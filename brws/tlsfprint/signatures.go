@@ -633,6 +633,8 @@ func platformToFloat(p Platform) float64 {
 		return 4.0
 	case PlatformIOS:
 		return 5.0
+	case PlatformUnknown:
+		return 0.0
 	default:
 		return 0.0
 	}
@@ -650,6 +652,8 @@ func libraryToFloat(l TLSLibrary) float64 {
 		return 4.0
 	case LibraryConscrypt:
 		return 5.0
+	case LibraryGo:
+		return 6.0
 	default:
 		return 0.0
 	}
@@ -669,6 +673,12 @@ func familyToFloat(f BrowserFamily) float64 {
 		return 5.0
 	case FamilyBrave:
 		return 6.0
+	case FamilyIOS:
+		return 7.0
+	case FamilyAndroid:
+		return 8.0
+	case FamilyUnknown:
+		return 0.0
 	default:
 		return 0.0
 	}
