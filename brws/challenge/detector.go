@@ -1,0 +1,223 @@
+// Package challenge provides detection and handling of anti-bot challenges
+// such as reCAPTCHA, hCaptcha, Cloudflare, and Turnstile.
+package challenge
+
+import (
+	"strings"
+)
+
+// ChallengeType represents the type of challenge detected
+type ChallengeType string
+
+const (
+	// reCAPTCHA variants
+	ChallengeRecaptchaV2 ChallengeType = "recaptcha-v2"
+	ChallengeRecaptchaV3 ChallengeType = "recaptcha-v3"
+
+	// hCaptcha
+	ChallengeHCaptcha ChallengeType = "hcaptcha"
+
+	// Cloudflare challenges
+	ChallengeCloudflare   ChallengeType = "cloudflare"
+	ChallengeTurnstile    ChallengeType = "turnstile"
+	ChallengeChallengeBot ChallengeType = "challenge-bot"
+
+	// Generic/Average
+	ChallengeGeneric ChallengeType = "generic"
+)
+
+// Challenge represents a detected challenge
+type Challenge struct {
+	Type     ChallengeType
+	SiteKey  string
+	URL      string
+	Response string
+}
+
+// Detector detects anti-bot challenges in HTTP responses
+type Detector struct{}
+
+// NewDetector creates a new challenge detector
+func NewDetector() *Detector {
+	return &Detector{}
+}
+
+// Detect analyzes response body and headers for challenge indicators
+func (d *Detector) Detect(body []byte, headers map[string][]string) *Challenge {
+	bodyStr := strings.ToLower(string(body))
+
+	// Check for Cloudflare
+	if server := getHeader(headers, "server"); strings.Contains(server, "cloudflare") {
+		if strings.Contains(bodyStr, "cf-challenge") ||
+			strings.Contains(bodyStr, "challenge-platform") ||
+			strings.Contains(bodyStr, "captcha") {
+			return &Challenge{
+				Type: ChallengeCloudflare,
+				URL:  extractURL(bodyStr),
+			}
+		}
+
+		// Check for Turnstile
+		if strings.Contains(bodyStr, "cf-turnstile") ||
+			strings.Contains(bodyStr, "turnstile") {
+			siteKey := extractSiteKey(bodyStr, "cf-turnstile")
+			return &Challenge{
+				Type:    ChallengeTurnstile,
+				SiteKey: siteKey,
+				URL:     extractURL(bodyStr),
+			}
+		}
+	}
+
+	// Check for reCAPTCHA
+	if strings.Contains(bodyStr, "g-recaptcha") ||
+		strings.Contains(bodyStr, "data-sitekey") {
+
+		siteKey := extractSiteKey(bodyStr, "data-sitekey")
+
+		// Determine v2 vs v3
+		if strings.Contains(bodyStr, "g-recaptcha-response") {
+			return &Challenge{
+				Type:    ChallengeRecaptchaV2,
+				SiteKey: siteKey,
+				URL:     extractURL(bodyStr),
+			}
+		}
+
+		return &Challenge{
+			Type:    ChallengeRecaptchaV3,
+			SiteKey: siteKey,
+			URL:     extractURL(bodyStr),
+		}
+	}
+
+	// Check for hCaptcha
+	if strings.Contains(bodyStr, "h-captcha") ||
+		strings.Contains(bodyStr, "data-hcaptcha-sitekey") {
+
+		siteKey := extractSiteKey(bodyStr, "data-hcaptcha-sitekey")
+		return &Challenge{
+			Type:    ChallengeHCaptcha,
+			SiteKey: siteKey,
+			URL:     extractURL(bodyStr),
+		}
+	}
+
+	// Check for generic challenge indicators
+	challengeIndicators := []string{
+		"access denied",
+		"blocked",
+		"please verify you are human",
+		"suspicious activity",
+	}
+
+	for _, indicator := range challengeIndicators {
+		if strings.Contains(bodyStr, indicator) {
+			return &Challenge{
+				Type: ChallengeGeneric,
+				URL:  extractURL(bodyStr),
+			}
+		}
+	}
+
+	return nil
+}
+
+func getHeader(headers map[string][]string, key string) string {
+	key = strings.ToLower(key)
+	for k, v := range headers {
+		if strings.ToLower(k) == key && len(v) > 0 {
+			return v[0]
+		}
+	}
+	return ""
+}
+
+// IsBlocked checks if the response indicates a block/challenge
+func (d *Detector) IsBlocked(body []byte, statusCode int) bool {
+	// Check status code
+	if statusCode == 403 || statusCode == 429 || statusCode == 503 {
+		return true
+	}
+
+	// Check body for block indicators
+	bodyStr := strings.ToLower(string(body))
+	blockIndicators := []string{
+		"blocked",
+		"access denied",
+		"forbidden",
+		"rate limit",
+		"too many requests",
+		"incapsula",
+		"cloudflare",
+		"captcha",
+		"verify you are human",
+		"suspicious activity",
+	}
+
+	for _, indicator := range blockIndicators {
+		if strings.Contains(bodyStr, indicator) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func extractSiteKey(body, pattern string) string {
+	// Simple extraction - looks for patterns like data-sitekey="xxx"
+	patterns := []string{
+		"data-sitekey=\"",
+		"data-sitekey='",
+		"sitekey=\"",
+		"sitekey='",
+	}
+
+	for _, p := range patterns {
+		idx := strings.Index(body, p)
+		if idx == -1 {
+			continue
+		}
+
+		start := idx + len(p)
+		end := strings.IndexAny(body[start:], "\"' ")
+		if end == -1 {
+			end = len(body)
+		}
+
+		if end > start {
+			return body[start : start+end]
+		}
+	}
+
+	return ""
+}
+
+func extractURL(body string) string {
+	// Try to extract URL from various patterns
+	patterns := []string{
+		"action=\"",
+		"action='",
+		"url=\"",
+		"url='",
+	}
+
+	for _, p := range patterns {
+		idx := strings.Index(body, p)
+		if idx == -1 {
+			continue
+		}
+
+		start := idx + len(p)
+		end := strings.IndexAny(body[start:], "\"' ")
+		if end == -1 {
+			end = len(body)
+		}
+
+		if end > start {
+			return body[start : start+end]
+		}
+	}
+
+	return ""
+}

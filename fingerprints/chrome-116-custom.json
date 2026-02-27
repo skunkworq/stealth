@@ -1,0 +1,51 @@
+{
+  "name": "chrome-116-custom",
+  "version": "1.0.0",
+  "description": "Custom Chrome 116 configuration",
+  "tags": ["chrome", "custom"],
+  "browser": {
+    "name": "chrome",
+    "version": "116",
+    "engine": "blink"
+  },
+  "os": {
+    "name": "macos",
+    "version": "14",
+    "arch": "arm64"
+  },
+  "tls": {
+    "version": {"min": 771, "max": 772},
+    "cipher_suites": [
+      {"value": 4865, "name": "TLS_AES_128_GCM_SHA256"},
+      {"value": 4866, "name": "TLS_AES_256_GCM_SHA384"},
+      {"value": 4867, "name": "TLS_CHACHA20_POLY1305_SHA256"},
+      {"grease": true}
+    ],
+    "extensions": [
+      {"grease": true},
+      {"name": "server_name"},
+      {"name": "extended_master_secret"},
+      {"name": "application_layer_protocol_negotiation"}
+    ],
+    "alpn": ["h2", "http/1.1"],
+    "alps": "h2",
+    "cert_compression": ["brotli"]
+  },
+  "http2": {
+    "settings": {
+      "header_table_size": 65536,
+      "enable_push": 0,
+      "max_concurrent_streams": 1000,
+      "initial_window_size": 6291456
+    },
+    "pseudo_header_order": [":method", ":authority", ":scheme", ":path"]
+  },
+  "http": {
+    "version": "2.0",
+    "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+    "headers": [
+      {"name": ":method", "required": true},
+      {"name": "user-agent", "required": true}
+    ]
+  }
+}

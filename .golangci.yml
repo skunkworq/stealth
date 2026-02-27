@@ -1,0 +1,86 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    # These linters are too strict or not practical for this codebase
+    - wsl           # Whitespace linter - too opinionated about formatting
+    - nlreturn      # Newline return - too opinionated
+    - godot         # Comment ends with period - too pedantic
+    - varnamelen    # Variable name length - too strict
+    - tagliatelle   # Struct tag naming - may conflict with existing tags
+    - exhaustruct   # Require all fields initialized - too strict
+    - ireturn       # Return interface - Go idiom allows this
+    - depguard      # Package import restrictions - not needed
+    - gochecknoglobals # Global variables - too strict for this codebase
+    - gomoddirectives  # go.mod directive restrictions
+    - testpackage     # Require _test package naming - changes test semantics
+    - paralleltest    # Require t.Parallel() - not needed
+    - tparallel       # Same as above
+    - funlen          # Function length limit - too strict
+    - cyclop          # Cyclomatic complexity - covered by gocyclo
+    - gocognit        # Cognitive complexity - too strict
+    - maintidx        # Maintainability index - not standard
+    - nestif          # Nested ifs - too opinionated
+    - containedctx    # Context inside struct - sometimes needed
+    - contextcheck    # Context usage - may have false positives
+    - noctx           # Require context in HTTP requests - too strict for now
+    - bodyclose       # Response body close - has false positives
+    - err113          # Static error wrapping - too strict
+    - forcetypeassert # Type assertions - too strict
+    - goconst         # String constants - may reduce readability
+    - gocyclo         # Cyclomatic complexity - covered by complexity
+    - gocritic        # Too many style opinions
+    - forbidigo       # fmt.Print* is valid for CLI tools
+    - mnd             # Magic numbers - too strict for this codebase
+    - wrapcheck       # Error wrapping - too strict
+    - funcorder       # Function ordering - requires major refactoring
+    - lll             # Line length limit - handled by gofmt
+    - godoclint       # Godoc comments - too strict for now
+    - dupl            # Duplicate code - has false positives
+    - prealloc        # Preallocation - micro-optimization
+    - perfsprint      # fmt vs strconv - micro-optimization
+    - modernize       # Modern Go - may require Go version changes
+    - usestdlibvars   # Standard library vars - micro-optimization
+    - whitespace      # Whitespace - handled by gofmt
+    - unparam         # Unused params - too strict
+    - unconvert       # Unnecessary conversions - too strict
+    - nonamedreturns  # Named returns - valid Go pattern
+    - noinlineerr     # Inlined errors - valid Go pattern
+    - godox           # TODO/FIXME comments - valid for development
+    - gochecknoinits  # Init functions - valid Go pattern
+    - nolintlint      # nolint comments - too meta
+    - nilnil          # Return nil, nil - valid Go pattern
+    - intrange        # Integer range - Go 1.22+ feature
+    - musttag         # Struct tags - too strict
+    - recvcheck       # Receiver naming - too strict
+    - sloglint        # Structured logging - too strict
+    - fatcontext      # Fat contexts - too strict
+    - errname         # Error variable naming - too strict
+    - goprintffuncname # Printf-like func naming - too strict
+    - interfacebloat  # Interface size - too strict
+    - copyloopvar     # Loop variable copying - Go 1.22+ fixed this
+    - dupword         # Duplicate words - not critical
+    - misspell        # Spelling - not critical
+    - nakedret        # Naked returns - valid Go pattern
+    - protogetter     # Protocol buffer getters - not applicable
+    - rowserrcheck    # Rows error checking - not applicable
+    - sqlclosecheck   # SQL close checking - not applicable
+    - thelper         # Testing helper - too strict
+issues:
+  default: true
+  exclude-rules:
+    # Exclude some linters from running on tests files
+    - path: _test\.go
+      linters:
+        - errcheck
+        - gosec
+        - unused
+    # Exclude known linter issues that are intentional
+    - linters:
+        - staticcheck
+      text: "SA1019:"  # Deprecated API warnings - may be intentional
+    - linters:
+        - unused
+      text: "is unused"  # May be intentional for future use
+formatters:
+  default: true
