@@ -370,7 +370,7 @@ type BehavioralGenerator struct {
 func NewBehavioralGenerator(sig *BehavioralSignature, seed int64) *BehavioralGenerator {
 	return &BehavioralGenerator{
 		signature: sig,
-		rng:       rand.New(rand.NewSource(seed)),
+		rng:       rand.New(rand.NewSource(seed)), //nolint:gosec // G404: math/rand is sufficient for behavioral generation
 	}
 }
 

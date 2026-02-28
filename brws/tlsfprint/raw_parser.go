@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"time"
 )
 
 type TLSParser struct {
@@ -560,5 +561,5 @@ func (t *ConnectionStateTracker) evictOldest() {
 }
 
 func nowUnix() int64 {
-	return 0
+	return time.Now().Unix()
 }

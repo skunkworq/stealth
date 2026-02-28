@@ -1,3 +1,5 @@
+// Package tlsfprint provides TLS fingerprinting capabilities.
+//nolint:gosec // G505: crypto/sha1 used intentionally for TLS fingerprinting
 package tlsfprint
 
 import (
@@ -604,9 +606,10 @@ func (a *TLSAnalyzer) GetSummary() TLSHandshakeSummary {
 			maxProtocolCount = count
 			summary.MostCommonProtocol = protocol
 		}
-		if protocol == "TLS 1.2" {
+		switch protocol {
+		case "TLS 1.2":
 			summary.TLS12Count = count
-		} else if protocol == "TLS 1.3" {
+		case "TLS 1.3":
 			summary.TLS13Count = count
 		}
 	}
