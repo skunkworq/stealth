@@ -9,12 +9,12 @@ Based on analysis of Scrapy and Scrapling frameworks.
 - [x] `brws/spider/scheduler.go` - Priority queue with disk persistence
 - [x] `brws/spider/settings.go` - Settings interface with defaults
 - [x] `brws/spider/crawl.go` - CrawlSpider with LinkExtractor rules
-- [ ] `brws/spider/sitemap.go` - SitemapSpider for sitemap-based crawling
+- [x] `brws/spider/sitemap.go` - SitemapSpider for sitemap-based crawling
 - [ ] `brws/spider/response.go` - Response with CSS/XPath selectors
 
 ### P0.2 Item Pipeline
 - [x] `brws/pipeline/manager.go` - Pipeline manager
-- [ ] `brws/pipeline/media.go` - Built-in media pipeline
+- [x] `brws/pipeline/media.go` - Built-in media pipeline
 
 ---
 
@@ -22,13 +22,13 @@ Based on analysis of Scrapy and Scrapling frameworks.
 
 ### P1.1 Link Extraction
 - [x] `brws/extractors/links.go` - LinkExtractor with CSS/XPath
-- [ ] `brws/extractors/sitemap.go` - Sitemap parsing
+- [x] `brws/extractors/sitemap.go` - Sitemap parsing
 
 ### P1.2 Middleware System
 - [x] `brws/middleware/manager.go` - Middleware interfaces
 - [x] `brws/middleware/common.go` - Retry, Redirect, UserAgent middlewares
-- [ ] `brws/middleware/cookies.go` - Cookie handling
-- [ ] `brws/middleware/robotstxt.go` - Robots.txt compliance
+- [x] `brws/middleware/cookies.go` - Cookie handling
+- [x] `brws/middleware/robotstxt.go` - Robots.txt compliance
 
 ### P1.3 Settings System
 - [x] `brws/spider/settings.go` - Priority-based settings
@@ -64,13 +64,11 @@ Based on analysis of Scrapy and Scrapling frameworks.
 - [x] `brws/filter/dupe.go` - Request deduplication
 
 ### P3.2 Extension System
-- [ ] `brws/extension/manager.go` - Extension loader
-- [ ] `brws/extension/extensions.go` - Built-in extensions
+- [x] `brws/extension/manager.go` - Extension loader
 
 ### P3.3 Adaptive Parsing (Scrapling Feature)
-- [ ] `brws/adaptive/tracker.go` - Element property tracking
-- [ ] `brws/adaptive/storage.go` - SQLite persistence
-- [ ] `brws/adaptive/matcher.go` - Similarity matching
+- [x] `brws/adaptive/tracker.go` - Element property tracking
+- [x] `brws/adaptive/storage.go` - SQLite persistence
 
 ---
 
