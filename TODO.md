@@ -8,7 +8,7 @@ Based on analysis of Scrapy and Scrapling frameworks.
 - [x] `brws/spider/spider.go` - Base Spider with callbacks
 - [x] `brws/spider/scheduler.go` - Priority queue with disk persistence
 - [x] `brws/spider/settings.go` - Settings interface with defaults
-- [ ] `brws/spider/crawl.go` - CrawlSpider with LinkExtractor rules
+- [x] `brws/spider/crawl.go` - CrawlSpider with LinkExtractor rules
 - [ ] `brws/spider/sitemap.go` - SitemapSpider for sitemap-based crawling
 - [ ] `brws/spider/response.go` - Response with CSS/XPath selectors
 
@@ -21,7 +21,7 @@ Based on analysis of Scrapy and Scrapling frameworks.
 ## Priority 1 - Essential Components
 
 ### P1.1 Link Extraction
-- [ ] `brws/extractors/links.go` - LinkExtractor with CSS/XPath
+- [x] `brws/extractors/links.go` - LinkExtractor with CSS/XPath
 - [ ] `brws/extractors/sitemap.go` - Sitemap parsing
 
 ### P1.2 Middleware System
@@ -52,16 +52,16 @@ Based on analysis of Scrapy and Scrapling frameworks.
 - [ ] `cmd/stealth/list.go` - List spiders
 
 ### P2.3 Data Export
-- [ ] `brws/export/exporter.go` - Exporter interface
-- [ ] `brws/export/json.go` - JSON exporter
-- [ ] `brws/export/csv.go` - CSV exporter
+- [x] `brws/export/exporter.go` - Exporter interface
+- [x] `brws/export/json.go` - JSON exporter
+- [x] `brws/export/csv.go` - CSV exporter
 
 ---
 
 ## Priority 3 - Advanced Features
 
 ### P3.1 Duplicate Filtering
-- [ ] `brws/filter/dupe.go` - Request deduplication
+- [x] `brws/filter/dupe.go` - Request deduplication
 
 ### P3.2 Extension System
 - [ ] `brws/extension/manager.go` - Extension loader
