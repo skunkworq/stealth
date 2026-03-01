@@ -122,6 +122,7 @@ func (s *RawCaptureServer) Start() error {
 
 	// Create TLS config
 	s.tlsConfig = &tls.Config{
+		MinVersion: tls.VersionTLS12,
 		GetConfigForClient: func(hello *tls.ClientHelloInfo) (*tls.Config, error) {
 			return s.handleClientHello(hello)
 		},

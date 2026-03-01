@@ -1,3 +1,4 @@
+// Package adversarial provides detection vectors and fingerprinting analysis.
 package adversarial
 
 import (
@@ -14,22 +15,35 @@ import (
 	"github.com/stealth/brwslab/brws/types"
 )
 
+// VectorCategory represents the category of a detection vector.
 type VectorCategory string
 
 const (
-	VectorTLS        VectorCategory = "tls"
-	VectorHTTP       VectorCategory = "http"
-	VectorHTTP2      VectorCategory = "http2"
+	// VectorTLS is the TLS fingerprinting category.
+	VectorTLS VectorCategory = "tls"
+	// VectorHTTP is the HTTP fingerprinting category.
+	VectorHTTP VectorCategory = "http"
+	// VectorHTTP2 is the HTTP/2 fingerprinting category.
+	VectorHTTP2 VectorCategory = "http2"
+	// VectorBehavioral is the behavioral fingerprinting category.
 	VectorBehavioral VectorCategory = "behavioral"
-	VectorWebGL      VectorCategory = "webgl"
-	VectorCanvas     VectorCategory = "canvas"
-	VectorFont       VectorCategory = "font"
-	VectorScreen     VectorCategory = "screen"
-	VectorNavigator  VectorCategory = "navigator"
-	VectorTiming     VectorCategory = "timing"
-	VectorPlugin     VectorCategory = "plugin"
+	// VectorWebGL is the WebGL fingerprinting category.
+	VectorWebGL VectorCategory = "webgl"
+	// VectorCanvas is the canvas fingerprinting category.
+	VectorCanvas VectorCategory = "canvas"
+	// VectorFont is the font fingerprinting category.
+	VectorFont VectorCategory = "font"
+	// VectorScreen is the screen fingerprinting category.
+	VectorScreen VectorCategory = "screen"
+	// VectorNavigator is the navigator fingerprinting category.
+	VectorNavigator VectorCategory = "navigator"
+	// VectorTiming is the timing fingerprinting category.
+	VectorTiming VectorCategory = "timing"
+	// VectorPlugin is the plugin fingerprinting category.
+	VectorPlugin VectorCategory = "plugin"
 )
 
+// FingerprintVector represents a single fingerprinting detection vector.
 type FingerprintVector struct {
 	Category    VectorCategory     `json:"category"`
 	Name        string             `json:"name"`
@@ -40,6 +54,7 @@ type FingerprintVector struct {
 	Checks      []VectorCheck      `json:"checks"`
 }
 
+// VectorPattern defines a pattern to match in a detection vector.
 type VectorPattern struct {
 	Name      string  `json:"name"`
 	Pattern   string  `json:"pattern"`
@@ -47,6 +62,7 @@ type VectorPattern struct {
 	MatchType string  `json:"match_type"` // exact, regex, contains
 }
 
+// VectorCheck defines a single check within a detection vector.
 type VectorCheck struct {
 	Name     string      `json:"name"`
 	Field    string      `json:"field"`
@@ -56,6 +72,7 @@ type VectorCheck struct {
 	Message  string      `json:"message"`
 }
 
+// VectorResult contains the results of a vector analysis.
 type VectorResult struct {
 	Vector     string            `json:"vector"`
 	Category   VectorCategory    `json:"category"`
@@ -64,6 +81,7 @@ type VectorResult struct {
 	Indicators []VectorIndicator `json:"indicators"`
 }
 
+// VectorIndicator represents a single detection indicator.
 type VectorIndicator struct {
 	Check   string  `json:"check"`
 	Message string  `json:"message"`
@@ -72,6 +90,7 @@ type VectorIndicator struct {
 	Value   string  `json:"value"`
 }
 
+// VectorMap manages multiple detection vectors and their results.
 type VectorMap struct {
 	mu        sync.RWMutex
 	vectors   map[string]*FingerprintVector
@@ -79,6 +98,7 @@ type VectorMap struct {
 	baselines map[VectorCategory]*BaselineProfile
 }
 
+// BaselineProfile represents a baseline profile for fingerprint comparison.
 type BaselineProfile struct {
 	Category  VectorCategory     `json:"category"`
 	TLS       *TLSBaseline       `json:"tls,omitempty"`
@@ -89,6 +109,7 @@ type BaselineProfile struct {
 	Timing    *TimingBaseline    `json:"timing,omitempty"`
 }
 
+// TLSBaseline represents TLS-specific baseline data.
 type TLSBaseline struct {
 	JA4             string   `json:"ja4"`
 	Version         string   `json:"version"`
@@ -101,6 +122,7 @@ type TLSBaseline struct {
 	HasALPS         bool     `json:"has_alps"`
 }
 
+// HTTPBaseline represents HTTP-specific baseline data.
 type HTTPBaseline struct {
 	UserAgent              string   `json:"user_agent"`
 	Accept                 string   `json:"accept"`
@@ -118,6 +140,7 @@ type HTTPBaseline struct {
 	SecChUaWow64           string   `json:"sec_ch_ua_wow64"`
 }
 
+// HTTP2Baseline represents HTTP/2-specific baseline data.
 type HTTP2Baseline struct {
 	Settings          map[string]uint32 `json:"settings"`
 	SettingOrder      []string          `json:"setting_order"`
@@ -125,6 +148,7 @@ type HTTP2Baseline struct {
 	PriorityWeight    bool              `json:"priority_weight"`
 }
 
+// NavigatorBaseline represents navigator-specific baseline data.
 type NavigatorBaseline struct {
 	UserAgent           string   `json:"user_agent"`
 	Platform            string   `json:"platform"`
@@ -141,6 +165,7 @@ type NavigatorBaseline struct {
 	Plugins             []string `json:"plugins"`
 }
 
+// ScreenBaseline represents screen-specific baseline data.
 type ScreenBaseline struct {
 	Width       int     `json:"width"`
 	Height      int     `json:"height"`
@@ -150,6 +175,7 @@ type ScreenBaseline struct {
 	PixelRatio  float64 `json:"pixel_ratio"`
 }
 
+// TimingBaseline represents timing-specific baseline data.
 type TimingBaseline struct {
 	NavigationStart       int `json:"navigation_start"`
 	UnloadEventStart      int `json:"unload_event_start"`
@@ -168,6 +194,7 @@ type TimingBaseline struct {
 	LoadEventEnd          int `json:"load_event_end"`
 }
 
+// NewVectorMap creates a new VectorMap with default vectors initialized.
 func NewVectorMap() *VectorMap {
 	vm := &VectorMap{
 		vectors:   make(map[string]*FingerprintVector),
@@ -307,18 +334,21 @@ func (vm *VectorMap) initVectors() {
 	}
 }
 
+// RegisterVector registers a new fingerprint vector.
 func (vm *VectorMap) RegisterVector(vec *FingerprintVector) {
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
 	vm.vectors[string(vec.Category)] = vec
 }
 
+// GetVector returns the fingerprint vector for the given category.
 func (vm *VectorMap) GetVector(category VectorCategory) *FingerprintVector {
 	vm.mu.RLock()
 	defer vm.mu.RUnlock()
 	return vm.vectors[string(category)]
 }
 
+// GetAllVectors returns all registered fingerprint vectors.
 func (vm *VectorMap) GetAllVectors() []*FingerprintVector {
 	vm.mu.RLock()
 	defer vm.mu.RUnlock()
@@ -329,6 +359,7 @@ func (vm *VectorMap) GetAllVectors() []*FingerprintVector {
 	return vecs
 }
 
+// AnalyzeTLS analyzes a TLS ClientHello using registered vectors.
 func (vm *VectorMap) AnalyzeTLS(ch *tls.ClientHelloInfo) *VectorResult {
 	vm.mu.RLock()
 	vec := vm.vectors[string(VectorTLS)]
@@ -380,6 +411,7 @@ func (vm *VectorMap) AnalyzeTLS(ch *tls.ClientHelloInfo) *VectorResult {
 	return result
 }
 
+// AnalyzeHTTP analyzes an HTTP request using registered vectors.
 func (vm *VectorMap) AnalyzeHTTP(req *http.Request) *VectorResult {
 	vm.mu.RLock()
 	vec := vm.vectors[string(VectorHTTP)]
@@ -471,6 +503,7 @@ func (vm *VectorMap) AnalyzeHTTP(req *http.Request) *VectorResult {
 	return result
 }
 
+// AnalyzeBehavioral analyzes behavioral events using registered vectors.
 func (vm *VectorMap) AnalyzeBehavioral(events *BehavioralEvents) *VectorResult {
 	vm.mu.RLock()
 	vec := vm.vectors[string(VectorBehavioral)]
@@ -534,6 +567,7 @@ func (vm *VectorMap) AnalyzeBehavioral(events *BehavioralEvents) *VectorResult {
 	return result
 }
 
+// AnalyzeNavigator analyzes navigator data using registered vectors.
 func (vm *VectorMap) AnalyzeNavigator(nav *NavigatorData) *VectorResult {
 	vm.mu.RLock()
 	vec := vm.vectors[string(VectorNavigator)]
@@ -575,6 +609,7 @@ func (vm *VectorMap) AnalyzeNavigator(nav *NavigatorData) *VectorResult {
 	return result
 }
 
+// AnalyzeTiming analyzes timing data using registered vectors.
 func (vm *VectorMap) AnalyzeTiming(timing *TimingData) *VectorResult {
 	vm.mu.RLock()
 	vec := vm.vectors[string(VectorTiming)]
@@ -616,6 +651,7 @@ func (vm *VectorMap) AnalyzeTiming(timing *TimingData) *VectorResult {
 	return result
 }
 
+// AnalyzeComplete performs a complete analysis using all registered vectors.
 func (vm *VectorMap) AnalyzeComplete(fp *types.CompleteFingerprint) []VectorResult {
 	results := make([]VectorResult, 0)
 
@@ -697,18 +733,21 @@ func (vm *VectorMap) analyzeHTTPFingerprint(http *types.HTTPFingerprint) *Vector
 	return result
 }
 
+// AddResult adds a result to the vector map.
 func (vm *VectorMap) AddResult(result VectorResult) {
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
 	vm.results = append(vm.results, result)
 }
 
+// GetResults returns all stored results.
 func (vm *VectorMap) GetResults() []VectorResult {
 	vm.mu.RLock()
 	defer vm.mu.RUnlock()
 	return vm.results
 }
 
+// GetResultsByCategory returns results filtered by category.
 func (vm *VectorMap) GetResultsByCategory(category VectorCategory) []VectorResult {
 	vm.mu.RLock()
 	defer vm.mu.RUnlock()
@@ -721,18 +760,21 @@ func (vm *VectorMap) GetResultsByCategory(category VectorCategory) []VectorResul
 	return results
 }
 
+// LoadBaseline loads a baseline profile for the given category.
 func (vm *VectorMap) LoadBaseline(category VectorCategory, profile *BaselineProfile) {
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
 	vm.baselines[category] = profile
 }
 
+// GetBaseline returns the baseline profile for the given category.
 func (vm *VectorMap) GetBaseline(category VectorCategory) *BaselineProfile {
 	vm.mu.RLock()
 	defer vm.mu.RUnlock()
 	return vm.baselines[category]
 }
 
+// CompareToBaseline compares a fingerprint against the baseline for the category.
 func (vm *VectorMap) CompareToBaseline(category VectorCategory, fp interface{}) *VectorResult {
 	vm.mu.RLock()
 	baseline := vm.baselines[category]
@@ -796,6 +838,7 @@ func (vm *VectorMap) CompareToBaseline(category VectorCategory, fp interface{}) 
 	return result
 }
 
+// BehavioralEvents represents behavioral interaction data.
 type BehavioralEvents struct {
 	MouseEvents   int
 	ScrollEvents  int
@@ -805,6 +848,7 @@ type BehavioralEvents struct {
 	TypingStdDev  float64
 }
 
+// NavigatorData represents navigator API data.
 type NavigatorData struct {
 	Webdriver           bool
 	PropCount           int
@@ -816,6 +860,7 @@ type NavigatorData struct {
 	DeviceMemory        int
 }
 
+// TimingData represents performance timing data.
 type TimingData struct {
 	TTFB         int
 	TransferSize int
@@ -823,6 +868,7 @@ type TimingData struct {
 	LoadTime     int
 }
 
+// DetectWithVectors detects automation using all registered vectors.
 func DetectWithVectors(fp *types.CompleteFingerprint) ([]VectorResult, bool) {
 	vm := NewVectorMap()
 	results := vm.AnalyzeComplete(fp)
@@ -838,6 +884,7 @@ func DetectWithVectors(fp *types.CompleteFingerprint) ([]VectorResult, bool) {
 	return results, detected
 }
 
+// GenerateReport generates a text report of all vector analysis results.
 func (vm *VectorMap) GenerateReport() string {
 	vm.mu.RLock()
 	defer vm.mu.RUnlock()
@@ -852,20 +899,20 @@ func (vm *VectorMap) GenerateReport() string {
 			continue
 		}
 
-		b.WriteString(fmt.Sprintf("## %s Vector\n", vec.Name))
-		b.WriteString(fmt.Sprintf("Description: %s\n", vec.Description))
-		b.WriteString(fmt.Sprintf("Severity: %.1f\n\n", vec.Severity))
+		_, _ = fmt.Fprintf(&b, "## %s Vector\n", vec.Name)
+		_, _ = fmt.Fprintf(&b, "Description: %s\n", vec.Description)
+		_, _ = fmt.Fprintf(&b, "Severity: %.1f\n\n", vec.Severity)
 
 		b.WriteString("Checks:\n")
 		for _, check := range vec.Checks {
-			b.WriteString(fmt.Sprintf("  - %s: %s\n", check.Name, check.Message))
+			_, _ = fmt.Fprintf(&b, "  - %s: %s\n", check.Name, check.Message)
 		}
 
 		b.WriteString("\n")
 	}
 
 	b.WriteString("## Results Summary\n")
-	b.WriteString(fmt.Sprintf("Total vectors: %d\n", len(vm.results)))
+	_, _ = fmt.Fprintf(&b, "Total vectors: %d\n", len(vm.results))
 
 	var detectedCount int
 	var totalScore float64
@@ -877,13 +924,14 @@ func (vm *VectorMap) GenerateReport() string {
 	}
 
 	if len(vm.results) > 0 {
-		b.WriteString(fmt.Sprintf("Detected: %d/%d\n", detectedCount, len(vm.results)))
-		b.WriteString(fmt.Sprintf("Average score: %.2f\n", totalScore/float64(len(vm.results))))
+		_, _ = fmt.Fprintf(&b, "Detected: %d/%d\n", detectedCount, len(vm.results))
+		_, _ = fmt.Fprintf(&b, "Average score: %.2f\n", totalScore/float64(len(vm.results)))
 	}
 
 	return b.String()
 }
 
+// SortHeaderOrder returns headers sorted in a canonical order.
 func SortHeaderOrder(headers http.Header) []string {
 	order := make([]string, 0, len(headers))
 

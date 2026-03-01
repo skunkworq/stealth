@@ -6,23 +6,27 @@ import (
 	"strings"
 )
 
-// ChallengeType represents the type of challenge detected
+// ChallengeType represents the type of challenge detected.
+//nolint:revive // Type name stuttering is intentional for clarity
 type ChallengeType string
 
 const (
-	// reCAPTCHA variants
+	// ChallengeRecaptchaV2 represents reCAPTCHA v2 challenge type
 	ChallengeRecaptchaV2 ChallengeType = "recaptcha-v2"
+	// ChallengeRecaptchaV3 represents reCAPTCHA v3 challenge type
 	ChallengeRecaptchaV3 ChallengeType = "recaptcha-v3"
 
-	// hCaptcha
+	// ChallengeHCaptcha represents hCaptcha challenge type
 	ChallengeHCaptcha ChallengeType = "hcaptcha"
 
-	// Cloudflare challenges
+	// ChallengeCloudflare represents Cloudflare challenge type
 	ChallengeCloudflare   ChallengeType = "cloudflare"
+	// ChallengeTurnstile represents Turnstile challenge type
 	ChallengeTurnstile    ChallengeType = "turnstile"
+	// ChallengeChallengeBot represents bot challenge type.
 	ChallengeChallengeBot ChallengeType = "challenge-bot"
 
-	// Generic/Average
+	// ChallengeGeneric represents a generic challenge type
 	ChallengeGeneric ChallengeType = "generic"
 )
 
@@ -164,7 +168,7 @@ func (d *Detector) IsBlocked(body []byte, statusCode int) bool {
 	return false
 }
 
-func extractSiteKey(body, pattern string) string {
+func extractSiteKey(body, _ string) string {
 	// Simple extraction - looks for patterns like data-sitekey="xxx"
 	patterns := []string{
 		"data-sitekey=\"",

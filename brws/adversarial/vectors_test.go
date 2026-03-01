@@ -253,7 +253,7 @@ func TestTestServer(t *testing.T) {
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Test server uses self-signed cert
 		},
 	}
 
@@ -277,7 +277,7 @@ func TestTestServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		detection := server.GetLastDetection()
 		if detection == nil {
@@ -308,7 +308,7 @@ func TestTestServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		detection := server.GetLastDetection()
 		if detection == nil {
@@ -337,7 +337,7 @@ func TestTestServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		detection := server.GetLastDetection()
 		if detection == nil {
@@ -489,4 +489,5 @@ func ExampleNewVectorMap() {
 	for _, ind := range result.Indicators {
 		fmt.Printf("  - %s: %s\n", ind.Check, ind.Message)
 	}
+	// Output:
 }

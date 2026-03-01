@@ -21,7 +21,7 @@ func TestNativeWithTestserver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method: "GET",
@@ -66,7 +66,7 @@ func TestNativeWithTLSTestserver(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method: "GET",
@@ -119,7 +119,7 @@ func TestNativeStealthTLS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method: "GET",
@@ -154,7 +154,7 @@ func TestNativeStealthHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	// Make request with native engine - this is the actual test
 	req := &engine.Request{
@@ -213,7 +213,7 @@ func TestNativeWithProfiles(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create engine: %v", err)
 			}
-			defer eng.Close()
+			defer func() { _ = eng.Close() }()
 
 			req := &engine.Request{
 				Method:  "GET",
@@ -262,7 +262,7 @@ func TestNativeWithCustomHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method:  "GET",
@@ -305,7 +305,7 @@ func TestNativeTraceCapturesHeaders(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method: "GET",

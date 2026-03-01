@@ -87,7 +87,7 @@ type CaptureServer struct {
 	captures      map[string]*CompleteFingerprint
 	proxyCaptures map[string]*CompleteFingerprint // Only proxy-intercepted captures
 	baselines     map[string]*CompleteFingerprint
-	httpServer    *http.Server
+	httpServer    *http.Server 
 
 	// Capture configuration
 	CaptureRawBytes bool
@@ -106,7 +106,7 @@ func NewCaptureServer() *CaptureServer {
 }
 
 // CaptureFromRequest captures fingerprint from an HTTP request
-func (s *CaptureServer) CaptureFromRequest(w http.ResponseWriter, r *http.Request) *CompleteFingerprint {
+func (s *CaptureServer) CaptureFromRequest(_ http.ResponseWriter, r *http.Request) *CompleteFingerprint {
 	fp := &CompleteFingerprint{
 		ID:        generateID(),
 		Timestamp: time.Now(),
@@ -309,6 +309,7 @@ func (s *CaptureServer) calculateJA3(t *TLSFingerprint) string {
 
 	return strings.Join(parts, ",")
 }
+
 
 // calculateJA4 computes JA4 fingerprint
 func (s *CaptureServer) calculateJA4(t *TLSFingerprint) string {
@@ -705,6 +706,7 @@ func hashString(s string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))[:32]
 }
 
+
 func hashStringTruncated(s string, length int) string {
 	h := sha256.New()
 	h.Write([]byte(s))
@@ -842,13 +844,13 @@ func (fp *CompleteFingerprint) ExportYAML() ([]byte, error) {
 	return json.MarshalIndent(sig, "", "  ")
 }
 
-func (s *CompleteFingerprint) exportTLSSignature() map[string]interface{} {
-	if s.TLS == nil {
+func (fp *CompleteFingerprint) exportTLSSignature() map[string]interface{} {
+	if fp.TLS == nil {
 		return nil
 	}
 
 	var ciphers []interface{}
-	for _, c := range s.TLS.CipherSuites {
+	for _, c := range fp.TLS.CipherSuites {
 		if c.IsGREASE {
 			ciphers = append(ciphers, "GREASE")
 		} else {
@@ -857,7 +859,7 @@ func (s *CompleteFingerprint) exportTLSSignature() map[string]interface{} {
 	}
 
 	var extensions []map[string]interface{}
-	for _, e := range s.TLS.Extensions {
+	for _, e := range fp.TLS.Extensions {
 		ext := map[string]interface{}{
 			"type": e.Name,
 		}
@@ -873,9 +875,9 @@ func (s *CompleteFingerprint) exportTLSSignature() map[string]interface{} {
 	}
 }
 
-// RawPacketCapture uses gopacket for complete ClientHello capture
-// This is a placeholder - actual implementation requires libpcap
-func (s *CaptureServer) EnableRawPacketCapture(interfaceName string) error {
+// EnableRawPacketCapture enables raw packet capture for ClientHello analysis.
+// This is a placeholder - actual implementation requires libpcap.
+func (s *CaptureServer) EnableRawPacketCapture(_ string) error {
 	// Implementation would use:
 	// - github.com/google/gopacket
 	// - github.com/google/gopacket/pcap
@@ -912,6 +914,7 @@ func convertFromTypesFingerprint(fp *types.CompleteFingerprint) *CompleteFingerp
 		Behavior:   (*BehaviorFingerprint)(fp.Behavior),
 	}
 }
+
 
 // convertToTypesFingerprint converts lab.CompleteFingerprint to types.CompleteFingerprint
 func convertToTypesFingerprint(fp *CompleteFingerprint) *types.CompleteFingerprint {

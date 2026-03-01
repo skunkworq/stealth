@@ -600,17 +600,17 @@ func (t *TimingAnalyzer) GetStats() *TimingStats {
 	}
 
 	var sum time.Duration
-	var min, max = t.observations[0], t.observations[0]
+	var minVal, maxVal = t.observations[0], t.observations[0]
 	sorted := make([]time.Duration, len(t.observations))
 	copy(sorted, t.observations)
 
 	for _, d := range t.observations {
 		sum += d
-		if d < min {
-			min = d
+		if d < minVal {
+			minVal = d
 		}
-		if d > max {
-			max = d
+		if d > maxVal {
+			maxVal = d
 		}
 	}
 
@@ -635,8 +635,8 @@ func (t *TimingAnalyzer) GetStats() *TimingStats {
 		Count:  len(t.observations),
 		Mean:   sum / time.Duration(len(t.observations)),
 		Median: median,
-		Min:    min,
-		Max:    max,
+		Min:    minVal,
+		Max:    maxVal,
 		P95:    p95,
 		P99:    p99,
 	}

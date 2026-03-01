@@ -14,7 +14,7 @@ type mockEngine struct {
 
 func (m *mockEngine) Name() string                      { return "mock" }
 func (m *mockEngine) Capabilities() engine.Capabilities { return engine.Capabilities{} }
-func (m *mockEngine) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
+func (m *mockEngine) Do(_ context.Context, _ *engine.Request) (*engine.Response, error) {
 	return &engine.Response{Status: 200}, nil
 }
 func (m *mockEngine) Close() error { return nil }
@@ -41,7 +41,8 @@ func TestNewPool(t *testing.T) {
 
 func TestPoolAcquire(t *testing.T) {
 	pool, _ := New(mockFactory, &Config{MaxSize: 5, MinSize: 1})
-	defer pool.Close()
+	_ = pool
+	defer func() { _ = pool.Close() }()
 
 	ctx := context.Background()
 
@@ -63,10 +64,12 @@ func TestPoolAcquire(t *testing.T) {
 
 func TestPoolRelease(t *testing.T) {
 	pool, _ := New(mockFactory, &Config{MaxSize: 5, MinSize: 1})
-	defer pool.Close()
+	_ = pool
+	defer func() { _ = pool.Close() }()
 
 	ctx := context.Background()
 	inst, _ := pool.Acquire(ctx)
+		_ = inst
 
 	// Release should not error
 	pool.Release(inst)
@@ -79,13 +82,16 @@ func TestPoolRelease(t *testing.T) {
 
 func TestPoolMaxSize(t *testing.T) {
 	pool, _ := New(mockFactory, &Config{MaxSize: 2, MinSize: 1})
-	defer pool.Close()
+	_ = pool
+	defer func() { _ = pool.Close() }()
 
 	ctx := context.Background()
 
 	// Acquire 2 instances
 	inst1, _ := pool.Acquire(ctx)
+	_ = inst1
 	inst2, _ := pool.Acquire(ctx)
+	_ = inst2
 
 	stats := pool.Stats()
 	if stats.Active > int64(pool.config.MaxSize) {
@@ -95,19 +101,22 @@ func TestPoolMaxSize(t *testing.T) {
 	// Release and acquire more
 	pool.Release(inst1)
 	inst3, _ := pool.Acquire(ctx)
+	_ = inst3
 	pool.Release(inst2)
 	pool.Release(inst3)
 }
 
 func TestPoolStats(t *testing.T) {
 	pool, _ := New(mockFactory, &Config{MaxSize: 5, MinSize: 1})
-	defer pool.Close()
+	_ = pool
+	defer func() { _ = pool.Close() }()
 
 	ctx := context.Background()
 
 	// Make some requests
 	for i := 0; i < 5; i++ {
 		inst, _ := pool.Acquire(ctx)
+		_ = inst
 		pool.Release(inst)
 	}
 
@@ -119,6 +128,7 @@ func TestPoolStats(t *testing.T) {
 
 func TestPoolClose(t *testing.T) {
 	pool, _ := New(mockFactory, &Config{MaxSize: 5, MinSize: 2})
+	_ = pool
 
 	// Close should not error
 	if err := pool.Close(); err != nil {
@@ -132,7 +142,8 @@ func TestNeedsRecycle(t *testing.T) {
 		MaxAge:      1 * time.Millisecond,
 		IdleTimeout: 1 * time.Millisecond,
 	})
-	defer pool.Close()
+	_ = pool
+	defer func() { _ = pool.Close() }()
 
 	inst := &BrowserInstance{
 		Engine:    &mockEngine{id: "test"},

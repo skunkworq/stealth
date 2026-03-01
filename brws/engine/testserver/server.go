@@ -415,9 +415,10 @@ func (s *Server) detectTLSFingerprint(tls *TLSInfo) VectorResult {
 	vector := VectorResult{Vector: "TLS Fingerprint"}
 
 	// Check for Go TLS fingerprint (unique cipher suite)
-	if tls.CipherSuite == "1301" || tls.CipherSuite == "1302" || tls.CipherSuite == "1303" {
+	switch tls.CipherSuite {
+	case "1301", "1302", "1303":
 		// Modern TLS 1.3 ciphers are OK
-	} else if tls.CipherSuite == "002f" || tls.CipherSuite == "0035" {
+	case "002f", "0035":
 		// Older ciphers might be suspicious
 		vector.Indicators = append(vector.Indicators, Indicator{
 			Name:     "unusual_cipher",
@@ -700,6 +701,7 @@ func (s *Server) TLSConfigWithCA() *tls.Config {
 		}
 
 		return &tls.Config{
+			MinVersion: tls.VersionTLS12,
 			RootCAs:    certPool,
 			ServerName: "localhost",
 		}

@@ -18,6 +18,7 @@ import (
 	"github.com/stealth/brwslab/brws/types"
 )
 
+// TestServer is a test server for adversarial detection testing
 type TestServer struct {
 	Server     *httptest.Server
 	URL        string
@@ -28,6 +29,7 @@ type TestServer struct {
 	ServerCert *tls.Certificate
 }
 
+// DetectionRecord represents a single detection event recorded by the test server
 type DetectionRecord struct {
 	Timestamp     time.Time      `json:"timestamp"`
 	RequestID     string         `json:"request_id"`
@@ -41,6 +43,7 @@ type DetectionRecord struct {
 	Response      *ResponseInfo  `json:"response,omitempty"`
 }
 
+// RequestInfo contains details about an HTTP request received by the test server
 type RequestInfo struct {
 	Method      string            `json:"method"`
 	URL         string            `json:"url"`
@@ -51,6 +54,7 @@ type RequestInfo struct {
 	TLS         *TLSInfo          `json:"tls,omitempty"`
 }
 
+// TLSInfo contains TLS connection details from the client
 type TLSInfo struct {
 	Version         string   `json:"version"`
 	CipherSuite     string   `json:"cipher_suite"`
@@ -60,6 +64,7 @@ type TLSInfo struct {
 	ALPN            string   `json:"alpn"`
 }
 
+// ResponseInfo contains details about the HTTP response sent by the test server
 type ResponseInfo struct {
 	StatusCode int               `json:"status_code"`
 	Headers    map[string]string `json:"headers"`
@@ -67,6 +72,7 @@ type ResponseInfo struct {
 	TTFB       int               `json:"ttfb"`
 }
 
+// NewTestServer creates a new test server for adversarial detection testing
 func NewTestServer() *TestServer {
 	ts := &TestServer{
 		Detections: make([]DetectionRecord, 0),
@@ -195,12 +201,14 @@ func (ts *TestServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(jsonResp)
 }
 
+// GetDetections returns all detection records collected by the test server
 func (ts *TestServer) GetDetections() []DetectionRecord {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 	return ts.Detections
 }
 
+// GetLastDetection returns the most recent detection record, or nil if none exist
 func (ts *TestServer) GetLastDetection() *DetectionRecord {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
@@ -210,12 +218,14 @@ func (ts *TestServer) GetLastDetection() *DetectionRecord {
 	return &ts.Detections[len(ts.Detections)-1]
 }
 
+// ClearDetections removes all detection records from the test server
 func (ts *TestServer) ClearDetections() {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	ts.Detections = make([]DetectionRecord, 0)
 }
 
+// Close shuts down the test server
 func (ts *TestServer) Close() {
 	ts.Server.Close()
 }
@@ -224,6 +234,7 @@ func generateRequestID() string {
 	return fmt.Sprintf("req_%d", time.Now().UnixNano())
 }
 
+// FingerprintTestServer is a specialized test server for fingerprint-based detection
 type FingerprintTestServer struct {
 	Listener   net.Listener
 	Server     *http.Server
@@ -233,6 +244,7 @@ type FingerprintTestServer struct {
 	TLSEnabled bool
 }
 
+// FingerprintDetection represents a detection based on fingerprint analysis
 type FingerprintDetection struct {
 	Timestamp    time.Time     `json:"timestamp"`
 	ConnectionID string        `json:"connection_id"`
@@ -243,6 +255,7 @@ type FingerprintDetection struct {
 	BlockReason  string        `json:"block_reason,omitempty"`
 }
 
+// TLSHandshake contains details about a TLS handshake
 type TLSHandshake struct {
 	ClientHello     *ClientHelloInfo `json:"client_hello"`
 	JA4             string           `json:"ja4"`
@@ -258,6 +271,7 @@ type TLSHandshake struct {
 	HasALPS         bool             `json:"has_alps"`
 }
 
+// ClientHelloInfo contains details from the TLS Client Hello message
 type ClientHelloInfo struct {
 	CipherSuites      []uint16 `json:"cipher_suites"`
 	ServerName        string   `json:"server_name"`
@@ -269,6 +283,7 @@ type ClientHelloInfo struct {
 	Conn              net.Conn `json:"conn"`
 }
 
+// HTTPRequest contains HTTP request information for fingerprint analysis
 type HTTPRequest struct {
 	Method      string            `json:"method"`
 	URL         string            `json:"url"`
@@ -280,6 +295,7 @@ type HTTPRequest struct {
 	CipherSuite uint16            `json:"cipher_suite"`
 }
 
+// Analysis contains the results of fingerprint analysis
 type Analysis struct {
 	BotScore      float64        `json:"bot_score"`
 	IsBot         bool           `json:"is_bot"`
@@ -289,6 +305,7 @@ type Analysis struct {
 	Anomalies     []string       `json:"anomalies"`
 }
 
+// NewFingerprintTestServer creates a new fingerprint test server
 func NewFingerprintTestServer() *FingerprintTestServer {
 	fts := &FingerprintTestServer{
 		Detections: make([]FingerprintDetection, 0),
@@ -408,12 +425,14 @@ func (fts *FingerprintTestServer) handleRequest(w http.ResponseWriter, r *http.R
 	}
 }
 
+// GetDetections returns all fingerprint detections collected by the server
 func (fts *FingerprintTestServer) GetDetections() []FingerprintDetection {
 	fts.mu.RLock()
 	defer fts.mu.RUnlock()
 	return fts.Detections
 }
 
+// GetLastDetection returns the most recent fingerprint detection, or nil if none exist
 func (fts *FingerprintTestServer) GetLastDetection() *FingerprintDetection {
 	fts.mu.RLock()
 	defer fts.mu.RUnlock()
@@ -423,12 +442,14 @@ func (fts *FingerprintTestServer) GetLastDetection() *FingerprintDetection {
 	return &fts.Detections[len(fts.Detections)-1]
 }
 
+// Close shuts down the fingerprint test server gracefully
 func (fts *FingerprintTestServer) Close() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	return fts.Server.Shutdown(ctx)
 }
 
+// RunFingerprintTest runs a single fingerprint test against the specified URL
 func RunFingerprintTest(client *http.Client, url string) (*Analysis, error) {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -478,6 +499,7 @@ func RunFingerprintTest(client *http.Client, url string) (*Analysis, error) {
 	return analysis, nil
 }
 
+// TestResult represents the outcome of a single fingerprint test
 type TestResult struct {
 	TestName        string
 	Passed          bool
@@ -491,6 +513,7 @@ type TestResult struct {
 	ResponseHeaders http.Header
 }
 
+// RunTestSuite runs a suite of fingerprint tests and returns the results
 func RunTestSuite(tests []struct {
 	Name    string
 	Request func(*http.Request)
@@ -561,6 +584,7 @@ func RunTestSuite(tests []struct {
 	return results
 }
 
+// PrintTestResults outputs test results in a formatted manner
 func PrintTestResults(results []TestResult) {
 	_, _ = fmt.Fprintln(os.Stdout, "\n=== Fingerprint Test Results ===")
 
@@ -596,6 +620,7 @@ func PrintTestResults(results []TestResult) {
 	_, _ = fmt.Fprintf(os.Stdout, "Summary: %d passed, %d failed\n", passed, failed)
 }
 
+// AnalyzeFingerprint performs analysis on a complete fingerprint
 func AnalyzeFingerprint(fp *types.CompleteFingerprint) *Analysis {
 	analysis := &Analysis{
 		BotScore:      0,
@@ -639,6 +664,7 @@ func AnalyzeFingerprint(fp *types.CompleteFingerprint) *Analysis {
 	return analysis
 }
 
+// ExpectHuman evaluates headers and returns whether they appear to be from a human user
 func ExpectHuman(headers http.Header) (bool, float64, []string) {
 	vm := NewVectorMap()
 

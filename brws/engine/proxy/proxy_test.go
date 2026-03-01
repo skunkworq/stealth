@@ -106,7 +106,7 @@ func TestPoolCount(t *testing.T) {
 	}
 }
 
-func TestStrategyRandom(t *testing.T) {
+func TestStrategyRandom(_ *testing.T) {
 	proxies := []string{"http://proxy1:8080", "http://proxy2:8080", "http://proxy3:8080"}
 	pool := NewPool(proxies, StrategyRandom)
 

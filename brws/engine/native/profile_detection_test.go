@@ -36,10 +36,12 @@ func TestTLSSpoofingWithRealTLS(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		var tlsInfo testserver.TLSInfo
-		json.NewDecoder(resp.Body).Decode(&tlsInfo)
+		_ = json.NewDecoder(resp.Body).Decode(&tlsInfo)
+
+			_ = tlsInfo
 
 		fmt.Printf("\n=== Standard Go TLS ===\n")
 		fmt.Printf("TLS Version: %s\n", tlsInfo.Version)
@@ -51,9 +53,9 @@ func TestTLSSpoofingWithRealTLS(t *testing.T) {
 		ad := adversarial.NewAdvancedDetection()
 
 		var version uint16
-		fmt.Sscanf(tlsInfo.Version, "%x", &version)
+		_, _ = fmt.Sscanf(tlsInfo.Version, "%x", &version)
 		var cipherSuite uint16
-		fmt.Sscanf(tlsInfo.CipherSuite, "%x", &cipherSuite)
+		_, _ = fmt.Sscanf(tlsInfo.CipherSuite, "%x", &cipherSuite)
 
 		mockTLS := &tls.ConnectionState{
 			Version:            version,
@@ -83,7 +85,7 @@ func TestTLSSpoofingWithRealTLS(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create engine: %v", err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		// We need to use the same TLS config for the engine
 		// But native engine doesn't support custom TLS config yet
@@ -150,7 +152,7 @@ func TestProfilesAgainstDetection(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create engine: %v", err)
 			}
-			defer eng.Close()
+			defer func() { _ = eng.Close() }()
 
 			req := &engine.Request{
 				Method:  "GET",
@@ -171,6 +173,7 @@ func TestProfilesAgainstDetection(t *testing.T) {
 
 			// Run detection
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
+				_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}

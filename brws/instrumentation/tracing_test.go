@@ -16,7 +16,7 @@ func TestTracer_StartSpan(t *testing.T) {
 	tracer := NewTracer()
 	ctx := context.Background()
 
-	ctx, span := tracer.StartSpan(ctx, "test-span", SpanKindRequest)
+	_, span := tracer.StartSpan(ctx, "test-span", SpanKindRequest)
 	if span == nil {
 		t.Fatal("expected non-nil span")
 	}
@@ -41,7 +41,7 @@ func TestTracer_StartSpan_Nested(t *testing.T) {
 	ctx := context.Background()
 
 	ctx, parent := tracer.StartSpan(ctx, "parent", SpanKindRequest)
-	ctx, child := tracer.StartSpan(ctx, "child", SpanKindInternal)
+	_, child := tracer.StartSpan(ctx, "child", SpanKindInternal)
 
 	// Child should have parent ID
 	if child.ParentSpanID != parent.SpanID {

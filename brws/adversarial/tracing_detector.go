@@ -12,10 +12,12 @@ import (
 	"github.com/stealth/brwslab/brws/constants"
 )
 
+// TracingDetector wraps StealthDetector with detailed request tracing
 type TracingDetector struct {
 	*StealthDetector
 }
 
+// DetectionTrace contains detailed tracing information for detection results
 type DetectionTrace struct {
 	RequestID  string    `json:"request_id"`
 	Timestamp  time.Time `json:"timestamp"`
@@ -31,6 +33,7 @@ type DetectionTrace struct {
 	Summary    string            `json:"summary"`
 }
 
+// CheckResult represents the result of a single detection check.
 type CheckResult struct {
 	CheckName string  `json:"check_name"`
 	Category  string  `json:"category"`
@@ -41,12 +44,14 @@ type CheckResult struct {
 	Severity  string  `json:"severity"`
 }
 
+// NewTracingDetector creates a new tracing detector instance.
 func NewTracingDetector() *TracingDetector {
 	return &TracingDetector{
 		StealthDetector: NewStealthDetector(),
 	}
 }
 
+// AnalyzeWithTrace performs detection analysis and returns a detailed trace.
 func (td *TracingDetector) AnalyzeWithTrace(req *http.Request, tlsConn *tls.ConnectionState) *DetectionTrace {
 	trace := &DetectionTrace{
 		RequestID:    fmt.Sprintf("trace_%d", time.Now().UnixNano()),
@@ -271,7 +276,7 @@ func (td *TracingDetector) traceNavigatorData(req *http.Request) []CheckResult {
 			Category:  "navigator",
 			Passed:    false,
 			Details:   constants.HeaderNavigatorData + " is not valid JSON",
-			RawValue:  navHeader[:min(100, len(navHeader))],
+			RawValue:  navHeader[:minInt(100, len(navHeader))],
 			Severity:  "high",
 		})
 		checks[len(checks)-1].Score = 0.4
@@ -365,7 +370,7 @@ func (td *TracingDetector) traceCanvasData(req *http.Request) []CheckResult {
 			Category:  "canvas",
 			Passed:    false,
 			Details:   "Canvas fingerprint has randomization/noise (stealth mode detected)",
-			RawValue:  canvasHeader[:min(100, len(canvasHeader))],
+			RawValue:  canvasHeader[:minInt(100, len(canvasHeader))],
 			Severity:  "critical",
 		})
 		checks[len(checks)-1].Score = 0.6
@@ -378,7 +383,7 @@ func (td *TracingDetector) traceCanvasData(req *http.Request) []CheckResult {
 			Category:  "canvas",
 			Passed:    false,
 			Details:   "Canvas hash detected (fingerprinting detected)",
-			RawValue:  canvasHeader[:min(50, len(canvasHeader))],
+			RawValue:  canvasHeader[:minInt(50, len(canvasHeader))],
 			Severity:  "medium",
 		})
 		checks[len(checks)-1].Score = 0.3
@@ -517,7 +522,7 @@ func (td *TracingDetector) traceTimingData(req *http.Request) []CheckResult {
 
 func (td *TracingDetector) generateSummary(trace *DetectionTrace) string {
 	var b strings.Builder
-	b.WriteString(fmt.Sprintf("Detection Score: %.2f | ", trace.FinalScore))
+	_, _ = fmt.Fprintf(&b, "Detection Score: %.2f | ", trace.FinalScore)
 	if trace.IsBot {
 		b.WriteString("BLOCKED")
 	} else if trace.IsStealth {
@@ -525,13 +530,14 @@ func (td *TracingDetector) generateSummary(trace *DetectionTrace) string {
 	} else {
 		b.WriteString("ALLOWED")
 	}
-	b.WriteString(fmt.Sprintf("\nFailed Checks (%d):\n", len(trace.FailedChecks)))
+	_, _ = fmt.Fprintf(&b, "\nFailed Checks (%d):\n", len(trace.FailedChecks))
 	for i, check := range trace.FailedChecks {
-		b.WriteString(fmt.Sprintf("  %d. [%s] %s: %s\n", i+1, check.Severity, check.CheckName, check.Details))
+		_, _ = fmt.Fprintf(&b, "  %d. [%s] %s: %s\n", i+1, check.Severity, check.CheckName, check.Details)
 	}
 	return b.String()
 }
 
+// PrintTrace prints a detailed detection trace to stdout.
 func (td *TracingDetector) PrintTrace(trace *DetectionTrace) {
 	_, _ = fmt.Fprintln(os.Stdout, "\n"+strings.Repeat("=", 60))
 	_, _ = fmt.Fprintln(os.Stdout, "DETAILED DETECTION TRACE")
@@ -584,7 +590,7 @@ func (td *TracingDetector) PrintTrace(trace *DetectionTrace) {
 	_, _ = fmt.Fprintln(os.Stdout, )
 }
 
-func min(a, b int) int {
+func minInt(a, b int) int {
 	if a < b {
 		return a
 	}

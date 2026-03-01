@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+// QUICFingerprint represents a complete fingerprint of a QUIC connection,
+// including TLS handshake parameters and transport characteristics.
 type QUICFingerprint struct {
 	Version string
 
@@ -26,6 +28,8 @@ type QUICFingerprint struct {
 	TransportParams *QUICTransportParams
 }
 
+// QUICTransportParams contains QUIC transport parameters exchanged during
+// the handshake, which can be used for fingerprinting client implementations.
 type QUICTransportParams struct {
 	InitialMaxStreamDataBidiLocal  uint64
 	InitialMaxStreamDataBidiRemote uint64
@@ -53,6 +57,8 @@ type QUICTransportParams struct {
 	CustomParameters map[uint64][]byte
 }
 
+// PreferredAddress represents a preferred address for connection migration
+// as specified in QUIC transport parameters.
 type PreferredAddress struct {
 	IPv4Address         string
 	IPv6Address         string
@@ -61,6 +67,8 @@ type PreferredAddress struct {
 	StatelessResetToken []byte
 }
 
+// ToFingerprintString converts the QUIC fingerprint to a string representation
+// suitable for comparison and hashing.
 func (q *QUICFingerprint) ToFingerprintString() string {
 	var parts []string
 
@@ -89,10 +97,13 @@ func (q *QUICFingerprint) ToFingerprintString() string {
 	return strings.Join(parts, ";")
 }
 
+// Hash returns a SHA-256 hash of the fingerprint string representation.
 func (q *QUICFingerprint) Hash() string {
 	return sha256Hash(q.ToFingerprintString())
 }
 
+// HTTP3Fingerprint extends QUICFingerprint with HTTP/3 specific settings
+// and header compression parameters for browser identification.
 type HTTP3Fingerprint struct {
 	QUICFingerprint
 
@@ -103,17 +114,21 @@ type HTTP3Fingerprint struct {
 	MaxFieldSectionSize uint64
 }
 
+// HTTP3Setting represents a single HTTP/3 SETTINGS frame parameter.
 type HTTP3Setting struct {
 	ID    uint64
 	Value uint64
 }
 
+// HTTP3HeaderCompression contains QPACK header compression settings
+// used in HTTP/3 connections.
 type HTTP3HeaderCompression struct {
 	MaxTableSize     uint64
 	MaxTableCapacity uint64
 	DynamicTableSize uint64
 }
 
+// HTTP3Chrome is the known HTTP/3 fingerprint for Google Chrome.
 var HTTP3Chrome = HTTP3Fingerprint{
 	Settings: []HTTP3Setting{
 		{ID: 0x1, Value: 0x1000},
@@ -129,6 +144,7 @@ var HTTP3Chrome = HTTP3Fingerprint{
 	MaxFieldSectionSize: 0x1000,
 }
 
+// HTTP3Firefox is the known HTTP/3 fingerprint for Mozilla Firefox.
 var HTTP3Firefox = HTTP3Fingerprint{
 	Settings: []HTTP3Setting{
 		{ID: 0x1, Value: 0x2000},
@@ -144,6 +160,7 @@ var HTTP3Firefox = HTTP3Fingerprint{
 	MaxFieldSectionSize: 0x2000,
 }
 
+// HTTP3Safari is the known HTTP/3 fingerprint for Apple Safari.
 var HTTP3Safari = HTTP3Fingerprint{
 	Settings: []HTTP3Setting{
 		{ID: 0x1, Value: 0x800},
@@ -159,6 +176,8 @@ var HTTP3Safari = HTTP3Fingerprint{
 	MaxFieldSectionSize: 0x800,
 }
 
+// GetHTTP3Signatures returns a map of known browser HTTP/3 signatures
+// keyed by browser name (chrome, firefox, safari).
 func GetHTTP3Signatures() map[string]HTTP3Fingerprint {
 	return map[string]HTTP3Fingerprint{
 		"chrome":  HTTP3Chrome,
@@ -167,6 +186,8 @@ func GetHTTP3Signatures() map[string]HTTP3Fingerprint {
 	}
 }
 
+// QUICObservation represents a single observed QUIC packet with metadata
+// useful for fingerprinting and analysis.
 type QUICObservation struct {
 	Timestamp    time.Time
 	ConnectionID string
@@ -188,6 +209,8 @@ type QUICObservation struct {
 	RawData []byte
 }
 
+// ToFingerprintString converts the QUIC observation to a string representation
+// for comparison and hashing.
 func (q *QUICObservation) ToFingerprintString() string {
 	var parts []string
 
@@ -207,6 +230,8 @@ func (q *QUICObservation) ToFingerprintString() string {
 	return strings.Join(parts, ";")
 }
 
+// DetectBrowser attempts to identify the browser based on TLS extension
+// patterns in the QUIC observation. Returns "chrome", "firefox", or "unknown".
 func (q *QUICObservation) DetectBrowser() string {
 	hasGREASE := false
 	for _, e := range q.TLSExtensions {
@@ -234,20 +259,25 @@ func (q *QUICObservation) DetectBrowser() string {
 	return "unknown"
 }
 
+// QUICAnalyzer collects and analyzes QUIC observations to generate statistics
+// about QUIC traffic patterns.
 type QUICAnalyzer struct {
 	observations []QUICObservation
 }
 
+// NewQUICAnalyzer creates a new QUICAnalyzer instance ready to collect observations.
 func NewQUICAnalyzer() *QUICAnalyzer {
 	return &QUICAnalyzer{
 		observations: make([]QUICObservation, 0),
 	}
 }
 
+// Record adds a QUIC observation to the analyzer's collection.
 func (a *QUICAnalyzer) Record(obs *QUICObservation) {
 	a.observations = append(a.observations, *obs)
 }
 
+// GetStats returns aggregated statistics about all recorded observations.
 func (a *QUICAnalyzer) GetStats() *QUICStats {
 	stats := &QUICStats{
 		TotalPackets: len(a.observations),
@@ -263,12 +293,15 @@ func (a *QUICAnalyzer) GetStats() *QUICStats {
 	return stats
 }
 
+// QUICStats contains aggregated statistics from QUIC observations.
 type QUICStats struct {
 	TotalPackets int
 	ByVersion    map[string]int
 	ByBrowser    map[string]int
 }
 
+// HTTP3SettingsFingerprint represents the fingerprint of HTTP/3 SETTINGS
+// frame parameters for browser identification.
 type HTTP3SettingsFingerprint struct {
 	SettingsField0x1 uint64
 	SettingsField0x2 uint64
@@ -283,6 +316,8 @@ type HTTP3SettingsFingerprint struct {
 	QPACKDynamicCapacity  uint64
 }
 
+// ToFingerprintString converts the HTTP/3 settings fingerprint to a string
+// representation suitable for comparison.
 func (s *HTTP3SettingsFingerprint) ToFingerprintString() string {
 	return fmt.Sprintf("s1=%d;s2=%d;s3=%d;s4=%d;s5=%d;m=%d;qt=%d;qb=%d;qd=%d",
 		s.SettingsField0x1,
@@ -297,10 +332,13 @@ func (s *HTTP3SettingsFingerprint) ToFingerprintString() string {
 	)
 }
 
+// Hash returns a SHA-256 hash of the HTTP/3 settings fingerprint string.
 func (s *HTTP3SettingsFingerprint) Hash() string {
 	return sha256Hash(s.ToFingerprintString())
 }
 
+// ParseHTTP3Settings parses raw HTTP/3 SETTINGS frame data and extracts
+// the settings into a fingerprint structure.
 func ParseHTTP3Settings(data []byte) (*HTTP3SettingsFingerprint, error) {
 	if len(data) < 6 {
 		return nil, fmt.Errorf("settings too short")
@@ -350,6 +388,8 @@ func ParseHTTP3Settings(data []byte) (*HTTP3SettingsFingerprint, error) {
 	return settings, nil
 }
 
+// HTTP3FrameFingerprint represents the fingerprint of an HTTP/3 frame
+// for protocol analysis and identification.
 type HTTP3FrameFingerprint struct {
 	Type string
 
@@ -360,6 +400,8 @@ type HTTP3FrameFingerprint struct {
 	FrameSpecific map[string]interface{}
 }
 
+// ToFingerprintString converts the HTTP/3 frame fingerprint to a string
+// representation for comparison.
 func (f *HTTP3FrameFingerprint) ToFingerprintString() string {
 	frameType := f.Type
 	if frameType == "" {
@@ -374,6 +416,7 @@ func (f *HTTP3FrameFingerprint) ToFingerprintString() string {
 	return result
 }
 
+// KnownHTTP3FrameTypes maps HTTP/3 frame type hex values to their human-readable names.
 var KnownHTTP3FrameTypes = map[string]string{
 	"0x0":  "DATA",
 	"0x1":  "HEADERS",
@@ -405,6 +448,8 @@ var KnownHTTP3FrameTypes = map[string]string{
 	"0x1e": "EXTENSION",
 }
 
+// ParseFrameType converts a frame type byte to its human-readable name.
+// Returns the hex representation if the type is not known.
 func ParseFrameType(t byte) string {
 	if name, ok := KnownHTTP3FrameTypes[fmt.Sprintf("0x%x", t)]; ok {
 		return name
@@ -412,6 +457,8 @@ func ParseFrameType(t byte) string {
 	return fmt.Sprintf("0x%x", t)
 }
 
+// QUICConnectionAnalyzer tracks packets and frames across a QUIC connection
+// to provide connection-level statistics and analysis.
 type QUICConnectionAnalyzer struct {
 	packets   []QUICObservation
 	frames    []HTTP3FrameFingerprint
@@ -419,6 +466,8 @@ type QUICConnectionAnalyzer struct {
 	endTime   time.Time
 }
 
+// NewQUICConnectionAnalyzer creates a new QUICConnectionAnalyzer instance
+// ready to track connection data.
 func NewQUICConnectionAnalyzer() *QUICConnectionAnalyzer {
 	return &QUICConnectionAnalyzer{
 		packets: make([]QUICObservation, 0),
@@ -426,6 +475,7 @@ func NewQUICConnectionAnalyzer() *QUICConnectionAnalyzer {
 	}
 }
 
+// AddPacket adds a QUIC packet observation to the connection analyzer.
 func (a *QUICConnectionAnalyzer) AddPacket(obs QUICObservation) {
 	if a.startTime.IsZero() {
 		a.startTime = obs.Timestamp
@@ -434,10 +484,12 @@ func (a *QUICConnectionAnalyzer) AddPacket(obs QUICObservation) {
 	a.packets = append(a.packets, obs)
 }
 
+// AddFrame adds an HTTP/3 frame fingerprint to the connection analyzer.
 func (a *QUICConnectionAnalyzer) AddFrame(frame HTTP3FrameFingerprint) {
 	a.frames = append(a.frames, frame)
 }
 
+// GetConnectionStats returns aggregated statistics about the tracked connection.
 func (a *QUICConnectionAnalyzer) GetConnectionStats() *QUICConnectionStats {
 	stats := &QUICConnectionStats{
 		Duration:        a.endTime.Sub(a.startTime),
@@ -462,6 +514,7 @@ func (a *QUICConnectionAnalyzer) GetConnectionStats() *QUICConnectionStats {
 	return stats
 }
 
+// QUICConnectionStats contains aggregated statistics for a QUIC connection.
 type QUICConnectionStats struct {
 	Duration        time.Duration
 	TotalPackets    int

@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// CompleteFingerprint represents a complete browser fingerprint including all protocols.
 type CompleteFingerprint struct {
 	TraceID         string            `json:"trace_id"`
 	Timestamp       time.Time         `json:"timestamp"`
@@ -25,6 +26,7 @@ type CompleteFingerprint struct {
 	Metadata        map[string]string `json:"metadata,omitempty"`
 }
 
+// TLSFingerprint represents a TLS handshake fingerprint.
 type TLSFingerprint struct {
 	Version          string   `json:"version"`
 	CipherSuites     []uint16 `json:"cipher_suites"`
@@ -43,6 +45,7 @@ type TLSFingerprint struct {
 	IsTLS13          bool     `json:"is_tls13"`
 }
 
+// WSFingerprint represents a WebSocket handshake fingerprint.
 type WSFingerprint struct {
 	Version         string   `json:"version"`
 	SubProtocols    []string `json:"sub_protocols"`
@@ -52,6 +55,7 @@ type WSFingerprint struct {
 	JA3W            string   `json:"ja3w"`
 }
 
+// BehavioralPrint represents behavioral biometric fingerprint data.
 type BehavioralPrint struct {
 	MouseVariance  float64 `json:"mouse_variance"`
 	TypingSpeed    float64 `json:"typing_speed"`
@@ -60,10 +64,12 @@ type BehavioralPrint struct {
 	IsHumanLike    bool    `json:"is_human_like"`
 }
 
+// FingerprintBuilder provides a fluent API for building fingerprints.
 type FingerprintBuilder struct {
 	fingerprint *CompleteFingerprint
 }
 
+// NewFingerprint creates a new fingerprint builder.
 func NewFingerprint() *FingerprintBuilder {
 	return &FingerprintBuilder{
 		fingerprint: &CompleteFingerprint{
@@ -76,6 +82,7 @@ func NewFingerprint() *FingerprintBuilder {
 	}
 }
 
+// WithTLS adds TLS fingerprint data to the builder.
 func (b *FingerprintBuilder) WithTLS(tls *TLSFingerprint) *FingerprintBuilder {
 	b.fingerprint.TLS = tls
 	if tls != nil {
@@ -85,6 +92,7 @@ func (b *FingerprintBuilder) WithTLS(tls *TLSFingerprint) *FingerprintBuilder {
 	return b
 }
 
+// WithHTTP1 adds HTTP/1.1 fingerprint data to the builder.
 func (b *FingerprintBuilder) WithHTTP1(http1 *HTTP1Fingerprint) *FingerprintBuilder {
 	b.fingerprint.HTTP1 = http1
 	if http1 != nil {
@@ -93,6 +101,7 @@ func (b *FingerprintBuilder) WithHTTP1(http1 *HTTP1Fingerprint) *FingerprintBuil
 	return b
 }
 
+// WithHTTP2 adds HTTP/2 fingerprint data to the builder.
 func (b *FingerprintBuilder) WithHTTP2(http2 *HTTP2Fingerprint) *FingerprintBuilder {
 	b.fingerprint.HTTP2 = http2
 	if http2 != nil {
@@ -101,6 +110,7 @@ func (b *FingerprintBuilder) WithHTTP2(http2 *HTTP2Fingerprint) *FingerprintBuil
 	return b
 }
 
+// WithWebSocket adds WebSocket fingerprint data to the builder.
 func (b *FingerprintBuilder) WithWebSocket(ws *WSFingerprint) *FingerprintBuilder {
 	b.fingerprint.WebSocket = ws
 	if ws != nil {
@@ -109,26 +119,31 @@ func (b *FingerprintBuilder) WithWebSocket(ws *WSFingerprint) *FingerprintBuilde
 	return b
 }
 
+// WithBehavioral adds behavioral fingerprint data to the builder.
 func (b *FingerprintBuilder) WithBehavioral(bh *BehavioralPrint) *FingerprintBuilder {
 	b.fingerprint.Behavioral = bh
 	return b
 }
 
+// WithMetadata adds metadata to the fingerprint.
 func (b *FingerprintBuilder) WithMetadata(key, value string) *FingerprintBuilder {
 	b.fingerprint.Metadata[key] = value
 	return b
 }
 
+// WithDetectedBrowser sets the detected browser.
 func (b *FingerprintBuilder) WithDetectedBrowser(browser string) *FingerprintBuilder {
 	b.fingerprint.DetectedBrowser = browser
 	return b
 }
 
+// WithConfidence sets the detection confidence.
 func (b *FingerprintBuilder) WithConfidence(confidence float64) *FingerprintBuilder {
 	b.fingerprint.Confidence = confidence
 	return b
 }
 
+// Build returns the complete fingerprint.
 func (b *FingerprintBuilder) Build() *CompleteFingerprint {
 	b.detectBrowser()
 	return b.fingerprint
@@ -175,6 +190,7 @@ func (b *FingerprintBuilder) detectBrowser() {
 	b.fingerprint.Confidence = maxScore
 }
 
+// FingerprintCapture captures and analyzes fingerprint data.
 type FingerprintCapture struct {
 	analyzer      *TLSAnalyzer
 	http1Analyzer *HTTP1Analyzer
@@ -182,6 +198,7 @@ type FingerprintCapture struct {
 	wsAnalyzer    *WebSocketAnalyzer
 }
 
+// NewFingerprintCapture creates a new fingerprint capture instance.
 func NewFingerprintCapture() *FingerprintCapture {
 	return &FingerprintCapture{
 		analyzer:      NewTLSAnalyzer(),
@@ -191,6 +208,7 @@ func NewFingerprintCapture() *FingerprintCapture {
 	}
 }
 
+// CaptureTLS captures TLS fingerprint data from a ClientHello.
 func (c *FingerprintCapture) CaptureTLS(clientHello interface{}) string {
 	var traceID string
 
@@ -209,14 +227,17 @@ func (c *FingerprintCapture) CaptureTLS(clientHello interface{}) string {
 	return traceID
 }
 
+// CaptureHTTP1 captures HTTP/1.1 fingerprint data from headers.
 func (c *FingerprintCapture) CaptureHTTP1(headers map[string]string) {
 	c.http1Analyzer.Record(headers)
 }
 
+// CaptureHTTP2 captures HTTP/2 fingerprint data from settings.
 func (c *FingerprintCapture) CaptureHTTP2(settings map[uint16]uint32, pseudoHeaders []string) {
 	c.http2Analyzer.Record(settings, pseudoHeaders, 65535, 16384)
 }
 
+// CaptureWebSocket captures WebSocket fingerprint data from headers.
 func (c *FingerprintCapture) CaptureWebSocket(headers map[string]string) {
 	c.wsAnalyzer.Record(headers)
 }
@@ -242,6 +263,7 @@ func (c *FingerprintCapture) GetFingerprint() *CompleteFingerprint {
 			fp.TLS = tlsFP
 			fp.JA3 = tlsFP.JA3
 			fp.JA4 = tlsFP.JA4
+			fp.TraceID = lastHS.TraceID
 		}
 	}
 

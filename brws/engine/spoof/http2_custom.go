@@ -172,7 +172,6 @@ func (t *CustomHTTP2Transport) SendRequest(
 	headers map[string]string,
 	body []byte,
 ) (*http.Response, error) {
-
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -226,8 +225,8 @@ func (t *CustomHTTP2Transport) encodeHeaders(
 	method, authority, scheme, path string,
 	headers map[string]string,
 ) ([]byte, error) {
-
 	var buf bytes.Buffer
+
 	encoder := hpack.NewEncoder(&buf)
 
 	// Encode pseudo-headers in specific order
@@ -348,6 +347,7 @@ func (t *CustomHTTP2Transport) readResponse(streamID uint32) (*http.Response, er
 // decodeHeaders decodes HPACK header block
 func (t *CustomHTTP2Transport) decodeHeaders(block []byte) (http.Header, int, error) {
 	header := make(http.Header)
+
 	var statusCode int
 
 	// HPACK decoder

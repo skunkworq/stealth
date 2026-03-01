@@ -112,6 +112,7 @@ func (c *Comparison) compareStatuses(results []EngineResult) {
 	}
 
 	var firstStatus int
+
 	first := true
 
 	for _, r := range results {
@@ -141,6 +142,7 @@ func (c *Comparison) compareStatuses(results []EngineResult) {
 func (c *Comparison) compareHeaders(results []EngineResult) {
 	// Collect all header names
 	allHeaders := make(map[string]bool)
+
 	for _, r := range results {
 		if r.Error != nil || r.Response == nil {
 			continue
@@ -230,6 +232,7 @@ func (c *Comparison) compareProtocols(results []EngineResult) {
 	}
 
 	var firstProto string
+
 	first := true
 
 	for _, r := range results {
@@ -288,11 +291,13 @@ func (c *Comparison) generateSummary() {
 	}
 
 	differentHeaders := 0
+
 	for _, hd := range c.HeaderDiffs {
 		if !hd.Same {
 			differentHeaders++
 		}
 	}
+
 	if differentHeaders > 0 {
 		parts = append(parts, fmt.Sprintf("%d headers differ", differentHeaders))
 	}
@@ -312,6 +317,7 @@ func (c *Comparison) FormatPretty() string {
 	fmt.Fprintf(&b, "Engines: %s\n\n", strings.Join(c.Engines, ", "))
 
 	fmt.Fprintf(&b, "Status: ")
+
 	if c.StatusDiff.Same {
 		for _, v := range c.StatusDiff.Values {
 			fmt.Fprintf(&b, "%d (all engines)\n", v)
@@ -325,6 +331,7 @@ func (c *Comparison) FormatPretty() string {
 	}
 
 	fmt.Fprintf(&b, "\nProtocol: ")
+
 	if c.ProtocolDiff.Same {
 		for _, v := range c.ProtocolDiff.Protocols {
 			fmt.Fprintf(&b, "%s (all engines)\n", v)
@@ -338,6 +345,7 @@ func (c *Comparison) FormatPretty() string {
 	}
 
 	fmt.Fprintf(&b, "\nBody: ")
+
 	if c.BodyDiff.Same {
 		for _, length := range c.BodyDiff.Lengths {
 			fmt.Fprintf(&b, "%d bytes (all engines)\n", length)
@@ -345,17 +353,20 @@ func (c *Comparison) FormatPretty() string {
 		}
 	} else {
 		fmt.Fprintln(&b, "DIFFER")
+
 		for engine, length := range c.BodyDiff.Lengths {
 			fmt.Fprintf(&b, "  %s: %d bytes\n", engine, length)
 		}
 	}
 
 	fmt.Fprintln(&b, "\nHeaders:")
+
 	var headerNames []string
 	for name := range c.HeaderDiffs {
 		headerNames = append(headerNames, name)
 	}
 	sort.Strings(headerNames)
+
 
 	for _, name := range headerNames {
 		hd := c.HeaderDiffs[name]
@@ -455,8 +466,10 @@ func NewHeaderSet(h http.Header) *HeaderSet {
 	for k, v := range h {
 		hs.Headers[http.CanonicalHeaderKey(k)] = v
 	}
+
 	return hs
 }
+
 
 // Diff returns differences between two header sets.
 func (hs *HeaderSet) Diff(other *HeaderSet) map[string][2][]string {
@@ -466,6 +479,7 @@ func (hs *HeaderSet) Diff(other *HeaderSet) map[string][2][]string {
 	for k := range hs.Headers {
 		allKeys[k] = true
 	}
+
 	for k := range other.Headers {
 		allKeys[k] = true
 	}
@@ -529,6 +543,7 @@ func (ra *ResponseAnalyzer) Analyze() map[string]interface{} {
 		"Referrer-Policy",
 	}
 	present := make([]string, 0)
+
 	for _, h := range securityHeaders {
 		if _, ok := ra.Response.Headers[h]; ok {
 			present = append(present, h)

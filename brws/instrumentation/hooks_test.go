@@ -16,7 +16,7 @@ func TestHookRegistry_New(t *testing.T) {
 func TestHookRegistry_Register(t *testing.T) {
 	registry := NewHookRegistry()
 
-	registry.Register("test-hook", func(ctx context.Context) error {
+	registry.Register("test-hook", func(_ context.Context) error {
 		return nil
 	})
 
@@ -31,7 +31,7 @@ func TestHookRegistry_Execute(t *testing.T) {
 	ctx := context.Background()
 
 	executed := false
-	registry.Register("test-hook", func(ctx context.Context) error {
+	registry.Register("test-hook", func(_ context.Context) error {
 		executed = true
 		return nil
 	})
@@ -51,16 +51,16 @@ func TestHookRegistry_Execute_MultipleHooks(t *testing.T) {
 	ctx := context.Background()
 
 	count := 0
-	registry.Register("test-hook", func(ctx context.Context) error {
+	registry.Register("test-hook", func(_ context.Context) error {
 		count++
 		return nil
 	})
-	registry.Register("test-hook", func(ctx context.Context) error {
+	registry.Register("test-hook", func(_ context.Context) error {
 		count++
 		return nil
 	})
 
-	registry.Execute(ctx, "test-hook")
+	_ = registry.Execute(ctx, "test-hook")
 
 	if count != 2 {
 		t.Errorf("expected 2 executions, got %d", count)
@@ -82,7 +82,7 @@ func TestHookRegistry_Execute_Error(t *testing.T) {
 	registry := NewHookRegistry()
 	ctx := context.Background()
 
-	registry.Register("test-hook", func(ctx context.Context) error {
+	registry.Register("test-hook", func(_ context.Context) error {
 		return errors.New("hook error")
 	})
 
@@ -95,7 +95,7 @@ func TestHookRegistry_Execute_Error(t *testing.T) {
 func TestHookRegistry_Unregister(t *testing.T) {
 	registry := NewHookRegistry()
 
-	registry.Register("test-hook", func(ctx context.Context) error {
+	registry.Register("test-hook", func(_ context.Context) error {
 		return nil
 	})
 

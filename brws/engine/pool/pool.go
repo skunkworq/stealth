@@ -41,7 +41,8 @@ type Config struct {
 	IdleTimeout time.Duration // Idle time before instance is recycled
 }
 
-// PoolStats tracks pool statistics
+// PoolStats tracks pool statistics.
+//nolint:revive // Type name stuttering is intentional for clarity
 type PoolStats struct {
 	Created  int64
 	Recycled int64
@@ -71,12 +72,14 @@ func New(factory EngineFactory, cfg *Config) (*Pool, error) {
 	if cfg.MaxSize == 0 {
 		cfg.MaxSize = 10
 	}
+
 	if cfg.MinSize == 0 {
 		cfg.MinSize = 2
 	}
 	if cfg.MaxUses == 0 {
 		cfg.MaxUses = 100
 	}
+
 	if cfg.MaxAge == 0 {
 		cfg.MaxAge = 10 * time.Minute
 	}
@@ -97,6 +100,7 @@ func New(factory EngineFactory, cfg *Config) (*Pool, error) {
 		if err != nil {
 			return nil, fmt.Errorf("creating initial instance: %w", err)
 		}
+
 		p.instances <- inst
 	}
 
@@ -182,6 +186,7 @@ func (p *Pool) Acquire(ctx context.Context) (*BrowserInstance, error) {
 		p.mu.Lock()
 		p.stats.Active++
 		p.mu.Unlock()
+
 		return inst, nil
 	}
 }
@@ -267,6 +272,7 @@ func (p *Pool) cleanupLoop() {
 func (p *Pool) Stats() PoolStats {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
+
 	return p.stats
 }
 

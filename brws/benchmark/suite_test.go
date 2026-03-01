@@ -105,7 +105,7 @@ func BenchmarkMemoryLeakDetection(b *testing.B) {
 		first := snapshots[0]
 		last := snapshots[len(snapshots)-1]
 
-		heapGrowth := int64(last.HeapAlloc) - int64(first.HeapAlloc)
+		heapGrowth := int64(last.HeapAlloc) - int64(first.HeapAlloc) //nolint:gosec // G115: HeapAlloc values will fit in int64 for test purposes
 		iterations := int64(len(snapshots) * 100)
 		growthPerIteration := heapGrowth / iterations
 
@@ -170,7 +170,7 @@ func BenchmarkLockContention(b *testing.B) {
 		}
 
 		p, _ := pool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
-		defer p.Close()
+		defer func() { _ = p.Close() }()
 
 		b.ReportAllocs()
 		b.ResetTimer()
@@ -326,7 +326,7 @@ func BenchmarkStressTest(b *testing.B) {
 		}
 
 		p, _ := pool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
-		defer p.Close()
+		defer func() { _ = p.Close() }()
 
 		b.ReportAllocs()
 		b.ResetTimer()

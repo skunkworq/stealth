@@ -75,9 +75,9 @@ func TestFSM_GetStats(t *testing.T) {
 	fsm := NewRequestFSM()
 	ctx := context.Background()
 
-	fsm.Transition(ctx, RequestEvents.Start)
-	fsm.Transition(ctx, RequestEvents.Prepared)
-	fsm.Transition(ctx, RequestEvents.Navigate)
+	_ = fsm.Transition(ctx, RequestEvents.Start)
+	_ = fsm.Transition(ctx, RequestEvents.Prepared)
+	_ = fsm.Transition(ctx, RequestEvents.Navigate)
 
 	stats := fsm.GetStats()
 
@@ -95,12 +95,12 @@ func TestFSM_SetTransitionFunc(t *testing.T) {
 	ctx := context.Background()
 
 	called := false
-	fsm.SetTransitionFunc(func(ctx context.Context, from, to State, event Event) error {
+	fsm.SetTransitionFunc(func(_ context.Context, _, _ State, _ Event) error {
 		called = true
 		return nil
 	})
 
-	fsm.Transition(ctx, RequestEvents.Start)
+	_ = fsm.Transition(ctx, RequestEvents.Start)
 
 	if !called {
 		t.Error("expected transition func to be called")
@@ -138,9 +138,9 @@ func TestRequestFSM_RetryFlow(t *testing.T) {
 	ctx := context.Background()
 
 	// idle -> initializing -> prepared -> navigating
-	fsm.Transition(ctx, RequestEvents.Start)
-	fsm.Transition(ctx, RequestEvents.Prepared)
-	fsm.Transition(ctx, RequestEvents.Navigate)
+	_ = fsm.Transition(ctx, RequestEvents.Start)
+	_ = fsm.Transition(ctx, RequestEvents.Prepared)
+	_ = fsm.Transition(ctx, RequestEvents.Navigate)
 
 	// Simulate failure and retry
 	err := fsm.Transition(ctx, RequestEvents.Fail)

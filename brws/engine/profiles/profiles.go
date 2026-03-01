@@ -419,11 +419,13 @@ func NewRotator(profiles []*Profile) *Rotator {
 	if len(profiles) == 0 {
 		// Use all available profiles
 		names := AvailableProfiles()
+
 		profiles = make([]*Profile, len(names))
 		for i, name := range names {
 			profiles[i] = GetByName(name)
 		}
 	}
+
 	return &Rotator{
 		profiles: profiles,
 	}

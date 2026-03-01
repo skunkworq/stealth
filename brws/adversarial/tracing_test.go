@@ -99,7 +99,7 @@ func TestDetailedDetectionTrace(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		resp, err := eng.Do(context.Background(), &engine.Request{
 			URL:    "http://example.com",

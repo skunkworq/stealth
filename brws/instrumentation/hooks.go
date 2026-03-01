@@ -66,7 +66,7 @@ func (r *HookRegistry) List() []string {
 	return names
 }
 
-// Hook names for the stealth engine.
+// HookNames defines the available hook names for the stealth engine.
 var HookNames = struct {
 	// Browser hooks
 	OnBrowserStart string
@@ -143,7 +143,7 @@ func DefaultHookRegistry() *HookRegistry {
 		HookNames.OnScroll,
 		HookNames.OnError,
 	} {
-		registry.Register(name, func(ctx context.Context) error { return nil })
+		registry.Register(name, func(_ context.Context) error { return nil })
 	}
 
 	return registry

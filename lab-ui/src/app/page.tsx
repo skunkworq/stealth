@@ -15,6 +15,9 @@ import { useWebSocket, WebSocketMessage } from "@/hooks/useWebSocket";
 import { useToasts, ToastContainer } from "@/components/Toasts";
 import { useCallback, useState } from "react";
 
+import { CaptchaDashboard } from "@/components/CaptchaDashboard";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 export default function Home() {
   return (
     <FingerprintProvider>
@@ -28,6 +31,7 @@ function AppContent() {
   const { toasts, addToast } = useToasts();
   const [wsConnected, setWsConnected] = useState(false);
   const [packets, setPackets] = useState<WebSocketMessage[]>([]);
+  const [activeTab, setActiveTab] = useState("analysis");
 
   const handleFingerprint = useCallback((msg: WebSocketMessage) => {
     const host = msg.host || "Unknown";
@@ -57,19 +61,45 @@ function AppContent() {
       <Header wsConnected={wsConnected} />
       <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Left column: fingerprint panels */}
-          <div className="lg:col-span-7 xl:col-span-8 space-y-5">
-            <OverviewCard />
-            <TLSPanel />
-            <HTTP2Panel />
-            <HTTPPanel />
-            <CaptureHistory />
-            <PacketAnalysisPanel packets={packets} />
+          {/* Left column: main area */}
+          <div className="lg:col-span-12 xl:col-span-8 space-y-5">
+            <Tabs defaultValue="analysis" className="w-full" onValueChange={setActiveTab}>
+              <div className="flex items-center justify-between mb-2">
+                <TabsList className="skeuo-inset bg-black/40 border-border/10">
+                  <TabsTrigger value="analysis" className="data-[state=active]:skeuo-panel data-[state=active]:text-cyan-glow uppercase text-[10px] font-bold tracking-widest px-6">
+                    Analysis
+                  </TabsTrigger>
+                  <TabsTrigger value="captcha" className="data-[state=active]:skeuo-panel data-[state=active]:text-amber-glow uppercase text-[10px] font-bold tracking-widest px-6">
+                    CAPTCHA
+                  </TabsTrigger>
+                </TabsList>
+                
+                <div className="hidden md:flex items-center gap-2">
+                   <div className="h-px w-24 bg-gradient-to-r from-transparent to-border/30" />
+                   <span className="text-[10px] text-muted-foreground/40 font-mono uppercase tracking-tighter">
+                      Mode: {activeTab === "analysis" ? "FINGERPRINT_EXTRACTION" : "ADVERSARIAL_TELEMETRY"}
+                   </span>
+                </div>
+              </div>
+
+              <TabsContent value="analysis" className="space-y-5 mt-0">
+                <OverviewCard />
+                <TLSPanel />
+                <HTTP2Panel />
+                <HTTPPanel />
+                <CaptureHistory />
+                <PacketAnalysisPanel packets={packets} />
+              </TabsContent>
+
+              <TabsContent value="captcha" className="mt-0">
+                <CaptchaDashboard />
+              </TabsContent>
+            </Tabs>
           </div>
 
-          {/* Right column: config + build output (sticky) */}
-          <div className="lg:col-span-5 xl:col-span-4">
-            <div className="lg:sticky lg:top-6 space-y-5">
+          {/* Right column: controls (sticky) */}
+          <div className="lg:col-span-12 xl:col-span-4">
+            <div className="xl:sticky xl:top-6 space-y-5">
               <ControlPanel />
               <ConfigPanel />
               <BuildOutput />

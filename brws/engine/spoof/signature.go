@@ -147,6 +147,7 @@ func (db *SignatureDatabase) LoadFromDir(dir string) error {
 		}
 
 		path := filepath.Join(dir, file.Name())
+
 		safePath, err := sanitizePath(path)
 		if err != nil {
 			continue

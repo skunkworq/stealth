@@ -17,7 +17,7 @@ func TestPlainHTTPS(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method:  "GET",
@@ -46,7 +46,7 @@ func TestPlainHTTPSWithStealthOnly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method:  "GET",

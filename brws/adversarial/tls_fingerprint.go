@@ -1,3 +1,4 @@
+// Package adversarial provides detection and fingerprinting capabilities for adversarial systems.
 //nolint:gosec // G401/G501: MD5 required for JA3 fingerprinting per JA3 spec
 package adversarial
 
@@ -12,10 +13,12 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
+// TLSFingerprinter captures and analyzes TLS fingerprints from TLS connections.
 type TLSFingerprinter struct {
 	config *utls.Config
 }
 
+// NewTLSFingerprinter creates a new TLS fingerprinting instance.
 func NewTLSFingerprinter() *TLSFingerprinter {
 	return &TLSFingerprinter{
 		config: &utls.Config{
@@ -24,6 +27,7 @@ func NewTLSFingerprinter() *TLSFingerprinter {
 	}
 }
 
+// TLSFingerprint represents a captured TLS fingerprint with JA3/JA4 hashes.
 type TLSFingerprint struct {
 	JA3        string
 	JA3Hash    string
@@ -37,7 +41,8 @@ type TLSFingerprint struct {
 	UserAgent  string
 }
 
-func (t *TLSFingerprinter) CaptureFingerprint(addr string, browser string) (*TLSFingerprint, error) {
+// CaptureFingerprint captures a TLS fingerprint from the given address.
+func (t *TLSFingerprinter) CaptureFingerprint(addr string, _ string) (*TLSFingerprint, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("dial: %w", err)
@@ -93,6 +98,7 @@ func (t *TLSFingerprinter) calculateJA3(cipher uint16) string {
 	return fmt.Sprintf("769,%04x,0-1-5-10-11-13-16-23-35-43-45-51", cipher)
 }
 
+// DetectBrowserFromJA4 attempts to detect the browser type from a JA4 fingerprint.
 func (t *TLSFingerprinter) DetectBrowserFromJA4(ja4 string) string {
 	if strings.HasPrefix(ja4, "t13") || strings.HasPrefix(ja4, "t12") {
 		// Check for TLS 1.3 ciphers which indicate modern browsers
@@ -104,6 +110,7 @@ func (t *TLSFingerprinter) DetectBrowserFromJA4(ja4 string) string {
 	return "unknown"
 }
 
+// ValidateFingerprint checks if the JA4 fingerprint matches the expected browser.
 func (t *TLSFingerprinter) ValidateFingerprint(ja4, expectedBrowser string) bool {
 	detected := t.DetectBrowserFromJA4(ja4)
 	return detected == expectedBrowser
@@ -114,6 +121,7 @@ func md5Hash(s string) string {
 	return hex.EncodeToString(h[:])
 }
 
+// TLSAnalysisResult contains the analysis results of a TLS fingerprint.
 type TLSAnalysisResult struct {
 	JA4            string
 	JA3            string
@@ -131,6 +139,7 @@ type TLSAnalysisResult struct {
 	Anomalies      []string
 }
 
+// AnalyzeConnection captures and analyzes a TLS connection to the given address.
 func (t *TLSFingerprinter) AnalyzeConnection(addr string) (*TLSAnalysisResult, error) {
 	fp, err := t.CaptureFingerprint(addr, "chrome")
 	if err != nil {
@@ -165,6 +174,7 @@ func (t *TLSFingerprinter) AnalyzeConnection(addr string) (*TLSAnalysisResult, e
 	return result, nil
 }
 
+// GetBrowserFingerprint returns the utls ClientHelloID for the specified browser.
 func (t *TLSFingerprinter) GetBrowserFingerprint(browser string) (*utls.ClientHelloID, error) {
 	switch strings.ToLower(browser) {
 	case "chrome":

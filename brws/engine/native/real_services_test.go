@@ -27,7 +27,7 @@ func TestRealHTTPServices(t *testing.T) {
 		t.Run(svc.name, func(t *testing.T) {
 			client := &http.Client{
 				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Test server uses self-signed cert
 				},
 			}
 
@@ -36,7 +36,7 @@ func TestRealHTTPServices(t *testing.T) {
 				t.Logf("Error: %v", err)
 				return
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			if resp.TLS != nil {
 				fmt.Printf("\n=== %s (Standard Go) ===\n", svc.name)
@@ -56,7 +56,7 @@ func TestRealHTTPServices(t *testing.T) {
 				fmt.Printf("JA4: %s\n", ja4)
 			}
 
-			io.Copy(io.Discard, resp.Body)
+			_, _ = io.Copy(io.Discard, resp.Body)
 		})
 	}
 }
@@ -73,7 +73,7 @@ func TestStealthEngineAgainstRealService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method:  "GET",

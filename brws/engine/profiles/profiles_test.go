@@ -116,7 +116,7 @@ func TestRotatorNext(t *testing.T) {
 	}
 }
 
-func TestRotatorRandom(t *testing.T) {
+func TestRotatorRandom(_ *testing.T) {
 	rotator := NewRotator([]*Profile{
 		GetChrome120Mac(),
 		GetFirefox120Win(),
@@ -129,7 +129,7 @@ func TestRotatorRandom(t *testing.T) {
 	}
 }
 
-func TestRotatorMutated(t *testing.T) {
+func TestRotatorMutated(_ *testing.T) {
 	rotator := NewRotator(nil) // Uses all profiles
 
 	// Just test that it doesn't panic

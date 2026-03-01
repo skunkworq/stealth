@@ -39,6 +39,7 @@ func New(cfg *Config) (*Client, error) {
 	tlsConfig := cfg.TLSConfig
 	if tlsConfig == nil {
 		tlsConfig = &tls.Config{
+			MinVersion:         tls.VersionTLS12,
 			InsecureSkipVerify: false,
 			NextProtos:         []string{"h3", "h3-29"},
 		}
@@ -72,7 +73,7 @@ type Transport struct {
 }
 
 // RoundTrip implements http.RoundTripper
-func (t *Transport) RoundTrip(req *http.Request) (*http.Response, error) {
+func (t *Transport) RoundTrip(_ *http.Request) (*http.Response, error) {
 	// This is a placeholder - full HTTP/3 implementation requires
 	// significant code from quic-go/http3 or similar library
 	// For now, return an error suggesting to use the native HTTP/2 client

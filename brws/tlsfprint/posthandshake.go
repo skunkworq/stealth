@@ -483,3 +483,141 @@ type PostHandshakeStats struct {
 	ByType      map[string]int
 	SuccessRate map[string]float64
 }
+
+type KeyUpdateFingerprint struct {
+	RequestDirection string
+	RequestTime      time.Time
+	ProcessingTime   time.Duration
+	SequenceNumber   uint64
+	Errors           []string
+}
+
+type TLS13KeyUpdateAnalyzer struct {
+	mu           sync.RWMutex
+	observations []KeyUpdateFingerprint
+}
+
+func NewTLS13KeyUpdateAnalyzer() *TLS13KeyUpdateAnalyzer {
+	return &TLS13KeyUpdateAnalyzer{
+		observations: make([]KeyUpdateFingerprint, 0),
+	}
+}
+
+func (a *TLS13KeyUpdateAnalyzer) RecordKeyUpdate(dir string, seq uint64, dur time.Duration, err error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	fp := KeyUpdateFingerprint{
+		RequestDirection: dir,
+		RequestTime:      time.Now(),
+		ProcessingTime:   dur,
+		SequenceNumber:   seq,
+	}
+	if err != nil {
+		fp.Errors = append(fp.Errors, err.Error())
+	}
+	a.observations = append(a.observations, fp)
+}
+
+func (a *TLS13KeyUpdateAnalyzer) GetFingerprint() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if len(a.observations) == 0 {
+		return "no_key_updates"
+	}
+
+	counts := make(map[string]int)
+	var totalDur time.Duration
+	errorCount := 0
+
+	for _, o := range a.observations {
+		counts[o.RequestDirection]++
+		totalDur += o.ProcessingTime
+		if len(o.Errors) > 0 {
+			errorCount++
+		}
+	}
+
+	avgDur := totalDur / time.Duration(len(a.observations))
+	dir := "unidirectional"
+	if counts["client"] > 0 && counts["server"] > 0 {
+		dir = "bidirectional"
+	}
+	errStr := "ok"
+	if errorCount > 0 {
+		errStr = "err"
+	}
+	return fmt.Sprintf("ku_%d_%s_%s_%dms",
+		len(a.observations),
+		dir,
+		errStr,
+		avgDur.Milliseconds())
+}
+
+type SessionTicketTiming struct {
+	TicketAge        time.Duration
+	IssueTime        time.Time
+	UsedLatency      time.Duration
+	AcceptLatency    time.Duration
+	EarlyDataEnabled bool
+}
+
+type SessionTicketTimingAnalyzer struct {
+	mu          sync.RWMutex
+	ticketStats []SessionTicketTiming
+}
+
+func NewSessionTicketTimingAnalyzer() *SessionTicketTimingAnalyzer {
+	return &SessionTicketTimingAnalyzer{
+		ticketStats: make([]SessionTicketTiming, 0),
+	}
+}
+
+func (a *SessionTicketTimingAnalyzer) RecordTicketIssue(age time.Duration) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	a.ticketStats = append(a.ticketStats, SessionTicketTiming{
+		TicketAge: age,
+		IssueTime: time.Now(),
+	})
+}
+
+func (a *SessionTicketTimingAnalyzer) RecordTicketUse(idx int, latency time.Duration) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	if idx >= 0 && idx < len(a.ticketStats) {
+		a.ticketStats[idx].UsedLatency = latency
+	}
+}
+
+func (a *SessionTicketTimingAnalyzer) GetTimingFingerprint() string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	if len(a.ticketStats) == 0 {
+		return "no_tickets"
+	}
+
+	var totalAge, totalLatency time.Duration
+	earlyDataEnabled := 0
+
+	for _, t := range a.ticketStats {
+		totalAge += t.TicketAge
+		totalLatency += t.UsedLatency
+		if t.EarlyDataEnabled {
+			earlyDataEnabled++
+		}
+	}
+
+	avgAge := totalAge / time.Duration(len(a.ticketStats))
+	avgLatency := totalLatency / time.Duration(len(a.ticketStats))
+
+	return fmt.Sprintf("st_%d_%dms_%dms_ed%d",
+		len(a.ticketStats),
+		avgAge.Milliseconds(),
+		avgLatency.Milliseconds(),
+		earlyDataEnabled)
+}

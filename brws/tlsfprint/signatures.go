@@ -1,3 +1,4 @@
+// Package tlsfprint provides TLS fingerprinting types and signatures.
 package tlsfprint
 
 import (
@@ -7,9 +8,11 @@ import (
 	"strings"
 )
 
+// TLSLibrary represents the TLS library used by a browser.
 type TLSLibrary string
 
 const (
+	// LibraryBoringSSL represents the BoringSSL library.
 	LibraryBoringSSL       TLSLibrary = "boringssl"
 	LibraryOpenSSL         TLSLibrary = "openssl"
 	LibraryNSS             TLSLibrary = "nss"
@@ -18,9 +21,11 @@ const (
 	LibraryGo              TLSLibrary = "go"
 )
 
+// BrowserFamily represents the browser family.
 type BrowserFamily string
 
 const (
+	// FamilyChrome represents the Chrome browser family.
 	FamilyChrome  BrowserFamily = "chrome"
 	FamilyFirefox BrowserFamily = "firefox"
 	FamilySafari  BrowserFamily = "safari"
@@ -32,9 +37,11 @@ const (
 	FamilyUnknown BrowserFamily = "unknown"
 )
 
+// Platform represents the operating system platform.
 type Platform string
 
 const (
+	// PlatformWindows represents the Windows platform.
 	PlatformWindows Platform = "windows"
 	PlatformMacOS   Platform = "macos"
 	PlatformLinux   Platform = "linux"
@@ -43,6 +50,7 @@ const (
 	PlatformUnknown Platform = "unknown"
 )
 
+// BrowserProperties contains browser-specific TLS properties.
 type BrowserProperties struct {
 	Name           string        `json:"name"`
 	Version        string        `json:"version"`
@@ -66,15 +74,18 @@ type BrowserProperties struct {
 	QUICSupport    bool          `json:"quic_support"`
 }
 
+// PaddingStyle represents the TLS padding style.
 type PaddingStyle int
 
 const (
+	// PaddingStyleNone represents no padding.
 	PaddingStyleNone      PaddingStyle = iota
 	PaddingStyleBoringSSL              // Chrome-style random padding
 	PaddingStyleFixed                  // Fixed padding
 	PaddingStyleMax                    // Max padding to 256 bytes
 )
 
+// FingerprintSignature represents a complete TLS fingerprint signature.
 type FingerprintSignature struct {
 	Name          string            `json:"name"`
 	Description   string            `json:"description"`
@@ -85,6 +96,7 @@ type FingerprintSignature struct {
 	Labels        []string          `json:"labels"`
 }
 
+// NewBrowserProperties creates a new BrowserProperties instance with defaults.
 func NewBrowserProperties(name, version string, platform Platform, library TLSLibrary) *BrowserProperties {
 	return &BrowserProperties{
 		Name:           name,
@@ -99,6 +111,7 @@ func NewBrowserProperties(name, version string, platform Platform, library TLSLi
 	}
 }
 
+// Chrome133Windows is the fingerprint signature for Chrome 133 on Windows.
 var Chrome133Windows = FingerprintSignature{
 	Name:        "chrome-133-windows",
 	Description: "Chrome 133 on Windows 11 with BoringSSL",
@@ -130,6 +143,7 @@ var Chrome133Windows = FingerprintSignature{
 	Labels:        []string{"chrome", "windows", "boringssl", "modern"},
 }
 
+// Chrome133MacOS is the fingerprint signature for Chrome 133 on macOS.
 var Chrome133MacOS = FingerprintSignature{
 	Name:        "chrome-133-macos",
 	Description: "Chrome 133 on macOS with BoringSSL",
@@ -161,6 +175,7 @@ var Chrome133MacOS = FingerprintSignature{
 	Labels:        []string{"chrome", "macos", "boringssl", "modern"},
 }
 
+// Chrome120Android is the fingerprint signature for Chrome 120 on Android.
 var Chrome120Android = FingerprintSignature{
 	Name:        "chrome-120-android",
 	Description: "Chrome 120 on Android with BoringSSL",
@@ -192,6 +207,7 @@ var Chrome120Android = FingerprintSignature{
 	Labels:        []string{"chrome", "android", "boringssl", "mobile"},
 }
 
+// Firefox120Windows is the fingerprint signature for Firefox 120 on Windows.
 var Firefox120Windows = FingerprintSignature{
 	Name:        "firefox-120-windows",
 	Description: "Firefox 120 on Windows with NSS",
@@ -223,6 +239,7 @@ var Firefox120Windows = FingerprintSignature{
 	Labels:        []string{"firefox", "windows", "nss", "modern"},
 }
 
+// Firefox120MacOS is the fingerprint signature for Firefox 120 on macOS.
 var Firefox120MacOS = FingerprintSignature{
 	Name:        "firefox-120-macos",
 	Description: "Firefox 120 on macOS with NSS",
@@ -347,16 +364,148 @@ var Edge130Windows = FingerprintSignature{
 	Labels:        []string{"edge", "windows", "boringssl", "modern"},
 }
 
+var Edge133Windows = FingerprintSignature{
+	Name:        "Edge 133",
+	Description: "Edge 133 on Windows 11 with BoringSSL",
+	BrowserProps: BrowserProperties{
+		Name:           "Edge",
+		Version:        "133.0.2999.100",
+		Platform:       PlatformWindows,
+		TLSLibrary:     LibraryBoringSSL,
+		BrowserFamily:  FamilyEdge,
+		IsMobile:       false,
+		SupportsHTTP3:  true,
+		SupportsGREASE: true,
+		SupportsTLS13:  true,
+		MaxTLSVersion:  0x0304,
+	},
+	ClientHelloID: HelloEdge_106,
+	Weight:        1.0,
+	Confidence:    0.92,
+	Labels:        []string{"edge", "windows", "boringssl", "modern", "chromium"},
+}
+
+var Edge133MacOS = FingerprintSignature{
+	Name:        "Edge 133",
+	Description: "Edge 133 on macOS with BoringSSL",
+	BrowserProps: BrowserProperties{
+		Name:           "Edge",
+		Version:        "133.0.2999.100",
+		Platform:       PlatformMacOS,
+		TLSLibrary:     LibraryBoringSSL,
+		BrowserFamily:  FamilyEdge,
+		IsMobile:       false,
+		SupportsHTTP3:  true,
+		SupportsGREASE: true,
+		SupportsTLS13:  true,
+		MaxTLSVersion:  0x0304,
+	},
+	ClientHelloID: HelloEdge_106,
+	Weight:        1.0,
+	Confidence:    0.92,
+	Labels:        []string{"edge", "macos", "boringssl", "modern", "chromium"},
+}
+
+var Safari18MacOS = FingerprintSignature{
+	Name:        "Safari 18",
+	Description: "Safari 18 on macOS with Secure Transport",
+	BrowserProps: BrowserProperties{
+		Name:           "Safari",
+		Version:        "18.0",
+		Platform:       PlatformMacOS,
+		TLSLibrary:     LibrarySecureTransport,
+		BrowserFamily:  FamilySafari,
+		IsMobile:       false,
+		SupportsHTTP3:  true,
+		SupportsGREASE: true,
+		SupportsTLS13:  true,
+		MaxTLSVersion:  0x0304,
+	},
+	ClientHelloID: HelloSafari_16_0,
+	Weight:        1.0,
+	Confidence:    0.91,
+	Labels:        []string{"safari", "macos", "securetransport", "modern", "apple"},
+}
+
+var Safari18iOS = FingerprintSignature{
+	Name:        "Safari 18",
+	Description: "Safari 18 on iOS with Secure Transport",
+	BrowserProps: BrowserProperties{
+		Name:           "Safari",
+		Version:        "18.0",
+		Platform:       PlatformIOS,
+		TLSLibrary:     LibrarySecureTransport,
+		BrowserFamily:  FamilySafari,
+		IsMobile:       true,
+		SupportsHTTP3:  true,
+		SupportsGREASE: true,
+		SupportsTLS13:  true,
+		MaxTLSVersion:  0x0304,
+	},
+	ClientHelloID: HelloIOS_14,
+	Weight:        1.0,
+	Confidence:    0.91,
+	Labels:        []string{"safari", "ios", "securetransport", "modern", "apple"},
+}
+
+var Chrome134Windows = FingerprintSignature{
+	Name:        "Chrome 134",
+	Description: "Chrome 134 on Windows 11 with BoringSSL",
+	BrowserProps: BrowserProperties{
+		Name:           "Chrome",
+		Version:        "134.0.6998.35",
+		Platform:       PlatformWindows,
+		TLSLibrary:     LibraryBoringSSL,
+		BrowserFamily:  FamilyChrome,
+		IsMobile:       false,
+		SupportsHTTP3:  true,
+		SupportsGREASE: true,
+		SupportsTLS13:  true,
+		MaxTLSVersion:  0x0304,
+	},
+	ClientHelloID: HelloChrome_133,
+	Weight:        1.0,
+	Confidence:    0.93,
+	Labels:        []string{"chrome", "windows", "boringssl", "modern", "chromium"},
+}
+
+var Chrome134MacOS = FingerprintSignature{
+	Name:        "Chrome 134",
+	Description: "Chrome 134 on macOS with BoringSSL",
+	BrowserProps: BrowserProperties{
+		Name:           "Chrome",
+		Version:        "134.0.6998.35",
+		Platform:       PlatformMacOS,
+		TLSLibrary:     LibraryBoringSSL,
+		BrowserFamily:  FamilyChrome,
+		IsMobile:       false,
+		SupportsHTTP3:  true,
+		SupportsGREASE: true,
+		SupportsTLS13:  true,
+		MaxTLSVersion:  0x0304,
+	},
+	ClientHelloID: HelloChrome_133,
+	Weight:        1.0,
+	Confidence:    0.93,
+	Labels:        []string{"chrome", "macos", "boringssl", "modern", "chromium"},
+}
+
 func GetAllSignatures() []FingerprintSignature {
 	return []FingerprintSignature{
 		Chrome133Windows,
 		Chrome133MacOS,
 		Chrome120Android,
+		Chrome134Windows,
+		Chrome134MacOS,
 		Firefox120Windows,
 		Firefox120MacOS,
 		Safari16MacOS,
 		SafariIOS17,
+		Safari18MacOS,
+		Safari18iOS,
 		Edge130Windows,
+		Edge133Windows,
+		Edge133MacOS,
 	}
 }
 

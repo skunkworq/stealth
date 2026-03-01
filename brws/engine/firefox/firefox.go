@@ -21,7 +21,7 @@ func init() {
 type Firefox struct {
 	pw      *playwright.Playwright
 	browser playwright.Browser
-	context playwright.BrowserContext
+	context playwright.BrowserContext 
 	options engine.Options
 	trace   *engine.Trace
 }
@@ -88,7 +88,7 @@ func (f *Firefox) Capabilities() engine.Capabilities {
 }
 
 // Do executes a request using Firefox.
-func (f *Firefox) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
+func (f *Firefox) Do(_ context.Context, req *engine.Request) (*engine.Response, error) {
 	requestID := uuid.New().String()
 	f.trace = &engine.Trace{
 		Engine:    f.Name(),
@@ -114,6 +114,7 @@ func (f *Firefox) Do(ctx context.Context, req *engine.Request) (*engine.Response
 	if err != nil {
 		return nil, fmt.Errorf("creating browser context: %w", err)
 	}
+
 	defer func() { _ = browserCtx.Close() }()
 
 	// Enable request/response tracing
@@ -170,7 +171,7 @@ func (f *Firefox) Do(ctx context.Context, req *engine.Request) (*engine.Response
 
 	// Wait for selector if specified
 	if req.WaitForSelector != "" {
-		_, err := page.WaitForSelector(req.WaitForSelector)
+		_, err := page.WaitForSelector(req.WaitForSelector) //nolint:staticcheck // SA1019: Intentional use of deprecated API
 		if err != nil {
 			return nil, fmt.Errorf("waiting for selector: %w", err)
 		}

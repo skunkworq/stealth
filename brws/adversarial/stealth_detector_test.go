@@ -207,7 +207,7 @@ func TestStealthBrowserWithNativeEngine(t *testing.T) {
 			"vectors":    detection.Vectors,
 		}
 		jsonResp, _ := json.Marshal(response)
-		w.Write(jsonResp)
+		w.Write(jsonResp) //nolint:errcheck,gosec // G104: Test response write
 	}))
 	defer server.Close()
 
@@ -216,7 +216,7 @@ func TestStealthBrowserWithNativeEngine(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		headers := map[string]string{
 			"User-Agent":         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -264,7 +264,7 @@ func TestStealthBrowserWithNativeEngine(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		headers := map[string]string{
 			"User-Agent":        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",

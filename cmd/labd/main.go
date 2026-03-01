@@ -150,7 +150,7 @@ func launchChromeWithProxy(chromePath string, proxyPort, httpPort int, logger *s
 		chromePath = findChrome()
 	}
 	if chromePath == "" {
-		return fmt.Errorf("Chrome not found. Install Chrome or specify -chrome-path")
+		return fmt.Errorf("chrome not found: install Chrome or specify -chrome-path")
 	}
 
 	// Create temp user data dir

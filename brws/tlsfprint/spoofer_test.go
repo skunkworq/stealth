@@ -44,7 +44,7 @@ func TestSpooferGetFirefoxID(t *testing.T) {
 	}
 }
 
-func TestSpooferGetClientHelloID(t *testing.T) {
+func TestSpooferGetClientHelloID(_ *testing.T) {
 	s := New()
 
 	_ = s.GetClientHelloID(Chrome, "133")

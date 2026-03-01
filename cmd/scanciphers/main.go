@@ -19,11 +19,13 @@ func main() {
 		timeout = flag.Duration("timeout", 10*time.Second, "Connection timeout")
 		jsonOut = flag.Bool("json", false, "Output as JSON")
 	)
+
 	flag.Parse()
 
 	if *host == "" {
 		//nolint:gosec // Test server output is controlled
 		_, _ = fmt.Fprintf(os.Stderr, "Usage: %s -host <hostname> [-port <port>]\n", os.Args[0])
+
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
@@ -49,8 +51,10 @@ func main() {
 		}
 		enc := json.NewEncoder(os.Stdout)
 		enc.SetIndent("", "  ")
+
 		if err := enc.Encode(output); err != nil {
 			_, _ = fmt.Fprintf(os.Stderr, "Error encoding JSON: %v\n", err)
+
 			os.Exit(1)
 		}
 	} else {
@@ -118,8 +122,10 @@ func scanCiphers(addr string, timeout time.Duration) []CipherInfo {
 				ID:        cipher,
 				Supported: false,
 			})
+
 			continue
 		}
+
 		_ = conn.Close()
 
 		state := conn.ConnectionState()
@@ -148,6 +154,7 @@ func getTLSInfo(addr string, timeout time.Duration) *TLSInfo {
 	_ = conn.Close()
 
 	state := conn.ConnectionState()
+
 	return &TLSInfo{
 		Version:            tlsVersionName(state.Version),
 		CipherSuite:        tls.CipherSuiteName(state.CipherSuite),
@@ -168,6 +175,7 @@ func printResults(host string, ciphers []CipherInfo, tlsInfo *TLSInfo) {
 	_, _ = fmt.Fprintln(os.Stdout, strings.Repeat("-", 80))
 
 	supported := 0
+
 	for _, c := range ciphers {
 		if c.Supported {
 			_, _ = fmt.Fprintf(os.Stdout, "%-50s 0x%04x       %s\n", c.Name, c.ID, c.Version)

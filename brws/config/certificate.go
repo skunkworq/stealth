@@ -117,7 +117,7 @@ type ValidityConfig struct {
 	NotAfter  time.Time `json:"not_after,omitempty"`
 }
 
-// Platform-specific Root CA presets
+// PlatformRootCAs provides platform-specific Root CA presets for certificate chain spoofing
 var PlatformRootCAs = map[string]RootCAConfig{
 	// Windows typically uses DigiCert
 	"windows": {
@@ -180,7 +180,7 @@ var PlatformRootCAs = map[string]RootCAConfig{
 	},
 }
 
-// Browser-specific intermediate CA presets
+// BrowserIntermediateCAs provides browser-specific intermediate CA presets
 var BrowserIntermediateCAs = map[string]IntermediateCAConfig{
 	"chrome": {
 		CommonName:         "Google Trust Services",
@@ -212,7 +212,7 @@ var BrowserIntermediateCAs = map[string]IntermediateCAConfig{
 	},
 }
 
-// Coles-specific configuration (as observed)
+// ColesCertificateConfig provides a Coles-specific certificate chain configuration
 var ColesCertificateConfig = &CertificateChainConfig{
 	Platform: "windows",
 	Browser:  "chrome",
@@ -405,7 +405,7 @@ func (g *CertificateGenerator) generateRootCA(config *RootCAConfig) (*Certificat
 }
 
 // generateIntermediateCA generates an intermediate CA certificate
-func (g *CertificateGenerator) generateIntermediateCA(config *IntermediateCAConfig, parent *Certificate) (*Certificate, error) {
+func (g *CertificateGenerator) generateIntermediateCA(config *IntermediateCAConfig, _ *Certificate) (*Certificate, error) {
 	return &Certificate{
 		Cert: &x509.Certificate{
 			Subject:               config.GenerateSubject(),
@@ -422,7 +422,7 @@ func (g *CertificateGenerator) generateIntermediateCA(config *IntermediateCAConf
 }
 
 // generateLeafCert generates a leaf certificate
-func (g *CertificateGenerator) generateLeafCert(config *LeafCertConfig, intermediate, root *Certificate) (*Certificate, error) {
+func (g *CertificateGenerator) generateLeafCert(config *LeafCertConfig, _, _ *Certificate) (*Certificate, error) {
 	cert := &x509.Certificate{
 		Subject:      config.GenerateSubject(),
 		SerialNumber: big.NewInt(3),
@@ -482,6 +482,7 @@ func parseIPAddresses(ips []string) []net.IP {
 	return result
 }
 
+
 // pemEncodeCertificate encodes a certificate to PEM
 func pemEncodeCertificate(cert *x509.Certificate) string {
 	pem := pem.EncodeToMemory(&pem.Block{
@@ -491,8 +492,9 @@ func pemEncodeCertificate(cert *x509.Certificate) string {
 	return string(pem)
 }
 
+
 // pemEncodeKey encodes a private key to PEM
-func pemEncodeKey(key interface{}) string {
+func pemEncodeKey(_ interface{}) string {
 	// Placeholder - actual implementation would encode the key
 	return "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 }

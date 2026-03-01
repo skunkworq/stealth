@@ -236,7 +236,7 @@ type CookieData struct {
 	Path     string    `json:"path"`
 	Expires  time.Time `json:"expires"`
 	Secure   bool      `json:"secure"`
-	HttpOnly bool      `json:"http_only"`
+	HTTPOnly bool      `json:"http_only"`
 	SameSite string    `json:"same_site"`
 }
 
@@ -249,7 +249,7 @@ func (c *CookieData) ToHTTP() *http.Cookie {
 		Path:     c.Path,
 		Expires:  c.Expires,
 		Secure:   c.Secure,
-		HttpOnly: c.HttpOnly,
+		HttpOnly: c.HTTPOnly,
 		SameSite: parseSameSite(c.SameSite),
 	}
 }
@@ -334,6 +334,7 @@ func (s *Session) UpdateLastUsed() {
 	s.LastUsedAt = time.Now()
 }
 
+// DomainStats tracks request statistics for a domain
 type DomainStats struct {
 	Domain        string    `json:"domain"`
 	SuccessCount  int       `json:"success_count"`
@@ -343,6 +344,7 @@ type DomainStats struct {
 	AvgResponseMs int64     `json:"avg_response_ms"`
 }
 
+// GetDomainStats retrieves statistics for a specific domain
 func (s *Session) GetDomainStats(domain string) *DomainStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -359,6 +361,7 @@ func (s *Session) GetDomainStats(domain string) *DomainStats {
 	return &ds
 }
 
+// RecordSuccess records a successful request to a domain
 func (s *Session) RecordSuccess(domain string, responseMs int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -388,6 +391,7 @@ func (s *Session) RecordSuccess(domain string, responseMs int64) {
 	s.Metadata[domain] = string(data)
 }
 
+// RecordFailure records a failure for the given domain.
 func (s *Session) RecordFailure(domain string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -415,6 +419,7 @@ func (s *Session) RecordFailure(domain string) {
 	s.Metadata[domain] = string(data)
 }
 
+// GetTrustScore returns the trust score for the given domain.
 func (s *Session) GetTrustScore(domain string) float64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -453,6 +458,7 @@ func (s *Session) GetTrustScore(domain string) float64 {
 	return successRate * freshness
 }
 
+// ShouldRetry determines if a request to the given domain should be retried.
 func (s *Session) ShouldRetry(domain string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -470,6 +476,7 @@ func (s *Session) ShouldRetry(domain string) bool {
 	return ds.FailureCount < 3
 }
 
+// RetryConfig configures retry behavior for failed requests.
 type RetryConfig struct {
 	MaxRetries    int
 	InitialDelay  time.Duration
@@ -477,6 +484,7 @@ type RetryConfig struct {
 	BackoffFactor float64
 }
 
+// NewRetryConfig creates a new RetryConfig with default values.
 func NewRetryConfig() *RetryConfig {
 	return &RetryConfig{
 		MaxRetries:    3,
@@ -486,6 +494,7 @@ func NewRetryConfig() *RetryConfig {
 	}
 }
 
+// ExecuteWithRetry executes the given function with retry logic.
 func ExecuteWithRetry(ctx context.Context, fn func() error, config *RetryConfig) error {
 	var lastErr error
 	delay := config.InitialDelay

@@ -302,6 +302,7 @@ func runSessionNew(cmd *cobra.Command, args []string) error {
 
 func runSessionList(cmd *cobra.Command, args []string) error {
 	sessionsDir := getSessionsDir()
+
 	mgr, err := session.NewManager(sessionsDir)
 	if err != nil {
 		return fmt.Errorf("creating session manager: %w", err)
@@ -439,6 +440,7 @@ func runFingerprint(cmd *cobra.Command, args []string) error {
 
 	if report.HTTP2 != nil {
 		_, _ = fmt.Fprintln(os.Stdout, "HTTP/2 Fingerprint:")
+
 		_, _ = fmt.Fprintf(os.Stdout, "  Settings:\n")
 		for _, s := range report.HTTP2.Settings {
 			_, _ = fmt.Fprintf(os.Stdout, "    %s=%d\n", s.Name, s.Value)
@@ -695,6 +697,7 @@ func getSessionsDir() string {
 	return home + "/.brwslab/sessions"
 }
 
+
 func tlsVersionName(version uint16) string {
 	switch version {
 	case 0x0301:
@@ -768,7 +771,9 @@ func runRepl(cmd *cobra.Command, args []string) error {
 			if errors.Is(err, io.EOF) {
 				break
 			}
+
 			_, _ = fmt.Fprintf(os.Stdout, "Error: %v\n", err)
+
 			continue
 		}
 

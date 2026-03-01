@@ -13,7 +13,7 @@ import (
 
 // BrowserController manages Chrome/browser process lifecycle
 type BrowserController struct {
-	mu         sync.Mutex
+	mu         sync.Mutex 
 	cmd        *exec.Cmd
 	chromePath string
 	tmpDir     string
@@ -178,18 +178,21 @@ type StatusResponse struct {
 	Server ServerStatus `json:"server"`
 }
 
+// ProxyStatus represents the status of a proxy connection.
 type ProxyStatus struct {
 	Running bool   `json:"running"`
 	Address string `json:"address,omitempty"`
 	PACUrl  string `json:"pac_url,omitempty"`
 }
 
+// ChromeStatus represents the status of a Chrome browser instance.
 type ChromeStatus struct {
 	Running    bool   `json:"running"`
 	ChromePath string `json:"chrome_path,omitempty"`
 	PID        int    `json:"pid,omitempty"`
 }
 
+// ServerStatus represents the overall server status.
 type ServerStatus struct {
 	HTTPPort     int  `json:"http_port"`
 	HTTPSPort    int  `json:"https_port"`
@@ -198,7 +201,7 @@ type ServerStatus struct {
 }
 
 // handleAPIStatus returns the current status of proxy, Chrome, and server
-func (s *EnhancedServer) handleAPIStatus(w http.ResponseWriter, r *http.Request) {
+func (s *EnhancedServer) handleAPIStatus(w http.ResponseWriter, _ *http.Request) {
 	s.browserMu.Lock()
 	chromeStatus := ChromeStatus{}
 	if s.browser != nil && s.browser.running {
@@ -280,6 +283,7 @@ func (s *EnhancedServer) handleAPIProxyStop(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, map[string]interface{}{"ok": true, "message": "Proxy stopped"})
 }
 
+// LaunchChromeRequest represents a request to launch Chrome.
 type LaunchChromeRequest struct {
 	URL        string `json:"url"`
 	Headless   bool   `json:"headless"`

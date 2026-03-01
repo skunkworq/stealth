@@ -464,7 +464,9 @@ func (p *Proxy) handleTransparentTLS(clientConn net.Conn, targetAddr string, cap
 	}
 
 	// Combine header + ClientHello for parsing
-	fullClientHello := append(header, clientHello...)
+	fullClientHello := make([]byte, 0, len(header)+len(clientHello))
+	fullClientHello = append(fullClientHello, header...)
+	fullClientHello = append(fullClientHello, clientHello...)
 
 	// Parse ClientHello to extract SNI and fingerprint
 	ch, err := tlsparser.ParseClientHello(fullClientHello)
@@ -534,7 +536,7 @@ func (p *Proxy) handleHTTP(clientConn net.Conn, captured *capturedConn) {
 }
 
 // handleHTTPRequest processes a single HTTP request
-func (p *Proxy) handleHTTPRequest(clientConn net.Conn, reader *bufio.Reader, req *http.Request, captured *capturedConn) {
+func (p *Proxy) handleHTTPRequest(clientConn net.Conn, _ *bufio.Reader, req *http.Request, captured *capturedConn) {
 	// Capture HTTP request
 	httpCapture := &types.HTTPFingerprint{
 		Method:    req.Method,
@@ -612,7 +614,7 @@ func (p *Proxy) handleHTTPRequest(clientConn net.Conn, reader *bufio.Reader, req
 	// Execute request
 	client := &http.Client{
 		Timeout: constants.DefaultTimeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
@@ -680,7 +682,7 @@ func (p *Proxy) proxyWithInspection(clientConn, targetConn net.Conn, captured *c
 }
 
 // copyWithHTTPInspection copies data while looking for HTTP requests
-func (p *Proxy) copyWithHTTPInspection(src, dst net.Conn, captured *capturedConn) {
+func (p *Proxy) copyWithHTTPInspection(src, dst net.Conn, _ *capturedConn) {
 	// For now, just do simple copy
 	// Full HTTP inspection would require a complete HTTP parser
 	_, _ = io.Copy(dst, src)

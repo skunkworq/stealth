@@ -1,14 +1,17 @@
 // Package chromium provides a stealth-enhanced Chromium engine.
+//
 //nolint:gosec // G404: math/rand used intentionally for non-cryptographic jitter/randomization
 package chromium
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"time"
 
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/stealth/brwslab/brws/behavior"
 	"github.com/stealth/brwslab/brws/engine"
@@ -141,13 +144,20 @@ func NewStealthWithFingerprint(opts engine.Options, fp *types.CompleteFingerprin
 		allocOpts = append(allocOpts, chromedp.UserAgent(RandomUserAgent()))
 	}
 
+	// Dynamically map advanced AI Spoofer properties if injected from Proxy Client (train_shield_sword)
+	if opts.StealthConfigRaw != nil {
+		if rawBytes, err := json.Marshal(opts.StealthConfigRaw); err == nil {
+			_ = json.Unmarshal(rawBytes, &stealthCfg)
+		}
+	}
+
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), allocOpts...)
 
 	// Initialize instrumentation
 	tracer := instrumentation.NewTracer()
 	hooks := instrumentation.DefaultHookRegistry()
 	fsm := instrumentation.NewRequestFSM()
-	fsm.SetTransitionFunc(func(ctx context.Context, from, to instrumentation.State, event instrumentation.Event) error {
+	fsm.SetTransitionFunc(func(_ context.Context, from, to instrumentation.State, event instrumentation.Event) error {
 		log.Debug("FSM transition", "from", from, "to", to, "event", event)
 		return nil
 	})
@@ -249,6 +259,7 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	// Start tracing
 	ctx, span := s.tracer.StartSpan(ctx, "stealth.fetch", instrumentation.SpanKindRequest)
 	span.SetAttribute("url", req.URL)
+
 	span.SetAttribute("method", req.Method)
 	defer span.End()
 
@@ -307,6 +318,7 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	// Build actions
 	actions := []chromedp.Action{
 		network.Enable(),
+		page.Enable(),
 		chromedp.EmulateViewport(viewportWidth, viewportHeight),
 	}
 
@@ -316,9 +328,12 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		actions = append(actions, network.SetExtraHTTPHeaders(network.Headers(extraHeaders)))
 	}
 
-	// Add stealth script before navigation
+	// Add stealth script before navigation (persistently across the page load)
 	if initScript != "" {
-		actions = append(actions, chromedp.Evaluate(initScript, nil))
+		actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
+			_, err := page.AddScriptToEvaluateOnNewDocument(initScript).Do(ctx)
+			return err
+		}))
 	}
 
 	// Transition FSM to navigating
@@ -347,6 +362,7 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	actions = append(actions, chromedp.OuterHTML("html", &body))
 
 	start := time.Now()
+
 	if err := chromedp.Run(tabCtx, actions...); err != nil {
 		return nil, fmt.Errorf("stealth run: %w", err)
 	}
@@ -479,9 +495,9 @@ func (s *StealthEngine) getBehaviorDelay() time.Duration {
 	return 0
 }
 
-// WaitRandom adds a random delay for human-like behavior
-func (s *StealthEngine) WaitRandom(min, max time.Duration) {
-	delay := RandomDelay(min, max)
+// WaitRandom adds a random delay for human-like behavior.
+func (s *StealthEngine) WaitRandom(minDelay, maxDelay time.Duration) {
+	delay := RandomDelay(minDelay, maxDelay)
 	time.Sleep(delay)
 }
 

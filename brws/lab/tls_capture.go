@@ -33,7 +33,7 @@ type CapturingListener struct {
 	net.Listener
 
 	OnClientHello  func(*tlsparser.ClientHello, *types.CompleteFingerprint)
-	activeCaptures sync.Map
+	activeCaptures sync.Map 
 }
 
 // Accept waits for and returns the next connection to the listener,
@@ -61,7 +61,7 @@ type capturingConn struct {
 	buffer            *bytes.Buffer
 	readChan          chan []byte
 	captured          bool
-	handshakeComplete bool
+	handshakeComplete bool 
 
 	// Parsed data
 	clientHello *tlsparser.ClientHello

@@ -18,7 +18,7 @@ func TestNew(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	if eng.Name() != "native" {
 		t.Errorf("Expected name 'native', got '%s'", eng.Name())
@@ -35,11 +35,11 @@ func TestNew(t *testing.T) {
 
 func TestDo(t *testing.T) {
 	// Create test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Test-Header", "test-value")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"message": "hello"}`))
+		_, _ = w.Write([]byte(`{"message": "hello"}`))
 	}))
 	defer server.Close()
 
@@ -49,7 +49,7 @@ func TestDo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method:  "GET",
@@ -82,7 +82,7 @@ func TestDo(t *testing.T) {
 
 func TestDoWithTimeout(t *testing.T) {
 	// Create slow test server
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(2 * time.Second)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -94,7 +94,7 @@ func TestDoWithTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method:  "GET",

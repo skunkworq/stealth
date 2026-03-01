@@ -47,7 +47,7 @@ func fetchWithEngine(ctx context.Context, engineName, url string) error {
 	if err != nil {
 		return fmt.Errorf("creating engine: %w", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	// Print capabilities
 	caps := eng.Capabilities()

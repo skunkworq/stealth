@@ -177,15 +177,15 @@ func ParseRawClientHello(data []byte) (*RawClientHello, error) {
 		for extParser.offset < len(extData) {
 			extType, err := extParser.ReadUint16()
 			if err != nil {
-				break
+				break // Stop parsing extensions on error - intentional
 			}
 			extLen, err := extParser.ReadUint16()
 			if err != nil {
-				break
+				break // Stop parsing extensions on error - intentional
 			}
 			extVal, err := extParser.ReadBytes(int(extLen))
 			if err != nil {
-				break
+				break // Stop parsing extensions on error - intentional
 			}
 
 			ext := ExtensionInfo{
@@ -196,9 +196,10 @@ func ParseRawClientHello(data []byte) (*RawClientHello, error) {
 				IsGrease: IsGreaseValue(extType),
 			}
 
-			if extType == 0 {
+			switch extType {
+			case 0:
 				ext.Value = parseSNIServerName(extVal)
-			} else if extType == 43 {
+			case 43:
 				ext.Value = parseSupportedVersions(extVal)
 			}
 
@@ -206,6 +207,7 @@ func ParseRawClientHello(data []byte) (*RawClientHello, error) {
 		}
 	}
 
+	//nolint:nilerr // Intentional: stop parsing extensions on error, return what we have
 	return &RawClientHello{
 		Raw:                data,
 		TLSVersion:         version,
@@ -264,7 +266,7 @@ func parseSupportedVersions(data []byte) string {
 		if err != nil {
 			break
 		}
-		versions = append(versions, VersionToString(uint16(v)<<8|0x00))
+		versions = append(versions, VersionToString(uint16(v)<<8))
 	}
 	return join(versions, ",")
 }

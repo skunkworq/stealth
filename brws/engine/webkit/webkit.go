@@ -81,7 +81,7 @@ func (w *WebKit) Capabilities() engine.Capabilities {
 }
 
 // Do executes a request using WebKit.
-func (w *WebKit) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
+func (w *WebKit) Do(_ context.Context, req *engine.Request) (*engine.Response, error) {
 	requestID := uuid.New().String()
 	w.trace = &engine.Trace{
 		Engine:    w.Name(),
@@ -107,6 +107,7 @@ func (w *WebKit) Do(ctx context.Context, req *engine.Request) (*engine.Response,
 	if err != nil {
 		return nil, fmt.Errorf("creating browser context: %w", err)
 	}
+
 	defer func() { _ = browserCtx.Close() }()
 
 	// Enable request/response tracing
@@ -162,7 +163,7 @@ func (w *WebKit) Do(ctx context.Context, req *engine.Request) (*engine.Response,
 
 	// Wait for selector if specified
 	if req.WaitForSelector != "" {
-		_, err := page.WaitForSelector(req.WaitForSelector)
+		_, err := page.WaitForSelector(req.WaitForSelector) //nolint:staticcheck // SA1019: Intentional use of deprecated API
 		if err != nil {
 			return nil, fmt.Errorf("waiting for selector: %w", err)
 		}

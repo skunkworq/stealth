@@ -24,7 +24,7 @@ func TestStealthClient_AgainstAdversarialServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		resp, err := eng.Do(context.Background(), &engine.Request{
 			URL:    server.URL,
@@ -74,7 +74,7 @@ func TestStealthClient_AgainstAdversarialServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		resp, err := eng.Do(context.Background(), &engine.Request{
 			URL:    server.URL,
@@ -124,7 +124,7 @@ func TestStealthClient_AgainstAdversarialServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		resp, err := eng.Do(context.Background(), &engine.Request{
 			URL:    server.URL,
@@ -173,7 +173,7 @@ func TestStealthClient_AgainstAdversarialServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		spoofedHeaders := map[string]string{
 			"User-Agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -232,12 +232,12 @@ func TestStealthClient_AgainstAdversarialServer(t *testing.T) {
 
 func TestStealthClient_DetailedAnalysis(t *testing.T) {
 	server := NewFingerprintTestServer()
-	defer server.Close()
+	defer func() { _ = server.Close() }()
 
 	t.Run("Full fingerprint analysis", func(t *testing.T) {
 		client := &http.Client{
 			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Test server uses self-signed cert
 			},
 		}
 
@@ -254,7 +254,7 @@ func TestStealthClient_DetailedAnalysis(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		detection := server.GetLastDetection()
 		if detection == nil {
@@ -353,7 +353,7 @@ func TestHeaderSpoofingAnalysis(t *testing.T) {
 
 			client := &http.Client{
 				Transport: &http.Transport{
-					TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+					TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Test server uses self-signed cert
 				},
 			}
 
@@ -366,7 +366,7 @@ func TestHeaderSpoofingAnalysis(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			detection := server.GetLastDetection()
 
@@ -394,7 +394,7 @@ func TestRoundTripDetection(t *testing.T) {
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Test server uses self-signed cert
 		},
 		Timeout: 30 * time.Second,
 	}
@@ -421,7 +421,7 @@ func TestRoundTripDetection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	detection := server.GetLastDetection()
 
@@ -489,7 +489,7 @@ func TestBrowserProfiles(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer eng.Close()
+			defer func() { _ = eng.Close() }()
 
 			resp, err := eng.Do(context.Background(), &engine.Request{
 				URL:    server.URL,

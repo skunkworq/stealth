@@ -305,25 +305,25 @@ func (dt *DetailedTrace) GenerateReport() string {
 	_, _ = fmt.Fprintf(&sb, "  User-Agent: %s\n", dt.HTTP.UserAgent)
 	_, _ = fmt.Fprintf(&sb, "  User-Agent Length: %d\n", dt.HTTP.UserAgentLength)
 	_, _ = fmt.Fprintf(&sb, "  Has Client Hints: %v (%d/4)\n", dt.HTTP.HasAllRequiredCH, dt.HTTP.ClientHintsCount)
-	sb.WriteString(fmt.Sprintf("  Has Sec-Fetch: %v (%d/4)\n", dt.HTTP.SecFetchCount > 0, dt.HTTP.SecFetchCount))
-	sb.WriteString(fmt.Sprintf("  Accept-Language: %s\n", dt.HTTP.AcceptLanguage))
-	sb.WriteString(fmt.Sprintf("  Header Count: %d\n", dt.HTTP.HeaderCount))
+	_, _ = fmt.Fprintf(&sb, "  Has Sec-Fetch: %v (%d/4)\n", dt.HTTP.SecFetchCount > 0, dt.HTTP.SecFetchCount)
+	_, _ = fmt.Fprintf(&sb, "  Accept-Language: %s\n", dt.HTTP.AcceptLanguage)
+	_, _ = fmt.Fprintf(&sb, "  Header Count: %d\n", dt.HTTP.HeaderCount)
 
 	if dt.TLS.JA4 != "" {
 		sb.WriteString("\nTLS Characteristics:\n")
-		sb.WriteString(fmt.Sprintf("  Version: %s\n", dt.TLS.Version))
-		sb.WriteString(fmt.Sprintf("  JA4: %s\n", dt.TLS.JA4))
-		sb.WriteString(fmt.Sprintf("  Cipher: %s\n", dt.TLS.CipherSuite))
-		sb.WriteString(fmt.Sprintf("  ALPN: %s\n", dt.TLS.ALPN))
-		sb.WriteString(fmt.Sprintf("  SNI: %s\n", dt.TLS.SNI))
+		_, _ = fmt.Fprintf(&sb, "  Version: %s\n", dt.TLS.Version)
+		_, _ = fmt.Fprintf(&sb, "  JA4: %s\n", dt.TLS.JA4)
+		_, _ = fmt.Fprintf(&sb, "  Cipher: %s\n", dt.TLS.CipherSuite)
+		_, _ = fmt.Fprintf(&sb, "  ALPN: %s\n", dt.TLS.ALPN)
+		_, _ = fmt.Fprintf(&sb, "  SNI: %s\n", dt.TLS.SNI)
 	}
 
 	sb.WriteString("\nSuspicion Analysis:\n")
-	sb.WriteString(fmt.Sprintf("  Is Suspicious: %v\n", dt.IsSuspicious))
-	sb.WriteString(fmt.Sprintf("  Suspicion Score: %.2f\n", dt.SuspicionScore))
-	sb.WriteString(fmt.Sprintf("  Reasons (%d):\n", len(dt.SuspicionReasons)))
+	_, _ = fmt.Fprintf(&sb, "  Is Suspicious: %v\n", dt.IsSuspicious)
+	_, _ = fmt.Fprintf(&sb, "  Suspicion Score: %.2f\n", dt.SuspicionScore)
+	_, _ = fmt.Fprintf(&sb, "  Reasons (%d):\n", len(dt.SuspicionReasons))
 	for _, r := range dt.SuspicionReasons {
-		sb.WriteString(fmt.Sprintf("    - %s\n", r))
+		_, _ = fmt.Fprintf(&sb, "    - %s\n", r)
 	}
 
 	return sb.String()

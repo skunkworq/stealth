@@ -1,3 +1,4 @@
+// Package solver provides CAPTCHA solving capabilities for various challenge types.
 package solver
 
 import (
@@ -9,6 +10,7 @@ import (
 	"time"
 )
 
+// Solver defines the interface for CAPTCHA solving services.
 type Solver interface {
 	SolveRecaptchaV2(ctx context.Context, siteKey, url string) (string, error)
 	SolveRecaptchaV3(ctx context.Context, siteKey, url string, minScore float64) (string, error)
@@ -17,6 +19,7 @@ type Solver interface {
 	GetBalance(ctx context.Context) (float64, error)
 }
 
+// CapSolver implements the Solver interface using CapSolver API.
 type CapSolver struct {
 	apiKey   string
 	client   *http.Client

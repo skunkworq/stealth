@@ -48,6 +48,7 @@ func SignatureFromFingerprint(fp *types.CompleteFingerprint) *BrowserSignature {
 		// Map Extensions
 		for _, ext := range fp.TLS.Extensions {
 			// Extract signature_algorithms directly if found
+			//nolint:revive,staticcheck // Empty block with intentional comment - SpoofEngine falls back to defaults for 0x000d
 			if ext.Type == 0x000d && len(ext.Data) > 2 {
 				// Extension data format for signature_algorithms usually starts with length bytes
 				// We won't perfectly reconstruct the raw array here without deep parsing,
@@ -55,6 +56,7 @@ func SignatureFromFingerprint(fp *types.CompleteFingerprint) *BrowserSignature {
 			}
 
 			var data json.RawMessage
+
 			if len(ext.Data) > 0 {
 				d, err := json.Marshal(ext.Data)
 				if err != nil {

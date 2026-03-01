@@ -1,6 +1,7 @@
 package instrumentation
 
 import (
+	"bytes"
 	"strings"
 )
 
@@ -8,11 +9,16 @@ import (
 type WAFShield string
 
 const (
+	// WAFCloudflare represents Cloudflare WAF detection
 	WAFCloudflare WAFShield = "cloudflare"
-	WAFDataDome   WAFShield = "datadome"
-	WAFImperva    WAFShield = "imperva"
-	WAFAkamai     WAFShield = "akamai"
-	WAFUnknown    WAFShield = ""
+	// WAFDataDome represents DataDome WAF detection
+	WAFDataDome WAFShield = "datadome"
+	// WAFImperva represents Imperva WAF detection
+	WAFImperva WAFShield = "imperva"
+	// WAFAkamai represents Akamai WAF detection
+	WAFAkamai WAFShield = "akamai"
+	// WAFUnknown represents unknown WAF detection
+	WAFUnknown WAFShield = ""
 )
 
 // DetectChallenge evaluates HTTP headers and body payload to identify anti-bot vendor shields
@@ -66,8 +72,8 @@ func containsBytes(body, search []byte) bool {
 		return false
 	}
 
-	// Convert slice to string for standard lib contains (fast enough for typical block pages)
-	return strings.Contains(string(body), string(search))
+	// Use bytes.Contains to avoid allocations
+	return bytes.Contains(body, search)
 }
 
 func containsCookies(headers map[string]string, target string) bool {

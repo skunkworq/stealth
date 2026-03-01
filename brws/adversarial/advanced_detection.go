@@ -21,19 +21,7 @@ var (
 		"t13d",
 	}
 
-	knownGoJA4Patterns = []string{
-		"t13", // Go's TLS 1.3 fingerprint
-		"t12", // Go's TLS 1.2 fingerprint (sometimes)
-	}
-
-	http2SettingsChrome = map[string]uint32{
-		"HEADER_TABLE_SIZE":      65536,
-		"MAX_CONCURRENT_STREAMS": 1000,
-		"INITIAL_WINDOW_SIZE":    6291456,
-		"MAX_FRAME_SIZE":         16384,
-		"MAX_HEADER_LIST_SIZE":   262144,
-	}
-
+	
 	datacenterIPPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`^3\.`),
 		regexp.MustCompile(`^34\.`),
@@ -55,12 +43,15 @@ var (
 	}
 )
 
+// AdvancedDetection provides comprehensive bot and automation detection
 type AdvancedDetection struct{}
 
+// NewAdvancedDetection creates a new instance of AdvancedDetection
 func NewAdvancedDetection() *AdvancedDetection {
 	return &AdvancedDetection{}
 }
 
+// AdvancedCheckResult represents the outcome of a single detection check
 type AdvancedCheckResult struct {
 	CheckName string
 	Category  string
@@ -71,6 +62,7 @@ type AdvancedCheckResult struct {
 	Severity  string
 }
 
+// AnalyzeTLS performs TLS fingerprint analysis to detect automation tools
 func (ad *AdvancedDetection) AnalyzeTLS(tlsConn *tls.ConnectionState, userAgent string) []AdvancedCheckResult {
 	var checks []AdvancedCheckResult
 
@@ -248,6 +240,7 @@ func (ad *AdvancedDetection) detectGoTLSFingerprint(tlsConn *tls.ConnectionState
 	return false, ja4
 }
 
+// AnalyzeHTTP2 analyzes HTTP/2 protocol characteristics for anomalies
 func (ad *AdvancedDetection) AnalyzeHTTP2(req *http.Request, proto string) []AdvancedCheckResult {
 	var checks []AdvancedCheckResult
 
@@ -290,7 +283,7 @@ func (ad *AdvancedDetection) AnalyzeHTTP2(req *http.Request, proto string) []Adv
 	return checks
 }
 
-func (ad *AdvancedDetection) isValidHTTP2Request(req *http.Request) bool {
+func (ad *AdvancedDetection) isValidHTTP2Request(_ *http.Request) bool {
 	return true
 }
 
@@ -322,6 +315,7 @@ func (ad *AdvancedDetection) compareHeaderOrder(actual, expected []string) bool 
 	return expectedIdx == len(expected)
 }
 
+// AnalyzeHeaders analyzes HTTP headers for client hints and consistency
 func (ad *AdvancedDetection) AnalyzeHeaders(req *http.Request) []AdvancedCheckResult {
 	var checks []AdvancedCheckResult
 
@@ -474,6 +468,7 @@ func (ad *AdvancedDetection) validateFullVersion(version string) bool {
 	return true
 }
 
+
 func (ad *AdvancedDetection) checkBrowserTLSConsistency(ua string, tlsConn *tls.ConnectionState) bool {
 	uaBrowser := ad.extractBrowserFromUA(ua)
 	ja4 := ad.generateJA4Simple(tlsConn)
@@ -506,6 +501,7 @@ func (ad *AdvancedDetection) checkBrowserTLSConsistency(ua string, tlsConn *tls.
 	return true // Unknown browser, assume OK
 }
 
+// AnalyzeIP analyzes the client IP for datacenter or VPN classification
 func (ad *AdvancedDetection) AnalyzeIP(clientIP string) []AdvancedCheckResult {
 	var checks []AdvancedCheckResult
 
@@ -585,7 +581,8 @@ func (ad *AdvancedDetection) classifyIP(ip string) string {
 	return "residential"
 }
 
-func (ad *AdvancedDetection) AnalyzeTiming(req *http.Request, timing *RequestTiming) []AdvancedCheckResult {
+// AnalyzeTiming analyzes request timing patterns for bot detection.
+func (ad *AdvancedDetection) AnalyzeTiming(_ *http.Request, timing *RequestTiming) []AdvancedCheckResult {
 	var checks []AdvancedCheckResult
 
 	now := time.Now()
@@ -642,6 +639,7 @@ func (ad *AdvancedDetection) AnalyzeTiming(req *http.Request, timing *RequestTim
 	return checks
 }
 
+// AnalyzeBehavioral analyzes behavioral data from request headers
 func (ad *AdvancedDetection) AnalyzeBehavioral(req *http.Request) []AdvancedCheckResult {
 	var checks []AdvancedCheckResult
 
@@ -706,6 +704,7 @@ func (ad *AdvancedDetection) AnalyzeBehavioral(req *http.Request) []AdvancedChec
 	return checks
 }
 
+// AnalyzeAutomation checks for automation tool signatures in the request
 func (ad *AdvancedDetection) AnalyzeAutomation(req *http.Request) []AdvancedCheckResult {
 	var checks []AdvancedCheckResult
 
@@ -799,6 +798,7 @@ func (ad *AdvancedDetection) AnalyzeAutomation(req *http.Request) []AdvancedChec
 	return checks
 }
 
+// CalculateOverallScore calculates the final bot detection score
 func (ad *AdvancedDetection) CalculateOverallScore(allChecks []AdvancedCheckResult) (float64, bool) {
 	if len(allChecks) == 0 {
 		return 0, false
@@ -825,6 +825,7 @@ func (ad *AdvancedDetection) CalculateOverallScore(allChecks []AdvancedCheckResu
 	return avgScore, isBot
 }
 
+// RequestTiming holds timing metrics for a request
 type RequestTiming struct {
 	TTFB    time.Duration
 	Total   time.Duration
@@ -837,6 +838,7 @@ type RequestTiming struct {
 	Receive time.Duration
 }
 
+// CalculateEntropy calculates Shannon entropy for a given string
 func (ad *AdvancedDetection) CalculateEntropy(data string) float64 {
 	if len(data) == 0 {
 		return 0
@@ -856,6 +858,7 @@ func (ad *AdvancedDetection) CalculateEntropy(data string) float64 {
 	return entropy
 }
 
+// AnalyzeHTTPHeadersAndTLS performs combined analysis of HTTP headers and TLS
 func (ad *AdvancedDetection) AnalyzeHTTPHeadersAndTLS(req *http.Request, tlsConn *tls.ConnectionState) []AdvancedCheckResult {
 	var checks []AdvancedCheckResult
 

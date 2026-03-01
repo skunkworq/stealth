@@ -1,4 +1,5 @@
 // Package tlsfprint provides TLS fingerprinting capabilities.
+//
 //nolint:gosec // G501, G404: crypto/md5 and math/rand used intentionally for fingerprinting
 package tlsfprint
 
@@ -13,39 +14,65 @@ import (
 	utls "github.com/refraction-networking/utls"
 )
 
+// Browser represents a browser type for TLS fingerprint selection.
 type Browser string
 
 const (
-	Chrome  Browser = "chrome"
+	// Chrome represents the Chrome browser.
+	Chrome Browser = "chrome"
+	// Firefox represents the Firefox browser.
 	Firefox Browser = "firefox"
-	Safari  Browser = "safari"
-	Edge    Browser = "edge"
-	IOS     Browser = "ios"
+	// Safari represents the Safari browser.
+	Safari Browser = "safari"
+	// Edge represents the Edge browser.
+	Edge Browser = "edge"
+	// IOS represents iOS browser fingerprint.
+	IOS Browser = "ios"
+	// Android represents Android browser fingerprint.
 	Android Browser = "android"
 )
 
+// ClientHelloID is an alias for utls.ClientHelloID, identifying a specific ClientHello fingerprint.
 type ClientHelloID = utls.ClientHelloID
 
-var (
-	HelloGolang            = utls.HelloGolang
-	HelloChrome_Auto       = utls.HelloChrome_Auto
-	HelloChrome_120        = utls.HelloChrome_120
-	HelloChrome_133        = utls.HelloChrome_133
-	HelloFirefox_Auto      = utls.HelloFirefox_Auto
-	HelloFirefox_120       = utls.HelloFirefox_120
-	HelloFirefox_105       = utls.HelloFirefox_105
-	HelloSafari_16_0       = utls.HelloSafari_16_0
-	HelloEdge_Auto         = utls.HelloEdge_Auto
-	HelloEdge_106          = utls.HelloEdge_106
-	HelloIOS_14            = utls.HelloIOS_14
-	HelloIOS_13            = utls.HelloIOS_13
+var ( //nolint:revive // Variable names match utls library naming convention
+	// HelloGolang represents the default Go TLS fingerprint.
+	HelloGolang = utls.HelloGolang
+	// HelloChrome_Auto represents auto-detected Chrome fingerprint.
+	HelloChrome_Auto = utls.HelloChrome_Auto
+	// HelloChrome_120 represents Chrome 120 fingerprint.
+	HelloChrome_120 = utls.HelloChrome_120
+	// HelloChrome_133 represents Chrome 133 fingerprint.
+	HelloChrome_133 = utls.HelloChrome_133
+	// HelloFirefox_Auto represents auto-detected Firefox fingerprint.
+	HelloFirefox_Auto = utls.HelloFirefox_Auto
+	// HelloFirefox_120 represents Firefox 120 fingerprint.
+	HelloFirefox_120 = utls.HelloFirefox_120
+	// HelloFirefox_105 represents Firefox 105 fingerprint.
+	HelloFirefox_105 = utls.HelloFirefox_105
+	// HelloSafari_16_0 represents Safari 16.0 fingerprint.
+	HelloSafari_16_0 = utls.HelloSafari_16_0
+	// HelloEdge_Auto represents auto-detected Edge fingerprint.
+	HelloEdge_Auto = utls.HelloEdge_Auto
+	// HelloEdge_106 represents Edge 106 fingerprint.
+	HelloEdge_106 = utls.HelloEdge_106
+	// HelloIOS_14 represents iOS 14 fingerprint.
+	HelloIOS_14 = utls.HelloIOS_14
+	// HelloIOS_13 represents iOS 13 fingerprint.
+	HelloIOS_13 = utls.HelloIOS_13
+	// HelloAndroid_11_OkHttp represents Android 11 OkHttp fingerprint.
 	HelloAndroid_11_OkHttp = utls.HelloAndroid_11_OkHttp
-	HelloRandomized        = utls.HelloRandomized
-	HelloRandomizedALPN    = utls.HelloRandomizedALPN
-	HelloRandomizedNoALPN  = utls.HelloRandomizedNoALPN
-	HelloCustom            = utls.HelloCustom
+	// HelloRandomized represents a fully randomized fingerprint.
+	HelloRandomized = utls.HelloRandomized
+	// HelloRandomizedALPN represents a randomized fingerprint with ALPN.
+	HelloRandomizedALPN = utls.HelloRandomizedALPN
+	// HelloRandomizedNoALPN represents a randomized fingerprint without ALPN.
+	HelloRandomizedNoALPN = utls.HelloRandomizedNoALPN
+	// HelloCustom represents a custom fingerprint configuration.
+	HelloCustom = utls.HelloCustom
 )
 
+// FingerprintInfo contains detailed information about a TLS fingerprint.
 type FingerprintInfo struct {
 	JA3        string
 	JA3Hash    string
@@ -61,21 +88,26 @@ type FingerprintInfo struct {
 	IsRandom   bool
 }
 
+// Spoofer provides TLS fingerprint spoofing capabilities for browser impersonation.
 type Spoofer struct {
 	rng *rand.Rand
 }
 
+// New creates a new Spoofer with default configuration.
 func New() *Spoofer {
 	return &Spoofer{
 		rng: rand.New(rand.NewSource(1)),
 	}
 }
 
+// WithSeed sets a custom random seed for fingerprint rotation.
+// Returns the Spoofer for method chaining.
 func (s *Spoofer) WithSeed(seed int64) *Spoofer {
 	s.rng = rand.New(rand.NewSource(seed))
 	return s
 }
 
+// GetClientHelloID returns the appropriate ClientHelloID for the given browser and version.
 func (s *Spoofer) GetClientHelloID(browser Browser, version string) ClientHelloID {
 	switch browser {
 	case Chrome:
@@ -137,6 +169,8 @@ func (s *Spoofer) getIOSID(version string) ClientHelloID {
 	}
 }
 
+// GetRandomized returns a randomized ClientHelloID.
+// If alpn is true, includes ALPN extension.
 func (s *Spoofer) GetRandomized(alpn bool) ClientHelloID {
 	if alpn {
 		return HelloRandomizedALPN
@@ -144,6 +178,7 @@ func (s *Spoofer) GetRandomized(alpn bool) ClientHelloID {
 	return HelloRandomizedNoALPN
 }
 
+// GetRotatingFingerprint returns a random ClientHelloID from a pool of browser fingerprints.
 func (s *Spoofer) GetRotatingFingerprint() ClientHelloID {
 	fingerprints := []ClientHelloID{
 		HelloChrome_Auto,
@@ -159,6 +194,8 @@ func (s *Spoofer) GetRotatingFingerprint() ClientHelloID {
 	return fingerprints[s.rng.Intn(len(fingerprints))]
 }
 
+// DetectBrowserFromJA4 attempts to detect the browser type from a JA4 fingerprint string.
+// Returns "chrome", "modern_browser", "tls12_browser", or "unknown".
 func (s *Spoofer) DetectBrowserFromJA4(ja4 string) string {
 	parts := strings.Split(ja4, "_")
 	if len(parts) < 2 {

@@ -44,14 +44,19 @@ func TestMLEvasionTraceExtraction(t *testing.T) {
 	// 2. Clear trace directory for the test
 	homeDir, _ := os.UserHomeDir()
 	traceDir := filepath.Join(homeDir, ".stealth", "traces")
-	os.RemoveAll(traceDir) // Fresh start
+	if err := os.RemoveAll(traceDir); err != nil {
+		t.Logf("Warning: failed to clean trace dir: %v", err)
+	}
 	
 	reqBody := map[string]string{
 		"id":  fpID,
 		"url": "http://localhost:8080/api/stealth-test", // Target internal WAF hook
 	}
 	
-	b, _ := json.Marshal(reqBody)
+	b, err := json.Marshal(reqBody)
+	if err != nil {
+		t.Fatalf("Failed to marshal request body: %v", err)
+	}
 	req := httptest.NewRequest("POST", "/api/test-signature", bytes.NewReader(b))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -81,6 +86,7 @@ func TestMLEvasionTraceExtraction(t *testing.T) {
 	}
 	
 	tracePath := filepath.Join(traceDir, firstTrace.Name())
+	//nolint:gosec // G304: Test reads from temp file
 	traceData, err := os.ReadFile(tracePath)
 	if err != nil {
 		t.Fatalf("Failed to read created trace %s: %v", tracePath, err)

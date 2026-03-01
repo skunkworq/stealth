@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+//nolint:staticcheck // SA5011: Test validation
 func TestVersionToString(t *testing.T) {
 	tests := []struct {
 		version  uint16
@@ -116,14 +117,17 @@ func TestTLSAnalyzerRecordClientHello(t *testing.T) {
 	}
 
 	handshake := analyzer.GetHandshake(traceID)
+	//nolint:staticcheck // SA5011: Test validation
 	if handshake == nil {
 		t.Error("expected handshake to be found")
 	}
 
+	//nolint:staticcheck // SA5011: Test validation
 	if handshake.ClientHello == nil {
 		t.Error("expected ClientHello to be set")
 	}
 
+	//nolint:staticcheck // SA5011: Test validation
 	if handshake.ClientHello.SNI != "example.com" {
 		t.Errorf("expected SNI example.com, got %s", handshake.ClientHello.SNI)
 	}
@@ -178,6 +182,7 @@ func TestTLSAnalyzerGetAllHandshakes(t *testing.T) {
 	analyzer := NewTLSAnalyzer()
 
 	for i := 0; i < 5; i++ {
+		// #nosec G115 - i is bounded 0-4, safe conversion
 		ch := &ClientHelloInfo{
 			Version: uint16(0x0300 + i),
 		}
@@ -215,8 +220,8 @@ func TestTLSAnalyzerGetUniqueCipherSuites(t *testing.T) {
 
 	handshakes := analyzer.GetAllHandshakes()
 	if len(handshakes) >= 2 {
-		analyzer.RecordServerHello(handshakes[0].TraceID, sh1)
-		analyzer.RecordServerHello(handshakes[1].TraceID, sh2)
+		_ = analyzer.RecordServerHello(handshakes[0].TraceID, sh1)
+		_ = analyzer.RecordServerHello(handshakes[1].TraceID, sh2)
 	}
 
 	suites := analyzer.GetUniqueCipherSuites()
@@ -277,7 +282,7 @@ func TestTLSAnalyzerSummary(t *testing.T) {
 				VersionStr:  "TLS 1.2",
 				CipherSuite: 0x002f,
 			}
-			analyzer.RecordServerHello(traceID, sh)
+			_ = analyzer.RecordServerHello(traceID, sh)
 		}
 	}
 

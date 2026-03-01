@@ -77,7 +77,7 @@ func TestSessionManagerMock(t *testing.T) {
 		t.Error("expected non-nil session")
 	}
 
-	session, err = mock.Get("session-id")
+	_, err = mock.Get("session-id")
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestChallengeSolverMock(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if token != "hcaptcha_token" {
+	if token != "hcaptcha_token" { //nolint:gosec // G101: Test value
 		t.Errorf("expected hcaptcha_token, got %s", token)
 	}
 

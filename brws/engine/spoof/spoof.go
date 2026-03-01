@@ -14,6 +14,8 @@ import (
 )
 
 // SpoofEngine implements browser fingerprint spoofing
+// SpoofEngine provides TLS fingerprint spoofing capabilities.
+
 type SpoofEngine struct {
 	name            string
 	signature       *BrowserSignature
@@ -44,6 +46,7 @@ func NewFirefoxSpoof() (*SpoofEngine, error) {
 // NewSpoofEngine creates a spoofing engine from a signature key
 func NewSpoofEngine(signatureKey string) (*SpoofEngine, error) {
 	sigs := LoadDefaultSignatures()
+
 	sig, ok := sigs[signatureKey]
 	if !ok {
 		return nil, fmt.Errorf("signature not found: %s", signatureKey)
@@ -111,6 +114,7 @@ func (e *SpoofEngine) buildTLSConfig() error {
 	tlsSig := e.signature.TLS
 
 	// Build cipher suites
+
 	var cipherSuites []uint16
 	for _, c := range tlsSig.CipherSuites {
 		if !c.IsGREASE {
@@ -119,6 +123,7 @@ func (e *SpoofEngine) buildTLSConfig() error {
 	}
 
 	// Build ClientHello spec
+
 	var extensions []utls.TLSExtension
 
 	for _, ext := range tlsSig.Extensions {
@@ -359,6 +364,7 @@ func (e *SpoofEngine) Fetch(ctx context.Context, url string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fetching: %w", err)
 	}
+
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)

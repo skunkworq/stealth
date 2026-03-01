@@ -307,6 +307,7 @@ func parseALPNExtension(data []byte) []string {
 	}
 
 	listLen := binary.BigEndian.Uint16(data[0:2])
+
 	var protocols []string
 
 	for i := 2; i < 2+int(listLen); {
@@ -365,6 +366,7 @@ func parseKeyShareGroups(data []byte) []uint16 {
 
 	// Skip total length
 	offset := 2
+
 	var groups []uint16
 
 	for offset < len(data) {
@@ -593,7 +595,6 @@ func calculateJA3FromCH(ch *ClientHello) string {
 // calculateJA4FromCH calculates JA4 from parsed ClientHello
 func calculateJA4FromCH(ch *ClientHello) string {
 	// JA4: t[protocol][version][SNI][cipher_count][ext_count][ALPN]_[cipher_hash]_[ext_hash]
-
 	proto := "t"
 	version := "12"
 	if ch.Version == 0x0304 {
@@ -652,6 +653,7 @@ func calculateJA4FromCH(ch *ClientHello) string {
 			extList = append(extList, fmt.Sprintf("%04x", e.Type))
 		}
 	}
+
 	sortStrings(extList)
 	extHash := hashStringTruncated(joinStrings(extList, ","), 12)
 

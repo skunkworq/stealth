@@ -84,7 +84,7 @@ func (c *Chromium) Capabilities() engine.Capabilities {
 }
 
 // Do executes a request using Chromium.
-func (c *Chromium) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
+func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response, error) {
 	requestID := uuid.New().String()
 	c.trace = &engine.Trace{
 		Engine:    c.Name(),
@@ -95,6 +95,7 @@ func (c *Chromium) Do(ctx context.Context, req *engine.Request) (*engine.Respons
 	// Create a new tab context
 	tabCtx, tabCancel := chromedp.NewContext(c.allocCtx)
 	c.tabCtx = tabCtx
+
 	defer tabCancel()
 
 	// Set timeout
@@ -188,6 +189,7 @@ func (c *Chromium) Do(ctx context.Context, req *engine.Request) (*engine.Respons
 	actions = append(actions, chromedp.OuterHTML("html", &body))
 
 	start := time.Now()
+
 	if err := chromedp.Run(tabCtx, actions...); err != nil {
 		return nil, fmt.Errorf("chromedp run: %w", err)
 	}

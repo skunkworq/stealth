@@ -54,6 +54,15 @@ type StealthConfig struct {
 	UserAgent       string
 	ViewportWidth   int
 	ViewportHeight  int
+
+	// Phase 14 & 16: Dynamic RL Mutable Heuristics
+	HardwareSync    bool
+	NetworkSync     bool
+	PluginsSync     bool
+	GeometrySync    bool
+	VideoSync       bool
+	PermissionsSync bool
+	TimezoneSync    bool
 }
 
 // BehaviorConfig configures human behavior simulation.
@@ -118,9 +127,10 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 	logger.Info("initializing stealth client", "engine", cfg.EngineName)
 
 	eng, err := engine.New(cfg.EngineName, engine.Options{
-		Headless:   cfg.Headless,
-		Proxy:      cfg.Proxy,
-		ProfileDir: cfg.Session.ProfileDir,
+		Headless:         cfg.Headless,
+		Proxy:            cfg.Proxy,
+		ProfileDir:       cfg.Session.ProfileDir,
+		StealthConfigRaw: cfg.Stealth,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create engine: %w", err)
@@ -144,6 +154,7 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 
 	return &Client{
 		engine:     eng,
+		options:    &Options{Timeout: 30 * time.Second},
 		config:     cfg,
 		sessionMgr: sessMgr,
 		logger:     logger,
@@ -156,6 +167,7 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 // Navigate performs a GET request to the specified URL.
 func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 	ctx, span := c.tracer.StartSpan(ctx, "navigate", instrumentation.SpanKindRequest)
+
 	span.SetAttribute("url", url)
 	defer span.End()
 
@@ -173,7 +185,6 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 			URL:     url,
 			Timeout: c.options.Timeout,
 		})
-
 		if err != nil {
 			if strings.Contains(err.Error(), "WAF Challenge Detected") && attempt < maxRetries {
 				c.logger.Warn("WAF Blocked. Adapting Stealth Config and Retrying", "attempt", attempt, "error", err)

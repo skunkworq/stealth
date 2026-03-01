@@ -39,7 +39,7 @@ func TestSnifferIntegrationLifecycle(t *testing.T) {
 	
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
-	defer server.Stop(ctx)
+	defer func() { _ = server.Stop(ctx) }()
 
 	// Give the sniffer time to catch background system packets
 	time.Sleep(1 * time.Second)

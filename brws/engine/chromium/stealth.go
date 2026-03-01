@@ -1,12 +1,13 @@
 // Package chromium provides stealth enhancements for the Chromium engine.
 // This file contains advanced anti-detection techniques for browser automation.
+//
 //nolint:gosec // G404: math/rand used intentionally for non-cryptographic jitter/randomization
 package chromium
 
 import (
 	"fmt"
-	//nolint:gosec // math/rand is used intentionally for non-cryptographic jitter/randomization
 	"math/rand"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,9 @@ import (
 type StealthConfig struct {
 	// Spoof device memory (RAM)
 	DeviceMemoryGB int
+
+	// Spoof CPU Cores
+	HardwareConcurrency int
 
 	// Spoof platform
 	Platform string
@@ -44,13 +48,23 @@ type StealthConfig struct {
 	// Screen dimensions
 	ScreenWidth  int
 	ScreenHeight int
+
+	// Dynamic AI Spoofer Sync Flags (passed from stealth.Client / Python RL)
+	HardwareSync    bool
+	NetworkSync     bool
+	PluginsSync     bool
+	GeometrySync    bool
+	VideoSync       bool
+	PermissionsSync bool
+	TimezoneSync    bool
 }
 
 // DefaultStealthConfig returns a default stealth configuration
 func DefaultStealthConfig() *StealthConfig {
 	return &StealthConfig{
-		DeviceMemoryGB:  RandomRAM(),
-		Platform:        "Win32",
+		DeviceMemoryGB:      RandomRAM(),
+		HardwareConcurrency: 8,
+		Platform:            "Win32",
 		WebGLVendor:     randomGPUVendor(),
 		WebGLRenderer:   randomGPURenderer(),
 		CanvasNoise:     true,
@@ -98,12 +112,23 @@ func GenerateStealthScript(config *StealthConfig) string {
 
 	screenWidth := config.ScreenWidth
 	screenHeight := config.ScreenHeight
+
 	if screenWidth == 0 {
 		screenWidth = 1920
 		screenHeight = 1080
 	}
 
-	return fmt.Sprintf(`
+	deviceMemory := config.DeviceMemoryGB
+	if deviceMemory == 0 {
+		deviceMemory = 8
+	}
+	
+	concurrency := config.HardwareConcurrency
+	if concurrency == 0 {
+		concurrency = 8
+	}
+
+	script := fmt.Sprintf(`
 // ====== Anti-Detection Script ======
 (function() {
     'use strict';
@@ -449,8 +474,8 @@ func GenerateStealthScript(config *StealthConfig) string {
     console.log('[Stealth] Anti-detection scripts injected successfully');
 })();
 `,
-		config.DeviceMemoryGB,
-		RandomCoreCount(),
+		deviceMemory,
+		concurrency,
 		config.Platform,
 		screenWidth, screenHeight,
 		screenWidth, screenHeight-40, // minus taskbar
@@ -467,6 +492,81 @@ func GenerateStealthScript(config *StealthConfig) string {
 		chromeVersion,
 		config.WebGLVendor,
 		config.WebGLRenderer)
+
+	// --- Phase 16: Dynamic RL Mutable Evasion Logic ---
+
+	if config.NetworkSync {
+		script = strings.Replace(script, `downlink: 10,
+            effectiveType: '4g',
+            rtt: 50,`, fmt.Sprintf(`downlink: %f,
+            effectiveType: '4g',
+            rtt: %d,`, rand.Float64()*8.5+1.5, rand.Intn(100)+50), 1)
+	}
+
+	if config.VideoSync {
+		script = strings.Replace(script, `if (type.includes('video/mp4') && type.includes('avc1')) return 'probably';
+            if (type.includes('video/webm')) return 'probably';`, `if (type.includes('video/mp4') && type.includes('avc1')) return 'maybe';
+            if (type.includes('video/webm')) return 'maybe';`, 1)
+	}
+
+	if !config.PluginsSync {
+		// Enforce penalty detectable mock if RL agent failed to mutate
+		script = strings.Replace(script, `get: () => [
+            {
+                name: 'Chrome PDF Plugin',
+                filename: 'internal-pdf-viewer',
+                description: 'Portable Document Format',
+                version: 'undefined',
+                length: 1,
+                item: () => null,
+                namedItem: () => null
+            }
+        ]`, `get: () => [1, 2, 3, 4, 5]`, 1)
+	}
+
+	if !config.GeometrySync {
+		// Enforce penalty geometry anomaly
+		script = strings.Replace(script, fmt.Sprintf(`Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
+    Object.defineProperty(screen, 'pixelDepth', { get: () => 24 });
+    
+    Object.defineProperty(window, 'innerWidth', { get: () => %d });`, screenWidth-80),
+			fmt.Sprintf(`Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
+    Object.defineProperty(screen, 'pixelDepth', { get: () => 24 });
+    
+    Object.defineProperty(window, 'innerWidth', { get: () => %d });
+    Object.defineProperty(window, 'outerWidth', { get: () => %d });`, screenWidth-80, screenWidth-80), 1)
+	}
+
+	if config.PermissionsSync {
+		script += "\n" + `
+// 21. Permissions API Patching Bypass
+const originalQuery = window.navigator.permissions.query;
+window.navigator.permissions.query = function(parameters) {
+    if (parameters.name === 'notifications') {
+        const p = Promise.resolve({ state: 'prompt' });
+        p.isProxy = true; // explicitly detectable! wait, they asked for bypass on Sync = true.
+        return Promise.resolve({ state: 'prompt' }); 
+    }
+    return originalQuery.call(this, parameters);
+};`
+	} else {
+		script += "\n" + `
+// 21. Detectable Permissions API Mock
+const originalQuery = window.navigator.permissions.query;
+window.navigator.permissions.query = function(parameters) {
+    const p = Promise.resolve({ state: 'default' });
+    p.isProxy = true; 
+    return p;
+};`
+	}
+
+	if !config.TimezoneSync {
+		// Mismatch the timezone offset intentionally
+		script = strings.Replace(script, fmt.Sprintf(`return %d;  // minutes offset from UTC`, getTimezoneOffset(timezone)),
+			`return 0;  // mismatched default offset`, 1)
+	}
+
+	return script
 }
 
 // BezierCurve represents a quadratic Bezier curve for mouse movement
@@ -577,9 +677,9 @@ func (mp *MousePath) ToJavaScript() string {
 		int(mp.StartDelay.Milliseconds()))
 }
 
-// RandomDelay returns a random delay between min and max
-func RandomDelay(min, max time.Duration) time.Duration {
-	return min + time.Duration(RandomFloat(0, float64(max-min)))
+// RandomDelay returns a random delay between minDelay and maxDelay.
+func RandomDelay(minDelay, maxDelay time.Duration) time.Duration {
+	return minDelay + time.Duration(RandomFloat(0, float64(maxDelay-minDelay)))
 }
 
 // RandomBirthDate generates a random birth date for age gates
@@ -612,11 +712,13 @@ func RandomUserAgent() string {
 
 // Helper functions
 
+// RandomRAM returns a random RAM size in GB.
 func RandomRAM() int {
 	ramOptions := []int{4, 8, 16, 32}
 	return ramOptions[rand.Intn(len(ramOptions))]
 }
 
+// RandomCoreCount returns a random CPU core count.
 func RandomCoreCount() int {
 	coreOptions := []int{4, 8, 12, 16}
 	return coreOptions[rand.Intn(len(coreOptions))]
@@ -669,14 +771,16 @@ func randomGPURenderer() string {
 	return renderers[rand.Intn(len(renderers))]
 }
 
-func RandomFloat(min, max float64) float64 {
-	return min + rand.Float64()*(max-min)
+// RandomFloat returns a random float between minVal and maxVal.
+func RandomFloat(minVal, maxVal float64) float64 {
+	return minVal + rand.Float64()*(maxVal-minVal)
 }
 
 // bezier calculates a point on a quadratic Bezier curve
 func bezier(p0, p1, p2, t float64) float64 {
 	return (1-t)*(1-t)*p0 + 2*(1-t)*t*p1 + t*t*p2
 }
+
 
 // easeInOutCubic applies easing to time t (0-1)
 func easeInOutCubic(t float64) float64 {

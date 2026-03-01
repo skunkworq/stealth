@@ -45,10 +45,11 @@ func New(opts engine.Options) (engine.Engine, error) {
 
 	// Configure TLS
 	tlsConfig := &tls.Config{
+		MinVersion:         tls.VersionTLS12,
 		InsecureSkipVerify: false,
 	}
 	if !opts.IPv6 {
-		transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		transport.DialContext = func(ctx context.Context, _, addr string) (net.Conn, error) {
 			return (&net.Dialer{
 				Timeout:   constants.DefaultTimeout,
 				KeepAlive: constants.KeepAliveTimeout,
@@ -92,7 +93,7 @@ func New(opts engine.Options) (engine.Engine, error) {
 	client := &http.Client{
 		Transport: transport,
 		Timeout:   timeout,
-		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		CheckRedirect: func(_ *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return fmt.Errorf("too many redirects")
 			}
@@ -200,25 +201,25 @@ func (n *Native) Do(ctx context.Context, req *engine.Request) (*engine.Response,
 	var start, connectStart, tlsStart time.Time
 
 	trace := &httptrace.ClientTrace{
-		GetConn: func(hostPort string) {
+		GetConn: func(_ string) {
 			start = time.Now()
 		},
-		DNSStart: func(info httptrace.DNSStartInfo) {
+		DNSStart: func(_ httptrace.DNSStartInfo) {
 			timing.Blocked = time.Since(start)
 		},
-		DNSDone: func(info httptrace.DNSDoneInfo) {
+		DNSDone: func(_ httptrace.DNSDoneInfo) {
 			timing.DNS = time.Since(start) - timing.Blocked
 		},
-		ConnectStart: func(network, addr string) {
+		ConnectStart: func(_, _ string) {
 			connectStart = time.Now()
 		},
-		ConnectDone: func(network, addr string, err error) {
+		ConnectDone: func(_, _ string, _ error) {
 			timing.Connect = time.Since(connectStart)
 		},
 		TLSHandshakeStart: func() {
 			tlsStart = time.Now()
 		},
-		TLSHandshakeDone: func(state tls.ConnectionState, err error) {
+		TLSHandshakeDone: func(_ tls.ConnectionState, _ error) {
 			timing.SSL = time.Since(tlsStart)
 		},
 		GotFirstResponseByte: func() {

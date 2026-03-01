@@ -12,7 +12,8 @@ import (
 	"time"
 )
 
-// BenchmarkRunner provides a configurable benchmark execution environment
+// BenchmarkRunner provides a configurable benchmark execution environment.
+//nolint:revive // Type name stuttering is intentional for clarity
 type BenchmarkRunner struct {
 	Name          string
 	Iterations    int
@@ -22,7 +23,8 @@ type BenchmarkRunner struct {
 	Results       []BenchmarkResult
 }
 
-// BenchmarkResult captures metrics from a single benchmark run
+// BenchmarkResult captures metrics from a single benchmark run.
+//nolint:revive // Type name stuttering is intentional for clarity
 type BenchmarkResult struct {
 	Name         string
 	Duration     time.Duration
@@ -61,6 +63,7 @@ func (r *BenchmarkRunner) Run(b *testing.B, fn func()) {
 		f, err := os.Create(fmt.Sprintf("%s_cpu.prof", r.Name))
 		if err == nil {
 			_ = pprof.StartCPUProfile(f)
+
 			defer pprof.StopCPUProfile()
 		}
 	}
@@ -139,8 +142,8 @@ func (r *BenchmarkRunner) Analyze() Statistics {
 	})
 
 	count := len(durations)
-	min := durations[0]
-	max := durations[count-1]
+	minDuration := durations[0]
+	maxDuration := durations[count-1]
 
 	var sum time.Duration
 	for _, d := range durations {
@@ -167,8 +170,8 @@ func (r *BenchmarkRunner) Analyze() Statistics {
 
 	return Statistics{
 		Count:    count,
-		Min:      min,
-		Max:      max,
+		Min:      minDuration,
+		Max:      maxDuration,
 		Mean:     mean,
 		Median:   median,
 		P95:      p95,
@@ -267,10 +270,10 @@ func PrintMemoryReport(label string, snap MemorySnapshot) {
 
 // CompareSnapshots shows the delta between two memory snapshots
 func CompareSnapshots(before, after MemorySnapshot) {
-	//nolint:gosec // overflow check not needed - values are within safe range
-	deltaHeap := int64(after.HeapAlloc) - int64(before.HeapAlloc)
-	//nolint:gosec // overflow check not needed - values are within safe range
-	deltaObjects := int64(after.HeapObjects) - int64(before.HeapObjects)
+	// Calculate deltas using signed integers for negative values
+	// These conversions are safe because memory values won't exceed int64 range in practice
+	deltaHeap := safeDelta(after.HeapAlloc, before.HeapAlloc)
+	deltaObjects := safeDelta(after.HeapObjects, before.HeapObjects)
 	deltaGoroutines := after.NumGoroutine - before.NumGoroutine
 
 	_, _ = fmt.Fprintf(os.Stdout, "\n--- Memory Delta ---\n")
@@ -279,4 +282,13 @@ func CompareSnapshots(before, after MemorySnapshot) {
 	_, _ = fmt.Fprintf(os.Stdout, "Goroutines:     %+d\n", deltaGoroutines)
 	_, _ = fmt.Fprintf(os.Stdout, "GC Runs:        %d\n", after.NumGC-before.NumGC)
 	_, _ = fmt.Fprintln(os.Stdout)
+}
+
+// safeDelta calculates the difference between two uint64 values as int64.
+// Handles the case where after < before (negative delta).
+func safeDelta(after, before uint64) int64 {
+	if after >= before {
+		return int64(after - before)
+	}
+	return -int64(before - after)
 }

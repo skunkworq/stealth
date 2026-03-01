@@ -20,7 +20,7 @@ func TestLogger(t *testing.T) {
 	log.Warnw("warn message", "key", "value")
 	log.Errorw("error message", "key", "value")
 
-	log.Flush()
+	_ = log.Flush()
 }
 
 func TestLoggerLevels(t *testing.T) {
@@ -51,7 +51,7 @@ func TestDefaultLogger(t *testing.T) {
 
 	// Should not panic
 	log.Info("test message")
-	log.Flush()
+	_ = log.Flush()
 }
 
 func TestLoggerNamed(t *testing.T) {

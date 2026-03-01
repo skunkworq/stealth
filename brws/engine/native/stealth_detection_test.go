@@ -20,16 +20,18 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 	defer server.Close()
 
 	// Test 1: Standard Go client (should be detected as bot)
-	t.Run("Standard Go Client Detection", func(t *testing.T) {
+	t.Run("Standard Go Client Detection", func(_ *testing.T) {
 		client := &http.Client{}
 		resp, _ := client.Get(server.URL + "/headers")
+			_ = resp
 		if resp != nil {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 		}
 
 		lastReq := server.GetLastRequest()
 		if lastReq != nil {
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
+				_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -49,13 +51,22 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 	})
 
 	// Test 2: Native with Chrome stealth (incomplete - missing TLS)
-	t.Run("Native Stealth Chrome Detection", func(t *testing.T) {
+	t.Run("Native Stealth Chrome Detection", func(_ *testing.T) {
+		eng, _ := New(engine.Options{
+				Timeout:     30 * time.Second,
+				Stealth:     true,
+				ProfileName: "chrome-120-macos",
+			})
+			_ = eng
+		})
+
+	t.Run("Native Stealth Firefox Detection", func(_ *testing.T) {
 		eng, _ := New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "chrome-120-macos",
 		})
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		req := &engine.Request{
 			Method:  "GET",
@@ -64,11 +75,12 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		eng.Do(ctx, req)
+		_, _ = eng.Do(ctx, req)
 
 		lastReq := server.GetLastRequest()
 		if lastReq != nil {
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
+				_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -98,11 +110,20 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 	// Test 3: Native with Firefox (incomplete - missing Chrome headers)
 	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
 		eng, _ := New(engine.Options{
+				Timeout:     30 * time.Second,
+				Stealth:     true,
+				ProfileName: "chrome-120-macos",
+			})
+			_ = eng
+		})
+
+	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
+		eng, _ := New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "firefox-120-macos",
 		})
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		req := &engine.Request{
 			Method:  "GET",
@@ -111,11 +132,12 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		eng.Do(ctx, req)
+		_, _ = eng.Do(ctx, req)
 
 		lastReq := server.GetLastRequest()
 		if lastReq != nil {
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
+				_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -158,7 +180,7 @@ func TestStealthDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	// Make request
 	req := &engine.Request{
@@ -193,6 +215,7 @@ func TestStealthDetection(t *testing.T) {
 
 	// Create a mock http.Request to analyze
 	mockReq, _ := http.NewRequest("GET", server.URL, nil)
+				_ = mockReq
 	for k, v := range lastReq.Headers {
 		mockReq.Header.Set(k, v)
 	}
@@ -229,7 +252,7 @@ func TestStealthTLSDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	// Make request - will fail due to self-signed cert but we can still analyze
 	req := &engine.Request{
@@ -277,7 +300,7 @@ func TestProfileFingerprintDetection(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create engine: %v", err)
 			}
-			defer eng.Close()
+			defer func() { _ = eng.Close() }()
 
 			req := &engine.Request{
 				Method:  "GET",
@@ -304,6 +327,7 @@ func TestProfileFingerprintDetection(t *testing.T) {
 			// Analyze with detector
 			detector := adversarial.NewStealthDetector()
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
+				_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -331,8 +355,9 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 	t.Run("Standard Go Client", func(t *testing.T) {
 		client := &http.Client{}
 		resp, _ := client.Get(server.URL + "/headers")
+			_ = resp
 		if resp != nil {
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 		}
 
 		lastReq := server.GetLastRequest()
@@ -347,11 +372,20 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 	// Test 2: Native with stealth
 	t.Run("Native Stealth", func(t *testing.T) {
 		eng, _ := New(engine.Options{
+				Timeout:     30 * time.Second,
+				Stealth:     true,
+				ProfileName: "chrome-120-macos",
+			})
+			_ = eng
+		})
+
+	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
+		eng, _ := New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "chrome-120-macos",
 		})
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		req := &engine.Request{
 			Method:  "GET",
@@ -360,7 +394,7 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		eng.Do(ctx, req)
+		_, _ = eng.Do(ctx, req)
 
 		lastReq := server.GetLastRequest()
 		if lastReq != nil {
@@ -372,6 +406,7 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 			// Analyze
 			detector := adversarial.NewStealthDetector()
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
+				_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -385,11 +420,20 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 	// Test 3: Native with Firefox profile
 	t.Run("Native Stealth Firefox", func(t *testing.T) {
 		eng, _ := New(engine.Options{
+				Timeout:     30 * time.Second,
+				Stealth:     true,
+				ProfileName: "chrome-120-macos",
+			})
+			_ = eng
+		})
+
+	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
+		eng, _ := New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "firefox-120-macos",
 		})
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		req := &engine.Request{
 			Method:  "GET",
@@ -398,7 +442,7 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		eng.Do(ctx, req)
+		_, _ = eng.Do(ctx, req)
 
 		lastReq := server.GetLastRequest()
 		if lastReq != nil {

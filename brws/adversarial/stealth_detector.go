@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -13,6 +14,9 @@ import (
 	"github.com/stealth/brwslab/brws/constants"
 )
 
+// StealthDetector analyzes HTTP requests to detect stealth browser automation
+// by examining TLS fingerprints, HTTP headers, navigator properties, canvas fingerprints,
+// timing patterns, and behavioral biometrics.
 type StealthDetector struct {
 	mu         sync.RWMutex
 	detections []StealthDetection
@@ -20,6 +24,8 @@ type StealthDetector struct {
 	config     *DetectorConfig
 }
 
+// DetectorConfig holds configuration thresholds and feature toggles for the
+// stealth detection engine.
 type DetectorConfig struct {
 	ThresholdBot          float64 `json:"threshold_bot"`
 	ThresholdSuspicious   float64 `json:"threshold_suspicious"`
@@ -30,6 +36,8 @@ type DetectorConfig struct {
 	EnableBehavioralCheck bool    `json:"enable_behavioral_check"`
 }
 
+// StealthDetection represents a complete detection result for a single request,
+// including all analysis vectors and confidence scores.
 type StealthDetection struct {
 	Timestamp      time.Time            `json:"timestamp"`
 	RequestID      string               `json:"request_id"`
@@ -49,12 +57,16 @@ type StealthDetection struct {
 	IsomorphicData *IsomorphicCheckInfo `json:"isomorphic_data,omitempty"`
 }
 
+// IsomorphicCheckInfo contains cross-validation results comparing different
+// fingerprinting layers for consistency.
 type IsomorphicCheckInfo struct {
 	PlatformMismatch   bool     `json:"platform_mismatch"`
 	ExecutionMismatch  bool     `json:"execution_mismatch"`
 	SuspiciousPatterns []string `json:"suspicious_patterns"`
 }
 
+// DetectionVector represents a single detection category with its score,
+// weight, and associated indicators.
 type DetectionVector struct {
 	Name        string   `json:"name"`
 	Category    string   `json:"category"`
@@ -65,6 +77,8 @@ type DetectionVector struct {
 	Indicators  []string `json:"indicators"`
 }
 
+// StealthIndicator represents a specific indicator of automation with severity
+// and descriptive message.
 type StealthIndicator struct {
 	Vector   string  `json:"vector"`
 	Name     string  `json:"name"`
@@ -73,6 +87,8 @@ type StealthIndicator struct {
 	RawData  string  `json:"raw_data,omitempty"`
 }
 
+// TLSFingerprintInfo contains detailed TLS connection fingerprinting data
+// including JA3/JA4 hashes and cipher suite analysis.
 type TLSFingerprintInfo struct {
 	JA4             string   `json:"ja4"`
 	JA3             string   `json:"ja3"`
@@ -92,6 +108,8 @@ type TLSFingerprintInfo struct {
 	Anomalies       []string `json:"anomalies"`
 }
 
+// HTTPFingerprintInfo contains HTTP header analysis data for browser fingerprinting
+// including User-Agent parsing and Client Hints validation.
 type HTTPFingerprintInfo struct {
 	UserAgent             string   `json:"user_agent"`
 	Platform              string   `json:"platform"`
@@ -118,6 +136,8 @@ type HTTPFingerprintInfo struct {
 	SuspiciousHeaders     []string `json:"suspicious_headers"`
 }
 
+// NavigatorCheckInfo contains JavaScript navigator object properties used
+// to detect automation frameworks and inconsistencies.
 type NavigatorCheckInfo struct {
 	Webdriver           bool     `json:"webdriver"`
 	Languages           string   `json:"languages"`
@@ -142,8 +162,18 @@ type NavigatorCheckInfo struct {
 	PropertyCount       int      `json:"property_count"`
 	MissingProps        []string `json:"missing_props"`
 	InconsistentProps   []string `json:"inconsistent_props"`
+	ConnectionRTT       float64  `json:"connection_rtt"`
+	ConnectionDownlink  float64  `json:"connection_downlink"`
+	ScreenColorDepth    int      `json:"screen_color_depth"`
+	ScreenInnerWidth    int      `json:"screen_inner_width"`
+	ScreenOuterWidth    int      `json:"screen_outer_width"`
+	Timezone            string   `json:"timezone"`
+	VideoCanPlayMp4     string   `json:"video_can_play_mp4"`
+	NotificationsPrompt string   `json:"notifications_prompt"`
 }
 
+// CanvasCheckInfo contains Canvas and WebGL fingerprinting data for detecting
+// randomization and software renderers.
 type CanvasCheckInfo struct {
 	CanvasFingerprint   string   `json:"canvas_fingerprint"`
 	CanvasHash          string   `json:"canvas_hash"`
@@ -160,6 +190,8 @@ type CanvasCheckInfo struct {
 	SuspiciousPatterns  []string `json:"suspicious_patterns"`
 }
 
+// TimingCheckInfo contains navigation timing data used to detect automated
+// browsing patterns and impossible timing sequences.
 type TimingCheckInfo struct {
 	NavigationStart       int      `json:"navigation_start"`
 	UnloadEventStart      int      `json:"unload_event_start"`
@@ -181,6 +213,8 @@ type TimingCheckInfo struct {
 	SuspiciousGaps        []string `json:"suspicious_gaps"`
 }
 
+// BehavioralCheckInfo contains user interaction metrics for detecting
+// mechanical mouse movements and typing patterns.
 type BehavioralCheckInfo struct {
 	MouseEvents        int      `json:"mouse_events"`
 	MouseSpeedAvg      float64  `json:"mouse_speed_avg"`
@@ -198,6 +232,8 @@ type BehavioralCheckInfo struct {
 	SuspiciousPatterns []string `json:"suspicious_patterns"`
 }
 
+// StealthBaseline represents known-good browser fingerprint data for comparison
+// against detected fingerprints.
 type StealthBaseline struct {
 	Browser        string   `json:"browser"`
 	JA4            string   `json:"ja4"`
@@ -206,6 +242,7 @@ type StealthBaseline struct {
 	NavigatorProps []string `json:"navigator_props"`
 }
 
+//nolint:unused
 var knownJA4Signatures = map[string]string{
 	"t13d": "Chrome 120+ macOS",
 	"t13c": "Chrome 120+ Windows",
@@ -214,6 +251,8 @@ var knownJA4Signatures = map[string]string{
 	"r20a": "Safari 17+",
 }
 
+// NewStealthDetector creates and initializes a new StealthDetector with default
+// configuration settings.
 func NewStealthDetector() *StealthDetector {
 	return &StealthDetector{
 		detections: make([]StealthDetection, 0),
@@ -230,6 +269,8 @@ func NewStealthDetector() *StealthDetector {
 	}
 }
 
+// AnalyzeRequest performs comprehensive stealth detection analysis on an HTTP request,
+// examining TLS state, headers, and embedded fingerprint data.
 func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.ConnectionState) *StealthDetection {
 	// Early return if request is nil
 	if req == nil {
@@ -330,6 +371,16 @@ func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.Connec
 			detection.Vectors = append(detection.Vectors, *isomorphicVec)
 			totalScore += isomorphicVec.Score * isomorphicVec.Weight
 			totalWeight += isomorphicVec.Weight
+		}
+	}
+
+	// 8. Hardware Execution Parity
+	hardwareVec := sd.analyzeHardwareExecution(req)
+	if hardwareVec != nil {
+		if hardwareVec.Score > 0 {
+			detection.Vectors = append(detection.Vectors, *hardwareVec)
+			totalScore += hardwareVec.Score * hardwareVec.Weight
+			totalWeight += hardwareVec.Weight
 		}
 	}
 
@@ -512,6 +563,8 @@ func (sd *StealthDetector) analyzeNavigatorData(req *http.Request) *DetectionVec
 		return nil
 	}
 
+	log.Printf("NAV_DATA JSON: %+v", navData)
+
 	indicators := make([]string, 0)
 
 	// Check webdriver (naive boolean leak)
@@ -555,10 +608,114 @@ func (sd *StealthDetector) analyzeNavigatorData(req *http.Request) *DetectionVec
 		}
 	}
 
+	// Phase 16: Comprehensive Spoofing Checks
+	indicators = sd.analyzeNetworkInformation(navData, vec, indicators)
+	indicators = sd.analyzePluginsArray(navData, vec, indicators)
+	indicators = sd.analyzeScreenGeometry(navData, vec, indicators)
+	indicators = sd.analyzeVideoElement(navData, vec, indicators)
+	indicators = sd.analyzePermissionsAPI(navData, vec, indicators)
+	indicators = sd.analyzeTimezoneParity(navData, vec, indicators, req)
+
 	vec.Indicators = indicators
 	vec.Detected = vec.Score > 0.3
 
 	return vec
+}
+
+func (sd *StealthDetector) analyzeNetworkInformation(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	if conn, ok := navData["connection"].(map[string]interface{}); ok {
+		rtt, _ := conn["rtt"].(float64)
+		downlink, _ := conn["downlink"].(float64)
+
+		if rtt == 50 && downlink == 10 {
+			indicators = append(indicators, "spoofed_network_api_detected")
+			vec.Score += 0.4
+		}
+	} else if rtt, ok := navData["connection_rtt"].(float64); ok {
+		downlink, _ := navData["connection_downlink"].(float64)
+		if rtt == 50 && downlink == 10 {
+			indicators = append(indicators, "spoofed_network_api_detected")
+			vec.Score += 0.4
+		}
+	}
+	return indicators
+}
+
+func (sd *StealthDetector) analyzePluginsArray(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	if plugins, ok := navData["plugins"].([]interface{}); ok {
+		if len(plugins) == 5 {
+			isIntArray := true
+			for _, p := range plugins {
+				if _, isNum := p.(float64); !isNum {
+					isIntArray = false
+					break
+				}
+			}
+			if isIntArray {
+				indicators = append(indicators, "spoofed_plugins_array_detected")
+				vec.Score += 0.5
+			}
+		}
+	} else if length, ok := navData["plugins_length"].(float64); ok {
+		if length == 5 && navData["plugins_is_array"] == true {
+			indicators = append(indicators, "spoofed_plugins_array_detected")
+			vec.Score += 0.5
+		}
+	}
+	return indicators
+}
+
+func (sd *StealthDetector) analyzeScreenGeometry(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	var colorDepth, innerWidth, outerWidth float64
+	if screen, ok := navData["screen"].(map[string]interface{}); ok {
+		colorDepth, _ = screen["colorDepth"].(float64)
+		innerWidth, _ = navData["innerWidth"].(float64)
+		outerWidth, _ = navData["outerWidth"].(float64)
+	} else if cd, ok := navData["screen_color_depth"].(float64); ok {
+		colorDepth = cd
+		innerWidth, _ = navData["screen_inner_width"].(float64)
+		outerWidth, _ = navData["screen_outer_width"].(float64)
+	}
+
+	if colorDepth == 24 {
+		if innerWidth > 0 && outerWidth > 0 && innerWidth == outerWidth {
+			indicators = append(indicators, "impossible_window_geometry_detected")
+			vec.Score += 0.4
+		}
+	}
+	return indicators
+}
+
+func (sd *StealthDetector) analyzeVideoElement(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	if video, ok := navData["video_can_play_mp4"].(string); ok {
+		if video == "probably" {
+			indicators = append(indicators, "spoofed_video_element_detected")
+			vec.Score += 0.3
+		}
+	}
+	return indicators
+}
+
+func (sd *StealthDetector) analyzeTimezoneParity(navData map[string]interface{}, vec *DetectionVector, indicators []string, _ *http.Request) []string {
+	if tz, ok := navData["timezone"].(string); ok {
+		if offset, ok := navData["timezone_offset"].(float64); ok {
+			if tz == "America/New_York" && offset != 300 {
+				indicators = append(indicators, "timezone_offset_mismatch")
+				vec.Score += 0.4
+			}
+		}
+	}
+	return indicators
+}
+
+func (sd *StealthDetector) analyzePermissionsAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	if perm, ok := navData["notifications_prompt"].(string); ok {
+		if perm == "default" && navData["permissions_is_proxy"] == true {
+			indicators = append(indicators, "spoofed_permissions_api_detected")
+			vec.Score += 0.6
+		}
+	}
+	return indicators
 }
 
 func (sd *StealthDetector) analyzeCanvasData(req *http.Request) *DetectionVector {
@@ -590,7 +747,8 @@ func (sd *StealthDetector) analyzeCanvasData(req *http.Request) *DetectionVector
 
 	// Check for masked WebGL
 	if strings.Contains(canvasHeader, "google") || strings.Contains(canvasHeader, "intel") {
-		// These are common real browser fingerprints
+		// These are common real browser fingerprints - no action needed
+		_ = canvasHeader
 	} else if strings.Contains(canvasHeader, "unknown") {
 		indicators = append(indicators, "masked_webgl")
 		vec.Score += 0.3
@@ -717,7 +875,7 @@ func (sd *StealthDetector) analyzeIsomorphicAnomalies(req *http.Request, httpInf
 	}
 
 	indicators := make([]string, 0)
-	
+
 	// Get Navigator Data
 	var navData map[string]interface{}
 	if navHeader := req.Header.Get(constants.HeaderNavigatorData); navHeader != "" {
@@ -739,10 +897,10 @@ func (sd *StealthDetector) analyzeIsomorphicAnomalies(req *http.Request, httpInf
 	if canvasData != nil {
 		if unmaskedRenderer, ok := canvasData["unmaskedRenderer"].(string); ok {
 			renderer := strings.ToLower(unmaskedRenderer)
-			
+
 			isMac := strings.Contains(httpPlatform, "mac") || strings.Contains(httpPlatform, "darwin")
 			isWindows := strings.Contains(httpPlatform, "win")
-			
+
 			// Detect Windows GPU (Direct3D/D3D) on claimed macOS HTTP
 			if isMac && (strings.Contains(renderer, "direct3d") || strings.Contains(renderer, "d3d") || strings.Contains(renderer, "angle (nvidia")) {
 				if !strings.Contains(renderer, "apple") {
@@ -750,7 +908,7 @@ func (sd *StealthDetector) analyzeIsomorphicAnomalies(req *http.Request, httpInf
 					vec.Score += 0.9 // Extremely suspicious Frankenstein bot
 				}
 			}
-			
+
 			// Detect Apple GPU on claimed Windows HTTP
 			if isWindows && (strings.Contains(renderer, "apple m") || strings.Contains(renderer, "apple gpu")) {
 				indicators = append(indicators, "platform_mismatch: windows_http_with_apple_gpu")
@@ -763,16 +921,95 @@ func (sd *StealthDetector) analyzeIsomorphicAnomalies(req *http.Request, httpInf
 	if navData != nil {
 		if navPlatform, ok := navData["platform"].(string); ok {
 			navPlatLow := strings.ToLower(navPlatform)
-			isMacHttp := strings.Contains(httpPlatform, "mac") || strings.Contains(httpPlatform, "darwin")
-			isWinHttp := strings.Contains(httpPlatform, "win")
-			
+			isMacHTTP := strings.Contains(httpPlatform, "mac") || strings.Contains(httpPlatform, "darwin")
+			isWinHTTP := strings.Contains(httpPlatform, "win")
+
 			isMacNav := strings.Contains(navPlatLow, "mac")
 			isWinNav := strings.Contains(navPlatLow, "win")
-			
-			if (isMacHttp && !isMacNav) || (isWinHttp && !isWinNav) {
+
+			if (isMacHTTP && !isMacNav) || (isWinHTTP && !isWinNav) {
 				indicators = append(indicators, "platform_mismatch: http_vs_navigator_platform")
 				vec.Score += 0.8
 			}
+		}
+
+		// Cross-check: Accept-Language HTTP Header vs navigator.languages
+		if langs, ok := navData["languages"].([]interface{}); ok {
+			if len(langs) > 0 {
+				primaryNavLang, _ := langs[0].(string)
+				httpLang := strings.ToLower(httpInfo.AcceptLanguage)
+				if primaryNavLang != "" {
+					primaryNavLang = strings.ToLower(strings.Split(primaryNavLang, "-")[0])
+					if httpLang != "" && !strings.Contains(httpLang, primaryNavLang) {
+						indicators = append(indicators, "locale_mismatch: http_accept_language_vs_navigator_languages")
+						vec.Score += 0.7
+					}
+				}
+			}
+		}
+
+		// Cross-check: Deep HTTP Parity (User-Agent vs Sec-Ch-Ua)
+		if navUA, ok := navData["userAgent"].(string); ok {
+			httpUA := strings.ToLower(httpInfo.UserAgent)
+			navUALower := strings.ToLower(navUA)
+
+			if httpUA != "" && httpUA != navUALower {
+				indicators = append(indicators, "user_agent_mismatch: http_ua_vs_navigator_ua")
+				vec.Score += 0.8
+			}
+
+			// If Sec-Ch-Ua says "Google Chrome" but UA says "Firefox"
+			secChUa := strings.ToLower(httpInfo.SecCHUA)
+			if secChUa != "" {
+				if strings.Contains(secChUa, "chrome") && !strings.Contains(httpUA, "chrome") {
+					indicators = append(indicators, "brand_mismatch: sec-ch-ua_chrome_vs_ua_non_chrome")
+					vec.Score += 0.9
+				}
+			}
+		}
+	}
+
+	vec.Indicators = indicators
+	vec.Detected = vec.Score > 0.0
+
+	return vec
+}
+
+func (sd *StealthDetector) analyzeHardwareExecution(req *http.Request) *DetectionVector {
+	navHeader := req.Header.Get(constants.HeaderNavigatorData)
+	if navHeader == "" {
+		return nil
+	}
+
+	vec := &DetectionVector{
+		Name:        "Hardware Execution Fingerprinting",
+		Category:    "hardware",
+		Weight:      0.4,
+		Description: "Analyzes navigator hardware properties for impossible configurations",
+	}
+
+	var navData map[string]interface{}
+	if err := json.Unmarshal([]byte(navHeader), &navData); err != nil {
+		return nil
+	}
+
+	indicators := make([]string, 0)
+
+	// Cross-check: hardwareConcurrency vs deviceMemory
+	cores, okCores := navData["hardwareConcurrency"].(float64)
+	memory, okMem := navData["deviceMemory"].(float64)
+
+	if okCores && okMem {
+		// E.g., 16+ cores but only 0, 1, or 2GB of RAM is an impossible modern configuration
+		if cores >= 16 && memory <= 2 {
+			indicators = append(indicators, "impossible_hardware: high_concurrency_low_memory")
+			vec.Score += 0.8
+		}
+
+		// Unusually low memory for desktop browsers
+		if memory <= 0 {
+			indicators = append(indicators, "impossible_hardware: zero_memory")
+			vec.Score += 0.5
 		}
 	}
 
@@ -810,12 +1047,14 @@ func (sd *StealthDetector) detectStealthBrowser(detection *StealthDetection) boo
 	return stealthIndicators >= 2
 }
 
+// GetDetections returns a copy of all detection records collected by the detector.
 func (sd *StealthDetector) GetDetections() []StealthDetection {
 	sd.mu.RLock()
 	defer sd.mu.RUnlock()
 	return sd.detections
 }
 
+// AddDetection adds a new detection record to the detector's history.
 func (sd *StealthDetector) AddDetection(detection StealthDetection) {
 	sd.mu.Lock()
 	defer sd.mu.Unlock()
@@ -875,22 +1114,129 @@ func getClientIP(req *http.Request) string {
 	return req.RemoteAddr
 }
 
+// AdvancedStealthServer combines a StealthDetector with a TestServer to provide
+// HTTP request handling with integrated stealth detection capabilities.
 type AdvancedStealthServer struct {
 	*StealthDetector
 
-	Server *TestServer
+	Server        *TestServer
+	CaptchaShield *CaptchaShield
+	Tracer        *CaptchaTracer
 }
 
+// NewAdvancedStealthServer creates and initializes a new AdvancedStealthServer
+// with default detector and test server configurations.
 func NewAdvancedStealthServer() *AdvancedStealthServer {
 	detector := NewStealthDetector()
 	testServer := NewTestServer()
+	tracer := NewCaptchaTracer()
 
 	return &AdvancedStealthServer{
 		StealthDetector: detector,
 		Server:          testServer,
+		CaptchaShield:   NewCaptchaShield(nil, nil, tracer),
+		Tracer:          tracer,
 	}
 }
 
+// selectCaptchaTypeFromScore selects the CAPTCHA type based on the WAF detection score.
+func selectCaptchaTypeFromScore(score float64) string {
+	if score < 0.35 {
+		return "text" // math/text-based CAPTCHA for low suspicion
+	}
+	return "hcaptcha" // harder CAPTCHA for higher suspicion
+}
+
+// HandleCaptchaVerify verifies a submitted CAPTCHA solution.
+func (as *AdvancedStealthServer) HandleCaptchaVerify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		ChallengeID string         `json:"challenge_id"`
+		Solution    string         `json:"solution"`
+		Answer      string         `json:"answer"` // Keep for backward compatibility
+		IsExpert    bool           `json:"is_expert"`
+		Events      []CaptchaEvent `json:"events"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, `{"error":"invalid request"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Support both naming conventions
+	solution := req.Solution
+	if solution == "" {
+		solution = req.Answer
+	}
+
+	// Add events to tracer if provided
+	if len(req.Events) > 0 {
+		for _, ev := range req.Events {
+			_ = as.CaptchaShield.RecordEvent(req.ChallengeID, ev)
+		}
+	}
+
+	solved, metrics := as.CaptchaShield.ValidateChallenge(req.ChallengeID, solution)
+	
+	botScore := 0.0
+	trace, _ := as.CaptchaShield.tracer.GetTrace(req.ChallengeID)
+	if trace != nil {
+		botScore = as.CaptchaShield.tracer.CalculateBotScore(trace)
+	}
+
+	mlFeatures := map[string]float64{
+		"mouse_velocity": 0,
+		"typing_speed":   0,
+	}
+	if trace != nil && trace.Metrics != nil {
+		mlFeatures["mouse_velocity"] = trace.Metrics.MouseVelocity
+		mlFeatures["typing_speed"] = trace.Metrics.TypingSpeed
+	}
+
+	log.Printf("CAPTCHA_VERIFIED challenge_id=%s solved=%v expert=%v score=%.2f", req.ChallengeID, solved, req.IsExpert, botScore)
+
+	w.Header().Set("Content-Type", "application/json")
+	
+	// For expert training tracks, we always return 200 even if solve failed
+	// so the UI can show the analysis.
+	if req.IsExpert {
+		w.WriteHeader(http.StatusOK)
+		//nolint:errchkjson // Dynamic response requires interface{}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"solved":        solved,
+			"message":       "Expert track recorded",
+			"solve_time_ms": metrics.SolveTimeMs,
+			"attempts":      metrics.AttemptCount,
+			"bot_score":     botScore,
+			"ml_features":   mlFeatures,
+		})
+		return
+	}
+
+	if solved {
+		w.WriteHeader(http.StatusOK)
+		//nolint:errchkjson // Dynamic response requires interface{}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"solved":        true,
+			"message":       "CAPTCHA solved successfully",
+			"solve_time_ms": metrics.SolveTimeMs,
+			"attempts":      metrics.AttemptCount,
+		})
+	} else {
+		w.WriteHeader(http.StatusForbidden)
+		//nolint:errchkjson // Dynamic response requires interface{}
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"solved":  false,
+			"message": "Incorrect CAPTCHA solution",
+		})
+	}
+}
+
+// HandleRequest processes an HTTP request through stealth detection and returns
+// the detection results as JSON with appropriate HTTP status codes.
 func (as *AdvancedStealthServer) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	var tlsConn *tls.ConnectionState
 	if r.TLS != nil {
@@ -935,21 +1281,39 @@ func (as *AdvancedStealthServer) HandleRequest(w http.ResponseWriter, r *http.Re
 		"indicators": detection.Indicators,
 	}
 
-	if detection.IsBot || detection.IsStealth {
-		response["detection_type"] = "stealth"
+	// Phase 17: Graduated CAPTCHA response based on bot score
+	const captchaThresholdLow = 0.20
+	const captchaThresholdHigh = 0.60
 
-		// Phase 10: Inject explicit Adversarial Shield headers to organically trigger
-		// the FSM Client Adapting sequence for validation
+	if detection.Score > captchaThresholdHigh && detection.IsBot {
+		// Hard block — confirmed bot with very high score
+		response["detection_type"] = "blocked"
+		response["message"] = "Bot detected"
 		w.Header().Set("X-Datadome", "1")
 		w.WriteHeader(http.StatusForbidden)
-
-		if detection.IsStealth {
-			response["message"] = "Stealth browser automation detected"
+	} else if detection.Score > captchaThresholdLow {
+		// Suspicious — issue CAPTCHA challenge using existing CaptchaShield infrastructure
+		captchaType := selectCaptchaTypeFromScore(detection.Score)
+		challenge, err := as.CaptchaShield.CreateChallenge(detection.RequestID, nil, captchaType)
+		if err != nil {
+			log.Printf("CAPTCHA_GENERATION_FAILED: %v", err)
+			w.WriteHeader(http.StatusOK)
 		} else {
-			response["message"] = "Bot detected"
+			response["detection_type"] = "captcha"
+			response["captcha"] = map[string]interface{}{
+				"challenge_id": challenge.ID,
+				"type":         challenge.Type,
+				"captcha_id":   challenge.CaptchaID,
+			}
+			response["message"] = "CAPTCHA challenge required"
+			log.Printf("CAPTCHA_CHALLENGE_ISSUED type=%s challenge_id=%s score=%.2f", challenge.Type, challenge.ID, detection.Score)
+			w.Header().Set("X-Captcha-Required", "1")
+			w.Header().Set("X-Captcha-Type", challenge.Type)
+			w.Header().Set("X-Captcha-Id", challenge.ID)
+			w.WriteHeader(http.StatusOK)
 		}
 	} else {
-		// Only write 200 OK if we passed the shield
+		// Clean pass
 		w.WriteHeader(http.StatusOK)
 	}
 
@@ -999,6 +1363,7 @@ func (sd *StealthDetector) httpInfoToVector(info *HTTPFingerprintInfo) Detection
 	return vec
 }
 
+//nolint:unused
 var chromeHeaderOrder = []string{
 	":method", ":authority", ":path", "accept", "accept-encoding",
 	"accept-language", "cache-control", "content-type", "content-length",
@@ -1009,10 +1374,12 @@ var chromeHeaderOrder = []string{
 	"upgrade-insecure-requests", "user-agent",
 }
 
+//nolint:unused
 var goHeaderOrder = []string{
 	"accept-encoding", "user-agent", "accept",
 }
 
+//nolint:unused
 var automationScriptPatterns = []string{
 	"window.cdc_adoQpoas",
 	"window.selendroid",
@@ -1026,6 +1393,7 @@ var automationScriptPatterns = []string{
 	"__webdriver_script_fn",
 }
 
+//nolint:unused
 func (sd *StealthDetector) analyzeHeaderOrder(req *http.Request) *DetectionVector {
 	vec := &DetectionVector{
 		Name:        "Header Order",
@@ -1090,6 +1458,7 @@ func (sd *StealthDetector) analyzeHeaderOrder(req *http.Request) *DetectionVecto
 	return vec
 }
 
+//nolint:unused
 func (sd *StealthDetector) analyzeAutomationScripts(req *http.Request) *DetectionVector {
 	vec := &DetectionVector{
 		Name:        "Automation Scripts",
@@ -1180,6 +1549,7 @@ func (sd *StealthDetector) analyzeAutomationScripts(req *http.Request) *Detectio
 	return vec
 }
 
+//nolint:unused
 func (sd *StealthDetector) analyzeGenericFingerprint(req *http.Request) *DetectionVector {
 	vec := &DetectionVector{
 		Name:        "Generic Fingerprint",
@@ -1268,6 +1638,7 @@ func (sd *StealthDetector) analyzeGenericFingerprint(req *http.Request) *Detecti
 	return vec
 }
 
+//nolint:unused
 func (sd *StealthDetector) detectOurStealthBrowser(detection *StealthDetection) bool {
 	stealthScore := 0.0
 	reasons := make([]string, 0)

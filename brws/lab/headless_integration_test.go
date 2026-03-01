@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -23,7 +24,11 @@ func getFreePort() (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer l.Close()
+	defer func() {
+		if closeErr := l.Close(); closeErr != nil {
+			return
+		}
+	}()
 	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
@@ -56,7 +61,7 @@ func TestHeadlessCapture(t *testing.T) {
 
 	// Start server in background
 	go func() {
-		if err := server.Start(); err != nil && err != http.ErrServerClosed {
+		if err := server.Start(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			// This might log harmless errors on shutdown, so just print
 			fmt.Printf("Server start error: %v\n", err)
 		}
@@ -68,8 +73,8 @@ func TestHeadlessCapture(t *testing.T) {
 	// Clean up resources at the end
 	defer func() {
 		t.Log("Cleaning up server and browser...")
-		server.StopChrome() // Force stop if it hasn't already auto-closed
-		server.Stop(context.Background())
+		_ = server.StopChrome() // Force stop if it hasn't already auto-closed
+		_ = server.Stop(context.Background())
 	}()
 
 	// 3. Command the server to launch Chrome in Headless Mode pointing to coles.com.au
@@ -89,7 +94,11 @@ func TestHeadlessCapture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to call launch API: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			return
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Chrome launch API returned non-200 status: %d", resp.StatusCode)
@@ -117,7 +126,8 @@ pollLoop:
 			}
 
 			cBody, err := io.ReadAll(cResp.Body)
-			cResp.Body.Close()
+			//nolint:errcheck // closing response body
+			_ = cResp.Body.Close()
 			if err != nil {
 				continue
 			}
@@ -186,7 +196,11 @@ pollLoop:
 	if err != nil {
 		t.Fatalf("Failed to get detail for %s: %v", exampleCaptureID, err)
 	}
-	defer detailResp.Body.Close()
+	defer func() {
+		if closeErr := detailResp.Body.Close(); closeErr != nil {
+			return
+		}
+	}()
 
 	detailBody, err := io.ReadAll(detailResp.Body)
 	if err != nil {

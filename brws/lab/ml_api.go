@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stealth/brwslab/brws/adversarial"
+	_ "github.com/stealth/brwslab/brws/engine/chromium"
 	"github.com/stealth/brwslab/brws/stealth"
 )
 
@@ -20,13 +21,17 @@ type MLEvaluationRequest struct {
 
 // MLEvaluationResponse represents the reward output from the WAF Shield.
 type MLEvaluationResponse struct {
-	Success    bool                          `json:"success"`
-	TraceID    string                        `json:"trace_id"`
-	BotScore   float64                       `json:"bot_score"`
-	IsBot      bool                          `json:"is_bot"`
-	Anomalies  []string                      `json:"anomalies"`
-	RawPayload *adversarial.StealthDetection `json:"raw_payload,omitempty"`
-	Error      string                        `json:"error,omitempty"`
+	Success          bool                          `json:"success"`
+	TraceID          string                        `json:"trace_id"`
+	BotScore         float64                       `json:"bot_score"`
+	IsBot            bool                          `json:"is_bot"`
+	Anomalies        []string                      `json:"anomalies"`
+	RawPayload       *adversarial.StealthDetection `json:"raw_payload,omitempty"`
+	CaptchaPresented bool                          `json:"captcha_presented"`
+	CaptchaType      string                        `json:"captcha_type,omitempty"`
+	CaptchaSolved    bool                          `json:"captcha_solved"`
+	CaptchaSolveMs   int64                         `json:"captcha_solve_time_ms,omitempty"`
+	Error            string                        `json:"error,omitempty"`
 }
 
 // handleMLEvaluate is the bridge endpoint. Python PyTorch loops submit
@@ -48,7 +53,7 @@ func (s *EnhancedServer) handleMLEvaluate(w http.ResponseWriter, r *http.Request
 
 	// Default to targeting our local test trap if none provided
 	if req.TargetURL == "" {
-		req.TargetURL = "http://localhost:8080/api/stealth-test"
+		req.TargetURL = "http://localhost:8080/api/ml/trap"
 	}
 
 	traceID := fmt.Sprintf("ml_eval_%d", time.Now().UnixNano())
@@ -76,13 +81,12 @@ func (s *EnhancedServer) handleMLEvaluate(w http.ResponseWriter, r *http.Request
 	time.Sleep(500 * time.Millisecond)
 
 	// 3. Extract the exact output from the Adversarial Detector singleton
-	wafDetector := adversarial.NewAdvancedStealthServer()
-	
 	// NOTE: In a multi-threaded training environment, we would need to correlate the exact 
 	// trace ID to the detector memory block. Since this is local sequential RL training,
 	// we just pull the absolute newest detection trap result from the top of the stack.
 	
-	allDetections := wafDetector.GetDetections()
+	allDetections := s.stealthServer.GetDetections()
+	s.logger.Info("Total WAF Detections in Memory", "count", len(allDetections))
 	if len(allDetections) == 0 {
 		s.respondMLError(w, traceID, "Evaluation failed: WAF Detector registered 0 traces")
 		return
@@ -106,6 +110,33 @@ func (s *EnhancedServer) handleMLEvaluate(w http.ResponseWriter, r *http.Request
 		RawPayload: &latestDetection,
 	}
 
+	// Phase 17: Check if a CAPTCHA was issued and attempt to solve it
+	for _, vec := range latestDetection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "captcha_challenge_issued" {
+				resp.CaptchaPresented = true
+			}
+		}
+	}
+
+	// Also check the raw detection response from the stealthServer
+	allChallenges := s.stealthServer.CaptchaShield.GetActiveChallenges()
+	if len(allChallenges) > 0 {
+		latestChallenge := allChallenges[len(allChallenges)-1]
+		resp.CaptchaPresented = true
+		resp.CaptchaType = latestChallenge.Type
+		
+		// Attempt to solve using ValidateChallenge with the challenge ID as answer
+		solved, metrics := s.stealthServer.CaptchaShield.ValidateChallenge(latestChallenge.ID, latestChallenge.ID)
+		resp.CaptchaSolved = solved
+		if metrics != nil {
+			resp.CaptchaSolveMs = metrics.SolveTimeMs
+		}
+		s.logger.Info("CAPTCHA solve attempt", "challenge_id", latestChallenge.ID, "type", latestChallenge.Type, "solved", solved)
+	}
+
+	s.logger.Info("Raw WAF anomalies", "anomalies", anomalies)
+
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		s.logger.Error("Failed to encode ML Evaluation Response", "error", err)
@@ -119,5 +150,7 @@ func (s *EnhancedServer) respondMLError(w http.ResponseWriter, traceID string, e
 		Error:   errMsg,
 	}
 	w.WriteHeader(http.StatusInternalServerError)
-	_ = json.NewEncoder(w).Encode(resp)
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		s.logger.Error("Failed to encode ML error response", "error", err)
+	}
 }

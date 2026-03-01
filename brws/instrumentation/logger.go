@@ -37,6 +37,7 @@ func NewLogger(config *Config) (*Logger, error) {
 	}
 
 	var level zapcore.Level
+
 	switch config.LogLevel {
 	case "debug":
 		level = zapcore.DebugLevel

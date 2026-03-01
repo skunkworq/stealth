@@ -5,11 +5,11 @@ import (
 )
 
 func TestStartStop(t *testing.T) {
-	err := Start("lo0", func(p Packet) {})
+	err := Start("lo0", func(_ Packet) {})
 	if err != nil {
 		t.Logf("Start failed (expected without root or if missing device): %v", err)
 	} else {
-		Start("any", func(p Packet) {})
+		_ = Start("any", func(_ Packet) {})
 	}
 	Stop()
 }

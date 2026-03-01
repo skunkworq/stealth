@@ -25,7 +25,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 	t.Run("Standard Go TLS", func(t *testing.T) {
 		// Create client that skips cert verification
 		tr := &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // G402: Test server uses self-signed cert
 		}
 		client := &http.Client{Transport: tr}
 
@@ -33,10 +33,12 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Request failed: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		var tlsInfo testserver.TLSInfo
-		json.NewDecoder(resp.Body).Decode(&tlsInfo)
+		_ = json.NewDecoder(resp.Body).Decode(&tlsInfo)
+
+			_ = tlsInfo
 
 		fmt.Printf("\n=== Standard Go TLS ===\n")
 		fmt.Printf("TLS Version: %s\n", tlsInfo.Version)
@@ -48,9 +50,9 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 
 		// Create mock TLS connection state
 		var version uint16
-		fmt.Sscanf(tlsInfo.Version, "%x", &version)
+		_, _ = fmt.Sscanf(tlsInfo.Version, "%x", &version)
 		var cipherSuite uint16
-		fmt.Sscanf(tlsInfo.CipherSuite, "%x", &cipherSuite)
+		_, _ = fmt.Sscanf(tlsInfo.CipherSuite, "%x", &cipherSuite)
 
 		mockTLS := &tls.ConnectionState{
 			Version:            version,
@@ -80,7 +82,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create engine: %v", err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		req := &engine.Request{
 			Method:  "GET",
@@ -97,7 +99,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 		}
 
 		var tlsInfo testserver.TLSInfo
-		json.Unmarshal(resp.Body, &tlsInfo)
+		_ = json.Unmarshal(resp.Body, &tlsInfo)
 
 		fmt.Printf("\n=== Native No TLS Spoofing ===\n")
 		fmt.Printf("TLS Version: %s\n", tlsInfo.Version)
@@ -117,7 +119,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create engine: %v", err)
 		}
-		defer eng.Close()
+		defer func() { _ = eng.Close() }()
 
 		req := &engine.Request{
 			Method:  "GET",
@@ -141,7 +143,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 		}
 
 		var tlsInfo testserver.TLSInfo
-		json.Unmarshal(resp.Body, &tlsInfo)
+		_ = json.Unmarshal(resp.Body, &tlsInfo)
 
 		fmt.Printf("\n=== Native Chrome TLS Spoofing ===\n")
 		fmt.Printf("TLS Version: %s\n", tlsInfo.Version)
@@ -152,9 +154,9 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 		ad := adversarial.NewAdvancedDetection()
 
 		var version uint16
-		fmt.Sscanf(tlsInfo.Version, "%x", &version)
+		_, _ = fmt.Sscanf(tlsInfo.Version, "%x", &version)
 		var cipherSuite uint16
-		fmt.Sscanf(tlsInfo.CipherSuite, "%x", &cipherSuite)
+		_, _ = fmt.Sscanf(tlsInfo.CipherSuite, "%x", &cipherSuite)
 
 		mockTLS := &tls.ConnectionState{
 			Version:            version,
@@ -192,7 +194,7 @@ func TestCombinedSpoofingDetection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create engine: %v", err)
 	}
-	defer eng.Close()
+	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
 		Method:  "GET",
@@ -201,7 +203,7 @@ func TestCombinedSpoofingDetection(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	_, err = eng.Do(ctx, req)
+	_, _ = eng.Do(ctx, req)
 
 	// Get TLS info from server
 	lastReq := server.GetLastRequest()
@@ -220,9 +222,9 @@ func TestCombinedSpoofingDetection(t *testing.T) {
 	ad := adversarial.NewAdvancedDetection()
 
 	var version uint16
-	fmt.Sscanf(lastReq.TLS.Version, "%x", &version)
+	_, _ = fmt.Sscanf(lastReq.TLS.Version, "%x", &version)
 	var cipherSuite uint16
-	fmt.Sscanf(lastReq.TLS.CipherSuite, "%x", &cipherSuite)
+	_, _ = fmt.Sscanf(lastReq.TLS.CipherSuite, "%x", &cipherSuite)
 
 	mockTLS := &tls.ConnectionState{
 		Version:            version,
@@ -232,6 +234,8 @@ func TestCombinedSpoofingDetection(t *testing.T) {
 	}
 
 	mockReq, _ := http.NewRequest("GET", server.URL, nil)
+
+		_ = mockReq
 	mockReq.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	mockReq.Header.Set("Sec-Ch-Ua", `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`)
 	mockReq.Header.Set("Sec-Ch-Ua-Platform", `"macOS"`)

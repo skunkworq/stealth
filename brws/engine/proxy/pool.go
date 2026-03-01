@@ -43,10 +43,15 @@ type Pool struct {
 type Strategy int
 
 const (
+	// StrategyRoundRobin selects proxies in round-robin order
 	StrategyRoundRobin Strategy = iota
+	// StrategyRandom selects proxies randomly
 	StrategyRandom
+	// StrategyLeastUsed selects the least used proxy.
 	StrategyLeastUsed
+	// StrategyFastest selects the fastest proxy.
 	StrategyFastest
+	// StrategyWeighted selects proxies based on weight.
 	StrategyWeighted
 )
 
@@ -142,6 +147,7 @@ func (p *Pool) RecordSuccess(proxyURL string, latency time.Duration) {
 			pr.IsWorking = true
 			pr.Latency = latency
 			p.stats.Successes++
+
 			break
 		}
 	}
@@ -159,7 +165,9 @@ func (p *Pool) RecordFailure(proxyURL string) {
 			if pr.Failures > 5 {
 				pr.IsWorking = false
 			}
+
 			p.stats.Failures++
+
 			break
 		}
 	}

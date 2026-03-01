@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+// WebSocketFingerprint represents a fingerprint of a WebSocket connection,
+// capturing the key handshake headers and properties used for browser identification.
 type WebSocketFingerprint struct {
 	Version           string
 	SubProtocols      []string
@@ -20,6 +22,8 @@ type WebSocketFingerprint struct {
 	JA3W              string
 }
 
+// CalculateWebSocketFingerprint computes a fingerprint string from WebSocket handshake headers.
+// It concatenates headers in a specific order to create a consistent identifier.
 func CalculateWebSocketFingerprint(headers map[string]string) string {
 	var parts []string
 
@@ -39,6 +43,8 @@ func CalculateWebSocketFingerprint(headers map[string]string) string {
 	return strings.Join(parts, ";")
 }
 
+// CalculateJA3W calculates the JA3W hash of WebSocket headers.
+// It sorts headers alphabetically and returns a SHA256 hash truncated to 32 characters.
 func CalculateJA3W(headers map[string]string) string {
 	var parts []string
 
@@ -57,6 +63,8 @@ func CalculateJA3W(headers map[string]string) string {
 	return hex.EncodeToString(hash[:])[:32]
 }
 
+// WebSocketSignature represents a known browser signature for WebSocket connections,
+// used to match and identify the browser type from handshake characteristics.
 type WebSocketSignature struct {
 	Name                 string
 	Browser              string
@@ -68,6 +76,8 @@ type WebSocketSignature struct {
 	JA3W                 string
 }
 
+// WebSocketSignatures contains a mapping of known browser signatures for WebSocket fingerprinting.
+// These signatures are used to identify browsers based on their WebSocket handshake characteristics.
 var WebSocketSignatures = map[string]*WebSocketSignature{
 	"chrome-120": {
 		Name:                 "Chrome 120 WebSocket",
@@ -107,6 +117,9 @@ var WebSocketSignatures = map[string]*WebSocketSignature{
 	},
 }
 
+// DetectBrowserFromWebSocket attempts to identify the browser from WebSocket handshake headers.
+// It checks sec-websocket-extensions and the User-Agent header to determine the browser type.
+// Returns "chrome", "edge", "firefox", "safari", or "unknown".
 func DetectBrowserFromWebSocket(headers map[string]string) string {
 	exts := headers["sec-websocket-extensions"]
 	extsLower := strings.ToLower(exts)
@@ -138,10 +151,14 @@ func DetectBrowserFromWebSocket(headers map[string]string) string {
 	return "unknown"
 }
 
+// WebSocketAnalyzer collects and analyzes WebSocket handshake observations
+// to identify patterns and browser fingerprints.
 type WebSocketAnalyzer struct {
 	observations []WebSocketObservation
 }
 
+// WebSocketObservation represents a single observed WebSocket handshake
+// with extracted metadata and calculated fingerprints.
 type WebSocketObservation struct {
 	Timestamp       int64
 	Headers         map[string]string
@@ -154,12 +171,16 @@ type WebSocketObservation struct {
 	SignatureMatch  *WebSocketSignature
 }
 
+// NewWebSocketAnalyzer creates a new WebSocketAnalyzer with an empty observations list.
 func NewWebSocketAnalyzer() *WebSocketAnalyzer {
 	return &WebSocketAnalyzer{
 		observations: make([]WebSocketObservation, 0),
 	}
 }
 
+// Record captures a WebSocket handshake observation from the provided headers,
+// extracts relevant fields, calculates JA3W fingerprint, and stores the observation.
+// Returns the recorded observation.
 func (a *WebSocketAnalyzer) Record(headers map[string]string) WebSocketObservation {
 	exts := strings.Split(headers["sec-websocket-extensions"], ",")
 	for i := range exts {
@@ -184,10 +205,12 @@ func (a *WebSocketAnalyzer) Record(headers map[string]string) WebSocketObservati
 	return obs
 }
 
+// GetObservations returns all recorded WebSocket observations.
 func (a *WebSocketAnalyzer) GetObservations() []WebSocketObservation {
 	return a.observations
 }
 
+// GetUniqueFingerprints returns a map of unique JA3W fingerprints from all observations.
 func (a *WebSocketAnalyzer) GetUniqueFingerprints() map[string]bool {
 	unique := make(map[string]bool)
 	for _, obs := range a.observations {
@@ -196,6 +219,7 @@ func (a *WebSocketAnalyzer) GetUniqueFingerprints() map[string]bool {
 	return unique
 }
 
+// GetBrowserDistribution returns a count of detected browsers from all observations.
 func (a *WebSocketAnalyzer) GetBrowserDistribution() map[string]int {
 	dist := make(map[string]int)
 	for _, obs := range a.observations {
@@ -207,6 +231,8 @@ func (a *WebSocketAnalyzer) GetBrowserDistribution() map[string]int {
 var wsVersionPattern = regexp.MustCompile(`^(7|8|13)$`)
 var wsKeyPattern = regexp.MustCompile(`^[A-Za-z0-9+/=]{22,24}$`)
 
+// ValidateWebSocketKey validates that a WebSocket key matches the expected format.
+// Returns true if the key is valid (22-24 base64 characters).
 func ValidateWebSocketKey(key string) bool {
 	if key == "" {
 		return false
@@ -214,6 +240,8 @@ func ValidateWebSocketKey(key string) bool {
 	return wsKeyPattern.MatchString(key)
 }
 
+// ValidateWebSocketVersion validates that a WebSocket version is supported.
+// Returns true for valid versions: 7, 8, or 13.
 func ValidateWebSocketVersion(version string) bool {
 	if version == "" {
 		return false
@@ -221,6 +249,8 @@ func ValidateWebSocketVersion(version string) bool {
 	return wsVersionPattern.MatchString(version)
 }
 
+// GenerateWebSocketKey generates a new WebSocket key for handshake.
+// Returns a 22-character base64-encoded key.
 func GenerateWebSocketKey() string {
 	key := make([]byte, 16)
 	for i := range key {
@@ -229,10 +259,12 @@ func GenerateWebSocketKey() string {
 	return hex.EncodeToString(key)[:22]
 }
 
+// WebSocketHandshakeAnalyzer analyzes WebSocket handshake requests.
 type WebSocketHandshakeAnalyzer struct {
 	observations []WebSocketHandshakeObservation
 }
 
+// WebSocketHandshakeObservation represents a single observed WebSocket handshake.
 type WebSocketHandshakeObservation struct {
 	Timestamp           int64
 	Method              string
@@ -247,12 +279,15 @@ type WebSocketHandshakeObservation struct {
 	IsValid             bool
 }
 
+// NewWebSocketHandshakeAnalyzer creates a new WebSocketHandshakeAnalyzer.
 func NewWebSocketHandshakeAnalyzer() *WebSocketHandshakeAnalyzer {
 	return &WebSocketHandshakeAnalyzer{
 		observations: make([]WebSocketHandshakeObservation, 0),
 	}
 }
 
+// Record captures a WebSocket handshake observation from the provided request details.
+// Validates the handshake and returns the recorded observation.
 func (a *WebSocketHandshakeAnalyzer) Record(method, path string, headers map[string]string) WebSocketHandshakeObservation {
 	obs := WebSocketHandshakeObservation{
 		Method:              method,
@@ -273,10 +308,12 @@ func (a *WebSocketHandshakeAnalyzer) Record(method, path string, headers map[str
 	return obs
 }
 
+// GetObservations returns all recorded WebSocket handshake observations.
 func (a *WebSocketHandshakeAnalyzer) GetObservations() []WebSocketHandshakeObservation {
 	return a.observations
 }
 
+// GetValidCount returns the number of valid WebSocket handshakes observed.
 func (a *WebSocketHandshakeAnalyzer) GetValidCount() int {
 	count := 0
 	for _, obs := range a.observations {
@@ -287,6 +324,7 @@ func (a *WebSocketHandshakeAnalyzer) GetValidCount() int {
 	return count
 }
 
+// GetInvalidCount returns the number of invalid WebSocket handshakes observed.
 func (a *WebSocketHandshakeAnalyzer) GetInvalidCount() int {
 	count := 0
 	for _, obs := range a.observations {
@@ -297,6 +335,8 @@ func (a *WebSocketHandshakeAnalyzer) GetInvalidCount() int {
 	return count
 }
 
+// GetOriginDistribution returns a count of origins from all observations.
+// "none" is used for observations without an origin.
 func (a *WebSocketHandshakeAnalyzer) GetOriginDistribution() map[string]int {
 	dist := make(map[string]int)
 	for _, obs := range a.observations {
@@ -309,6 +349,7 @@ func (a *WebSocketHandshakeAnalyzer) GetOriginDistribution() map[string]int {
 	return dist
 }
 
+// WebSocketFrameFingerprint represents a fingerprint of a WebSocket frame.
 type WebSocketFrameFingerprint struct {
 	OpCode        uint8
 	Masked        bool
@@ -339,24 +380,29 @@ func (f *WebSocketFrameFingerprint) String() string {
 	return fmt.Sprintf("OPCODE:%d FLAGS:[%s] PAYLOAD:%d", f.OpCode, strings.TrimSpace(flags), f.PayloadLength)
 }
 
+// WebSocketFrameAnalyzer analyzes WebSocket frame patterns.
 type WebSocketFrameAnalyzer struct {
 	frames []WebSocketFrameFingerprint
 }
 
+// NewWebSocketFrameAnalyzer creates a new WebSocketFrameAnalyzer.
 func NewWebSocketFrameAnalyzer() *WebSocketFrameAnalyzer {
 	return &WebSocketFrameAnalyzer{
 		frames: make([]WebSocketFrameFingerprint, 0),
 	}
 }
 
+// Record adds a WebSocket frame fingerprint to the analyzer.
 func (a *WebSocketFrameAnalyzer) Record(frame WebSocketFrameFingerprint) {
 	a.frames = append(a.frames, frame)
 }
 
+// GetFrames returns all recorded WebSocket frame fingerprints.
 func (a *WebSocketFrameAnalyzer) GetFrames() []WebSocketFrameFingerprint {
 	return a.frames
 }
 
+// GetOpCodeDistribution returns a count of each opcode from all recorded frames.
 func (a *WebSocketFrameAnalyzer) GetOpCodeDistribution() map[uint8]int {
 	dist := make(map[uint8]int)
 	for _, frame := range a.frames {
@@ -365,6 +411,7 @@ func (a *WebSocketFrameAnalyzer) GetOpCodeDistribution() map[uint8]int {
 	return dist
 }
 
+// GetMaskedRatio returns the ratio of masked frames to total frames.
 func (a *WebSocketFrameAnalyzer) GetMaskedRatio() float64 {
 	if len(a.frames) == 0 {
 		return 0

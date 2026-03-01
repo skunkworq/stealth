@@ -5,6 +5,7 @@ import (
 	"strings"
 )
 
+// HPACKFingerprint represents an HPACK header compression fingerprint.
 type HPACKFingerprint struct {
 	DynamicTableSize uint32
 	MaxTableSize     uint32
@@ -13,6 +14,7 @@ type HPACKFingerprint struct {
 	HuffmanUsed      bool
 }
 
+// CalculateHPACKFingerprint calculates an HPACK fingerprint from headers.
 func CalculateHPACKFingerprint(headers map[string]string) string {
 	order := []string{
 		":method", ":path", ":scheme", ":authority", ":status",
@@ -30,6 +32,7 @@ func CalculateHPACKFingerprint(headers map[string]string) string {
 	return strings.Join(parts, ";")
 }
 
+// GetHPACKSignature returns an HPACK signature for the given headers.
 func GetHPACKSignature(headers map[string]string) string {
 	fingerprint := CalculateHPACKFingerprint(headers)
 
@@ -41,10 +44,12 @@ func GetHPACKSignature(headers map[string]string) string {
 	return fmt.Sprintf("%s;count:%d", fingerprint, count)
 }
 
+// HPACKSignatureDetector detects browser type from HPACK signatures.
 type HPACKSignatureDetector struct {
 	signatures map[string]string
 }
 
+// NewHPACKSignatureDetector creates a new HPACKSignatureDetector.
 func NewHPACKSignatureDetector() *HPACKSignatureDetector {
 	return &HPACKSignatureDetector{
 		signatures: map[string]string{
@@ -56,6 +61,7 @@ func NewHPACKSignatureDetector() *HPACKSignatureDetector {
 	}
 }
 
+// Detect detects the browser type from the given headers.
 func (d *HPACKSignatureDetector) Detect(headers map[string]string) string {
 	fp := CalculateHPACKFingerprint(headers)
 
@@ -68,10 +74,12 @@ func (d *HPACKSignatureDetector) Detect(headers map[string]string) string {
 	return "unknown"
 }
 
+// HTTP2TimingAnalyzer analyzes HTTP/2 timing patterns.
 type HTTP2TimingAnalyzer struct {
 	observations []HTTP2TimingObservation
 }
 
+// HTTP2TimingObservation represents a single HTTP/2 timing observation.
 type HTTP2TimingObservation struct {
 	Event          string
 	DurationMs     int64
@@ -82,12 +90,14 @@ type HTTP2TimingObservation struct {
 	Total          int64
 }
 
+// NewHTTP2TimingAnalyzer creates a new HTTP2TimingAnalyzer.
 func NewHTTP2TimingAnalyzer() *HTTP2TimingAnalyzer {
 	return &HTTP2TimingAnalyzer{
 		observations: make([]HTTP2TimingObservation, 0),
 	}
 }
 
+// RecordTLSHandshake records a TLS handshake timing observation.
 func (a *HTTP2TimingAnalyzer) RecordTLSHandshake(durationMs int64) {
 	obs := HTTP2TimingObservation{
 		Event:      "tls_handshake",
@@ -96,6 +106,7 @@ func (a *HTTP2TimingAnalyzer) RecordTLSHandshake(durationMs int64) {
 	a.observations = append(a.observations, obs)
 }
 
+// RecordTTFB records a time-to-first-byte (TTFB) observation.
 func (a *HTTP2TimingAnalyzer) RecordTTFB(ttfb int64) {
 	obs := HTTP2TimingObservation{
 		Event:      "ttfb",
@@ -104,6 +115,7 @@ func (a *HTTP2TimingAnalyzer) RecordTTFB(ttfb int64) {
 	a.observations = append(a.observations, obs)
 }
 
+// RecordDownload records a download duration observation.
 func (a *HTTP2TimingAnalyzer) RecordDownload(duration int64) {
 	obs := HTTP2TimingObservation{
 		Event:      "download",
@@ -112,6 +124,7 @@ func (a *HTTP2TimingAnalyzer) RecordDownload(duration int64) {
 	a.observations = append(a.observations, obs)
 }
 
+// RecordTotal records a total request duration observation.
 func (a *HTTP2TimingAnalyzer) RecordTotal(duration int64) {
 	obs := HTTP2TimingObservation{
 		Event:      "total",
@@ -120,6 +133,7 @@ func (a *HTTP2TimingAnalyzer) RecordTotal(duration int64) {
 	a.observations = append(a.observations, obs)
 }
 
+// GetAverageHandshakeMs returns the average TLS handshake duration in milliseconds.
 func (a *HTTP2TimingAnalyzer) GetAverageHandshakeMs() int64 {
 	var total int64
 	var count int
@@ -135,6 +149,7 @@ func (a *HTTP2TimingAnalyzer) GetAverageHandshakeMs() int64 {
 	return total / int64(count)
 }
 
+// GetAverageTTFB returns the average time-to-first-byte in milliseconds.
 func (a *HTTP2TimingAnalyzer) GetAverageTTFB() int64 {
 	var total int64
 	var count int
@@ -150,16 +165,21 @@ func (a *HTTP2TimingAnalyzer) GetAverageTTFB() int64 {
 	return total / int64(count)
 }
 
+// GetObservations returns all recorded timing observations.
 func (a *HTTP2TimingAnalyzer) GetObservations() []HTTP2TimingObservation {
 	return a.observations
 }
 
+// TLS13FeatureDetector detects TLS 1.3 specific features from ClientHello information.
 type TLS13FeatureDetector struct{}
 
+// NewTLS13FeatureDetector creates a new TLS13FeatureDetector.
 func NewTLS13FeatureDetector() *TLS13FeatureDetector {
 	return &TLS13FeatureDetector{}
 }
 
+// DetectTLS13 detects TLS 1.3 features from the given ClientHelloInfo.
+// Returns a list of TLSFeature indicating presence of various TLS 1.3 capabilities.
 func (d *TLS13FeatureDetector) DetectTLS13(ch *ClientHelloInfo) []TLSFeature {
 	var features []TLSFeature
 
@@ -204,12 +224,14 @@ func hasExt(exts []uint16, target uint16) bool {
 	return false
 }
 
+// TLSFeature represents a detected TLS feature with its presence status.
 type TLSFeature struct {
 	Name    string
 	Present bool
 	Details string
 }
 
+// OCSPResponse represents an OCSP stapling response.
 type OCSPResponse struct {
 	Stapled     bool
 	Status      string
@@ -219,16 +241,19 @@ type OCSPResponse struct {
 	SubjectHash string
 }
 
+// OCSPAnalyzer analyzes OCSP stapling observations.
 type OCSPAnalyzer struct {
 	observations []OCSPResponse
 }
 
+// NewOCSPAnalyzer creates a new OCSPAnalyzer.
 func NewOCSPAnalyzer() *OCSPAnalyzer {
 	return &OCSPAnalyzer{
 		observations: make([]OCSPResponse, 0),
 	}
 }
 
+// RecordStapling records an OCSP stapling observation with the given status and timestamps.
 func (a *OCSPAnalyzer) RecordStapling(status string, thisUpdate, nextUpdate int64) {
 	resp := OCSPResponse{
 		Stapled:    true,
@@ -239,6 +264,7 @@ func (a *OCSPAnalyzer) RecordStapling(status string, thisUpdate, nextUpdate int6
 	a.observations = append(a.observations, resp)
 }
 
+// GetStaplingRatio returns the ratio of stapled responses to total observations.
 func (a *OCSPAnalyzer) GetStaplingRatio() float64 {
 	if len(a.observations) == 0 {
 		return 0
@@ -252,6 +278,7 @@ func (a *OCSPAnalyzer) GetStaplingRatio() float64 {
 	return float64(stapled) / float64(len(a.observations))
 }
 
+// GetObservations returns all recorded OCSP responses.
 func (a *OCSPAnalyzer) GetObservations() []OCSPResponse {
 	return a.observations
 }

@@ -1,3 +1,4 @@
+// Package sniffer provides packet capture functionality using libpcap.
 package sniffer
 
 /*

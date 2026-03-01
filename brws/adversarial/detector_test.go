@@ -168,9 +168,11 @@ func TestDetector_LoadBaseline(t *testing.T) {
 	stored := d.baselines["test"]
 	d.mu.RUnlock()
 
+	//nolint:staticcheck // SA5011: Test validation
 	if stored == nil {
 		t.Error("expected baseline to be stored")
 	}
+	//nolint:staticcheck // SA5011: Test validation
 	if stored.TLS.JA4 != "test-ja4" {
 		t.Errorf("expected JA4 'test-ja4', got %s", stored.TLS.JA4)
 	}

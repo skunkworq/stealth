@@ -55,7 +55,7 @@ func TestDetailedDetectionTrace(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to create engine: %v", err)
 			}
-			defer eng.Close()
+			defer func() { _ = eng.Close() }()
 
 			req := &engine.Request{
 				Method:  "GET",
@@ -63,7 +63,7 @@ func TestDetailedDetectionTrace(t *testing.T) {
 				Timeout: 30,
 			}
 
-			eng.Do(context.Background(), req)
+			_, _ = eng.Do(context.Background(), req)
 
 			lastReq := server.GetLastRequest()
 			if lastReq == nil {
@@ -72,6 +72,7 @@ func TestDetailedDetectionTrace(t *testing.T) {
 
 			// Create http.Request for detection
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
+				_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}

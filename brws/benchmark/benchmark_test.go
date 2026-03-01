@@ -107,12 +107,12 @@ func BenchmarkTLSFingerprintComparison(b *testing.B) {
 // ============================================================================
 
 type mockEngine struct {
-	id int
+	id int //nolint:unused
 }
 
 func (m *mockEngine) Name() string { return "mock" }
 func (m *mockEngine) Capabilities() engine.Capabilities { return engine.Capabilities{} }
-func (m *mockEngine) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
+func (m *mockEngine) Do(_ context.Context, _ *engine.Request) (*engine.Response, error) {
 	return &engine.Response{}, nil
 }
 func (m *mockEngine) Close() error { return nil }
@@ -132,7 +132,7 @@ func BenchmarkPoolCreation(b *testing.B) {
 		if err != nil {
 			b.Fatalf("pool creation failed: %v", err)
 		}
-		p.Close()
+		_ = p.Close()
 	}
 }
 
@@ -142,7 +142,7 @@ func BenchmarkPoolAcquireRelease(b *testing.B) {
 	if err != nil {
 		b.Fatalf("pool creation failed: %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -169,7 +169,7 @@ func BenchmarkPoolParallel(b *testing.B) {
 	if err != nil {
 		b.Fatalf("pool creation failed: %v", err)
 	}
-	defer p.Close()
+	defer func() { _ = p.Close() }()
 
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -342,7 +342,7 @@ func BenchmarkMemoryPoolScaling(b *testing.B) {
 			p.Release(inst)
 		}
 
-		p.Close()
+		_ = p.Close()
 	}
 }
 

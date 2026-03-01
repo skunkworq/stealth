@@ -565,6 +565,7 @@ func TestFingerprintComparison(t *testing.T) {
 	}
 }
 
+//nolint:predeclared
 func min(a, b int) int {
 	if a < b {
 		return a

@@ -18,11 +18,16 @@ type SpanID string
 type SpanKind string
 
 const (
+	// SpanKindInternal represents internal spans
 	SpanKindInternal SpanKind = "internal"
-	SpanKindRequest  SpanKind = "request"
-	SpanKindBrowser  SpanKind = "browser"
-	SpanKindNetwork  SpanKind = "network"
-	SpanKindStealth  SpanKind = "stealth"
+	// SpanKindRequest represents request spans
+	SpanKindRequest SpanKind = "request"
+	// SpanKindBrowser represents browser spans
+	SpanKindBrowser SpanKind = "browser"
+	// SpanKindNetwork represents network spans
+	SpanKindNetwork SpanKind = "network"
+	// SpanKindStealth represents stealth spans
+	SpanKindStealth SpanKind = "stealth"
 )
 
 // Span represents a unit of work in a trace.
