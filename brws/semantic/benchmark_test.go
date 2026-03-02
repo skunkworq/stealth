@@ -115,7 +115,16 @@ func BenchmarkTreeTraversal(b *testing.B) {
 
 func BenchmarkTreeFindNode(b *testing.B) {
 	tree := generateBenchmarkTree(500, 4)
-	targetID := tree.RootNodes[0].Children[2].Children[0].ID
+	var targetID string
+	for _, n := range tree.RootNodes {
+		if len(n.Children) > 0 {
+			targetID = n.Children[0].ID
+			break
+		}
+	}
+	if targetID == "" && len(tree.RootNodes) > 0 {
+		targetID = tree.RootNodes[0].ID
+	}
 
 	b.ResetTimer()
 	b.ReportAllocs()
