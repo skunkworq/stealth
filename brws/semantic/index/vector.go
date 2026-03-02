@@ -21,10 +21,12 @@ type indexedNode struct {
 }
 
 type SearchResult struct {
-	Node    *semantic.SemanticNode
-	URL     string
-	Score   float32
-	Content string
+	NodeID    string `json:"node_id"`
+	Node      *semantic.SemanticNode
+	URL       string    `json:"url"`
+	Score     float32   `json:"score"`
+	Content   string    `json:"content"`
+	Embedding []float32 `json:"embedding,omitempty"`
 }
 
 func NewVectorIndex(embedder *semantic.EmbeddingClient) *VectorIndex {
