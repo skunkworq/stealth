@@ -179,10 +179,14 @@ func parseInputField(input *html.Node, labelFor map[string]string, index int) *F
 	maxLength := getAttr(input, "maxlength")
 	minLength := getAttr(input, "minlength")
 	if maxLength != "" {
-		fmt.Sscanf(maxLength, "%d", &field.MaxLength)
+		if _, err := fmt.Sscanf(maxLength, "%d", &field.MaxLength); err != nil {
+			field.MaxLength = 0
+		}
 	}
 	if minLength != "" {
-		fmt.Sscanf(minLength, "%d", &field.MinLength)
+		if _, err := fmt.Sscanf(minLength, "%d", &field.MinLength); err != nil {
+			field.MinLength = 0
+		}
 	}
 
 	inputID := getAttr(input, "id")
@@ -247,10 +251,14 @@ func parseTextareaField(ta *html.Node, labelFor map[string]string, index int) *F
 	maxLength := getAttr(ta, "maxlength")
 	minLength := getAttr(ta, "minlength")
 	if maxLength != "" {
-		fmt.Sscanf(maxLength, "%d", &field.MaxLength)
+		if _, err := fmt.Sscanf(maxLength, "%d", &field.MaxLength); err != nil {
+			field.MaxLength = 0
+		}
 	}
 	if minLength != "" {
-		fmt.Sscanf(minLength, "%d", &field.MinLength)
+		if _, err := fmt.Sscanf(minLength, "%d", &field.MinLength); err != nil {
+			field.MinLength = 0
+		}
 	}
 
 	defaultValue := extractTextContent(ta)

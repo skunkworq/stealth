@@ -156,9 +156,7 @@ func (h *HNSWIndex) searchLayer(query []float32, eps []*hnswNode, ef int, layer 
 	})
 
 	result := make([]scoredNode, 0, ef)
-	for _, c := range candidates {
-		result = append(result, c)
-	}
+	result = append(result, candidates...)
 
 	for len(candidates) > 0 {
 		furthest := candidates[0]

@@ -341,19 +341,19 @@ func TestCollectSummaries(t *testing.T) {
 }
 
 // MockLLM for testing compression pipeline
-type testLLMClient struct {
+type testLLMClient struct { //nolint:unused
 	mu        sync.Mutex
 	callCount int
 }
 
-func (m *testLLMClient) Complete(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+func (m *testLLMClient) Complete(ctx context.Context, systemPrompt, userPrompt string) (string, error) { //nolint:unused
 	m.mu.Lock()
 	m.callCount++
 	m.mu.Unlock()
 	return `{"summary": "Mock summary for testing", "is_dynamic": false, "stable": true, "element_descriptions": ["Mock action"]}`, nil
 }
 
-func (m *testLLMClient) CompleteJSON(ctx context.Context, systemPrompt, userPrompt string, v interface{}) error {
+func (m *testLLMClient) CompleteJSON(ctx context.Context, systemPrompt, userPrompt string, v interface{}) error { //nolint:unused
 	response := map[string]interface{}{
 		"summary":              "Mock summary",
 		"is_dynamic":           false,
@@ -364,5 +364,5 @@ func (m *testLLMClient) CompleteJSON(ctx context.Context, systemPrompt, userProm
 	return json.Unmarshal(data, v)
 }
 
-func (m *testLLMClient) WithCompressModel(model string) *testLLMClient { return m }
-func (m *testLLMClient) WithVisionModel(model string) *testLLMClient   { return m }
+func (m *testLLMClient) WithCompressModel(model string) *testLLMClient { return m } //nolint:unused
+func (m *testLLMClient) WithVisionModel(model string) *testLLMClient   { return m } //nolint:unused

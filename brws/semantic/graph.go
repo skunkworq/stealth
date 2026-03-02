@@ -295,7 +295,6 @@ type CrawlSession struct {
 	cache   *CacheStore
 	config  *PipelineConfig
 	visited map[string]bool
-	mu      sync.Mutex
 }
 
 func NewCrawlSession(cache *CacheStore, config *PipelineConfig) *CrawlSession {

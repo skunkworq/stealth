@@ -11,8 +11,6 @@ import (
 type IntegrationTestRunner struct {
 	LLMResponses    map[string]string
 	EmbeddingValues []float32
-	llmCalls        int
-	embeddingCalls  int
 }
 
 func NewIntegrationTestRunner() *IntegrationTestRunner {

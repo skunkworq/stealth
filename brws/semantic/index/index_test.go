@@ -13,7 +13,7 @@ import (
 func TestHNSWIndex(t *testing.T) {
 	hnsw := NewHNSWIndex(128)
 
-	rand.Seed(time.Now().UnixNano())
+	rand.Seed(time.Now().UnixNano()) //nolint:staticcheck
 
 	for i := 0; i < 100; i++ {
 		vector := randVector(128)
@@ -21,7 +21,7 @@ func TestHNSWIndex(t *testing.T) {
 		if i >= 26 {
 			nodeID = nodeID + string(rune('0'+i/26))
 		}
-		hnsw.Add(nodeID, "https://example.com/page"+string(rune('0'+i%10)), vector, "Node summary")
+		_ = hnsw.Add(nodeID, "https://example.com/page"+string(rune('0'+i%10)), vector, "Node summary")
 	}
 
 	stats := hnsw.Stats()
