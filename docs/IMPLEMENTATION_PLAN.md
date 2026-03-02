@@ -4,253 +4,373 @@
 
 Port of Webfurl semantic extraction system from Rust to Go. Compresses web pages into hierarchical semantic trees to minimize LLM context usage (~99% token reduction).
 
+## System Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            APPLICATION LAYER                                  │
+│                                                                               │
+│   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐           │
+│   │ cmd/pipeline    │   │ cmd/semantic-mcp│   │ cmd/test_semantic│           │
+│   │ (crawler)       │   │ (MCP server)    │   │ (testing)        │           │
+│   └────────┬────────┘   └────────┬────────┘   └────────┬────────┘           │
+│            │                     │                     │                     │
+└────────────┼─────────────────────┼─────────────────────┼─────────────────────┘
+             │                     │                     │
+             └─────────────────────┼─────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            PIPELINE LAYER                                     │
+│                          brws/pipeline/                                       │
+│                                                                               │
+│   ┌────────────────────────────────────────────────────────────────────┐     │
+│   │                      Pipeline Orchestrator                          │     │
+│   │                                                                     │     │
+│   │   ProcessURL(ctx, url) ─▶ PageResult                               │     │
+│   │   ProcessBatch(ctx, urls) ─▶ []PageResult                          │     │
+│   │                                                                     │     │
+│   │   Hooks: OnPageProcessed, OnError                                  │     │
+│   └──────────────────────────┬─────────────────────────────────────────┘     │
+│                              │                                               │
+│         ┌────────────────────┼────────────────────┐                         │
+│         ▼                    ▼                    ▼                          │
+│   ┌──────────┐         ┌──────────┐         ┌──────────┐                    │
+│   │  FETCH   │         │ EXTRACT  │         │  EMBED   │                    │
+│   │  Stage   │         │  Stage   │         │  Stage   │                    │
+│   ├──────────┤         ├──────────┤         ├──────────┤                    │
+│   │ • HTTP   │         │ • Chunk  │         │ • HNSW   │                    │
+│   │ • Timeout│         │ • LLM    │         │ • Vector │                    │
+│   │ • Retry  │         │ • Cache  │         │ • Index  │                    │
+│   └──────────┘         └──────────┘         └──────────┘                    │
+│         │                    │                    │                          │
+│         └────────────────────┴────────────────────┘                         │
+│                              │                                               │
+│                              ▼                                               │
+│   ┌──────────────────────────────────────────────────────────────────┐      │
+│   │                      TRACING & METRICS                            │      │
+│   ├──────────────────────────────────────────────────────────────────┤      │
+│   │  tracing.go                    metrics_server.go                  │      │
+│   │  • TraceID                     • GET /metrics                    │      │
+│   │  • SpanID                      • GET /health                    │      │
+│   │  • Hierarchical spans          • GET /stats                     │      │
+│   │  • JSON export                 • Real-time monitoring            │      │
+│   └──────────────────────────────────────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           SEMANTIC LAYER                                      │
+│                          brws/semantic/                                       │
+│                                                                               │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
+│   │   pipeline   │  │     tree     │  │    cache     │  │     llm      │    │
+│   │   .go        │  │     .go      │  │    .go       │  │     .go      │    │
+│   └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘    │
+│                                                                               │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐    │
+│   │   forms      │  │    diff      │  │   unfold     │  │   actions    │    │
+│   │   .go        │  │    .go       │  │    .go       │  │    .go       │    │
+│   └──────────────┘  └──────────────┘  └──────────────┘  └──────────────┘    │
+│                                                                               │
+│   ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                       │
+│   │   vision_    │  │   embeddings │  │    index/    │                       │
+│   │   grounding  │  │    .go       │  │   hnsw.go   │                       │
+│   └──────────────┘  └──────────────┘  └──────────────┘                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                   │
+                                   ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          OBSERVABILITY LAYER                                  │
+│                        brws/observability/                                     │
+│                                                                               │
+│   ┌──────────────────────────────────────────────────────────────────┐      │
+│   │                    metrics.go                                     │      │
+│   │  • InMemoryCollector                                              │      │
+│   │  • Counters, Gauges, Histograms                                   │      │
+│   │  • Global collector with context support                          │      │
+│   │  • Timer helpers for duration tracking                            │      │
+│   └──────────────────────────────────────────────────────────────────┘      │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
 ## Completed Components
 
-### 1. Core Semantic Package (`brws/semantic/`)
+### 1. Pipeline Package (`brws/pipeline/`)
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `tree.go` | SemanticNode/SemanticTree data structures | ✅ Complete |
-| `pipeline.go` | DOM chunking + LLM compression (~1100 lines) | ✅ Complete |
+| `tracing.go` | Distributed tracing with trace/span IDs | ✅ Complete |
+| `pipeline.go` | 3-stage processing (fetch→extract→embed) | ✅ Complete |
+| `metrics_server.go` | HTTP metrics endpoint | ✅ Complete |
+| `pipeline_test.go` | Integration tests | ✅ Complete |
+
+**Features:**
+- Hierarchical spans for each stage
+- Real-time metrics exported via HTTP
+- Concurrent batch processing
+- Hooks for callbacks
+- Token and timing tracking
+
+### 2. Core Semantic Package (`brws/semantic/`)
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `tree.go` | SemanticNode/SemanticTree structures | ✅ Complete |
+| `pipeline.go` | DOM chunking + LLM compression | ✅ Complete |
 | `cache.go` | SQLite-based content-hash cache | ✅ Complete |
-| `llm.go` | OpenRouter LLM client | ✅ Complete |
+| `llm.go` | OpenRouter LLM client with timeout | ✅ Complete |
 | `embeddings.go` | OpenRouter embedding client | ✅ Complete |
-| `vision.go` | Image description via vision models | ✅ Complete |
-| `serialize.go` | `[WEBFURL]` text format for LLM context | ✅ Complete |
-| `unfold.go` | Budget-based unfolding with semantic search | ✅ Complete |
-| `actions.go` | Action types (Click, Fill, Select, Toggle) | ✅ Complete |
-| `hasher.go` | SHA-256 structural/content hashing | ✅ Complete |
-| `graph.go` | Multi-page semantic graph | ✅ Complete |
-| `extractor.go` | Integration with engine package | ✅ Complete |
+| `forms.go` | Form schema extraction | ✅ Complete |
+| `diff.go` | Incremental update diffing | ✅ Complete |
+| `vision_grounding.go` | Bounding box calculation | ✅ Complete |
+| `serialize.go` | `[WEBFURL]` text format | ✅ Complete |
+| `unfold.go` | Budget-based unfolding | ✅ Complete |
+| `actions.go` | Click, Fill, Select, Toggle | ✅ Complete |
+| `index/hnsw.go` | HNSW vector index | ✅ Complete |
 
-**Test Coverage:** 47% statements, 38 tests passing
+**Performance Optimizations:**
+- HTTP client timeout (60s)
+- Concurrency limiter (10 concurrent LLM calls)
+- MaxChunks limit for large pages
+- Cache hits reduce LLM calls
 
-### 2. Benchmark Suite (`brws/semantic/bench/`)
+**Test Coverage:** 50+ tests passing
 
-- `Result` struct: HTML size, tokens, latency, cache hits
-- `Suite.RunURL()`: Benchmark single URL
-- `Suite.RunBatch()`: Batch processing with summaries
-- JSON report generation
-
-### 3. Vector Index (`brws/semantic/index/`)
-
-- In-memory cosine similarity search
-- `Search()` by embedding or natural language query
-- `FindSimilar()` for related content discovery
-
-**Performance (384-dim vectors):**
-- 1K vectors: 1,600 QPS
-- 50K vectors: 35 QPS
-- Zvec (HNSW): ~1000 QPS at 10M vectors
-
-### 4. Page Graph (`brws/semantic/graph.go`)
-
-- Multi-page semantic graph for navigation tracking
-- `PageNode` with incoming/outgoing edges
-- `FindPath()` for multi-hop navigation discovery
-- Hub page detection for crawl prioritization
-- `CrawlSession` for building site-wide semantic maps
-
-### 5. Spider/Crawler Framework (`brws/spider/`)
+### 3. Observability Package (`brws/observability/`)
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `spider.go` | Spider interface, Request/Response, CSS/XPath | ✅ Complete |
-| `crawler.go` | Concurrent crawler with workers | ✅ Complete |
-| `scheduler.go` | Priority queue with deduplication | ✅ Complete |
-| `settings.go` | Configuration (delay, concurrency, etc.) | ✅ Complete |
-| `middleware.go` | Request/response middleware | ✅ Complete |
-| `pipeline.go` | Item processing pipelines | ✅ Complete |
-| `semantic.go` | SemanticSpider integrating extraction | ✅ Complete |
+| `metrics.go` | In-memory metrics collector | ✅ Complete |
+| `health.go` | Health check endpoints | ✅ Complete |
 
-### 6. CLI Tools
+**Metrics Available:**
+- Counters: URLs processed, errors, cache hits
+- Gauges: Compression ratio, success rate
+- Timings: Fetch, extract, embed duration
+- Histograms: Token distribution
+
+### 4. CLI Tools
 
 | Tool | Purpose |
 |------|---------|
-| `cmd/semantic/` | Semantic extraction CLI |
-| `cmd/semanticcrawl/` | Semantic web crawler |
+| `cmd/pipeline/` | Integrated crawler with metrics |
+| `cmd/semantic-mcp/` | MCP server for LLM integration |
+| `cmd/test_semantic/` | URL testing with diagnostics |
 | `cmd/vecbench/` | Vector backend benchmark |
 
-## Architecture
+---
+
+## Data Flow
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Semantic Crawler                          │
-├─────────────────────────────────────────────────────────────────┤
-│  SemanticSpider                                                  │
-│    ↓                                                             │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
-│  │   Spider     │───▶│   Engine     │───▶│  Semantic    │       │
-│  │  Framework   │    │  (fetcher)   │    │  Pipeline    │       │
-│  └──────────────┘    └──────────────┘    └──────────────┘       │
-│         │                  │                   │                 │
-│         ▼                  ▼                   ▼                 │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
-│  │  Scheduler   │    │   Response   │    │ SemanticTree │       │
-│  │  (priority)  │    │    Body      │    │   (nodes)    │       │
-│  └──────────────┘    └──────────────┘    └──────────────┘       │
-│                                                │                 │
-│                    ┌───────────────────────────┤                 │
-│                    ▼                           ▼                 │
-│            ┌──────────────┐           ┌──────────────┐         │
-│            │    Cache     │           │  PageGraph   │         │
-│            │   (SQLite)   │           │  (multi-page)│         │
-│            └──────────────┘           └──────────────┘         │
-└─────────────────────────────────────────────────────────────────┘
+URL Input
+    │
+    ▼
+┌─────────────┐
+│  FETCH      │  ─▶ HTML (fetched with timeout/retry)
+│  Stage      │     • Trace span: "fetch"
+└─────────────┘     • Metrics: bytes, duration, status
+    │
+    ▼
+┌─────────────┐
+│  EXTRACT    │  ─▶ SemanticTree
+│  Stage      │     • Trace span: "extract"
+└─────────────┘     • Chunk DOM → LLM/Cache → Tree
+    │               • Metrics: tokens, chunks, cache hits
+    ▼
+┌─────────────┐
+│  EMBED      │  ─▶ Vector Index
+│  Stage      │     • Trace span: "embed"
+└─────────────┘     • Add to HNSW index
+                    • Metrics: vectors added
+    │
+    ▼
+PageResult ─▶ {URL, Tree, Stats, Trace, Error}
 ```
 
-## Next Steps
+---
 
-### Phase 1: Enhanced Vector Storage (WIP)
+## Tracing Format
 
-**Goal:** Add HNSW-based persistent vector index for scale
+Each `PageResult` includes a `TraceContext`:
 
-**Options:**
-1. **sqlite-vec** - SQLite extension with HNSW support
-2. **go-vector-index** - Pure Go HNSW implementation
-3. **Zvec** - Alibaba's in-process vector DB (Python/C++, via CGO)
-
-**Decision:** Start with sqlite-vec for simplicity, consider Zvec for >100K vectors
-
-**Implementation:**
+```json
+{
+  "trace_id": "1772432545788680000",
+  "spans": [
+    {
+      "name": "fetch",
+      "duration": "1.075s",
+      "status": "ok",
+      "attributes": {
+        "url": "https://example.com",
+        "status_code": 200
+      }
+    },
+    {
+      "name": "extract",
+      "duration": "560µs",
+      "status": "ok",
+      "attributes": {
+        "compressed_tokens": 55,
+        "full_tokens": 953,
+        "chunks_llm": 0,
+        "chunks_cached": 2
+      }
+    },
+    {
+      "name": "embed",
+      "duration": "13µs",
+      "status": "ok",
+      "attributes": {
+        "indexed": true
+      }
+    }
+  ],
+  "duration": "1.076s"
+}
 ```
-brws/semantic/index/
-  sqlite_vec.go      # SQLite with vector extension
-  hnsw.go            # HNSW implementation (fallback)
-```
 
-### Phase 2: Multi-hop Semantic Search
+---
 
-**Goal:** Find interconnected content across pages (Chunkhound-style)
+## Metrics Endpoints
 
-**Implementation:**
-- Index all semantic nodes from crawled pages
-- Link nodes via URL references and semantic similarity
-- Traverse graph for multi-hop queries
+| Endpoint | Description | Example |
+|----------|-------------|---------|
+| `GET /metrics` | All counters and gauges | `{"counters": {...}, "gauges": {...}}` |
+| `GET /health` | Health check | `{"status": "healthy"}` |
+| `GET /stats` | Summary statistics | URLs processed, success rate, compression |
 
-### Phase 3: Diff-based Updates
-
-**Goal:** Only re-extract changed DOM portions
-
-**Implementation:**
-- Track structural hashes per chunk
-- Compare hashes on re-crawl
-- Incremental update of semantic tree
-
-### Phase 4: Form Schema Extraction
-
-**Goal:** Extract form fields, types, validation rules
-
-**Implementation:**
-- Detect form elements and their constraints
-- Infer field types from names/patterns
-- Generate structured schema for automation
-
-### Phase 5: Visual Grounding
-
-**Goal:** Map semantic nodes to bounding boxes
-
-**Implementation:**
-- Extract coordinates during DOM parsing
-- Associate semantic nodes with regions
-- Enable vision model integration
-
-## Current State
-
-**Commits:**
-- `dac20e3` - feat(brws/semantic): add semantic extraction system ported from Webfurl
-- `b81da92` - feat(brws/semantic): add benchmarking, vector index, and page graph
-- `48786e6` - feat(brws/spider): add semantic spider with vector benchmark
-- `fa6a47d` - feat(brws/spider): restore crawling solution with semantic integration
-
-**Test Status:** All passing
-**Build Status:** Clean
-**Coverage:** 47% statements
+---
 
 ## Usage Examples
 
-### Basic Extraction
+### Pipeline CLI
+
+```bash
+# Single URL with metrics server
+go run ./cmd/pipeline -url "https://example.com" -metrics ":8080"
+
+# Batch from file
+go run ./cmd/pipeline -urls urls.txt -concurrency 8 -output summary
+
+# Verbose with traces
+go run ./cmd/pipeline -url "..." -v -output text
+```
+
+### Programmatic
+
 ```go
-config := semantic.NewConfigFromEnv()
-tree, stats, err := semantic.HTMLToSemanticTree(ctx, html, url, config)
-// tokens: 100K → 400 (99.6% reduction)
+config := &pipeline.Config{
+    Concurrency:     4,
+    RequestTimeout:  2 * time.Minute,
+    EnableCache:     true,
+    EnableIndexing:  true,
+}
+
+pipe, _ := pipeline.NewPipeline(config)
+defer pipe.Close()
+
+// Single URL
+result := pipe.ProcessURL(ctx, "https://example.com")
+fmt.Printf("Trace: %s\n", result.Trace.ToJSON())
+
+// Batch
+results := pipe.ProcessBatch(ctx, urls)
+
+// Get metrics
+counters := pipe.Metrics().GetAllCounters()
 ```
 
-### Semantic Crawl
+### MCP Server
+
+```bash
+# Start MCP server for Claude Desktop integration
+go run ./cmd/semantic-mcp
+
+# Tools available:
+# - extract_semantic_tree
+# - diff_semantic_trees
+# - get_form_schemas
+# - serialize_tree
+```
+
+---
+
+## Performance Characteristics
+
+| Site | HTML Size | Tokens | Compressed | Ratio | Duration |
+|------|-----------|--------|------------|-------|----------|
+| httpbin.org/html | 3.8KB | 953 | 55 | 5.8% | 1.07s |
+| httpbin.org/forms | 1.4KB | 218 | 7 | 3.2% | 1.08s |
+| Hacker News | 34KB | 5,436 | 8 | 0.1% | 59s |
+| GitHub | 561KB | 4,862 | 18 | 0.4% | 40s |
+| Wikipedia | 438KB | 9,851 | 39 | 0.4% | 160s |
+
+---
+
+## Cost Analysis
+
+See `docs/SEMANTIC_COSTS.md` for detailed token cost breakdown:
+
+- LLM tokens spent: ~10,500 for GitHub (one-time)
+- Compression result: 140K → 18 tokens (99.99% reduction)
+- Break-even: After 0.1 queries to downstream LLM
+
+---
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OPENROUTER_API_KEY` | LLM/Embeddings API key | Required for LLM mode |
+| `SEMANTIC_CACHE_PATH` | SQLite cache location | `~/.semantic/cache.db` |
+
+### Pipeline Config
+
 ```go
-spider := spider.NewSemanticSpider("crawler", startURLs, config,
-    spider.WithSemanticMaxDepth(3),
-)
-crawler.Run()
-trees := spider.GetAllSemanticTrees()
+type Config struct {
+    SemanticConfig   *semantic.PipelineConfig
+    MaxDepth         int           // Crawling depth
+    Concurrency      int           // Worker count
+    UserAgent        string        // HTTP User-Agent
+    EnableIndexing   bool          // Vector index
+    EnableCache      bool          // SQLite cache
+    RequestTimeout   time.Duration // HTTP timeout
+}
 ```
 
-### Vector Search
+### Semantic Config
+
 ```go
-idx := index.NewVectorIndex(embedder)
-idx.AddTree(ctx, tree)
-results, _ := idx.Search(ctx, "product checkout flow", 5)
+type PipelineConfig struct {
+    LLMClient        *LLMClient
+    EmbeddingClient  *EmbeddingClient
+    Cache            *CacheStore
+    MaxDepth         int
+    MinContentLen    int
+    MaxChunks        int           // Limit for large pages
+    MaxConcurrentLLM int           // Rate limiter
+}
 ```
 
-## Key Metrics
+---
 
-| Metric | Target | Current |
-|--------|--------|---------|
-| Token reduction | >95% | ~99% ✅ |
-| Cache hit rate | >80% | Variable |
-| LLM latency | <2s/chunk | ~1-2s |
-| Search QPS | >100 | 35-1600 |
+## Future Enhancements
 
-## Dependencies
+1. **Streaming support** - Process large pages incrementally
+2. **Prometheus exporter** - Native Prometheus metrics format
+3. **Distributed tracing** - OpenTelemetry integration
+4. **Graph-based crawling** - Site-wide semantic maps
+5. **MCP tools expansion** - Auto-unfold, semantic search
 
-- `github.com/mattn/go-sqlite3` - SQLite cache
-- `golang.org/x/net/html` - HTML parsing
-- OpenRouter API - LLM + embeddings
+---
 
-## Files Created
+## Related Documentation
 
-```
-brws/semantic/
-  actions.go         # Action types
-  cache.go           # SQLite cache
-  cache_test.go      # Cache tests
-  embeddings.go      # OpenRouter embeddings
-  error.go           # Error types
-  extractor.go       # Engine integration
-  graph.go           # Multi-page graph
-  hasher.go          # Content hashing
-  integration_test.go # E2E tests
-  jsonutil.go        # JSON helpers
-  llm.go             # LLM client
-  pipeline.go        # Main pipeline
-  pipeline_test.go   # Pipeline tests
-  semantic_test.go   # Core tests
-  serialize.go       # [WEBFURL] format
-  tree.go            # Data structures
-  unfold.go          # Budget unfolding
-  vision.go          # Image description
-  bench/
-    benchmark.go     # Benchmark harness
-    benchmark_test.go
-  index/
-    vector.go        # In-memory index
-    vector_test.go
-
-brws/spider/
-  crawler.go         # Concurrent crawler
-  middleware.go      # Middleware support
-  pipeline.go        # Item pipelines
-  scheduler.go       # Priority queue
-  semantic.go        # SemanticSpider
-  settings.go        # Configuration
-  spider.go          # Core Spider interface
-
-cmd/semantic/
-  main.go            # CLI tool
-  benchmark.go       # Benchmark commands
-  index.go           # Index commands
-cmd/semanticcrawl/
-  main.go            # Semantic crawler CLI
-cmd/vecbench/
-  main.go            # Vector backend benchmark
-```
+- `docs/SEMANTIC_COSTS.md` - Token cost analysis
+- `docs/BENCHMARK.md` - Performance benchmarks
+- `AGENTS.md` - Agent instructions (bd issue tracking)
