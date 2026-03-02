@@ -28,6 +28,11 @@ type MetricsCollector interface {
 	GetCounter(name string, labels map[string]string) int64
 	GetGauge(name string, labels map[string]string) float64
 	GetHistogram(name string, labels map[string]string) *HistogramStats
+
+	// Bulk retrieval
+	GetAllCounters() map[string]int64
+	GetAllGauges() map[string]float64
+	GetAllHistograms() map[string]*HistogramStats
 }
 
 // HistogramStats contains histogram statistics
@@ -150,7 +155,7 @@ func makeKey(name string, labels map[string]string) string {
 	// In strict mode, these should return error
 	_ = validateMetricName(name)
 	_ = validateLabels(labels)
-	
+
 	if len(labels) == 0 {
 		return name
 	}
@@ -161,14 +166,14 @@ func serializeLabels(labels map[string]string) string {
 	if len(labels) == 0 {
 		return ""
 	}
-	
+
 	// Sort keys for deterministic output
 	keys := make([]string, 0, len(labels))
 	for k := range labels {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	
+
 	var b strings.Builder
 	for i, k := range keys {
 		if i > 0 {
