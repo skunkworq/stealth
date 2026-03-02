@@ -137,6 +137,25 @@ func main() {
 		}
 	}
 
+	// Step 7: Extract form schemas
+	fmt.Println("\nStep 7: Extracting form schemas...")
+	forms := semantic.ExtractFormSchemas(html)
+	if len(forms) > 0 {
+		fmt.Printf("✓ Found %d forms\n", len(forms))
+		for i, form := range forms {
+			fmt.Printf("  Form %d: [%s %s] %d fields\n", i+1, form.Method, form.Action, len(form.Fields))
+			for _, field := range form.Fields {
+				req := ""
+				if field.Required {
+					req = " [req]"
+				}
+				fmt.Printf("    - %s (%s)%s\n", field.Name, field.Type, req)
+			}
+		}
+	} else {
+		fmt.Println("  No forms found")
+	}
+
 	// Summary
 	fmt.Println("\n========================================")
 	fmt.Println("Test Summary:")
