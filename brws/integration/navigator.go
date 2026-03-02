@@ -17,8 +17,7 @@ type SemanticNavigator struct {
 	pipeline *pipeline.Pipeline
 	cache    *semantic.CacheStore
 
-	mu    sync.RWMutex
-	trees map[string]*semantic.SemanticTree
+	trees sync.Map // map[string]*semantic.SemanticTree - read-heavy, sync.Map ideal
 }
 
 type NavigationResult struct {
@@ -53,7 +52,6 @@ func NewSemanticNavigator(client *stealth.Client, pipe *pipeline.Pipeline, opts 
 	n := &SemanticNavigator{
 		client:   client,
 		pipeline: pipe,
-		trees:    make(map[string]*semantic.SemanticTree),
 	}
 
 	for _, opt := range opts {
@@ -104,12 +102,10 @@ func (n *SemanticNavigator) NavigateWithIntent(ctx context.Context, url string, 
 		result.FinalURL = url
 	}
 
-	n.mu.Lock()
-	n.trees[url] = tree
+	n.trees.Store(url, tree)
 	if result.FinalURL != url {
-		n.trees[result.FinalURL] = tree
+		n.trees.Store(result.FinalURL, tree)
 	}
-	n.mu.Unlock()
 
 	if intent != "" {
 		actions := n.findRelevantActions(tree, intent)
@@ -157,9 +153,10 @@ func (n *SemanticNavigator) findRelevantActions(tree *semantic.SemanticTree, int
 }
 
 func (n *SemanticNavigator) GetTree(url string) *semantic.SemanticTree {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	return n.trees[url]
+	if val, ok := n.trees.Load(url); ok {
+		return val.(*semantic.SemanticTree)
+	}
+	return nil
 }
 
 func (n *SemanticNavigator) ExtractAndNavigate(ctx context.Context, url string, targetSelector string) (*NavigationResult, error) {

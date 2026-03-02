@@ -148,7 +148,7 @@ func TestFindActionBySelector(t *testing.T) {
 		},
 	}
 
-	navigator := &SemanticNavigator{trees: make(map[string]*semantic.SemanticTree)}
+	navigator := &SemanticNavigator{}
 
 	action := navigator.findActionBySelector(tree, "button.submit")
 	if action == nil {
@@ -181,7 +181,7 @@ func TestFindActionByDescription(t *testing.T) {
 		},
 	}
 
-	navigator := &SemanticNavigator{trees: make(map[string]*semantic.SemanticTree)}
+	navigator := &SemanticNavigator{}
 
 	action := navigator.findActionByDescription(tree, "submit")
 	if action == nil {

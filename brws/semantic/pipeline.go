@@ -583,26 +583,42 @@ func countChunks(chunks []DomChunk) int {
 }
 
 func compressChunksParallel(ctx context.Context, chunks []DomChunk, url string, config *PipelineConfig, stats *pipelineStats) ([]SemanticNode, error) {
-	var mu sync.Mutex
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	var wg sync.WaitGroup
 	nodes := make([]SemanticNode, len(chunks))
 	errors := make([]error, len(chunks))
+	var firstErr atomic.Pointer[error]
 
 	for i, chunk := range chunks {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
 		wg.Add(1)
 		go func(idx int, c DomChunk) {
 			defer wg.Done()
+
 			node, err := compressChunkRecursive(ctx, c, url, "", idx, config, stats)
-			mu.Lock()
 			if err != nil {
+				var zero error
+				if firstErr.CompareAndSwap(&zero, &err) {
+					cancel()
+				}
 				errors[idx] = err
-			} else {
-				nodes[idx] = *node
+				return
 			}
-			mu.Unlock()
+			nodes[idx] = *node
 		}(i, chunk)
 	}
 	wg.Wait()
+
+	if err := firstErr.Load(); err != nil {
+		return nil, *err
+	}
 
 	for _, err := range errors {
 		if err != nil {
@@ -614,6 +630,12 @@ func compressChunksParallel(ctx context.Context, chunks []DomChunk, url string, 
 }
 
 func compressChunkRecursive(ctx context.Context, chunk DomChunk, url string, idPrefix string, index int, config *PipelineConfig, stats *pipelineStats) (*SemanticNode, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	contentKey := ContentHash(chunk.HTML)
 
 	if len(chunk.Children) == 0 {
@@ -621,17 +643,30 @@ func compressChunkRecursive(ctx context.Context, chunk DomChunk, url string, idP
 	}
 
 	var childNodes []SemanticNode
-	var mu sync.Mutex
 	var wg sync.WaitGroup
+	var mu sync.Mutex
 	childErrors := make([]error, len(chunk.Children))
+	var firstErr atomic.Pointer[error]
+	cancelCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 
 	for i, child := range chunk.Children {
+		select {
+		case <-cancelCtx.Done():
+			return nil, cancelCtx.Err()
+		default:
+		}
+
 		wg.Add(1)
 		go func(idx int, c DomChunk) {
 			defer wg.Done()
-			node, err := compressChunkRecursive(ctx, c, url, "", idx, config, stats)
+			node, err := compressChunkRecursive(cancelCtx, c, url, "", idx, config, stats)
 			mu.Lock()
 			if err != nil {
+				var zero error
+				if firstErr.CompareAndSwap(&zero, &err) {
+					cancel()
+				}
 				childErrors[idx] = err
 			} else {
 				childNodes = append(childNodes, *node)
@@ -640,6 +675,10 @@ func compressChunkRecursive(ctx context.Context, chunk DomChunk, url string, idP
 		}(i, child)
 	}
 	wg.Wait()
+
+	if err := firstErr.Load(); err != nil {
+		return nil, *err
+	}
 
 	for _, err := range childErrors {
 		if err != nil {
