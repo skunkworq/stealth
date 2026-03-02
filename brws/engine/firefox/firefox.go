@@ -21,7 +21,6 @@ func init() {
 type Firefox struct {
 	pw      *playwright.Playwright
 	browser playwright.Browser
-	context playwright.BrowserContext 
 	options engine.Options
 	trace   *engine.Trace
 }

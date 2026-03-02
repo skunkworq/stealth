@@ -87,7 +87,6 @@ type CaptureServer struct {
 	captures      map[string]*CompleteFingerprint
 	proxyCaptures map[string]*CompleteFingerprint // Only proxy-intercepted captures
 	baselines     map[string]*CompleteFingerprint
-	httpServer    *http.Server 
 
 	// Capture configuration
 	CaptureRawBytes bool
@@ -311,7 +310,8 @@ func (s *CaptureServer) calculateJA3(t *TLSFingerprint) string {
 }
 
 
-// calculateJA4 computes JA4 fingerprint
+// calculateJA4 computes JA4 fingerprint (currently unused but kept for future use)
+//nolint:unused
 func (s *CaptureServer) calculateJA4(t *TLSFingerprint) string {
 	// JA4 format: t[protocol][version][SNI][cipher_count][ext_count][ALPN]_[cipher_hash]_[ext_hash]
 	// Example: t13d1516h2_8daaf6152771_02713d6af862
@@ -706,7 +706,7 @@ func hashString(s string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))[:32]
 }
 
-
+//nolint:unused // Called by calculateJA4 which is kept for future use
 func hashStringTruncated(s string, length int) string {
 	h := sha256.New()
 	h.Write([]byte(s))
@@ -912,24 +912,5 @@ func convertFromTypesFingerprint(fp *types.CompleteFingerprint) *CompleteFingerp
 		HTTP:       (*HTTPFingerprint)(fp.HTTP),
 		HTTPResp:   (*HTTPResponseFingerprint)(fp.HTTPResp),
 		Behavior:   (*BehaviorFingerprint)(fp.Behavior),
-	}
-}
-
-
-// convertToTypesFingerprint converts lab.CompleteFingerprint to types.CompleteFingerprint
-func convertToTypesFingerprint(fp *CompleteFingerprint) *types.CompleteFingerprint {
-	if fp == nil {
-		return nil
-	}
-	return &types.CompleteFingerprint{
-		ID:         fp.ID,
-		Timestamp:  fp.Timestamp,
-		SourceIP:   fp.SourceIP,
-		ServerName: fp.ServerName,
-		TLS:        (*types.TLSFingerprint)(fp.TLS),
-		HTTP2:      (*types.HTTP2Fingerprint)(fp.HTTP2),
-		HTTP:       (*types.HTTPFingerprint)(fp.HTTP),
-		HTTPResp:   (*types.HTTPResponseFingerprint)(fp.HTTPResp),
-		Behavior:   (*types.BehaviorFingerprint)(fp.Behavior),
 	}
 }

@@ -71,7 +71,7 @@ rust-sniffer:
 	@cd brws/sniffer/rust && cargo build --release
 	@echo "✓ Built rust sniffer"
 
-$(LABD_BINARY): rust-sniffer $(shell find brws/lab cmd/labd -name '*.go' 2>/dev/null) brws/lab/static/index.html
+$(LABD_BINARY): rust-sniffer $(shell find brws/lab brws/adversarial cmd/labd -name '*.go' 2>/dev/null) brws/lab/static/index.html
 	@echo "Building labd..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(LABD_SRC)

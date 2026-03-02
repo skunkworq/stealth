@@ -4,7 +4,6 @@ package config
 import (
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/pem"
 	"fmt"
 	"math/big"
 	"net"
@@ -483,18 +482,4 @@ func parseIPAddresses(ips []string) []net.IP {
 }
 
 
-// pemEncodeCertificate encodes a certificate to PEM
-func pemEncodeCertificate(cert *x509.Certificate) string {
-	pem := pem.EncodeToMemory(&pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: cert.Raw,
-	})
-	return string(pem)
-}
 
-
-// pemEncodeKey encodes a private key to PEM
-func pemEncodeKey(_ interface{}) string {
-	// Placeholder - actual implementation would encode the key
-	return "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-}

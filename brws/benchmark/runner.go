@@ -288,7 +288,17 @@ func CompareSnapshots(before, after MemorySnapshot) {
 // Handles the case where after < before (negative delta).
 func safeDelta(after, before uint64) int64 {
 	if after >= before {
-		return int64(after - before)
+		return safeInt64(after - before)
 	}
-	return -int64(before - after)
+	return -safeInt64(before - after)
+}
+
+// safeInt64 converts uint64 to int64 with bounds checking.
+// Values exceeding math.MaxInt64 are clamped to math.MaxInt64.
+func safeInt64(v uint64) int64 {
+	const maxInt64 = uint64(^uint(0) >> 1) // math.MaxInt64
+	if v > maxInt64 {
+		return int64(maxInt64)
+	}
+	return int64(v)
 }

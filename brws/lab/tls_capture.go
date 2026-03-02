@@ -32,8 +32,7 @@ func GetTLSCapture(remoteAddr string) *types.CompleteFingerprint {
 type CapturingListener struct {
 	net.Listener
 
-	OnClientHello  func(*tlsparser.ClientHello, *types.CompleteFingerprint)
-	activeCaptures sync.Map 
+	OnClientHello func(*tlsparser.ClientHello, *types.CompleteFingerprint)
 }
 
 // Accept waits for and returns the next connection to the listener,
@@ -57,11 +56,10 @@ type capturingConn struct {
 	net.Conn
 
 	onClientHello func(*tlsparser.ClientHello, *types.CompleteFingerprint)
-	mu                sync.Mutex
-	buffer            *bytes.Buffer
-	readChan          chan []byte
-	captured          bool
-	handshakeComplete bool 
+	mu            sync.Mutex
+	buffer        *bytes.Buffer
+	readChan      chan []byte
+	captured      bool
 
 	// Parsed data
 	clientHello *tlsparser.ClientHello

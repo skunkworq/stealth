@@ -7,13 +7,11 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
-	"sync"
 	"time"
 )
 
 // BrowserController manages Chrome/browser process lifecycle
 type BrowserController struct {
-	mu         sync.Mutex 
 	cmd        *exec.Cmd
 	chromePath string
 	tmpDir     string

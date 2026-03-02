@@ -14,7 +14,6 @@ type Solver struct {
 	projector  *ProjectionHead
 	classifier *CharacterClassifier
 	config     *SolverConfig
-	mu         sync.RWMutex 
 }
 
 // SolverConfig holds configuration for the CAPTCHA solver.

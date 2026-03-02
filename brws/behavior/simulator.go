@@ -13,6 +13,7 @@ import (
 // 1. We need reproducible randomness for testing browser automation
 // 2. Performance is more important than cryptographic security for UI simulation
 // 3. The randomness is used for visual timing effects, not security purposes
+//nolint:gosec // G404: math/rand is intentional for non-cryptographic use
 var behaviorRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 // MouseSimulator simulates human-like mouse movements for browser automation
@@ -230,11 +231,11 @@ func (s *ScrollSimulator) SmoothScrollTo(y float64) string {
 }
 
 func randomDuration(minDuration, maxDuration time.Duration) time.Duration {
-	return time.Duration(rand.Int63n(int64(maxDuration-minDuration))) + minDuration
+	return time.Duration(behaviorRand.Int63n(int64(maxDuration-minDuration))) + minDuration
 }
 
 func randomFloat(minVal, maxVal float64) float64 {
-	return minVal + rand.Float64()*(maxVal-minVal)
+	return minVal + behaviorRand.Float64()*(maxVal-minVal)
 }
 
 func toUpperFirst(s string) string {

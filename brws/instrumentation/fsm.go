@@ -42,7 +42,6 @@ type FSMStats struct {
 	TransitionCount int
 	StateCounts     map[State]int
 	EventCounts     map[Event]int
-	mu              sync.RWMutex 
 }
 
 // NewFSM creates a new FSM.

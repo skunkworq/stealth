@@ -38,7 +38,6 @@ type EnhancedServer struct {
 	capture         *CaptureServer
 	config          *ServerConfig
 	logger          *slog.Logger
-	listener        net.Listener 
 	httpServer      *http.Server
 	httpServerPlain *http.Server
 
@@ -1205,8 +1204,30 @@ type CaptchaSolveResponse struct {
 }
 
 func (s *EnhancedServer) handleCaptchaRandom(w http.ResponseWriter, r *http.Request) {
-	types := []string{"text", "math", "hcaptcha", "slider", "image_select"}
-	captchaType := types[time.Now().UnixNano()%int64(len(types))]
+	requestedType := r.URL.Query().Get("type")
+	validTypes := []string{"text", "math", "hcaptcha", "slider", "image_select", "turnstile", "webgl"}
+
+	var captchaType string
+	if requestedType != "" {
+		valid := false
+		for _, t := range validTypes {
+			if t == requestedType {
+				valid = true
+				break
+			}
+		}
+		if valid {
+			captchaType = requestedType
+		} else {
+			// fallback
+			randomTypes := []string{"text", "math", "slider"}
+			captchaType = randomTypes[time.Now().UnixNano()%int64(len(randomTypes))]
+		}
+	} else {
+		// Only randomize among visual/interactive types mostly
+		randomTypes := []string{"text", "math", "slider"}
+		captchaType = randomTypes[time.Now().UnixNano()%int64(len(randomTypes))]
+	}
 
 	id := fmt.Sprintf("train_%d", time.Now().UnixNano())
 	challenge, err := s.stealthServer.CaptchaShield.CreateChallenge(id, nil, captchaType)

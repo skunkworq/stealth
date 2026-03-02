@@ -406,10 +406,6 @@ func (cs *CaptchaShield) ValidateChallenge(challengeID, solution string) (bool, 
 }
 
 
-func parseIndices(_ string) []int {
-	return []int{0, 1, 2}
-}
-
 // GetChallenge retrieves a challenge by its ID.
 func (cs *CaptchaShield) GetChallenge(challengeID string) (*CaptchaChallenge, bool) {
 	cs.mu.RLock()

@@ -26,6 +26,7 @@ interface TrainerChallenge {
 
 export function CaptchaTrainer() {
   const [challenge, setChallenge] = useState<TrainerChallenge | null>(null);
+  const [selectedType, setSelectedType] = useState<string>("random");
   const [isRecording, setIsRecording] = useState(false);
   const [events, setEvents] = useState<CaptchaEvent[]>([]);
   const [solution, setSolution] = useState("");
@@ -41,7 +42,8 @@ export function CaptchaTrainer() {
     setSolution("");
     setEvents([]);
     try {
-      const res = await fetch("/api/captcha/random");
+      const url = selectedType === "random" ? "/api/captcha/random" : `/api/captcha/random?type=${selectedType}`;
+      const res = await fetch(url);
       if (res.ok) {
         const data = await res.json();
         setChallenge(data);
@@ -133,11 +135,44 @@ export function CaptchaTrainer() {
               Intervention Lab: Expert Feedback Generation
             </CardTitle>
             {!challenge ? (
-              <Button onClick={startTraining} size="sm" className="skeuo-panel bg-emerald-glow/20 text-emerald-glow border-emerald-glow/30 hover:bg-emerald-glow/30">
-                Generate New Training Session
-              </Button>
+              <div className="flex items-center gap-3">
+                <select 
+                  value={selectedType} 
+                  onChange={(e) => setSelectedType(e.target.value)}
+                  className="bg-black/40 border border-border/30 rounded px-3 py-1.5 text-xs text-muted-foreground focus:outline-none focus:border-cyan-glow/50"
+                >
+                  <option value="random">Random Type</option>
+                  <option value="text">Text CAPTCHA</option>
+                  <option value="math">Math CAPTCHA</option>
+                  <option value="slider">Slider</option>
+                  <option value="image">Image Target</option>
+                  <option value="turnstile">Turnstile (Mock)</option>
+                  <option value="webgl">WebGL 3D</option>
+                  <option value="behavioral">Behavioral (Invisible)</option>
+                </select>
+                <Button onClick={startTraining} size="sm" className="skeuo-panel bg-emerald-glow/20 text-emerald-glow border-emerald-glow/30 hover:bg-emerald-glow/30">
+                  Generate New Training Session
+                </Button>
+              </div>
             ) : (
                 <div className="flex items-center gap-3">
+                  <select 
+                    value={selectedType} 
+                    onChange={(e) => {
+                      setSelectedType(e.target.value);
+                      setTimeout(startTraining, 50); // Auto-refresh on change
+                    }}
+                    className="bg-black/40 border border-border/30 rounded px-3 py-1 h-7 text-[10px] text-muted-foreground focus:outline-none focus:border-cyan-glow/50"
+                  >
+                    <option value="random">Random</option>
+                    <option value="text">Text</option>
+                    <option value="math">Math</option>
+                    <option value="slider">Slider</option>
+                    <option value="image">Image Target</option>
+                    <option value="turnstile">Turnstile (Mock)</option>
+                    <option value="webgl">WebGL 3D</option>
+                    <option value="behavioral">Behavioral</option>
+                  </select>
                   <Button onClick={startTraining} size="sm" variant="ghost" className="h-7 px-2 text-[10px] text-muted-foreground hover:text-cyan-glow">
                     ↻ Refresh
                   </Button>
@@ -166,7 +201,16 @@ export function CaptchaTrainer() {
                    ref={interactionAreaRef}
                    className="flex-1 bg-black/60 p-10 flex flex-col items-center justify-center relative cursor-crosshair"
                  >
-                    <div className="skeuo-panel p-8 max-w-sm w-full bg-background border border-cyan-glow/20 shadow-2xl">
+                    <div className="skeuo-panel p-8 max-w-sm w-full bg-background border border-cyan-glow/20 shadow-2xl relative">
+                       <Button 
+                         variant="ghost" 
+                         size="icon" 
+                         className="absolute top-2 right-2 h-6 w-6 text-muted-foreground hover:text-cyan-glow"
+                         onClick={startTraining}
+                         title="Refresh Pattern"
+                       >
+                         ↻
+                       </Button>
                        <h4 className="text-xs font-bold text-muted-foreground uppercase mb-4 border-b border-border/10 pb-2">
                           Type: {challenge.Type?.toUpperCase() || "UNKNOWN"}
                        </h4>

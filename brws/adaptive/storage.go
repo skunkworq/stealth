@@ -97,7 +97,7 @@ func (s *Storage) LoadProfiles(domain string) ([]ElementProfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var profiles []ElementProfile
 	for rows.Next() {
@@ -108,7 +108,7 @@ func (s *Storage) LoadProfiles(domain string) ([]ElementProfile, error) {
 		if err != nil {
 			continue
 		}
-		json.Unmarshal(attrs, &p.Attributes)
+		_ = json.Unmarshal(attrs, &p.Attributes)
 		profiles = append(profiles, p)
 	}
 

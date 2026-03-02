@@ -469,38 +469,6 @@ func (ad *AdvancedDetection) validateFullVersion(version string) bool {
 }
 
 
-func (ad *AdvancedDetection) checkBrowserTLSConsistency(ua string, tlsConn *tls.ConnectionState) bool {
-	uaBrowser := ad.extractBrowserFromUA(ua)
-	ja4 := ad.generateJA4Simple(tlsConn)
-
-	// If claiming Chrome, TLS should match Chrome patterns
-	if uaBrowser == "chrome" {
-		// Chrome's JA4 typically has "d" suffix for TLS 1.3
-		// and specific cipher order
-		chromePatterns := []string{"t12d", "t13d"}
-		for _, p := range chromePatterns {
-			if strings.HasPrefix(ja4, p) {
-				return true
-			}
-		}
-		// Also check for common Chrome ciphers
-		if tlsConn.CipherSuite == 0x1301 || tlsConn.CipherSuite == 0x1302 {
-			return true
-		}
-		return false
-	}
-
-	// If claiming Firefox, TLS should match Firefox patterns
-	if uaBrowser == "firefox" {
-		// Firefox JA4 typically starts with "t12d"
-		if strings.HasPrefix(ja4, "t12d") {
-			return true
-		}
-	}
-
-	return true // Unknown browser, assume OK
-}
-
 // AnalyzeIP analyzes the client IP for datacenter or VPN classification
 func (ad *AdvancedDetection) AnalyzeIP(clientIP string) []AdvancedCheckResult {
 	var checks []AdvancedCheckResult

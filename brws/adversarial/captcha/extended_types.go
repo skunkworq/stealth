@@ -7,6 +7,13 @@ import (
 	"time"
 )
 
+// webGLRand is a local random source for WebGL scene generation.
+// math/rand is used intentionally (not crypto/rand) because:
+// 1. We need reproducible randomness for visual scene generation
+// 2. Performance is more important than cryptographic security for visual effects
+// 3. The randomness is used for visual placement, not security
+var webGLRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+
 // ReCaptchaV2Config holds configuration for reCAPTCHA v2 challenges.
 type ReCaptchaV2Config struct {
 	Theme         string
@@ -1121,13 +1128,13 @@ func NewWebGLCaptcha(config *WebGLSceneConfig) *WebGLCaptcha {
 
 func (w *WebGLCaptcha) generateScene() {
 	objects := make([]WebGLSceneObject, w.Config.ObjectCount)
-	targetIndex := rand.Intn(w.Config.ObjectCount)
+	targetIndex := webGLRand.Intn(w.Config.ObjectCount)
 
 	colors := []string{"#FF5733", "#33FF57", "#3357FF", "#F333FF", "#FF33F3", "#33FFF3", "#F3FF33", "#FF8C33"}
 
 	for i := range objects {
 		isTarget := (i == targetIndex)
-		objType := w.Config.ObjectTypes[rand.Intn(len(w.Config.ObjectTypes))]
+		objType := w.Config.ObjectTypes[webGLRand.Intn(len(w.Config.ObjectTypes))]
 
 		if isTarget {
 			objType = w.Config.TargetObject
@@ -1137,20 +1144,20 @@ func (w *WebGLCaptcha) generateScene() {
 			ID:   fmt.Sprintf("obj_%d", i),
 			Type: objType,
 			Position: [3]float64{
-				float64(rand.Intn(400) - 200),
-				float64(rand.Intn(400) - 200),
-				float64(rand.Intn(400) - 200),
+				float64(webGLRand.Intn(400) - 200),
+				float64(webGLRand.Intn(400) - 200),
+				float64(webGLRand.Intn(400) - 200),
 			},
 			Rotation: [3]float64{
-				float64(rand.Intn(360)),
-				float64(rand.Intn(360)),
-				float64(rand.Intn(360)),
+				float64(webGLRand.Intn(360)),
+				float64(webGLRand.Intn(360)),
+				float64(webGLRand.Intn(360)),
 			},
-			Scale:     0.5 + rand.Float64()*1.5,
-			Color:     colors[rand.Intn(len(colors))],
+			Scale:     0.5 + webGLRand.Float64()*1.5,
+			Color:     colors[webGLRand.Intn(len(colors))],
 			IsTarget:  isTarget,
 			Clickable: true,
-			Occluded:  rand.Float64() > 0.7,
+			Occluded:  webGLRand.Float64() > 0.7,
 		}
 	}
 

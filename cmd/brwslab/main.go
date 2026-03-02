@@ -696,30 +696,6 @@ func getSessionsDir() string {
 	}
 	return home + "/.brwslab/sessions"
 }
-
-
-func tlsVersionName(version uint16) string {
-	switch version {
-	case 0x0301:
-		return "1.0"
-	case 0x0302:
-		return "1.1"
-	case 0x0303:
-		return "1.2"
-	case 0x0304:
-		return "1.3"
-	default:
-		return fmt.Sprintf("0x%04x", version)
-	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
 func replCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "repl",

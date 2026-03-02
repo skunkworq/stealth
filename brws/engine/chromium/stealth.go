@@ -782,14 +782,5 @@ func bezier(p0, p1, p2, t float64) float64 {
 }
 
 
-// easeInOutCubic applies easing to time t (0-1)
-func easeInOutCubic(t float64) float64 {
-	if t < 0.5 {
-		return 4 * t * t * t
-	}
-	p := -2*t + 2
-	return 1 - p*p*p/2
-}
-
 // Note: rand.Seed is deprecated since Go 1.20.
 // The global random generator is automatically seeded.

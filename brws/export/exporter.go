@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 type Exporter interface {
@@ -129,7 +130,7 @@ func (e *XmlExporter) Export(items []map[string]any, w io.Writer) error {
 			return err
 		}
 		for k, v := range item {
-			_, err := w.Write([]byte(fmt.Sprintf("    <%s>%v</%s>\n", k, v, k)))
+			_, err := fmt.Fprintf(w, "    <%s>%v</%s>\n", k, v, k)
 			if err != nil {
 				return err
 			}
@@ -165,11 +166,15 @@ func NewXmlExporter() Exporter {
 
 func ExportToFile(items []map[string]any, filename string) error {
 	exporter := GetExporterForFile(filename)
-	f, err := os.Create(filename)
+	// Clean the path to prevent directory traversal
+	cleanPath := filepath.Clean(filename)
+	f, err := os.Create(cleanPath)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		_ = f.Close()
+	}()
 	return exporter.Export(items, f)
 }
 
