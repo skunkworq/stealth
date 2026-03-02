@@ -1,0 +1,218 @@
+package stealth
+
+import (
+	"strings"
+
+	"github.com/stealth/brwslab/brws/ml"
+)
+
+// BuildStateVector constructs an 18-dimensional vector from detection indicators,
+// matching the layout in datagen.ToFeatureVector and the Python training scripts.
+//
+// Indices 0-10:  Detection vectors (binary flags from anomaly strings)
+// Indices 11-13: CAPTCHA state (presented, solved, difficulty)
+// Indices 14-17: Behavioral metrics (velocity, typing, straightness, solve_time)
+func BuildStateVector(anomalies []string, captcha *CaptchaState, behavioral *BehavioralState) []float64 {
+	vec := make([]float64, 18)
+
+	// Parse anomaly strings into detection dimensions
+	for _, a := range anomalies {
+		aLower := strings.ToLower(a)
+		if strings.Contains(aLower, "webdriver") {
+			vec[0] = 1.0
+		}
+		if strings.Contains(aLower, "canvas") || strings.Contains(aLower, "webgl") {
+			vec[1] = 1.0
+		}
+		if strings.Contains(aLower, "client_hints") || strings.Contains(aLower, "inconsistent_ch") {
+			vec[2] = 1.0
+		}
+		if strings.Contains(aLower, "mismatch") && !strings.Contains(aLower, "timezone") {
+			vec[3] = 1.0
+		}
+		if strings.Contains(aLower, "hardware") || strings.Contains(aLower, "memory") {
+			vec[4] = 1.0
+		}
+		if strings.Contains(aLower, "network") {
+			vec[5] = 1.0
+		}
+		if strings.Contains(aLower, "plugins") {
+			vec[6] = 1.0
+		}
+		if strings.Contains(aLower, "geometry") {
+			vec[7] = 1.0
+		}
+		if strings.Contains(aLower, "video") {
+			vec[8] = 1.0
+		}
+		if strings.Contains(aLower, "permissions") {
+			vec[9] = 1.0
+		}
+		if strings.Contains(aLower, "timezone") {
+			vec[10] = 1.0
+		}
+	}
+
+	// CAPTCHA dimensions [11-13]
+	if captcha != nil {
+		if captcha.Presented {
+			vec[11] = 1.0
+		}
+		if captcha.Solved {
+			vec[12] = 1.0
+		}
+		vec[13] = captcha.Difficulty
+	}
+
+	// Behavioral dimensions [14-17]
+	if behavioral != nil {
+		vec[14] = clamp(behavioral.MouseVelocity/2000.0, 0, 1)
+		vec[15] = clamp(behavioral.TypingSpeed/500.0, 0, 1)
+		vec[16] = behavioral.Straightness
+		if behavioral.SolveTimeMs > 0 {
+			vec[17] = clamp(float64(behavioral.SolveTimeMs)/30000.0, 0, 1)
+		}
+	}
+
+	return vec
+}
+
+// CaptchaState holds CAPTCHA-related state for building the state vector.
+type CaptchaState struct {
+	Presented  bool
+	Solved     bool
+	Difficulty float64
+}
+
+// BehavioralState holds behavioral metrics for building the state vector.
+type BehavioralState struct {
+	MouseVelocity float64
+	TypingSpeed   float64
+	Straightness  float64
+	SolveTimeMs   int64
+}
+
+// ApplyAction maps a DQN action index (0-17) to a StealthConfig mutation.
+// Actions 0-11 toggle boolean fields on StealthConfig.
+// Actions 12-17 are behavioral/challenge flags consumed by other subsystems.
+// Returns whether the action was applied and the field name.
+func ApplyAction(cfg *StealthConfig, actionIndex int) (applied bool, fieldName string) {
+	name, ok := ml.ActionMap[actionIndex]
+	if !ok {
+		return false, "unknown"
+	}
+
+	switch actionIndex {
+	case 0: // RemoveWebDriver
+		if !cfg.RemoveWebDriver {
+			cfg.RemoveWebDriver = true
+			return true, name
+		}
+	case 1: // CanvasNoise
+		if !cfg.CanvasNoise {
+			cfg.CanvasNoise = true
+			return true, name
+		}
+	case 2: // ClientHints
+		if !cfg.ClientHints {
+			cfg.ClientHints = true
+			return true, name
+		}
+	case 3: // RandomUserAgent
+		if !cfg.RandomUserAgent {
+			cfg.RandomUserAgent = true
+			return true, name
+		}
+	case 4: // WebGLSpoof
+		if !cfg.WebGLSpoof {
+			cfg.WebGLSpoof = true
+			return true, name
+		}
+	case 5: // HardwareSync
+		if !cfg.HardwareSync {
+			cfg.HardwareSync = true
+			return true, name
+		}
+	case 6: // NetworkSync
+		if !cfg.NetworkSync {
+			cfg.NetworkSync = true
+			return true, name
+		}
+	case 7: // PluginsSync
+		if !cfg.PluginsSync {
+			cfg.PluginsSync = true
+			return true, name
+		}
+	case 8: // GeometrySync
+		if !cfg.GeometrySync {
+			cfg.GeometrySync = true
+			return true, name
+		}
+	case 9: // VideoSync
+		if !cfg.VideoSync {
+			cfg.VideoSync = true
+			return true, name
+		}
+	case 10: // PermissionsSync
+		if !cfg.PermissionsSync {
+			cfg.PermissionsSync = true
+			return true, name
+		}
+	case 11: // TimezoneSync
+		if !cfg.TimezoneSync {
+			cfg.TimezoneSync = true
+			return true, name
+		}
+	case 12, 13, 14, 15, 16, 17:
+		// CaptchaSolver, HumanizeInteraction, DelayedNavigation,
+		// WebRTCDisable, CanvasNoiseStrength, HeadlessPatches
+		// These are signaling actions consumed by challenge/behavior subsystems.
+		return true, name
+	}
+
+	return false, name
+}
+
+// WithPolicy is a functional option to load a trained DQN model for RL-driven
+// stealth config adaptation during navigation.
+func WithPolicy(modelPath string) Option {
+	return func(c *Config) {
+		c.PolicyModelPath = modelPath
+	}
+}
+
+// extractAnomalies parses WAF/detection error strings into anomaly indicators.
+func extractAnomalies(err error) []string {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	anomalies := make([]string, 0)
+
+	checks := map[string]string{
+		"webdriver":    "webdriver_exposed",
+		"canvas":       "canvas_detected",
+		"client_hints": "client_hints_issues",
+		"WAF":          "waf_challenge",
+		"blocked":      "blocked",
+		"captcha":      "captcha_challenge",
+	}
+
+	for keyword, anomaly := range checks {
+		if strings.Contains(strings.ToLower(msg), strings.ToLower(keyword)) {
+			anomalies = append(anomalies, anomaly)
+		}
+	}
+
+	return anomalies
+}
+
+func clamp(v, min, max float64) float64 {
+	if v < min {
+		return min
+	}
+	if v > max {
+		return max
+	}
+	return v
+}

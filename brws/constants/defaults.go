@@ -33,6 +33,36 @@ const (
 
 	// WeightBehavioral is the weight for behavioral biometrics
 	WeightBehavioral = 0.20
+
+	// WeightWebGL is the weight for WebGL fingerprint analysis
+	WeightWebGL = 0.15
+
+	// WeightWebRTC is the weight for WebRTC leak analysis
+	WeightWebRTC = 0.10
+
+	// WeightIP is the weight for IP classification analysis
+	WeightIP = 0.10
+
+	// WeightHTTP2 is the weight for HTTP/2 pseudo-header analysis
+	WeightHTTP2 = 0.10
+
+	// WeightFont is the weight for font enumeration analysis
+	WeightFont = 0.10
+
+	// WeightScreen is the weight for screen geometry analysis
+	WeightScreen = 0.10
+
+	// WeightPlugin is the weight for plugin enumeration analysis
+	WeightPlugin = 0.08
+
+	// WeightAudio is the weight for AudioContext analysis
+	WeightAudio = 0.12
+
+	// WeightHeadless is the weight for headless browser detection
+	WeightHeadless = 0.15
+
+	// WeightAutomation is the weight for automation tool detection
+	WeightAutomation = 0.20
 )
 
 // Severity weights for individual checks.

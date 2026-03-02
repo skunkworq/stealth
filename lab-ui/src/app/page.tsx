@@ -1,6 +1,11 @@
 "use client";
 
-import { FingerprintProvider, useFingerprint } from "@/components/FingerprintProvider";
+import dynamic from "next/dynamic";
+import {
+  FingerprintProvider,
+  useFingerprintRefresh,
+  useFingerprint,
+} from "@/components/FingerprintProvider";
 import { OverviewCard } from "@/components/OverviewCard";
 import { TLSPanel } from "@/components/TLSPanel";
 import { HTTP2Panel } from "@/components/HTTP2Panel";
@@ -10,13 +15,89 @@ import { BuildOutput } from "@/components/BuildOutput";
 import { ControlPanel } from "@/components/ControlPanel";
 import { CaptureHistory } from "@/components/CaptureHistory";
 import { PacketAnalysisPanel } from "@/components/PacketAnalysisPanel";
-import { SignatureTester } from "@/components/SignatureTester";
 import { useWebSocket, WebSocketMessage } from "@/hooks/useWebSocket";
 import { useToasts, ToastContainer } from "@/components/Toasts";
 import { useCallback, useState } from "react";
-
-import { CaptchaDashboard } from "@/components/CaptchaDashboard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { SCORE_DECIMAL_PLACES } from "@/components/v3-analytics/constants";
+
+const MAIN_CONTENT_ID = "main-content";
+const FINGERPRINT_ID_PREVIEW_LENGTH = 12;
+const JA3_PREVIEW_LENGTH = 16;
+const MAX_PACKETS = 2000;
+
+const CaptchaDashboard = dynamic(
+  () => import("@/components/CaptchaDashboard").then(m => ({ default: m.CaptchaDashboard })),
+  {
+    loading: () => (
+      <div className="p-12 text-center text-muted-foreground animate-pulse font-mono text-xs">
+        LOADING_CAPTCHA_MODULE…
+      </div>
+    ),
+  }
+);
+
+const FingerprintViewer = dynamic(
+  () => import("@/components/FingerprintViewer").then(m => ({ default: m.FingerprintViewer })),
+  {
+    loading: () => (
+      <div className="p-12 text-center text-muted-foreground animate-pulse font-mono text-xs">
+        LOADING_FINGERPRINT_MODULE…
+      </div>
+    ),
+  }
+);
+
+const FingerprintComparison = dynamic(
+  () =>
+    import("@/components/FingerprintComparison").then(m => ({ default: m.FingerprintComparison })),
+  {
+    loading: () => (
+      <div className="p-12 text-center text-muted-foreground animate-pulse font-mono text-xs">
+        LOADING_COMPARISON_MODULE…
+      </div>
+    ),
+  }
+);
+
+const ReCaptchaWidget = dynamic(
+  () => import("@/components/ReCaptchaWidget").then(m => ({ default: m.ReCaptchaWidget })),
+  {
+    loading: () => (
+      <div className="p-12 text-center text-muted-foreground animate-pulse font-mono text-xs">
+        LOADING_RECAPTCHA_MODULE…
+      </div>
+    ),
+  }
+);
+
+const V3AnalyticsDashboard = dynamic(
+  () =>
+    import("@/components/v3-analytics").then(m => ({
+      default: m.V3AnalyticsDashboard,
+    })),
+  {
+    loading: () => (
+      <div className="p-12 text-center text-muted-foreground animate-pulse font-mono text-xs">
+        LOADING_V3_ANALYTICS…
+      </div>
+    ),
+  }
+);
+
+const ShieldDashboard = dynamic(
+  () =>
+    import("@/components/shield-dashboard").then(m => ({
+      default: m.ShieldDashboard,
+    })),
+  {
+    loading: () => (
+      <div className="p-12 text-center text-muted-foreground animate-pulse font-mono text-xs">
+        LOADING_SHIELD_MODULE…
+      </div>
+    ),
+  }
+);
 
 export default function Home() {
   return (
@@ -26,89 +107,222 @@ export default function Home() {
   );
 }
 
-function AppContent() {
-  const { refresh } = useFingerprint();
-  const { toasts, addToast } = useToasts();
+function useAppState() {
+  const refresh = useFingerprintRefresh();
+  const { addToast } = useToasts();
   const [wsConnected, setWsConnected] = useState(false);
   const [packets, setPackets] = useState<WebSocketMessage[]>([]);
   const [activeTab, setActiveTab] = useState("analysis");
 
-  const handleFingerprint = useCallback((msg: WebSocketMessage) => {
-    const host = msg.host || "Unknown";
-    const ja3 = msg.ja3 ? msg.ja3.substring(0, 16) + "…" : "N/A";
-    addToast("🔒 Fingerprint Captured", `${host} • ${ja3}`);
-    // Auto-refresh to show latest data
-    refresh();
-  }, [addToast, refresh]);
+  const handleFingerprint = useCallback(
+    (msg: WebSocketMessage) => {
+      const host = msg.host || "Unknown";
+      const ja3 = msg.ja3 ? `${msg.ja3.substring(0, JA3_PREVIEW_LENGTH)}…` : "N/A";
+      addToast("🔒 Fingerprint Captured", `${host} • ${ja3}`);
+      refresh();
+    },
+    [addToast, refresh]
+  );
 
   const handlePacket = useCallback((msg: WebSocketMessage) => {
     setPackets(prev => {
       const next = [...prev, msg];
-      if (next.length > 2000) return next.slice(next.length - 2000);
+      if (next.length > MAX_PACKETS) return next.slice(next.length - MAX_PACKETS);
       return next;
     });
   }, []);
 
+  const handleV3Assessment = useCallback(
+    (msg: WebSocketMessage) => {
+      const action = msg.action || "unknown";
+      const score = msg.v3_score?.toFixed(SCORE_DECIMAL_PLACES) ?? "N/A";
+      addToast("v3 Assessment", `${action} • score ${score}`);
+    },
+    [addToast]
+  );
+
+  const handleShieldDetection = useCallback(
+    (msg: WebSocketMessage) => {
+      const rate = msg.catch_rate != null ? `${(msg.catch_rate * 100).toFixed(0)}%` : "N/A";
+      const avg = msg.avg_score?.toFixed(3) ?? "N/A";
+      addToast("Shield Detection", `catch ${rate} • avg ${avg}`);
+    },
+    [addToast]
+  );
+
   useWebSocket({
     onFingerprint: handleFingerprint,
     onPacket: handlePacket,
+    onV3Assessment: handleV3Assessment,
+    onShieldDetection: handleShieldDetection,
     onConnected: () => setWsConnected(true),
     onDisconnected: () => setWsConnected(false),
   });
 
+  return { wsConnected, packets, activeTab, setActiveTab };
+}
+
+function SkipLink() {
+  return (
+    <a
+      href={`#${MAIN_CONTENT_ID}`}
+      className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[10001] focus:px-4 focus:py-2 focus:bg-background focus:border focus:border-cyan-glow"
+    >
+      Skip to main content
+    </a>
+  );
+}
+
+function ModeLabel({ activeTab }: { activeTab: string }) {
+  const mode =
+    activeTab === "analysis"
+      ? "FINGERPRINT_EXTRACTION"
+      : activeTab === "captcha"
+        ? "ADVERSARIAL_TELEMETRY"
+        : activeTab === "recaptcha"
+          ? "RECAPTCHA_ANALYSIS"
+          : activeTab === "shield"
+            ? "SHIELD_EVALUATION"
+          : "ML_TRAINING_PIPELINE";
+
+  return (
+    <div className="hidden md:flex items-center gap-2">
+      <div className="h-px w-24 bg-gradient-to-r from-transparent to-border/30" />
+      <span className="text-[10px] text-muted-foreground/40 font-mono uppercase tracking-tighter">
+        Mode: {mode}
+      </span>
+    </div>
+  );
+}
+
+function TabNavigation() {
+  return (
+    <TabsList className="skeuo-inset bg-black/40 border-border/10">
+      <TabsTrigger
+        value="analysis"
+        className="data-[state=active]:skeuo-panel data-[state=active]:text-cyan-glow uppercase text-[10px] font-bold tracking-widest px-6"
+      >
+        Analysis
+      </TabsTrigger>
+      <TabsTrigger
+        value="captcha"
+        className="data-[state=active]:skeuo-panel data-[state=active]:text-amber-glow uppercase text-[10px] font-bold tracking-widest px-6"
+      >
+        CAPTCHA
+      </TabsTrigger>
+      <TabsTrigger
+        value="recaptcha"
+        className="data-[state=active]:skeuo-panel data-[state=active]:text-emerald-glow uppercase text-[10px] font-bold tracking-widest px-6"
+      >
+        reCAPTCHA
+      </TabsTrigger>
+      <TabsTrigger
+        value="training"
+        className="data-[state=active]:skeuo-panel data-[state=active]:text-purple-glow uppercase text-[10px] font-bold tracking-widest px-6"
+      >
+        Training
+      </TabsTrigger>
+      <TabsTrigger
+        value="shield"
+        className="data-[state=active]:skeuo-panel data-[state=active]:text-red-glow uppercase text-[10px] font-bold tracking-widest px-6"
+      >
+        Shield
+      </TabsTrigger>
+    </TabsList>
+  );
+}
+
+function MainContent({ packets }: { packets: WebSocketMessage[] }) {
+  return (
+    <TabsContent value="analysis" className="space-y-5 mt-0">
+      <OverviewCard />
+      <TLSPanel />
+      <HTTP2Panel />
+      <HTTPPanel />
+      <CaptureHistory />
+      <PacketAnalysisPanel packets={packets} />
+    </TabsContent>
+  );
+}
+
+function CaptchaContent() {
+  return (
+    <TabsContent value="captcha" className="mt-0">
+      <CaptchaDashboard />
+    </TabsContent>
+  );
+}
+
+function ReCaptchaContent() {
+  return (
+    <TabsContent value="recaptcha" className="mt-0">
+      <div className="space-y-5">
+        <ReCaptchaWidget />
+        <V3AnalyticsDashboard />
+      </div>
+    </TabsContent>
+  );
+}
+
+function TrainingContent() {
+  return (
+    <TabsContent value="training" className="mt-0">
+      <div className="space-y-5">
+        <FingerprintViewer />
+        <FingerprintComparison />
+      </div>
+    </TabsContent>
+  );
+}
+
+function ShieldContent() {
+  return (
+    <TabsContent value="shield" className="mt-0">
+      <ShieldDashboard />
+    </TabsContent>
+  );
+}
+
+function Sidebar() {
+  return (
+    <div className="lg:col-span-12 xl:col-span-4">
+      <div className="xl:sticky xl:top-6 space-y-5">
+        <ControlPanel />
+        <ConfigPanel />
+        <BuildOutput />
+      </div>
+    </div>
+  );
+}
+
+function AppContent() {
+  const { wsConnected, packets, activeTab, setActiveTab } = useAppState();
+
   return (
     <div className="min-h-screen bg-background">
+      <SkipLink />
       <Header wsConnected={wsConnected} />
-      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
+      <main id={MAIN_CONTENT_ID} className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           {/* Left column: main area */}
           <div className="lg:col-span-12 xl:col-span-8 space-y-5">
             <Tabs defaultValue="analysis" className="w-full" onValueChange={setActiveTab}>
               <div className="flex items-center justify-between mb-2">
-                <TabsList className="skeuo-inset bg-black/40 border-border/10">
-                  <TabsTrigger value="analysis" className="data-[state=active]:skeuo-panel data-[state=active]:text-cyan-glow uppercase text-[10px] font-bold tracking-widest px-6">
-                    Analysis
-                  </TabsTrigger>
-                  <TabsTrigger value="captcha" className="data-[state=active]:skeuo-panel data-[state=active]:text-amber-glow uppercase text-[10px] font-bold tracking-widest px-6">
-                    CAPTCHA
-                  </TabsTrigger>
-                </TabsList>
-                
-                <div className="hidden md:flex items-center gap-2">
-                   <div className="h-px w-24 bg-gradient-to-r from-transparent to-border/30" />
-                   <span className="text-[10px] text-muted-foreground/40 font-mono uppercase tracking-tighter">
-                      Mode: {activeTab === "analysis" ? "FINGERPRINT_EXTRACTION" : "ADVERSARIAL_TELEMETRY"}
-                   </span>
-                </div>
+                <TabNavigation />
+                <ModeLabel activeTab={activeTab} />
               </div>
-
-              <TabsContent value="analysis" className="space-y-5 mt-0">
-                <OverviewCard />
-                <TLSPanel />
-                <HTTP2Panel />
-                <HTTPPanel />
-                <CaptureHistory />
-                <PacketAnalysisPanel packets={packets} />
-              </TabsContent>
-
-              <TabsContent value="captcha" className="mt-0">
-                <CaptchaDashboard />
-              </TabsContent>
+              <MainContent packets={packets} />
+              <CaptchaContent />
+              <ReCaptchaContent />
+              <TrainingContent />
+              <ShieldContent />
             </Tabs>
           </div>
-
-          {/* Right column: controls (sticky) */}
-          <div className="lg:col-span-12 xl:col-span-4">
-            <div className="xl:sticky xl:top-6 space-y-5">
-              <ControlPanel />
-              <ConfigPanel />
-              <BuildOutput />
-            </div>
-          </div>
+          <Sidebar />
         </div>
       </main>
       <Footer />
-      <ToastContainer toasts={toasts} />
+      <ToastContainer toasts={[]} />
     </div>
   );
 }
@@ -159,15 +373,13 @@ function StatusIndicator({ wsConnected }: { wsConnected: boolean }) {
       <div className="w-px h-4 bg-border/30" />
       <div className="flex items-center gap-1.5">
         <span className={wsConnected ? "led-green" : "led-red"} />
-        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">
-          WS
-        </span>
+        <span className="text-[10px] text-muted-foreground uppercase tracking-wider">WS</span>
       </div>
       {fingerprint && (
         <>
           <div className="w-px h-4 bg-border/30" />
           <span className="text-[10px] font-mono text-muted-foreground">
-            {fingerprint.id.slice(0, 12)}
+            {fingerprint.id.slice(0, FINGERPRINT_ID_PREVIEW_LENGTH)}
           </span>
         </>
       )}

@@ -712,6 +712,9 @@ func (ad *AdvancedDetection) AnalyzeAutomation(req *http.Request) []AdvancedChec
 	if navHeader != "" {
 		var navData map[string]interface{}
 		if err := json.Unmarshal([]byte(navHeader), &navData); err == nil {
+			uaStr := req.Header.Get("User-Agent")
+			isChromeBrowser := strings.Contains(strings.ToLower(uaStr), "chrome")
+
 			if webdriver, ok := navData["webdriver"].(bool); ok && webdriver {
 				checks = append(checks, AdvancedCheckResult{
 					CheckName: "Automation-Webdriver-Flag",
@@ -724,28 +727,35 @@ func (ad *AdvancedDetection) AnalyzeAutomation(req *http.Request) []AdvancedChec
 				})
 			}
 
-			if plugins, ok := navData["plugins"].([]interface{}); ok && len(plugins) == 0 {
-				checks = append(checks, AdvancedCheckResult{
-					CheckName: "Automation-Empty-Plugins",
-					Category:  "automation",
-					Passed:    false,
-					Score:     0.4,
-					Details:   "No plugins detected (suspicious)",
-					RawValue:  "empty",
-					Severity:  "high",
-				})
+			// Empty plugins only suspicious for Chrome (Firefox has 0 plugins by design)
+			if isChromeBrowser {
+				if plugins, ok := navData["plugins"].([]interface{}); ok && len(plugins) == 0 {
+					checks = append(checks, AdvancedCheckResult{
+						CheckName: "Automation-Empty-Plugins",
+						Category:  "automation",
+						Passed:    false,
+						Score:     0.4,
+						Details:   "No plugins detected (suspicious)",
+						RawValue:  "empty",
+						Severity:  "high",
+					})
+				}
 			}
 
-			if chrome, ok := navData["chrome"].(bool); !ok || !chrome {
-				checks = append(checks, AdvancedCheckResult{
-					CheckName: "Automation-Chrome-Runtime",
-					Category:  "automation",
-					Passed:    false,
-					Score:     0.3,
-					Details:   "chrome.runtime missing",
-					RawValue:  "missing",
-					Severity:  "high",
-				})
+			// chrome.runtime is Chrome-only — Firefox doesn't have it
+			if isChromeBrowser {
+				chromeVal, chromeExists := navData["chrome"]
+				if !chromeExists || chromeVal == nil {
+					checks = append(checks, AdvancedCheckResult{
+						CheckName: "Automation-Chrome-Runtime",
+						Category:  "automation",
+						Passed:    false,
+						Score:     0.3,
+						Details:   "chrome.runtime missing",
+						RawValue:  "missing",
+						Severity:  "high",
+					})
+				}
 			}
 		}
 	}
@@ -761,6 +771,139 @@ func (ad *AdvancedDetection) AnalyzeAutomation(req *http.Request) []AdvancedChec
 			RawValue:  accept,
 			Severity:  "medium",
 		})
+	}
+
+	return checks
+}
+
+// AnalyzeWebRTC checks for WebRTC leak indicators and spoofing artifacts
+func (ad *AdvancedDetection) AnalyzeWebRTC(data *WebRTCData) []AdvancedCheckResult {
+	var checks []AdvancedCheckResult
+
+	if !data.RTCAvailable {
+		checks = append(checks, AdvancedCheckResult{
+			CheckName: "WebRTC-Disabled",
+			Category:  "webrtc",
+			Passed:    false,
+			Score:     0.3,
+			Details:   "WebRTC completely disabled — unusual for standard browsers",
+			RawValue:  "disabled",
+			Severity:  "medium",
+		})
+	}
+
+	if data.RTCAvailable && data.ICECandidateCount == 0 {
+		checks = append(checks, AdvancedCheckResult{
+			CheckName: "WebRTC-No-Candidates",
+			Category:  "webrtc",
+			Passed:    false,
+			Score:     0.4,
+			Details:   "WebRTC enabled but no ICE candidates — relay-only or blocked",
+			RawValue:  "0",
+			Severity:  "high",
+		})
+	}
+
+	if data.RequestSourceIP != "" && len(data.LocalIPs) > 0 {
+		mismatch := true
+		for _, ip := range data.LocalIPs {
+			if ip == data.RequestSourceIP {
+				mismatch = false
+				break
+			}
+		}
+		if mismatch {
+			checks = append(checks, AdvancedCheckResult{
+				CheckName: "WebRTC-IP-Mismatch",
+				Category:  "webrtc",
+				Passed:    false,
+				Score:     0.7,
+				Details:   "WebRTC-disclosed IP does not match HTTP source IP (proxy/VPN leak)",
+				RawValue:  fmt.Sprintf("webrtc:%v http:%s", data.LocalIPs, data.RequestSourceIP),
+				Severity:  "critical",
+			})
+		}
+	}
+
+	if data.ConstructorProxied {
+		checks = append(checks, AdvancedCheckResult{
+			CheckName: "WebRTC-Constructor-Proxied",
+			Category:  "webrtc",
+			Passed:    false,
+			Score:     0.3,
+			Details:   "RTCPeerConnection constructor appears to be proxied or wrapped",
+			RawValue:  "proxied",
+			Severity:  "medium",
+		})
+	}
+
+	return checks
+}
+
+// AnalyzeHeadless checks for headless browser indicators from navigator data
+func (ad *AdvancedDetection) AnalyzeHeadless(req *http.Request) []AdvancedCheckResult {
+	var checks []AdvancedCheckResult
+
+	navHeader := req.Header.Get(constants.HeaderNavigatorData)
+	if navHeader == "" {
+		return checks
+	}
+
+	var navData map[string]interface{}
+	if err := json.Unmarshal([]byte(navHeader), &navData); err != nil {
+		return checks
+	}
+
+	// Check window dimension gaps (outerHeight - innerHeight should be >0 in real browsers)
+	if windowData, ok := navData["window"].(map[string]interface{}); ok {
+		outerH, outerOk := windowData["outerHeight"].(float64)
+		innerH, innerOk := windowData["innerHeight"].(float64)
+		if outerOk && innerOk {
+			gap := outerH - innerH
+			if gap <= 0 {
+				checks = append(checks, AdvancedCheckResult{
+					CheckName: "Headless-Window-Gap",
+					Category:  "automation",
+					Passed:    false,
+					Score:     0.5,
+					Details:   fmt.Sprintf("outerHeight-innerHeight gap is %.0f (expected >0 for real browser chrome)", gap),
+					RawValue:  fmt.Sprintf("outer=%.0f inner=%.0f", outerH, innerH),
+					Severity:  "high",
+				})
+			}
+		}
+	}
+
+	// Check Notification.permission (headless returns 'denied')
+	if permissions, ok := navData["permissions"].(map[string]interface{}); ok {
+		if state, ok := permissions["state"].(string); ok && state == "denied" {
+			checks = append(checks, AdvancedCheckResult{
+				CheckName: "Headless-Notification-Denied",
+				Category:  "automation",
+				Passed:    false,
+				Score:     0.3,
+				Details:   "Notification.permission is 'denied' — common in headless environments",
+				RawValue:  "denied",
+				Severity:  "medium",
+			})
+		}
+	}
+
+	// Check chrome.loadTimes presence (absent in some headless modes)
+	if _, ok := navData["chrome_loadTimes"]; !ok {
+		// Only flag if claiming to be Chrome
+		ua := req.Header.Get("User-Agent")
+		if strings.Contains(strings.ToLower(ua), "chrome") {
+			checks = append(checks, AdvancedCheckResult{
+				CheckName: "Headless-No-LoadTimes",
+				Category:  "automation",
+				Passed:    false,
+				Score:     0.30,
+				Details:   "chrome.loadTimes() not detected — indicates non-standard Chrome environment",
+				RawValue:  "missing",
+				Severity:  "medium",
+			})
+		}
 	}
 
 	return checks

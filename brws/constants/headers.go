@@ -23,6 +23,21 @@ const (
 
 	// HeaderTLSData contains TLS fingerprinting data
 	HeaderTLSData = "X-TLS-Data"
+
+	// HeaderWebRTCData contains WebRTC fingerprinting data
+	HeaderWebRTCData = "X-WebRTC-Data"
+
+	// HeaderFontData contains font enumeration data
+	HeaderFontData = "X-Font-Data"
+
+	// HeaderScreenData contains screen geometry data
+	HeaderScreenData = "X-Screen-Data"
+
+	// HeaderPluginData contains plugin enumeration data
+	HeaderPluginData = "X-Plugin-Data"
+
+	// HeaderAudioData contains AudioContext fingerprinting data
+	HeaderAudioData = "X-Audio-Data"
 )
 
 // Client hint headers.

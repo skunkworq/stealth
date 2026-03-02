@@ -72,6 +72,8 @@ linters:
     - usetesting      # Use t.Context() - requires Go 1.21+
     - revive          # Many style issues - would require significant refactoring
     - gosec           # Security checks - too many false positives for this codebase
+    - exhaustive      # Requires all enum cases in switch - too strict when default handles rest
+    - inamedparam     # Requires named params in interface methods - optional Go feature
 issues:
   default: true
   exclude-dirs:

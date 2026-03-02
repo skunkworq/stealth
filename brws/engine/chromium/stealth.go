@@ -29,6 +29,12 @@ type StealthConfig struct {
 	// Enable canvas fingerprint randomization
 	CanvasNoise bool
 
+	// Canvas noise strength (0.0-1.0, default 0.5)
+	CanvasNoiseStrength float64
+
+	// WebRTC leak prevention config
+	WebRTC *WebRTCConfig
+
 	// Enable human-like mouse movements
 	HumanizeMouse bool
 
@@ -49,6 +55,9 @@ type StealthConfig struct {
 	ScreenWidth  int
 	ScreenHeight int
 
+	// Device pixel ratio (default 1.0, 2.0 for HiDPI/Retina)
+	DevicePixelRatio float64
+
 	// Dynamic AI Spoofer Sync Flags (passed from stealth.Client / Python RL)
 	HardwareSync    bool
 	NetworkSync     bool
@@ -65,13 +74,15 @@ func DefaultStealthConfig() *StealthConfig {
 		DeviceMemoryGB:      RandomRAM(),
 		HardwareConcurrency: 8,
 		Platform:            "Win32",
-		WebGLVendor:     randomGPUVendor(),
-		WebGLRenderer:   randomGPURenderer(),
-		CanvasNoise:     true,
-		HumanizeMouse:   true,
+		WebGLVendor:         randomGPUVendor(),
+		WebGLRenderer:       randomGPURenderer(),
+		CanvasNoise:         true,
+		CanvasNoiseStrength: 0.5,
+		WebRTC:              DefaultWebRTCConfig(),
+		HumanizeMouse:       true,
 		MinDelay:        100 * time.Millisecond,
 		MaxDelay:        500 * time.Millisecond,
-		ChromeVersion:   "120.0.6099.109",
+		ChromeVersion:   "134.0.6998.88",
 		PlatformVersion: "10.0.0",
 		Timezone:        "America/New_York",
 		ScreenWidth:     1920,
@@ -79,13 +90,13 @@ func DefaultStealthConfig() *StealthConfig {
 	}
 }
 
-// ChromeVersions for client hints
+// ChromeVersions for client hints (updated to 2025-2026 era)
 var ChromeVersions = []string{
-	"120.0.6099.109",
-	"121.0.6167.85",
-	"122.0.6266.112",
-	"123.0.6312.66",
-	"124.0.6360.122",
+	"131.0.6778.139",
+	"132.0.6834.110",
+	"133.0.6917.92",
+	"134.0.6998.88",
+	"135.0.7049.65",
 }
 
 // GenerateStealthScript generates the JavaScript to inject for stealth
@@ -97,7 +108,7 @@ func GenerateStealthScript(config *StealthConfig) string {
 	// Generate client hints strings
 	chromeVersion := config.ChromeVersion
 	if chromeVersion == "" {
-		chromeVersion = "120.0.6099.109"
+		chromeVersion = "134.0.6998.88"
 	}
 
 	platformVersion := config.PlatformVersion
@@ -126,6 +137,25 @@ func GenerateStealthScript(config *StealthConfig) string {
 	concurrency := config.HardwareConcurrency
 	if concurrency == 0 {
 		concurrency = 8
+	}
+
+	canvasNoiseStrength := config.CanvasNoiseStrength
+	if canvasNoiseStrength <= 0 {
+		canvasNoiseStrength = 0.5
+	}
+	if canvasNoiseStrength > 1.0 {
+		canvasNoiseStrength = 1.0
+	}
+
+	devicePixelRatio := config.DevicePixelRatio
+	if devicePixelRatio <= 0 {
+		devicePixelRatio = 1.0
+	}
+
+	// Slight screenY offset (0 for primary monitor, small value for realism)
+	screenY := 0
+	if screenHeight > 1080 {
+		screenY = 24 // typical panel/dock offset on large displays
 	}
 
 	script := fmt.Sprintf(`
@@ -161,11 +191,11 @@ func GenerateStealthScript(config *StealthConfig) string {
     Object.defineProperty(window, 'innerHeight', { get: () => %d });
     Object.defineProperty(window, 'outerWidth', { get: () => %d });
     Object.defineProperty(window, 'outerHeight', { get: () => %d });
-    Object.defineProperty(window, 'devicePixelRatio', { get: () => 1 });
+    Object.defineProperty(window, 'devicePixelRatio', { get: () => %f });
     Object.defineProperty(window, 'screenX', { get: () => 0 });
-    Object.defineProperty(window, 'screenY', { get: () => 0 });
+    Object.defineProperty(window, 'screenY', { get: () => %d });
     Object.defineProperty(window, 'screenLeft', { get: () => 0 });
-    Object.defineProperty(window, 'screenTop', { get: () => 0 });
+    Object.defineProperty(window, 'screenTop', { get: () => %d });
     
     // 5. Timezone Spoofing
     const originalGetTimezoneOffset = Date.prototype.getTimezoneOffset;
@@ -275,9 +305,24 @@ func GenerateStealthScript(config *StealthConfig) string {
         tagName: 'VIDEO',
     };
     
-    // 10. WebGL Spoofing
+    // 10. WebGL Spoofing (expanded with 25+ extensions and GL parameters)
+    const webglExtensions = [
+        'ANGLE_instanced_arrays', 'EXT_blend_minmax', 'EXT_color_buffer_half_float',
+        'EXT_disjoint_timer_query', 'EXT_float_blend', 'EXT_frag_depth',
+        'EXT_shader_texture_lod', 'EXT_texture_compression_bptc',
+        'EXT_texture_compression_rgtc', 'EXT_texture_filter_anisotropic',
+        'EXT_sRGB', 'KHR_parallel_shader_compile', 'OES_element_index_uint',
+        'OES_fbo_render_mipmap', 'OES_standard_derivatives', 'OES_texture_float',
+        'OES_texture_float_linear', 'OES_texture_half_float',
+        'OES_texture_half_float_linear', 'OES_vertex_array_object',
+        'WEBGL_color_buffer_float', 'WEBGL_compressed_texture_s3tc',
+        'WEBGL_compressed_texture_s3tc_srgb', 'WEBGL_debug_renderer_info',
+        'WEBGL_debug_shaders', 'WEBGL_depth_texture', 'WEBGL_draw_buffers',
+        'WEBGL_lose_context', 'WEBGL_multi_draw'
+    ];
+    const fakeExtObj = { /* stub for generic extensions */ };
     const fakeWebGLContext = {
-        getSupportedExtensions: () => ['WEBGL_debug_renderer_info'],
+        getSupportedExtensions: () => webglExtensions,
         getExtension: (name) => {
             if (name === 'WEBGL_debug_renderer_info') {
                 return {
@@ -285,18 +330,47 @@ func GenerateStealthScript(config *StealthConfig) string {
                     UNMASKED_RENDERER_WEBGL: 0x9246,
                 };
             }
+            if (name === 'WEBGL_lose_context') {
+                return { loseContext: () => {}, restoreContext: () => {} };
+            }
+            if (name === 'EXT_texture_filter_anisotropic') {
+                return { MAX_TEXTURE_MAX_ANISOTROPY_EXT: 0x84FF, TEXTURE_MAX_ANISOTROPY_EXT: 0x84FE };
+            }
+            if (name === 'WEBGL_draw_buffers') {
+                return { MAX_DRAW_BUFFERS_WEBGL: 8, MAX_COLOR_ATTACHMENTS_WEBGL: 8, drawBuffersWEBGL: () => {} };
+            }
+            if (webglExtensions.includes(name)) return fakeExtObj;
             return null;
         },
         getParameter: (param) => {
             if (param === 0x9245) return '%s';  // UNMASKED_VENDOR_WEBGL
             if (param === 0x9246) return '%s';  // UNMASKED_RENDERER_WEBGL
+            if (param === 0x0D33) return 16384;  // MAX_TEXTURE_SIZE
+            if (param === 0x8B8C) return 'WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)';  // SHADING_LANGUAGE_VERSION
+            if (param === 0x1F01) return 'WebKit WebGL';  // RENDERER
+            if (param === 0x1F00) return 'WebKit';  // VENDOR
+            if (param === 0x8869) return 16;  // MAX_VERTEX_ATTRIBS
+            if (param === 0x8DFB) return 30;  // MAX_VARYING_VECTORS
+            if (param === 0x8B4D) return 1024;  // MAX_FRAGMENT_UNIFORM_VECTORS
+            if (param === 0x0D32) return 16384;  // MAX_VIEWPORT_DIMS (approx)
+            if (param === 0x8B4A) return 256;  // MAX_VERTEX_UNIFORM_VECTORS
+            if (param === 0x851C) return 16;  // MAX_TEXTURE_IMAGE_UNITS
+            if (param === 0x8872) return 16;  // MAX_VERTEX_TEXTURE_IMAGE_UNITS
+            if (param === 0x8824) return 16;  // MAX_COMBINED_TEXTURE_IMAGE_UNITS
+            if (param === 0x0D34) return 16384;  // MAX_CUBE_MAP_TEXTURE_SIZE
+            if (param === 0x84E8) return 16;  // MAX_RENDERBUFFER_SIZE scaled
             return null;
         },
+        createShader: () => ({}),
+        createProgram: () => ({}),
+        createBuffer: () => ({}),
     };
     
-    // 11. Canvas Fingerprint Randomization
+    // 11. Enhanced Canvas Fingerprint Randomization
     const rand = (min = 0, max = 1) => Math.random() * (max - min) + min;
-    
+    const noiseStrength = %f; // 0.0-1.0 configurable strength
+    const pixelNoiseRate = 0.03 + (noiseStrength * 0.02); // 3-5%% of pixels
+
     const realCreateElement = document.createElement.bind(document);
     document.createElement = function(tagName) {
         if (tagName.toLowerCase() === 'video') {
@@ -306,57 +380,101 @@ func GenerateStealthScript(config *StealthConfig) string {
         } else if (tagName.toLowerCase() === 'canvas') {
             const realCanvas = realCreateElement('canvas');
             const originalGetContext = realCanvas.getContext.bind(realCanvas);
-            
+
+            // Patch toDataURL and toBlob at the canvas level
+            const origToDataURL = realCanvas.toDataURL.bind(realCanvas);
+            const origToBlob = realCanvas.toBlob?.bind(realCanvas);
+
+            realCanvas.toDataURL = function(...args) {
+                // Force a re-render pass through our noised context
+                const ctx = realCanvas.getContext('2d');
+                if (ctx) {
+                    const w = realCanvas.width || 1;
+                    const h = realCanvas.height || 1;
+                    const imageData = ctx.getImageData(0, 0, w, h);
+                    ctx.putImageData(imageData, 0, 0);
+                }
+                return origToDataURL(...args);
+            };
+
+            if (origToBlob) {
+                realCanvas.toBlob = function(callback, ...args) {
+                    const ctx = realCanvas.getContext('2d');
+                    if (ctx) {
+                        const w = realCanvas.width || 1;
+                        const h = realCanvas.height || 1;
+                        const imageData = ctx.getImageData(0, 0, w, h);
+                        ctx.putImageData(imageData, 0, 0);
+                    }
+                    return origToBlob(callback, ...args);
+                };
+            }
+
             realCanvas.getContext = function(contextType, ...args) {
                 const ctx = originalGetContext(contextType, ...args);
-                
+
                 if (contextType === 'webgl' || contextType === 'experimental-webgl') {
                     return fakeWebGLContext;
                 } else if (contextType === '2d' && ctx) {
                     // Add subtle noise to canvas operations
                     const origFillText = ctx.fillText.bind(ctx);
+                    const origStrokeText = ctx.strokeText?.bind(ctx);
                     const origGetImageData = ctx.getImageData.bind(ctx);
                     const origDrawImage = ctx.drawImage?.bind(ctx);
-                    
-                    // Patch fillText to add minor translation noise
+
+                    // Patch fillText with translation noise + subtle letter spacing
                     ctx.fillText = function(text, x, y, ...rest) {
-                        const dx = rand(-0.2, 0.2);
-                        const dy = rand(-0.2, 0.2);
+                        const dx = rand(-0.2, 0.2) * noiseStrength;
+                        const dy = rand(-0.2, 0.2) * noiseStrength;
+                        // Subtle letter spacing variance
+                        if (text.length > 1) {
+                            ctx.letterSpacing = (rand(-0.1, 0.1) * noiseStrength) + 'px';
+                        }
                         return origFillText(text, x + dx, y + dy, ...rest);
                     };
-                    
-                    // Patch getImageData to modify pixels slightly
+
+                    // Patch strokeText similarly
+                    if (origStrokeText) {
+                        ctx.strokeText = function(text, x, y, ...rest) {
+                            const dx = rand(-0.2, 0.2) * noiseStrength;
+                            const dy = rand(-0.2, 0.2) * noiseStrength;
+                            return origStrokeText(text, x + dx, y + dy, ...rest);
+                        };
+                    }
+
+                    // Patch getImageData to modify pixels (3-5%% across R/G/B, not alpha)
                     ctx.getImageData = function(sx, sy, sw, sh) {
                         const imageData = origGetImageData(sx, sy, sw, sh);
                         for (let i = 0; i < imageData.data.length; i += 4) {
-                            // Flip least significant bit randomly (1-2%% of pixels)
-                            if (Math.random() > 0.98) {
-                                imageData.data[i] ^= 1;     // Red
-                                imageData.data[i + 1] ^= 1; // Green
+                            if (Math.random() < pixelNoiseRate) {
+                                imageData.data[i] ^= 1;     // Red LSB
+                                imageData.data[i + 1] ^= 1; // Green LSB
+                                imageData.data[i + 2] ^= 1; // Blue LSB
+                                // Alpha (i+3) intentionally untouched
                             }
                         }
                         return imageData;
                     };
-                    
+
                     // Patch drawImage with slight shift
                     if (origDrawImage) {
                         ctx.drawImage = function(img, sx, sy, ...args) {
-                            const dx = rand(-0.3, 0.3);
-                            const dy = rand(-0.3, 0.3);
+                            const dx = rand(-0.3, 0.3) * noiseStrength;
+                            const dy = rand(-0.3, 0.3) * noiseStrength;
                             return origDrawImage(img, sx + dx, sy + dy, ...args);
                         };
                     }
-                    
+
                     // Apply rendering property noise
                     ctx.globalAlpha = rand(0.98, 1.0);
-                    ctx.shadowBlur = rand(0, 0.5);
-                    
+                    ctx.shadowBlur = rand(0, 0.5) * noiseStrength;
+
                     return ctx;
                 }
-                
+
                 return ctx;
             };
-            
+
             return realCanvas;
         }
         return realCreateElement(tagName);
@@ -374,19 +492,24 @@ func GenerateStealthScript(config *StealthConfig) string {
         },
     });
     
-    // 13. Plugin spoofing
+    // 13. Plugin spoofing (5 plugins matching real Chrome)
     Object.defineProperty(navigator, 'plugins', {
-        get: () => [
-            {
-                name: 'Chrome PDF Plugin',
-                filename: 'internal-pdf-viewer',
-                description: 'Portable Document Format',
-                version: 'undefined',
-                length: 1,
-                item: () => null,
-                namedItem: () => null
-            }
-        ]
+        get: () => {
+            const plugins = [
+                { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 1, item: () => null, namedItem: () => null },
+                { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '', length: 1, item: () => null, namedItem: () => null },
+                { name: 'Native Client', filename: 'internal-nacl-plugin', description: '', length: 2, item: () => null, namedItem: () => null },
+                { name: 'Chromium PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 1, item: () => null, namedItem: () => null },
+                { name: 'Chromium PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '', length: 1, item: () => null, namedItem: () => null },
+            ];
+            plugins.length = 5;
+            return plugins;
+        }
+    });
+
+    // 13b. PDF viewer enabled (present in real Chrome)
+    Object.defineProperty(navigator, 'pdfViewerEnabled', {
+        get: () => true
     });
     
     // 14. Languages spoofing (make configurable first)
@@ -470,7 +593,92 @@ func GenerateStealthScript(config *StealthConfig) string {
     Object.defineProperty(navigator, 'doNotTrack', {
         get: () => '1'
     });
-    
+
+    // 21. AudioContext Spoofing (consistent sample rate and latency)
+    try {
+        const OrigAudioContext = window.AudioContext || window.webkitAudioContext;
+        if (OrigAudioContext) {
+            const origProto = OrigAudioContext.prototype;
+            const origCreateOscillator = origProto.createOscillator;
+            const origCreateDynamicsCompressor = origProto.createDynamicsCompressor;
+            Object.defineProperty(origProto, 'sampleRate', { get: () => 48000 });
+            Object.defineProperty(origProto, 'baseLatency', { get: () => 0.005333 });
+            Object.defineProperty(origProto, 'outputLatency', { get: () => 0.016 });
+            // Ensure createOscillator and createDynamicsCompressor exist
+            if (!origCreateOscillator) {
+                origProto.createOscillator = function() { return { connect: () => {}, start: () => {}, frequency: { value: 440 } }; };
+            }
+            if (!origCreateDynamicsCompressor) {
+                origProto.createDynamicsCompressor = function() { return { connect: () => {}, reduction: { value: 0 } }; };
+            }
+        }
+    } catch(e) {}
+
+    // 22. Headless Detection Mitigations
+    // Realistic window dimension gaps (title bar + taskbar simulation)
+    try {
+        Object.defineProperty(window, 'outerHeight', {
+            get: () => %d + 85  // screenHeight + title bar + taskbar
+        });
+        Object.defineProperty(window, 'outerWidth', {
+            get: () => %d       // screenWidth (maximized window)
+        });
+    } catch(e) {}
+
+    // Notification.permission — headless returns 'denied', real browsers default 'default'
+    try {
+        Object.defineProperty(Notification, 'permission', {
+            get: () => 'default'
+        });
+    } catch(e) {}
+
+    // chrome.loadTimes() — present in real Chrome, absent in headless
+    if (window.chrome) {
+        window.chrome.loadTimes = function() {
+            return {
+                commitLoadTime: Date.now() / 1000 - Math.random() * 2,
+                connectionInfo: 'h2',
+                finishDocumentLoadTime: Date.now() / 1000 - Math.random() * 0.5,
+                finishLoadTime: Date.now() / 1000 - Math.random() * 0.3,
+                firstPaintAfterLoadTime: 0,
+                firstPaintTime: Date.now() / 1000 - Math.random() * 1.5,
+                navigationType: 'Other',
+                npnNegotiatedProtocol: 'h2',
+                requestTime: Date.now() / 1000 - Math.random() * 3,
+                startLoadTime: Date.now() / 1000 - Math.random() * 2.5,
+                wasAlternateProtocolAvailable: false,
+                wasFetchedViaSpdy: true,
+                wasNpnNegotiated: true
+            };
+        };
+        window.chrome.csi = function() {
+            return {
+                onloadT: Date.now(),
+                pageT: Math.random() * 3000 + 500,
+                startE: Date.now() - Math.random() * 5000,
+                tran: 15
+            };
+        };
+    }
+
+    // Intl locale must match navigator.language
+    try {
+        const origDateTimeFormat = Intl.DateTimeFormat;
+        Intl.DateTimeFormat = function(...args) {
+            const instance = new origDateTimeFormat(...args);
+            const origResolvedOptions = instance.resolvedOptions.bind(instance);
+            instance.resolvedOptions = function() {
+                const opts = origResolvedOptions();
+                opts.locale = navigator.language || 'en-US';
+                return opts;
+            };
+            return instance;
+        };
+        Object.setPrototypeOf(Intl.DateTimeFormat, origDateTimeFormat);
+        Intl.DateTimeFormat.prototype = origDateTimeFormat.prototype;
+        Intl.DateTimeFormat.supportedLocalesOf = origDateTimeFormat.supportedLocalesOf;
+    } catch(e) {}
+
     console.log('[Stealth] Anti-detection scripts injected successfully');
 })();
 `,
@@ -481,6 +689,8 @@ func GenerateStealthScript(config *StealthConfig) string {
 		screenWidth, screenHeight-40, // minus taskbar
 		screenWidth-80, screenHeight-80, // inner window
 		screenWidth, screenHeight, // outer
+		devicePixelRatio,    // devicePixelRatio
+		screenY, screenY,    // screenY, screenTop (slight offset for realism)
 		timezone,
 		getTimezoneOffset(timezone),
 		timezone,
@@ -491,7 +701,9 @@ func GenerateStealthScript(config *StealthConfig) string {
 		platformVersion,
 		chromeVersion,
 		config.WebGLVendor,
-		config.WebGLRenderer)
+		config.WebGLRenderer,
+		canvasNoiseStrength,       // canvas noise strength
+		screenHeight, screenWidth) // headless patches (outerHeight, outerWidth)
 
 	// --- Phase 16: Dynamic RL Mutable Evasion Logic ---
 
@@ -511,17 +723,8 @@ func GenerateStealthScript(config *StealthConfig) string {
 
 	if !config.PluginsSync {
 		// Enforce penalty detectable mock if RL agent failed to mutate
-		script = strings.Replace(script, `get: () => [
-            {
-                name: 'Chrome PDF Plugin',
-                filename: 'internal-pdf-viewer',
-                description: 'Portable Document Format',
-                version: 'undefined',
-                length: 1,
-                item: () => null,
-                namedItem: () => null
-            }
-        ]`, `get: () => [1, 2, 3, 4, 5]`, 1)
+		script = strings.Replace(script, `name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format'`,
+			`name: 'Detectable Plugin', filename: 'detectable'`, 1)
 	}
 
 	if !config.GeometrySync {
@@ -564,6 +767,11 @@ window.navigator.permissions.query = function(parameters) {
 		// Mismatch the timezone offset intentionally
 		script = strings.Replace(script, fmt.Sprintf(`return %d;  // minutes offset from UTC`, getTimezoneOffset(timezone)),
 			`return 0;  // mismatched default offset`, 1)
+	}
+
+	// --- Phase 23: WebRTC Leak Prevention ---
+	if config.WebRTC != nil {
+		script += "\n" + GenerateWebRTCScript(config.WebRTC)
 	}
 
 	return script
@@ -694,15 +902,15 @@ func RandomBirthDate() string {
 	return fmt.Sprintf("%02d/%02d/%d", day, month, birthDate.Year())
 }
 
-// UserAgents for rotation
+// UserAgents for rotation (updated to 2025-2026 era)
 var UserAgents = []string{
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.2277.83",
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36 Edg/123.0.2420.65",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 13_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 13_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.2210.61",
-	"Mozilla/5.0 (Macintosh; Intel Mac OS X 12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36 Edg/133.0.3065.82",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 15_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+	"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.2903.99",
+	"Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
 }
 
 // RandomUserAgent returns a random user agent
@@ -760,13 +968,17 @@ func randomGPUVendor() string {
 
 func randomGPURenderer() string {
 	renderers := []string{
-		"Intel(R) Iris(TM) Xe Graphics",
-		"Intel(R) UHD Graphics",
-		"NVIDIA GeForce GTX 1060",
+		"Intel(R) Iris(R) Xe Graphics",
+		"Intel(R) UHD Graphics 770",
+		"Intel(R) Arc(TM) A770",
 		"NVIDIA GeForce RTX 3060",
-		"AMD Radeon RX 580",
-		"Apple M1",
+		"NVIDIA GeForce RTX 4060",
+		"NVIDIA GeForce RTX 4070",
+		"AMD Radeon RX 6700 XT",
+		"AMD Radeon RX 7600",
 		"Apple M2",
+		"Apple M3",
+		"Apple M4",
 	}
 	return renderers[rand.Intn(len(renderers))]
 }

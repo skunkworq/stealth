@@ -37,7 +37,7 @@ func NewFormRequest(url string, formData FormData) *FormRequest {
 func (r *FormRequest) SetFormData(data FormData) {
 	r.FormData = data
 	r.Body = []byte(data.Encode())
-	r.Request.Headers["Content-Type"] = []string{"application/x-www-form-urlencoded"}
+	r.Headers["Content-Type"] = []string{"application/x-www-form-urlencoded"}
 }
 
 func (r *FormRequest) SetField(name, value string) {
@@ -53,8 +53,11 @@ type JsonRequest struct {
 	Data interface{}
 }
 
-func NewJsonRequest(url string, data interface{}) *JsonRequest {
-	body, _ := json.Marshal(data)
+func NewJsonRequest(url string, data interface{}) (*JsonRequest, error) {
+	body, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal JSON data: %w", err)
+	}
 	return &JsonRequest{
 		Request: &Request{
 			Method:  "POST",
@@ -63,7 +66,7 @@ func NewJsonRequest(url string, data interface{}) *JsonRequest {
 			Body:    body,
 		},
 		Data: data,
-	}
+	}, nil
 }
 
 func (r *JsonRequest) SetData(data interface{}) error {
@@ -73,7 +76,7 @@ func (r *JsonRequest) SetData(data interface{}) error {
 		return err
 	}
 	r.Body = body
-	r.Request.Headers["Content-Type"] = []string{"application/json"}
+	r.Headers["Content-Type"] = []string{"application/json"}
 	return nil
 }
 

@@ -2,6 +2,7 @@ package adversarial
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -338,8 +339,22 @@ func (cs *CaptchaShield) RecordEvent(challengeID string, event CaptchaEvent) err
 		return fmt.Errorf("challenge not found: %s", challengeID)
 	}
 
-	event.Timestamp = time.Now().UnixMilli()
-	event.ElapsedMs = event.Timestamp - challenge.StartedAt.UnixMilli()
+	// Determine event timestamp from the best available source:
+	// 1. ElapsedMs > 0: pre-computed relative timing (e.g., GenerateHumanEvents)
+	// 2. Timestamp is a valid absolute ms epoch (e.g., frontend Date.now()):
+	//    detect by checking it falls within [challenge start - 1min, now + 1min]
+	// 3. Fallback: use time.Now() for real-time single-event recording
+	startMs := challenge.StartedAt.UnixMilli()
+	nowMs := time.Now().UnixMilli()
+	if event.ElapsedMs > 0 {
+		event.Timestamp = startMs + event.ElapsedMs
+	} else if event.Timestamp > startMs-60000 && event.Timestamp < nowMs+60000 {
+		// Frontend sent an absolute timestamp (Date.now()) — preserve it
+		event.ElapsedMs = event.Timestamp - startMs
+	} else {
+		event.Timestamp = nowMs
+		event.ElapsedMs = nowMs - startMs
+	}
 
 	challenge.Events = append(challenge.Events, event)
 	challenge.Metrics.EventCount++
@@ -376,11 +391,25 @@ func (cs *CaptchaShield) ValidateChallenge(challengeID, solution string) (bool, 
 	}
 
 	challenge.CompletedAt = time.Now()
-	challenge.Solved = true
 	challenge.Solution = solution
 	challenge.Metrics.SolveTimeMs = challenge.CompletedAt.UnixMilli() - challenge.StartedAt.UnixMilli()
 
-	valid := solution != ""
+	// Check expiration
+	if time.Now().After(challenge.ExpiresAt) {
+		challenge.Metrics.WrongAttempts++
+		challenge.Metrics.AttemptCount++
+		return false, challenge.Metrics
+	}
+
+	// Validate against the actual answer stored in the challenge
+	valid := false
+	if expectedText, ok := challenge.Challenge["text"].(string); ok && expectedText != "" {
+		valid = strings.EqualFold(strings.TrimSpace(solution), strings.TrimSpace(expectedText))
+	} else if solution != "" {
+		// Non-text captchas (behavioral, turnstile, etc.) — backward compat
+		valid = true
+	}
+	challenge.Solved = valid
 
 	if valid {
 		challenge.Metrics.CorrectAttempts++
@@ -395,11 +424,16 @@ func (cs *CaptchaShield) ValidateChallenge(challengeID, solution string) (bool, 
 	}
 
 	if cs.config.RecordTrainingData {
+		var traceMetrics *TraceMetrics
 		botScore := 0.0
 		if !valid {
 			botScore = 0.8
 		}
-		cs.trainingData.RecordChallengeResult(challenge, valid, nil, botScore)
+		if trace, ok := cs.tracer.GetTrace(challenge.ID); ok && trace != nil {
+			traceMetrics = trace.Metrics
+			botScore = cs.tracer.CalculateBotScore(trace)
+		}
+		cs.trainingData.RecordChallengeResult(challenge, valid, traceMetrics, botScore)
 	}
 
 	return valid, challenge.Metrics

@@ -31,12 +31,25 @@ func TestSnifferIntegrationLifecycle(t *testing.T) {
 	}
 	defer sniffer.Stop()
 
-	// Boot the server to trigger network activity
-	err = server.Start()
-	if err != nil {
-		t.Fatalf("Failed to start server: %v", err)
+	// Boot the server in a goroutine — Start() blocks until Stop() is called
+	startErr := make(chan error, 1)
+	go func() {
+		startErr <- server.Start()
+	}()
+
+	// Give the server a moment to bind its listeners
+	time.Sleep(500 * time.Millisecond)
+
+	// Check if Start() returned an error immediately
+	select {
+	case err := <-startErr:
+		if err != nil {
+			t.Fatalf("Failed to start server: %v", err)
+		}
+	default:
+		// Still running — expected
 	}
-	
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*2)
 	defer cancel()
 	defer func() { _ = server.Stop(ctx) }()

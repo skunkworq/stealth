@@ -41,6 +41,20 @@ const (
 	VectorTiming VectorCategory = "timing"
 	// VectorPlugin is the plugin fingerprinting category.
 	VectorPlugin VectorCategory = "plugin"
+	// VectorWebRTC is the WebRTC fingerprinting category.
+	VectorWebRTC VectorCategory = "webrtc"
+	// VectorIsomorphic is the cross-vector consistency category.
+	VectorIsomorphic VectorCategory = "isomorphic"
+	// VectorAudio is the AudioContext fingerprinting category.
+	VectorAudio VectorCategory = "audio"
+	// VectorAutomation is the automation tool detection category.
+	VectorAutomation VectorCategory = "automation"
+	// VectorHeadless is the headless browser detection category.
+	VectorHeadless VectorCategory = "headless"
+	// VectorFingerprintCoverage detects Chrome Client Hints with zero JS fingerprint data.
+	VectorFingerprintCoverage VectorCategory = "fingerprint_coverage"
+	// VectorCrossVector detects temporal/spatial inconsistencies across independent vectors.
+	VectorCrossVector VectorCategory = "cross_vector"
 )
 
 // FingerprintVector represents a single fingerprinting detection vector.
@@ -330,6 +344,47 @@ func (vm *VectorMap) initVectors() {
 		Checks: []VectorCheck{
 			{Name: "ttfb", Field: "ttfb", Operator: "eq", Value: 0, Weight: 0.4, Message: "Zero TTFB"},
 			{Name: "navigation_timing", Field: "has_nav_timing", Operator: "eq", Value: false, Weight: 0.3, Message: "Missing Navigation Timing"},
+		},
+	}
+
+	vm.vectors[string(VectorWebRTC)] = &FingerprintVector{
+		Category:    VectorWebRTC,
+		Name:        "WebRTC Fingerprint",
+		Description: "Detects WebRTC-based IP leak vectors and spoofing artifacts",
+		Severity:    0.9,
+		Patterns: []VectorPattern{
+			{Name: "rtc_disabled", Pattern: "RTCPeerConnection", Weight: 0.3, MatchType: "missing"},
+			{Name: "rtc_no_candidates", Pattern: "icecandidate", Weight: 0.3, MatchType: "missing"},
+			{Name: "rtc_ip_mismatch", Pattern: "ip_mismatch", Weight: 0.5, MatchType: "custom"},
+		},
+		Thresholds: map[string]float64{
+			"max_ip_mismatch_score": 0.5,
+		},
+		Checks: []VectorCheck{
+			{Name: "rtc_disabled", Field: "rtc_available", Operator: "eq", Value: false, Weight: 0.3, Message: "WebRTC completely disabled — may flag as non-standard browser"},
+			{Name: "rtc_no_candidates", Field: "ice_candidate_count", Operator: "eq", Value: 0, Weight: 0.3, Message: "No ICE candidates generated"},
+			{Name: "rtc_ip_mismatch", Field: "ip_mismatch", Operator: "eq", Value: true, Weight: 0.5, Message: "WebRTC IP does not match request source IP"},
+			{Name: "rtc_proxy_constructor", Field: "constructor_proxied", Operator: "eq", Value: true, Weight: 0.2, Message: "RTCPeerConnection constructor appears proxied"},
+		},
+	}
+
+	vm.vectors[string(VectorCanvas)] = &FingerprintVector{
+		Category:    VectorCanvas,
+		Name:        "Canvas Fingerprint",
+		Description: "Detects canvas fingerprinting anomalies and spoofing",
+		Severity:    0.7,
+		Patterns: []VectorPattern{
+			{Name: "canvas_inconsistent", Pattern: "multi_render_mismatch", Weight: 0.4, MatchType: "custom"},
+			{Name: "canvas_prototype_modified", Pattern: "prototype_modified", Weight: 0.3, MatchType: "custom"},
+			{Name: "canvas_software_renderer", Pattern: "SwiftShader", Weight: 0.3, MatchType: "contains"},
+		},
+		Thresholds: map[string]float64{
+			"max_inconsistency_score": 0.5,
+		},
+		Checks: []VectorCheck{
+			{Name: "canvas_inconsistent", Field: "multi_render_consistent", Operator: "eq", Value: false, Weight: 0.4, Message: "Canvas renders inconsistently across calls (noise injection detected)"},
+			{Name: "canvas_prototype_modified", Field: "prototype_intact", Operator: "eq", Value: false, Weight: 0.3, Message: "Canvas prototype methods have been modified"},
+			{Name: "canvas_software_renderer", Field: "renderer", Operator: "contains", Value: "SwiftShader", Weight: 0.3, Message: "Software renderer detected (common in headless)"},
 		},
 	}
 }
@@ -828,7 +883,7 @@ func (vm *VectorMap) CompareToBaseline(category VectorCategory, fp interface{}) 
 				}
 			}
 		}
-	case VectorHTTP2, VectorBehavioral, VectorWebGL, VectorCanvas, VectorFont, VectorScreen, VectorNavigator, VectorTiming, VectorPlugin:
+	case VectorHTTP2, VectorBehavioral, VectorWebGL, VectorCanvas, VectorFont, VectorScreen, VectorNavigator, VectorTiming, VectorPlugin, VectorWebRTC:
 		// Not yet implemented
 	}
 
@@ -892,7 +947,7 @@ func (vm *VectorMap) GenerateReport() string {
 	var b strings.Builder
 	b.WriteString("=== Fingerprint Vector Analysis Report ===\n\n")
 
-	categories := []VectorCategory{VectorTLS, VectorHTTP, VectorHTTP2, VectorBehavioral, VectorNavigator, VectorTiming}
+	categories := []VectorCategory{VectorTLS, VectorHTTP, VectorHTTP2, VectorBehavioral, VectorNavigator, VectorTiming, VectorWebRTC, VectorCanvas}
 	for _, cat := range categories {
 		vec := vm.vectors[string(cat)]
 		if vec == nil {
@@ -929,6 +984,151 @@ func (vm *VectorMap) GenerateReport() string {
 	}
 
 	return b.String()
+}
+
+// WebRTCData represents WebRTC fingerprinting data collected from a browser session.
+type WebRTCData struct {
+	RTCAvailable       bool     `json:"rtc_available"`
+	ICECandidateCount  int      `json:"ice_candidate_count"`
+	LocalIPs           []string `json:"local_ips"`
+	RequestSourceIP    string   `json:"request_source_ip"`
+	ConstructorProxied bool     `json:"constructor_proxied"`
+	RelayOnly          bool     `json:"relay_only"`
+}
+
+// CanvasData represents canvas fingerprinting data collected from a browser session.
+type CanvasData struct {
+	MultiRenderConsistent bool   `json:"multi_render_consistent"`
+	PrototypeIntact       bool   `json:"prototype_intact"`
+	Renderer              string `json:"renderer"`
+	CanvasHash            string `json:"canvas_hash"`
+}
+
+// AnalyzeWebRTC analyzes WebRTC data for leak prevention and spoofing detection.
+func (vm *VectorMap) AnalyzeWebRTC(data *WebRTCData) *VectorResult {
+	vm.mu.RLock()
+	vec := vm.vectors[string(VectorWebRTC)]
+	vm.mu.RUnlock()
+
+	result := &VectorResult{
+		Vector:     vec.Name,
+		Category:   vec.Category,
+		Detected:   false,
+		Score:      0,
+		Indicators: make([]VectorIndicator, 0),
+	}
+
+	if !data.RTCAvailable {
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "rtc_disabled",
+			Message: "WebRTC completely disabled",
+			Weight:  0.3,
+			Field:   "rtc_available",
+			Value:   "false",
+		})
+		result.Score += 0.3
+	}
+
+	if data.ICECandidateCount == 0 && data.RTCAvailable {
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "rtc_no_candidates",
+			Message: "WebRTC enabled but no ICE candidates generated",
+			Weight:  0.3,
+			Field:   "ice_candidate_count",
+			Value:   "0",
+		})
+		result.Score += 0.3
+	}
+
+	// Check for IP mismatch between WebRTC local IPs and request source
+	if data.RequestSourceIP != "" && len(data.LocalIPs) > 0 {
+		mismatch := true
+		for _, ip := range data.LocalIPs {
+			if ip == data.RequestSourceIP {
+				mismatch = false
+				break
+			}
+		}
+		if mismatch {
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "rtc_ip_mismatch",
+				Message: "WebRTC local IP does not match request source IP",
+				Weight:  0.5,
+				Field:   "ip_mismatch",
+				Value:   "true",
+			})
+			result.Score += 0.5
+		}
+	}
+
+	if data.ConstructorProxied {
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "rtc_proxy_constructor",
+			Message: "RTCPeerConnection constructor appears proxied",
+			Weight:  0.2,
+			Field:   "constructor_proxied",
+			Value:   "true",
+		})
+		result.Score += 0.2
+	}
+
+	result.Score = minFloat(1.0, result.Score)
+	result.Detected = result.Score > 0.3
+
+	return result
+}
+
+// AnalyzeCanvas analyzes canvas fingerprint data for spoofing detection.
+func (vm *VectorMap) AnalyzeCanvas(data *CanvasData) *VectorResult {
+	vm.mu.RLock()
+	vec := vm.vectors[string(VectorCanvas)]
+	vm.mu.RUnlock()
+
+	result := &VectorResult{
+		Vector:     vec.Name,
+		Category:   vec.Category,
+		Detected:   false,
+		Score:      0,
+		Indicators: make([]VectorIndicator, 0),
+	}
+
+	if !data.MultiRenderConsistent {
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "canvas_inconsistent",
+			Message: "Canvas renders inconsistently across calls (noise injection detected)",
+			Weight:  0.4,
+			Field:   "multi_render_consistent",
+			Value:   "false",
+		})
+		result.Score += 0.4
+	}
+
+	if !data.PrototypeIntact {
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "canvas_prototype_modified",
+			Message: "Canvas prototype methods have been modified",
+			Weight:  0.3,
+			Field:   "prototype_intact",
+			Value:   "false",
+		})
+		result.Score += 0.3
+	}
+
+	if strings.Contains(data.Renderer, "SwiftShader") || strings.Contains(data.Renderer, "llvmpipe") {
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "canvas_software_renderer",
+			Message: fmt.Sprintf("Software renderer detected: %s", data.Renderer),
+			Weight:  0.3,
+			Field:   "renderer",
+			Value:   data.Renderer,
+		})
+		result.Score += 0.3
+	}
+
+	result.Score = minFloat(1.0, result.Score)
+	result.Detected = result.Score > 0.3
+
+	return result
 }
 
 // SortHeaderOrder returns headers sorted in a canonical order.

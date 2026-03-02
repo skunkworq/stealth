@@ -146,22 +146,67 @@ func (g *Generator) generateText() (*Captcha, error) {
 
 	draw.Draw(img, img.Bounds(), &image.Uniform{cfg.BackgroundColor}, image.Point{}, draw.Src)
 
+	// Draw background grid first (anti-segmentation)
+	if cfg.BackgroundGrid {
+		g.addBackgroundGrid(img)
+	}
+
 	text := g.generateRandomText(cfg.Length, cfg.CharSet)
 
-	charWidth := cfg.Width / cfg.Length
-	startX := (cfg.Width - cfg.Length*charWidth) / 2
+	// Calculate character placement with overlap support
+	baseCharWidth := cfg.Width / cfg.Length
+	spacing := baseCharWidth
+	if cfg.OverlapPx > 0 {
+		spacing = baseCharWidth - cfg.OverlapPx
+		if spacing < baseCharWidth/2 {
+			spacing = baseCharWidth / 2 // don't collapse below half-width
+		}
+	}
+	totalWidth := spacing*(cfg.Length-1) + baseCharWidth
+	startX := (cfg.Width - totalWidth) / 2
 
 	for i := 0; i < len(text); i++ {
-		x := startX + i*charWidth + 2
-		g.drawCharAt(img, string(text[i]), x, 10, cfg.FontSize)
+		x := startX + i*spacing + g.rng.Intn(3) - 1 // ±1px jitter
+
+		// Per-character font size variation (±20%)
+		fontSize := cfg.FontSize
+		if cfg.PerCharSize {
+			variation := float64(cfg.FontSize) * 0.2
+			fontSize = cfg.FontSize + int(g.rng.FloatBetween(-variation, variation))
+			if fontSize < 12 {
+				fontSize = 12
+			}
+		}
+
+		// Per-character y-offset for baseline wobble (±5px)
+		yOffset := 10 + g.rng.Intn(11) - 5
+
+		if cfg.PerCharColor {
+			g.drawCharAtWithColor(img, string(text[i]), x, yOffset, fontSize, g.randomDarkColor())
+		} else {
+			g.drawCharAt(img, string(text[i]), x, yOffset, fontSize)
+		}
 	}
 
 	if cfg.NoiseLines > 0 {
-		g.addNoiseLines(img, cfg.NoiseLines)
+		if cfg.ThickNoiseLines {
+			g.addThickNoiseLines(img, cfg.NoiseLines)
+		} else {
+			g.addNoiseLines(img, cfg.NoiseLines)
+		}
 	}
 
 	if cfg.NoiseDots > 0 {
 		g.addNoiseDots(img, cfg.NoiseDots)
+	}
+
+	// Apply whole-image wave deformation if enabled
+	if cfg.Wave {
+		if cfg.WaveFrequencies > 1 {
+			g.applyMultiWaveDeformation(img)
+		} else {
+			g.applyWaveDeformation(img)
+		}
 	}
 
 	id := g.generateID(text)
@@ -474,14 +519,6 @@ func (g *Generator) drawCharAt(img *image.RGBA, text string, x, y, size int) {
 							fx := x + i*charWidth + charX + px
 							fy := y + charY + py
 
-							// Apply wave deformation if enabled (Stronger now)
-							if g.config.Wave {
-								ampl := float64(g.config.Height) / 10.0
-								freq := 20.0
-								fy += int(ampl * math.Sin(float64(fx)/freq))
-								fx += int(ampl/2.0 * math.Cos(float64(fy)/freq))
-							}
-
 							// Apply some random jitter
 							if g.rng.Intn(100) < 15 {
 								fx += g.rng.Intn(3) - 1
@@ -494,6 +531,206 @@ func (g *Generator) drawCharAt(img *image.RGBA, text string, x, y, size int) {
 						}
 					}
 				}
+			}
+		}
+	}
+}
+
+// drawCharAtWithColor draws a character with a specific color.
+func (g *Generator) drawCharAtWithColor(img *image.RGBA, text string, x, y, size int, textColor color.RGBA) {
+	charWidth := size / 2
+	charHeight := size
+	pixelSize := size / 7
+
+	for i, r := range strings.ToUpper(text) {
+		bitmap, ok := font5x7[r]
+		if !ok {
+			for py := 0; py < charHeight; py++ {
+				for px := 0; px < charWidth; px++ {
+					img.Set(x+i*charWidth+px, y+py, textColor)
+				}
+			}
+			continue
+		}
+
+		angle := 0.0
+		if g.config.Rotate {
+			angle = g.rng.FloatBetween(-0.15, 0.15)
+		}
+		cosA := math.Cos(angle)
+		sinA := math.Sin(angle)
+
+		for row := 0; row < 7; row++ {
+			for col := 0; col < 5; col++ {
+				if (bitmap[row]>>(7-col))&1 == 1 {
+					cx := float64(charWidth) / 2.0
+					cy := float64(charHeight) / 2.0
+
+					rx := float64(col*pixelSize+pixelSize/2) - cx
+					ry := float64(row*pixelSize+pixelSize/2) - cy
+
+					rotX := rx*cosA - ry*sinA
+					rotY := rx*sinA + ry*cosA
+
+					charX := int(rotX + cx)
+					charY := int(rotY + cy)
+
+					for py := 0; py < pixelSize; py++ {
+						for px := 0; px < pixelSize; px++ {
+							fx := x + i*charWidth + charX + px
+							fy := y + charY + py
+							if g.rng.Intn(100) < 15 {
+								fx += g.rng.Intn(3) - 1
+								fy += g.rng.Intn(3) - 1
+							}
+							if fx >= 0 && fx < img.Bounds().Dx() && fy >= 0 && fy < img.Bounds().Dy() {
+								img.Set(fx, fy, textColor)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// randomDarkColor returns a random dark color suitable for captcha text.
+func (g *Generator) randomDarkColor() color.RGBA {
+	return color.RGBA{
+		R: byte(g.rng.Intn(150)),
+		G: byte(g.rng.Intn(150)),
+		B: byte(g.rng.Intn(150)),
+		A: 255,
+	}
+}
+
+// applyMultiWaveDeformation layers multiple sine waves with different frequencies.
+func (g *Generator) applyMultiWaveDeformation(img *image.RGBA) {
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	numLayers := g.config.WaveFrequencies
+	if numLayers < 1 {
+		numLayers = 1
+	}
+
+	tempImg := image.NewRGBA(bounds)
+	draw.Draw(tempImg, bounds, img, bounds.Min, draw.Src)
+	draw.Draw(img, bounds, &image.Uniform{g.config.BackgroundColor}, bounds.Min, draw.Src)
+
+	// Pre-compute wave parameters per layer
+	type waveLayer struct {
+		ampX, ampY     float64
+		periodX, periodY float64
+		phaseX, phaseY float64
+	}
+	layers := make([]waveLayer, numLayers)
+	for l := 0; l < numLayers; l++ {
+		decay := 1.0 - 0.3*float64(l)
+		layers[l] = waveLayer{
+			ampX:    g.config.WaveAmplitude * decay,
+			ampY:    g.config.WaveAmplitude * decay * 0.8,
+			periodX: float64(60 + g.rng.Intn(80)),
+			periodY: float64(60 + g.rng.Intn(80)),
+			phaseX:  g.rng.FloatBetween(0, 2*math.Pi),
+			phaseY:  g.rng.FloatBetween(0, 2*math.Pi),
+		}
+	}
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			offsetX := 0.0
+			offsetY := 0.0
+			for _, l := range layers {
+				offsetX += l.ampX * math.Sin(float64(y)/l.periodX*2*math.Pi+l.phaseX)
+				offsetY += l.ampY * math.Sin(float64(x)/l.periodY*2*math.Pi+l.phaseY)
+			}
+
+			srcX := int(math.Round(float64(x) + offsetX))
+			srcY := int(math.Round(float64(y) + offsetY))
+
+			if srcX >= 0 && srcX < width && srcY >= 0 && srcY < height {
+				img.Set(x, y, tempImg.At(srcX, srcY))
+			}
+		}
+	}
+}
+
+// addThickNoiseLines draws noise lines 2-4px wide by drawing at multiple offsets.
+func (g *Generator) addThickNoiseLines(img *image.RGBA, count int) {
+	for i := 0; i < count; i++ {
+		x1 := g.rng.Intn(img.Bounds().Dx())
+		y1 := g.rng.Intn(img.Bounds().Dy())
+		x2 := g.rng.Intn(img.Bounds().Dx())
+		y2 := g.rng.Intn(img.Bounds().Dy())
+
+		c := color.RGBA{
+			R: byte(g.rng.Intn(256)),
+			G: byte(g.rng.Intn(256)),
+			B: byte(g.rng.Intn(256)),
+			A: 128,
+		}
+
+		thickness := 2 + g.rng.Intn(3) // 2-4px
+		for off := 0; off < thickness; off++ {
+			g.drawLine(img, x1, y1+off, x2, y2+off, c)
+			g.drawLine(img, x1+off, y1, x2+off, y2, c)
+		}
+	}
+}
+
+// addBackgroundGrid draws a faint grid pattern that defeats vertical projection segmentation.
+func (g *Generator) addBackgroundGrid(img *image.RGBA) {
+	bounds := img.Bounds()
+	gridSpacing := 8 + g.rng.Intn(5) // 8-12px
+	gridColor := color.RGBA{R: 200, G: 200, B: 200, A: 40}
+
+	// Vertical lines
+	for x := gridSpacing; x < bounds.Dx(); x += gridSpacing {
+		for y := 0; y < bounds.Dy(); y++ {
+			img.Set(x, y, gridColor)
+		}
+	}
+	// Horizontal lines
+	for y := gridSpacing; y < bounds.Dy(); y += gridSpacing {
+		for x := 0; x < bounds.Dx(); x++ {
+			img.Set(x, y, gridColor)
+		}
+	}
+}
+
+// applyWaveDeformation applies a sine wave distortion to the entire image
+func (g *Generator) applyWaveDeformation(img *image.RGBA) {
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+	
+	// Create a temporary copy to read from while writing to img
+	tempImg := image.NewRGBA(bounds)
+	draw.Draw(tempImg, bounds, img, bounds.Min, draw.Src)
+	draw.Draw(img, bounds, &image.Uniform{g.config.BackgroundColor}, bounds.Min, draw.Src) // clear original
+	
+	amplitudeX := float64(g.rng.IntBetween(1, 3))
+	amplitudeY := float64(g.rng.IntBetween(1, 3))
+	periodX := float64(g.rng.IntBetween(80, 150))
+	periodY := float64(g.rng.IntBetween(80, 150))
+	
+	phaseX := g.rng.FloatBetween(0, 2*math.Pi)
+	phaseY := g.rng.FloatBetween(0, 2*math.Pi)
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			// Calculate source pixel coordinates with reverse sine wave offset
+			srcX := float64(x) + amplitudeX*math.Sin(float64(y)/periodX*2*math.Pi+phaseX)
+			srcY := float64(y) + amplitudeY*math.Sin(float64(x)/periodY*2*math.Pi+phaseY)
+			
+			// Nearest neighbor interpolation
+			ix := int(math.Round(srcX))
+			iy := int(math.Round(srcY))
+			
+			if ix >= 0 && ix < width && iy >= 0 && iy < height {
+				img.Set(x, y, tempImg.At(ix, iy))
 			}
 		}
 	}

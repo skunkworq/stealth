@@ -314,11 +314,12 @@ func extractFormInfo(n *htmlNode) *FormInfo {
 					Value: getAttr(node, "value"),
 				}
 				if field.Type == "" {
-					if tagName == atom.Textarea {
+					switch tagName {
+					case atom.Textarea:
 						field.Type = "textarea"
-					} else if tagName == atom.Select {
+					case atom.Select:
 						field.Type = "select"
-					} else {
+					default:
 						field.Type = "text"
 					}
 				}

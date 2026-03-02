@@ -141,14 +141,16 @@ func TestPipelineConcurrentExtraction(t *testing.T) {
 }
 
 func TestVectorIndexConcurrentSearch(t *testing.T) {
-	cache, err := NewCacheStore(context.Background(), ":memory:")
+	cache, err := NewCacheStore(context.Background(), "")
 	if err != nil {
 		t.Skipf("cache init failed: %v", err)
 	}
 	defer cache.Close()
 
 	node := &SemanticNode{ID: "test", Summary: "Test", TokenCount: 100}
-	for i := 0; i < 10; i++ {
+
+	// Seed some data first
+	for i := 0; i < 5; i++ {
 		if err := cache.PutChunk(context.Background(), "key-"+string(rune('a'+i)), node); err != nil {
 			t.Fatalf("PutChunk failed: %v", err)
 		}

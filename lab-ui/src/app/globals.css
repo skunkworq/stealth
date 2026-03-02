@@ -101,7 +101,9 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
   }
 }
 
@@ -151,12 +153,12 @@
 
   .skeuo-button:active {
     background: linear-gradient(180deg, #252530 0%, #2a2a34 100%);
-    box-shadow:
-      0 2px 4px rgba(0, 0, 0, 0.5) inset;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5) inset;
   }
 
   .led-green {
-    width: 8px; height: 8px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: #34d399;
     box-shadow:
@@ -165,7 +167,8 @@
   }
 
   .led-amber {
-    width: 8px; height: 8px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: #fbbf24;
     box-shadow:
@@ -174,7 +177,8 @@
   }
 
   .led-red {
-    width: 8px; height: 8px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: #f87171;
     box-shadow:
@@ -183,7 +187,8 @@
   }
 
   .screw-hole {
-    width: 10px; height: 10px;
+    width: 10px;
+    height: 10px;
     border-radius: 50%;
     background: linear-gradient(135deg, #1a1a1f 0%, #252530 100%);
     border: 1px solid rgba(0, 0, 0, 0.5);
@@ -198,7 +203,7 @@
     box-shadow:
       0 3px 10px rgba(0, 0, 0, 0.6) inset,
       0 1px 0 rgba(255, 255, 255, 0.03);
-    font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
   }
 
   .metal-divider {

@@ -2,6 +2,7 @@ package adversarial
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"math"
 	"sync"
@@ -195,31 +196,137 @@ func (ct *CaptchaTracer) GetTrace(challengeID string) (*CaptchaTrace, bool) {
 	return trace, ok
 }
 
-// CalculateBotScore calculates a bot score from trace metrics.
+// CalculateBotScore calculates a bot score from trace metrics using both the quick
+// heuristic checks and the full BehavioralAnalyzer's 8-check suite.
+// The final score is the max of both to ensure either path catches bots.
 func (ct *CaptchaTracer) CalculateBotScore(trace *CaptchaTrace) float64 {
-	score := 0.0
+	// Quick heuristic score (original 4 checks)
+	quickScore := 0.0
 
 	if trace.Metrics.TotalEvents < 5 {
-		score += 0.4
+		quickScore += 0.4
 	}
 
 	if trace.Metrics.MouseVelocity > 1000 || trace.Metrics.MouseVelocity < 10 {
-		score += 0.2
+		quickScore += 0.2
 	}
 
 	if trace.Metrics.LongPauses == 0 && trace.Metrics.TotalEvents > 10 {
-		score += 0.2
+		quickScore += 0.2
 	}
 
 	if trace.Metrics.TypingSpeed > 500 || trace.Metrics.TypingSpeed < 30 {
-		score += 0.1
+		quickScore += 0.1
 	}
 
+	if quickScore > 1.0 {
+		quickScore = 1.0
+	}
+
+	// Enhanced: Build EnhancedBehavioralEvents from trace events and run BehavioralAnalyzer
+	enhanced := ct.buildEnhancedEvents(trace)
+	analyzer := NewBehavioralAnalyzer(nil) // default config
+	result := analyzer.Analyze(enhanced)
+
+	analyzerScore := result.Score
+
+	// Return whichever is higher — either path catches bots
+	if analyzerScore > quickScore {
+		return analyzerScore
+	}
+	return quickScore
+}
+
+// CalculateBotScoreDetailed returns the bot score plus the full behavioral analysis result.
+func (ct *CaptchaTracer) CalculateBotScoreDetailed(trace *CaptchaTrace) (float64, *VectorResult) {
+	enhanced := ct.buildEnhancedEvents(trace)
+	analyzer := NewBehavioralAnalyzer(nil)
+	result := analyzer.Analyze(enhanced)
+
+	quickScore := ct.calculateQuickScore(trace)
+
+	finalScore := result.Score
+	if quickScore > finalScore {
+		finalScore = quickScore
+	}
+	return finalScore, result
+}
+
+func (ct *CaptchaTracer) calculateQuickScore(trace *CaptchaTrace) float64 {
+	score := 0.0
+	if trace.Metrics.TotalEvents < 5 {
+		score += 0.4
+	}
+	if trace.Metrics.MouseVelocity > 1000 || trace.Metrics.MouseVelocity < 10 {
+		score += 0.2
+	}
+	if trace.Metrics.LongPauses == 0 && trace.Metrics.TotalEvents > 10 {
+		score += 0.2
+	}
+	if trace.Metrics.TypingSpeed > 500 || trace.Metrics.TypingSpeed < 30 {
+		score += 0.1
+	}
 	if score > 1.0 {
 		score = 1.0
 	}
-
 	return score
+}
+
+// buildEnhancedEvents converts CaptchaTrace events into EnhancedBehavioralEvents
+// for the full BehavioralAnalyzer suite.
+func (ct *CaptchaTracer) buildEnhancedEvents(trace *CaptchaTrace) *EnhancedBehavioralEvents {
+	enhanced := &EnhancedBehavioralEvents{
+		MouseTimestamps:  make([]int64, 0),
+		ScrollTimestamps: make([]int64, 0),
+		TypingTimestamps: make([]int64, 0),
+		MousePositions:   make([]Position, 0),
+		MouseVelocities:  make([]float64, 0),
+		ClickTimestamps:  make([]int64, 0),
+		ClickPositions:   make([]Position, 0),
+		ScrollDeltas:     make([]float64, 0),
+	}
+
+	var prevX, prevY float64
+	var prevTimestamp int64
+	firstMouse := true
+
+	for _, ev := range trace.Events {
+		switch ev.Type {
+		case "mousemove":
+			enhanced.MouseTimestamps = append(enhanced.MouseTimestamps, ev.Timestamp)
+			enhanced.MousePositions = append(enhanced.MousePositions, Position{X: ev.X, Y: ev.Y})
+			enhanced.BehavioralEvents.MouseEvents++
+
+			if !firstMouse && ev.Timestamp > prevTimestamp {
+				dx := ev.X - prevX
+				dy := ev.Y - prevY
+				dt := float64(ev.Timestamp-prevTimestamp) / 1000.0 // seconds
+				if dt > 0 {
+					dist := math.Sqrt(dx*dx + dy*dy)
+					velocity := dist / dt
+					enhanced.MouseVelocities = append(enhanced.MouseVelocities, velocity)
+				}
+			}
+			firstMouse = false
+			prevX, prevY = ev.X, ev.Y
+			prevTimestamp = ev.Timestamp
+
+		case "keydown", "keypress":
+			enhanced.TypingTimestamps = append(enhanced.TypingTimestamps, ev.Timestamp)
+			enhanced.BehavioralEvents.TypingEvents++
+
+		case "scroll", "wheel":
+			enhanced.ScrollTimestamps = append(enhanced.ScrollTimestamps, ev.Timestamp)
+			enhanced.ScrollDeltas = append(enhanced.ScrollDeltas, ev.Delta)
+			enhanced.BehavioralEvents.ScrollEvents++
+
+		case "click", "mousedown", "mouseup":
+			enhanced.ClickTimestamps = append(enhanced.ClickTimestamps, ev.Timestamp)
+			enhanced.ClickPositions = append(enhanced.ClickPositions, Position{X: ev.X, Y: ev.Y})
+		}
+	}
+
+	return enhanced
 }
 
 // CaptchaTrainingData stores training data for CAPTCHA ML models.
@@ -358,6 +465,95 @@ func (td *CaptchaTrainingData) ExportForML() ([]byte, error) {
 	}
 
 	return json.MarshalIndent(export, "", "  ")
+}
+
+// TrainingDataStats holds aggregate statistics about collected training data.
+type TrainingDataStats struct {
+	TotalSamples int            `json:"total_samples"`
+	ByLabel      map[string]int `json:"by_label"`
+	ByType       map[string]int `json:"by_type"`
+}
+
+// GetSamplesFiltered returns a filtered, paginated slice of training samples
+// along with the total count matching the filter criteria.
+func (td *CaptchaTrainingData) GetSamplesFiltered(typeFilter, labelFilter string, limit, offset int) ([]TrainingSample, int) {
+	td.mu.RLock()
+	defer td.mu.RUnlock()
+
+	var filtered []TrainingSample
+	for _, s := range td.samples {
+		if typeFilter != "" && s.ChallengeType != typeFilter {
+			continue
+		}
+		if labelFilter != "" && s.Label != labelFilter {
+			continue
+		}
+		filtered = append(filtered, s)
+	}
+
+	total := len(filtered)
+
+	if offset >= total {
+		return []TrainingSample{}, total
+	}
+
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+
+	return filtered[offset:end], total
+}
+
+// ExportCSV exports training data in CSV format.
+func (td *CaptchaTrainingData) ExportCSV() ([]byte, error) {
+	td.mu.RLock()
+	defer td.mu.RUnlock()
+
+	header := "id,timestamp,challenge_type,session_id,is_bot,bot_score,solved,solve_time_ms,attempts,label\n"
+	var buf []byte
+	buf = append(buf, header...)
+
+	for _, s := range td.samples {
+		line := fmt.Sprintf("%s,%s,%s,%s,%t,%.4f,%t,%d,%d,%s\n",
+			s.ID,
+			s.Timestamp.Format("2006-01-02T15:04:05Z"),
+			s.ChallengeType,
+			s.SessionID,
+			s.IsBot,
+			s.BotScore,
+			s.Solved,
+			s.SolveTimeMs,
+			s.Attempts,
+			s.Label,
+		)
+		buf = append(buf, line...)
+	}
+
+	return buf, nil
+}
+
+// GetStats returns aggregate statistics about the training data.
+func (td *CaptchaTrainingData) GetStats() TrainingDataStats {
+	td.mu.RLock()
+	defer td.mu.RUnlock()
+
+	stats := TrainingDataStats{
+		TotalSamples: len(td.samples),
+		ByLabel:      make(map[string]int),
+		ByType:       make(map[string]int),
+	}
+
+	for _, s := range td.samples {
+		if s.Label != "" {
+			stats.ByLabel[s.Label]++
+		}
+		if s.ChallengeType != "" {
+			stats.ByType[s.ChallengeType]++
+		}
+	}
+
+	return stats
 }
 
 func extractFeaturesFromMetrics(m *TraceMetrics) []float64 {

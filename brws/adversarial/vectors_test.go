@@ -490,4 +490,5 @@ func ExampleNewVectorMap() {
 		fmt.Printf("  - %s: %s\n", ind.Check, ind.Message)
 	}
 	// Output:
+	// Detected: false, Score: 0.00
 }

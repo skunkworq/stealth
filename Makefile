@@ -1,16 +1,18 @@
 # Browser Fingerprint Lab Makefile
-.PHONY: all build clean test run run-lab run-lab-https certs help install kill-ports lab-ui
+.PHONY: all build clean test test-go test-frontend typecheck run run-lab run-lab-https certs help install kill-ports lab-ui ml-datagen ml-generate ml-export ml-stats train train-run train-benchmark train-discover
 
 # Variables
 BINARY_DIR := build
 LABD_BINARY := $(BINARY_DIR)/labd
 BRWSLAB_BINARY := $(BINARY_DIR)/brwslab
 EVALBENCH_BINARY := $(BINARY_DIR)/evalbench
+ML_DATAGEN_BINARY := $(BINARY_DIR)/ml_datagen
 
 # Source files
 LABD_SRC := ./cmd/labd
 BRWSLAB_SRC := ./cmd/brwslab
 EVALBENCH_SRC := ./cmd/evalbench
+ML_DATAGEN_SRC := ./cmd/ml_datagen
 
 # Certificate files
 CERT_FILE := server.crt
@@ -64,7 +66,7 @@ help: ## Show this help message
 	@echo ""
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-build: $(LABD_BINARY) $(BRWSLAB_BINARY) ## Build all binaries
+build: $(LABD_BINARY) $(BRWSLAB_BINARY) $(BENCHMARK_BINARY) $(ML_DATAGEN_BINARY) $(TRAIN_BINARY) ## Build all binaries
 
 rust-sniffer:
 	@echo "Building Rust sniffer library..."
@@ -88,6 +90,72 @@ $(EVALBENCH_BINARY): $(shell find cmd/evalbench -name '*.go' 2>/dev/null)
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(EVALBENCH_SRC)
 	@echo "✓ Built $@"
+
+BENCHMARK_BINARY := $(BINARY_DIR)/benchmark
+BENCHMARK_SRC := ./cmd/benchmark
+
+$(BENCHMARK_BINARY): $(shell find cmd/benchmark -name '*.go' brws/benchmark -name '*.go' 2>/dev/null)
+	@echo "Building benchmark..."
+	@mkdir -p $(BINARY_DIR)
+	go build $(LDFLAGS) -o $@ $(BENCHMARK_SRC)
+	@echo "✓ Built $@"
+
+benchmark: $(BENCHMARK_BINARY) ## Build the extended benchmark tool
+	@echo "Extended benchmark tool built at $(BENCHMARK_BINARY)"
+	@echo ""
+	@echo "Usage examples:"
+	@echo "  $(BENCHMARK_BINARY) --suite all"
+	@echo "  $(BENCHMARK_BINARY) --suite capabilities"
+	@echo "  $(BENCHMARK_BINARY) --suite endpoints --categories basic,protocol"
+	@echo "  $(BENCHMARK_BINARY) --engines native,chromium --suite performance"
+	@echo ""
+	@echo "List available endpoints:"
+	@echo "  $(BENCHMARK_BINARY) list"
+	@echo ""
+	@echo "List available engines:"
+	@echo "  $(BENCHMARK_BINARY) engines"
+
+benchmark-run: $(BENCHMARK_BINARY) ## Run the extended benchmark suite
+	$(BENCHMARK_BINARY) --suite all --timeout 30s
+
+# ML Data Generation targets
+$(ML_DATAGEN_BINARY): $(shell find cmd/ml_datagen brws/ml -name '*.go' 2>/dev/null)
+	@echo "Building ml_datagen..."
+	@mkdir -p $(BINARY_DIR)
+	go build $(LDFLAGS) -o $@ $(ML_DATAGEN_SRC)
+	@echo "✓ Built $@"
+
+ml-datagen: $(ML_DATAGEN_BINARY) ## Build the ML data generator tool
+
+ml-generate: $(ML_DATAGEN_BINARY) ## Generate ML training episodes from the lab
+	$(ML_DATAGEN_BINARY) generate --episodes 500
+
+ml-export: $(ML_DATAGEN_BINARY) ## Export ML training data to CSV
+	$(ML_DATAGEN_BINARY) export --format csv --output data/training/
+
+ml-stats: $(ML_DATAGEN_BINARY) ## Show ML training data statistics
+	$(ML_DATAGEN_BINARY) stats
+
+# Training targets
+TRAIN_BINARY := $(BINARY_DIR)/train
+TRAIN_SRC := ./cmd/train
+
+$(TRAIN_BINARY): $(shell find cmd/train brws/ml brws/lab -name '*.go' 2>/dev/null)
+	@echo "Building train..."
+	@mkdir -p $(BINARY_DIR)
+	go build $(LDFLAGS) -o $@ $(TRAIN_SRC)
+	@echo "✓ Built $@"
+
+train: $(TRAIN_BINARY) ## Build the training orchestration tool
+
+train-run: $(TRAIN_BINARY) ## Run the full training pipeline
+	$(TRAIN_BINARY) run --lab-url http://localhost:$(HTTP_PORT) --episodes 500 --benchmark-episodes 100
+
+train-benchmark: $(TRAIN_BINARY) ## Run a benchmark evaluation
+	$(TRAIN_BINARY) benchmark --lab-url http://localhost:$(HTTP_PORT) --episodes 100
+
+train-discover: $(TRAIN_BINARY) ## Discover browser fingerprints
+	$(TRAIN_BINARY) discover --lab-url http://localhost:$(HTTP_PORT) --output signatures/
 
 certs: $(CERT_FILE) $(KEY_FILE) ## Generate self-signed TLS certificates
 
@@ -313,9 +381,62 @@ proxy-test: $(LABD_BINARY) certs ## Quick test of the MITM proxy
 	kill $$LABD_PID 2>/dev/null || true; \
 	rm -f /tmp/labd_proxy_test.log
 
-test: build ## Run all tests
-	@echo "Running tests..."
+test: ## Run full validation: lint + build + tests (Go + Frontend)
+	@echo "=========================================="
+	@echo "  Running full validation suite"
+	@echo "=========================================="
+	@echo ""
+	@echo "--- Go Build ---"
+	go build ./...
+	@echo ""
+	@echo "--- Go Lint (non-blocking) ---"
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run ./... || echo "⚠ Go lint issues found (non-blocking)"; \
+	else \
+		echo "Warning: golangci-lint not found, skipping"; \
+	fi
+	@echo ""
+	@echo "--- Go Tests ---"
+	go test -count=1 -timeout 120s ./...
+	@echo ""
+	@echo "--- Frontend ESLint ---"
+	@cd lab-ui && npx eslint src/ --max-warnings 50
+	@echo ""
+	@echo "--- TypeScript Typecheck ---"
+	@cd lab-ui && npx tsc --noEmit
+	@echo ""
+	@echo "--- Frontend Tests ---"
+	@cd lab-ui && npm test -- --run
+	@echo ""
+	@echo "=========================================="
+	@echo "  All checks passed!"
+	@echo "=========================================="
+
+test-go: ## Run Go tests only
+	@echo "Running Go tests..."
 	go test -v ./...
+
+test-frontend: ## Run frontend tests only
+	@cd lab-ui && npm test -- --run
+
+lint: ## Run all linters (Go + Frontend)
+	@echo "--- Go Lint (non-blocking) ---"
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run ./... || echo "⚠ Go lint issues found (non-blocking)"; \
+	else \
+		echo "Warning: golangci-lint not found, skipping"; \
+	fi
+	@echo "--- Frontend ESLint ---"
+	@cd lab-ui && npx eslint src/ --max-warnings 50
+	@echo "--- TypeScript Typecheck ---"
+	@cd lab-ui && npx tsc --noEmit
+
+typecheck: ## Run TypeScript type checking
+	@cd lab-ui && npx tsc --noEmit
+
+install-hooks: ## Install git pre-commit hooks
+	@echo "Installing git hooks..."
+	@./scripts/install-hooks.sh
 
 test-lab: $(LABD_BINARY) certs ## Test lab server endpoints
 	@echo "Testing lab server..."

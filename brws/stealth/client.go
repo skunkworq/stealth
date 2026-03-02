@@ -4,6 +4,7 @@ package stealth
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
@@ -11,16 +12,20 @@ import (
 	"github.com/stealth/brwslab/brws/challenge"
 	"github.com/stealth/brwslab/brws/engine"
 	"github.com/stealth/brwslab/brws/instrumentation"
+	"github.com/stealth/brwslab/brws/ml"
 	"github.com/stealth/brwslab/brws/session"
 	"github.com/stealth/brwslab/brws/solver"
 )
 
 // Client is the main entry point for the stealth browser automation library.
 type Client struct {
-	engine     engine.Engine
-	config     *Config
-	options    *Options
-	sessionMgr *session.Manager
+	engine        engine.Engine
+	config        *Config
+	options       *Options
+	sessionMgr    *session.Manager
+	policyLoader  *ml.PolicyLoader
+	behavTracker  *BehavioralTracker
+	captchaSolver *CaptchaSolver
 
 	logger *instrumentation.Logger
 	tracer *instrumentation.Tracer
@@ -30,9 +35,10 @@ type Client struct {
 
 // Config holds configuration for the stealth client.
 type Config struct {
-	EngineName string
-	Headless   bool
-	Proxy      string
+	EngineName      string
+	Headless        bool
+	Proxy           string
+	PolicyModelPath string
 
 	Stealth         *StealthConfig
 	Behavior        *BehaviorConfig
@@ -76,10 +82,12 @@ type BehaviorConfig struct {
 
 // ChallengeConfig configures challenge handling.
 type ChallengeConfig struct {
-	AutoDetect   bool
-	AutoSolve    bool
-	SolverAPIKey string
-	SolverType   string
+	AutoDetect      bool
+	AutoSolve       bool
+	SolverAPIKey    string
+	SolverType      string
+	VerifyURL       string // Override captcha verify endpoint (derived from target if empty)
+	MaxSolveRetries int    // Max captcha solve attempts before giving up (default 1)
 }
 
 // SessionConfig configures session management.
@@ -150,17 +158,39 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		return nil
 	})
 
+	// Load RL policy if configured
+	var policyLoader *ml.PolicyLoader
+	if cfg.PolicyModelPath != "" {
+		var err error
+		policyLoader, err = ml.NewPolicyLoader(cfg.PolicyModelPath)
+		if err != nil {
+			logger.Warn("failed to load RL policy, falling back to hardcoded", "path", cfg.PolicyModelPath, "error", err)
+		} else {
+			logger.Info("RL policy loaded", "model_id", policyLoader.ModelID(), "input_dim", policyLoader.InputDim())
+		}
+	}
+
+	// Initialize captcha solver if auto-solve is enabled
+	var captchaSolver *CaptchaSolver
+	if cfg.Challenge.AutoSolve {
+		captchaSolver = NewCaptchaSolver()
+		logger.Info("captcha auto-solver initialized")
+	}
+
 	logger.Info("stealth client initialized")
 
 	return &Client{
-		engine:     eng,
-		options:    &Options{Timeout: 30 * time.Second},
-		config:     cfg,
-		sessionMgr: sessMgr,
-		logger:     logger,
-		tracer:     tracer,
-		hooks:      hooks,
-		fsm:        fsm,
+		engine:        eng,
+		options:       &Options{Timeout: 30 * time.Second},
+		config:        cfg,
+		sessionMgr:    sessMgr,
+		policyLoader:  policyLoader,
+		behavTracker:  NewBehavioralTracker(),
+		captchaSolver: captchaSolver,
+		logger:        logger,
+		tracer:        tracer,
+		hooks:         hooks,
+		fsm:           fsm,
 	}, nil
 }
 
@@ -192,11 +222,17 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 				// FSM State Transition
 				_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.Retry)
 
-				// Mutate the stealth configuration specifically to become more adversarial
-				// Example: force max webGL spoofing, max canvas noise, rotate completely new UA
-				c.config.Stealth.CanvasNoise = true
-				c.config.Stealth.WebGLSpoof = true
-				c.config.Stealth.ClientHints = true
+				// RL-driven stealth adaptation or hardcoded fallback
+				if c.policyLoader != nil {
+					stateVec := BuildStateVector(extractAnomalies(err), nil, nil)
+					actionIdx, qValue := c.policyLoader.SelectAction(stateVec)
+					applied, field := ApplyAction(c.config.Stealth, actionIdx)
+					c.logger.Info("RL policy action", "action", field, "q_value", qValue, "applied", applied)
+				} else {
+					c.config.Stealth.CanvasNoise = true
+					c.config.Stealth.WebGLSpoof = true
+					c.config.Stealth.ClientHints = true
+				}
 				// We wait randomly to let the previous context clear gracefully
 				time.Sleep(time.Duration(500+attempt*1500) * time.Millisecond)
 
@@ -212,15 +248,98 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		break
 	}
 
-	if c.config.Challenge.AutoDetect {
+	// Captcha auto-solve: detect X-Captcha-Required and solve via ML solver
+	if c.captchaSolver != nil && c.config.Challenge.AutoSolve {
+		cr := c.captchaSolver.DetectCaptchaResponse(resp.Body, resp.Headers)
+		if cr != nil {
+			span.AddEvent("captcha_detected", map[string]interface{}{"type": cr.Type, "challenge_id": cr.ChallengeID})
+			c.logger.Info("captcha challenge detected", "type", cr.Type, "challenge_id", cr.ChallengeID)
+			_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected)
+
+			if cr.Type == "recaptcha-v2" {
+				// Dispatch to full reCAPTCHA v2 flow
+				baseURL := deriveBaseURL(url)
+				v2Result, v2Err := c.captchaSolver.SolveReCaptchaV2(baseURL)
+				if v2Err == nil && v2Result.Passed && v2Result.Token != "" {
+					c.logger.Info("reCAPTCHA v2 solved", "score", v2Result.BehavioralScore, "attempts", v2Result.SolveAttempts)
+					span.AddEvent("recaptcha_v2_solved", nil)
+
+					retryReq := &engine.Request{
+						URL:     url,
+						Timeout: c.options.Timeout,
+						Headers: map[string][]string{"X-Captcha-Token": {v2Result.Token}},
+					}
+					retryResp, retryErr := c.engine.Do(ctx, retryReq)
+					if retryErr == nil {
+						resp = retryResp
+					}
+				} else if v2Err != nil {
+					c.logger.Warn("reCAPTCHA v2 solve failed", "error", v2Err)
+				}
+			} else {
+				// Inline captcha flow
+				solveResult, _, solveErr := c.captchaSolver.SolveFromResponse(resp.Body, resp.Headers)
+				if solveErr == nil && solveResult != nil {
+					// Human-like delay before submitting (2-8 seconds)
+					//nolint:gosec
+					humanDelay := time.Duration(2000+rand.Intn(6000)) * time.Millisecond
+					time.Sleep(humanDelay)
+
+					events := c.captchaSolver.GenerateHumanEvents(
+						solveResult.SolveTimeMs+humanDelay.Milliseconds(),
+						HumanEventOpts{Solution: solveResult.Solution},
+					)
+
+					verifyURL := c.config.Challenge.VerifyURL
+					if verifyURL == "" {
+						verifyURL = deriveVerifyURL(url)
+					}
+
+					maxRetries := c.config.Challenge.MaxSolveRetries
+					if maxRetries <= 0 {
+						maxRetries = 1
+					}
+
+					for solveAttempt := 0; solveAttempt < maxRetries; solveAttempt++ {
+						solved, submitErr := c.captchaSolver.SubmitSolution(verifyURL, cr.ChallengeID, solveResult.Solution, events)
+						if submitErr != nil {
+							c.logger.Warn("captcha submit failed", "error", submitErr)
+							break
+						}
+						if solved {
+							c.logger.Info("captcha solved, retrying original request", "confidence", solveResult.Confidence)
+							span.AddEvent("captcha_solved", nil)
+
+							retryReq := &engine.Request{
+								URL:     url,
+								Timeout: c.options.Timeout,
+							}
+							if token := c.captchaSolver.LastToken(); token != "" {
+								if retryReq.Headers == nil {
+									retryReq.Headers = make(map[string][]string)
+								}
+								retryReq.Headers["X-Captcha-Token"] = []string{token}
+								c.logger.Info("attaching captcha session token to retry")
+							}
+							retryResp, retryErr := c.engine.Do(ctx, retryReq)
+							if retryErr == nil {
+								resp = retryResp
+							}
+							break
+						}
+						c.logger.Warn("captcha solve rejected", "attempt", solveAttempt+1)
+					}
+				} else if solveErr != nil {
+					c.logger.Warn("captcha solve failed", "error", solveErr)
+				}
+			}
+		}
+	} else if c.config.Challenge.AutoDetect {
+		// Fallback to generic challenge detection
 		detector := challenge.NewDetector()
 		if ch := detector.Detect(resp.Body, resp.Headers); ch != nil {
 			span.AddEvent("challenge_detected", map[string]interface{}{"type": string(ch.Type)})
 			c.logger.Info("challenge detected", "type", ch.Type)
-
-			if c.config.Challenge.AutoSolve {
-				_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected)
-			}
 		}
 	}
 
@@ -252,21 +371,56 @@ type Response struct {
 // Mouse moves the mouse to the specified coordinates.
 func (c *Client) Mouse(x, y float64) error {
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnMouseMove)
+	c.behavTracker.RecordMouseMove(x, y)
 	c.logger.Debug("mouse move", "x", x, "y", y)
 	return nil
 }
 
-// Click performs a mouse click.
+// Click performs a mouse click at coordinates.
 func (c *Client) Click(x, y float64) error {
 	sim := behavior.NewMouseSimulator(0)
 	_ = sim.ClickAt(x, y)
+	c.behavTracker.RecordMouseMove(x, y)
 	c.logger.Debug("click", "x", x, "y", y)
+	return nil
+}
+
+// ClickSelector clicks an element matching the CSS selector.
+// Uses JavaScript to find and click the element. Requires a JS-capable engine.
+func (c *Client) ClickSelector(ctx context.Context, selector string) error {
+	if !c.engine.Capabilities().JavaScript {
+		return fmt.Errorf("click by selector requires JavaScript-capable engine")
+	}
+
+	clickScript := fmt.Sprintf(`
+		(function() {
+			var el = document.querySelector("%s");
+			if (el) {
+				el.click();
+				return true;
+			}
+			return false;
+		})()
+	`, selector)
+
+	_, err := c.engine.Do(ctx, &engine.Request{
+		URL:             "about:blank",
+		ScriptToExecute: clickScript,
+		Timeout:         c.options.Timeout,
+	})
+	if err != nil {
+		c.logger.Warn("click selector failed", "selector", selector, "error", err)
+		return err
+	}
+
+	c.logger.Debug("clicked selector", "selector", selector)
 	return nil
 }
 
 // Type simulates typing text.
 func (c *Client) Type(text string) error {
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnType)
+	c.behavTracker.RecordKeystroke()
 	c.logger.Debug("type", "length", len(text))
 	return nil
 }
@@ -276,6 +430,17 @@ func (c *Client) Scroll(pixels float64) error {
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnScroll)
 	c.logger.Debug("scroll", "pixels", pixels)
 	return nil
+}
+
+// BehavioralSnapshot returns the accumulated behavioral data from this session.
+// Useful for training data collection and self-evaluation.
+func (c *Client) BehavioralSnapshot() *behavior.EventData {
+	return c.behavTracker.Snapshot()
+}
+
+// ResetBehavioralTracker clears the accumulated behavioral data.
+func (c *Client) ResetBehavioralTracker() {
+	c.behavTracker = NewBehavioralTracker()
 }
 
 // Close closes the client and all associated resources.

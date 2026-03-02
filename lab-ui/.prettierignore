@@ -1,0 +1,18 @@
+# Build outputs
+.next/
+out/
+build/
+
+# Dependencies
+node_modules/
+
+# Generated files
+next-env.d.ts
+*.config.mjs
+package-lock.json
+
+# Test coverage
+coverage/
+
+# Public assets
+public/

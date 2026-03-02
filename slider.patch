@@ -1,0 +1,27 @@
+--- lab-ui/src/components/CaptchaTrainer.tsx	2023-10-27 10:00:00.000000000 -0700
++++ lab-ui/src/components/CaptchaTrainer.tsx	2023-10-27 10:01:00.000000000 -0700
+@@ -314,9 +314,11 @@
+                                 <p className="text-xs text-muted-foreground italic">Drag the slider to solve the puzzle.</p>
+-                                {challenge.Challenge?.image && (
+-                                   <div className="skeuo-inset p-2 bg-white/5 flex items-center justify-center">
+-                                      <img 
+-                                        src={`data:image/png;base64,${challenge.Challenge.image}`} 
+-                                        alt="Slider CAPTCHA" 
+-                                        className="max-w-full h-auto brightness-90 contrast-125"
+-                                      />
+-                                   </div>
+-                                )}
++                                 {challenge.Challenge?.image ? (
++                                    <div className="skeuo-inset p-2 bg-white/5 flex items-center justify-center min-h-[100px]">
++                                       <img 
++                                         src={`data:image/png;base64,${challenge.Challenge.image}`} 
++                                         alt="Slider CAPTCHA Base" 
++                                         className="max-w-full h-auto brightness-90 contrast-125"
++                                       />
++                                    </div>
++                                 ) : (
++                                    <div className="skeuo-inset p-2 bg-white/5 flex items-center justify-center min-h-[100px] border border-dashed border-red-500/50">
++                                       <p className="text-muted-foreground text-xs text-red-500">Image data missing from backend.</p>
++                                    </div>
++                                 )}
+                                 <input 

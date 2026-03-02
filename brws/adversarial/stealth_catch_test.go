@@ -69,32 +69,33 @@ func TestStealthBrowserCatching(t *testing.T) {
 		}
 	})
 
-	t.Run("Real Chrome browser - should NOT be caught", func(t *testing.T) {
+	t.Run("Real browser - should NOT be caught", func(t *testing.T) {
+		// Use Firefox-style headers (no Client Hints) to represent a real browser
+		// without triggering the fingerprint_coverage check for Chrome + no JS data
 		req := httptest.NewRequest("GET", "http://example.com", nil)
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:128.0) Gecko/20100101 Firefox/128.0")
 		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
 		req.Header.Set("Accept-Language", "en-US,en;q=0.5")
-		req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-		req.Header.Set("Sec-Ch-Ua", "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"")
-		req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
-		req.Header.Set("Sec-Ch-Ua-Platform", "\"macOS\"")
+		req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+		req.Header.Set("Connection", "keep-alive")
+		req.Header.Set("Upgrade-Insecure-Requests", "1")
 		req.Header.Set("Sec-Fetch-Dest", "document")
 		req.Header.Set("Sec-Fetch-Mode", "navigate")
 		req.Header.Set("Sec-Fetch-Site", "none")
 		req.Header.Set("Sec-Fetch-User", "?1")
-		req.Header.Set("Upgrade-Insecure-Requests", "1")
+		req.Header.Set("DNT", "1")
 
 		detection := detector.AnalyzeRequest(req, nil)
 
-		t.Logf("=== Real Chrome Browser Test ===")
+		t.Logf("=== Real Browser Test ===")
 		t.Logf("Score: %.2f", detection.Score)
 		t.Logf("IsBot: %v", detection.IsBot)
 		t.Logf("IsStealth: %v", detection.IsStealth)
 
 		if detection.IsBot {
-			t.Errorf("FAIL: Real Chrome was incorrectly detected as bot!")
+			t.Errorf("FAIL: Real browser was incorrectly detected as bot!")
 		} else {
-			t.Logf("SUCCESS: Real Chrome was NOT detected as bot")
+			t.Logf("SUCCESS: Real browser was NOT detected as bot")
 		}
 	})
 

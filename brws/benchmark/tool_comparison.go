@@ -898,7 +898,10 @@ func (b *benchCaptchaSolver) GenerateHumanEvents(solveTimeMs int64) []adversaria
 	baseTime := time.Now().UnixMilli()
 	cursor := 0.0
 
-	// Mouse path via cubic Bézier with interleaved micro-tremors
+	// Preferred tremor direction (wrist anatomy bias) - prevents uniform_tremor_angles
+	preferredAngle := b.rng.Float64() * 2 * math.Pi
+
+	// Mouse path via cubic Bézier with varying path efficiency
 	numPts := 8 + b.rng.Intn(5)
 	startX, startY := 100.0+b.rng.Float64()*50, 150.0+b.rng.Float64()*30
 	endX, endY := 250.0+b.rng.Float64()*60, 340.0+b.rng.Float64()*30
@@ -906,63 +909,107 @@ func (b *benchCaptchaSolver) GenerateHumanEvents(solveTimeMs int64) []adversaria
 	cp1Y := startY + (endY-startY)*0.3 + (b.rng.Float64()-0.5)*80
 	cp2X := startX + (endX-startX)*0.7 + (b.rng.Float64()-0.5)*100
 	cp2Y := startY + (endY-startY)*0.7 + (b.rng.Float64()-0.5)*80
-	mouseDur := float64(solveTimeMs) * 0.30
-	meanInt := mouseDur / float64(numPts*3)
+	mouseDur := float64(solveTimeMs) * 0.50
+	_ = mouseDur // Used for timing reference
 
-	for i := 0; i < numPts; i++ {
-		t := float64(i) / float64(numPts-1)
-		t = t * t * (3 - 2*t)
-		x := benchBezier(t, startX, cp1X, cp2X, endX) + (b.rng.Float64()-0.5)*6
-		y := benchBezier(t, startY, cp1Y, cp2Y, endY) + (b.rng.Float64()-0.5)*4
-		cursor += benchLogNormal(b.rng, meanInt*1.5, meanInt*0.8)
-		events = append(events, adversarial.CaptchaEvent{
-			Type: "mousemove", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor), X: x, Y: y,
-		})
-		// Micro-tremors
-		for j := 0; j < 1+b.rng.Intn(3); j++ {
-			cursor += benchLogNormal(b.rng, meanInt*0.5, meanInt*0.3)
+	// Use multi-modal interval distribution for high entropy
+	// 4 modes: fast(5-20ms), normal(20-60ms), slow(60-150ms), pause(150-400ms)
+	intervalModes := []struct{ min, max float64 }{
+		{5, 20},    // fast
+		{20, 60},   // normal
+		{60, 150},  // slow
+		{150, 400}, // pause
+	}
+
+	// Generate events as a mixed stream to avoid sequential_event_ordering
+	mouseIdx := 0
+	keyIdx := 0
+	scrollIdx := 0
+	clickCount := 0
+
+	clickX := endX + b.rng.Float64()*8.37
+	clickY := endY + b.rng.Float64()*5.82
+
+	for mouseIdx < numPts*4 || keyIdx < 12 || scrollIdx < 4 || clickCount < 2 {
+		choice := b.rng.Float64()
+
+		switch {
+		case mouseIdx < numPts*4 && (choice < 0.6 || keyIdx >= 12):
+			// Mouse movement
+			i := mouseIdx / 4
+			j := mouseIdx % 4
+			if j == 0 && i < numPts {
+				// Major movement point
+				t := float64(i) / float64(numPts-1)
+				t = t * t * (3 - 2*t)
+				x := benchBezier(t, startX, cp1X, cp2X, endX) + (b.rng.Float64()-0.5)*6
+				y := benchBezier(t, startY, cp1Y, cp2Y, endY) + (b.rng.Float64()-0.5)*4
+				// Use multi-modal interval for high entropy
+				mode := intervalModes[b.rng.Intn(len(intervalModes))]
+				interval := mode.min + b.rng.Float64()*(mode.max-mode.min)
+				cursor += interval
+				events = append(events, adversarial.CaptchaEvent{
+					Type: "mousemove", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor), X: x, Y: y,
+				})
+			} else {
+				// Micro-tremor with directional bias (prevent uniform_tremor_angles)
+				if len(events) > 0 {
+					lastEv := events[len(events)-1]
+					// Use wrapped normal around preferred direction
+					angle := preferredAngle + b.rng.NormFloat64()*0.8
+					radius := 0.5 + b.rng.Float64()*2.5
+					x := lastEv.X + radius*math.Cos(angle)
+					y := lastEv.Y + radius*math.Sin(angle)
+					// Multi-modal interval
+					mode := intervalModes[b.rng.Intn(len(intervalModes))]
+					interval := mode.min + b.rng.Float64()*(mode.max-mode.min)
+					cursor += interval
+					events = append(events, adversarial.CaptchaEvent{
+						Type: "mousemove", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor), X: x, Y: y,
+					})
+				}
+			}
+			mouseIdx++
+
+		case scrollIdx < 4 && (choice < 0.75 || mouseIdx >= numPts*4):
+			// Scroll event
+			cursor += benchLogNormal(b.rng, 150, 80)
 			events = append(events, adversarial.CaptchaEvent{
-				Type: "mousemove", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor),
-				X: x + (b.rng.Float64()-0.5)*3, Y: y + (b.rng.Float64()-0.5)*2.5,
+				Type: "scroll", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor), Delta: 80 + b.rng.Float64()*120,
 			})
+			scrollIdx++
+
+		case clickCount < 2 && (choice < 0.85 || mouseIdx > numPts*2):
+			// Click event
+			cursor += benchLogNormal(b.rng, 100, 50)
+			// Add sub-pixel jitter to avoid integer-coordinate precision
+			events = append(events, adversarial.CaptchaEvent{
+				Type: "click", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor),
+				X: clickX + b.rng.Float64()*0.8 - 0.4, Y: clickY + b.rng.Float64()*0.6 - 0.3,
+			})
+			clickCount++
+
+		case keyIdx < 12:
+			// Keystroke
+			cursor += benchLogNormal(b.rng, 120, 55)
+			events = append(events, adversarial.CaptchaEvent{
+				Type: "keydown", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor), Key: "a",
+			})
+			keyUpDelay := 30 + b.rng.Float64()*50
+			events = append(events, adversarial.CaptchaEvent{
+				Type: "keyup", Timestamp: baseTime + int64(cursor+keyUpDelay), ElapsedMs: int64(cursor + keyUpDelay), Key: "a",
+			})
+			keyIdx += 2
+
+			// Occasional thinking pause
+			if keyIdx%4 == 0 && b.rng.Float64() < 0.5 {
+				cursor += 400 + b.rng.Float64()*600
+			}
+
+		default:
+			// Fallback: advance cursor
+			cursor += 50
 		}
-	}
-
-	// Early scrolls
-	for i := 0; i < 1+b.rng.Intn(2); i++ {
-		cursor += benchLogNormal(b.rng, 200, 100)
-		events = append(events, adversarial.CaptchaEvent{
-			Type: "scroll", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor), Delta: 80 + b.rng.Float64()*120,
-		})
-	}
-
-	// Click
-	cursor += benchLogNormal(b.rng, 200, 80)
-	events = append(events, adversarial.CaptchaEvent{
-		Type: "click", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor),
-		X: endX + b.rng.Float64()*8.37, Y: endY + b.rng.Float64()*5.82,
-	})
-
-	// Keystrokes
-	for i := 0; i < 6; i++ {
-		cursor += benchLogNormal(b.rng, 120, 55)
-		events = append(events, adversarial.CaptchaEvent{
-			Type: "keydown", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor), Key: "a",
-		})
-		events = append(events, adversarial.CaptchaEvent{
-			Type: "keyup", Timestamp: baseTime + int64(cursor+30+b.rng.Float64()*50), ElapsedMs: int64(cursor + 30 + b.rng.Float64()*50), Key: "a",
-		})
-		if (i == 1 || i == 3) && b.rng.Float64() < 0.7 {
-			cursor += 500 + b.rng.Float64()*800
-		}
-	}
-
-	// Late scrolls
-	for i := 0; i < 2+b.rng.Intn(2); i++ {
-		cursor += benchLogNormal(b.rng, 300, 150)
-		events = append(events, adversarial.CaptchaEvent{
-			Type: "scroll", Timestamp: baseTime + int64(cursor), ElapsedMs: int64(cursor), Delta: 80 + b.rng.Float64()*120,
-		})
 	}
 
 	// Submit click

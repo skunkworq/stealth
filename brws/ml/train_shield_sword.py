@@ -1,4 +1,6 @@
+import argparse
 import json
+import os
 import random
 import requests
 import torch
@@ -11,18 +13,21 @@ from collections import deque
 # 1. Live Go Proxy Environment (The Live Network Shield)
 # -------------------------------------------------------------
 class LiveGoProxyEnv:
-    def __init__(self, target_api="http://localhost:8080/api/ml/evaluate"):
-        self.target_api = target_api
+    def __init__(self, target_api=None):
+        self.target_api = target_api or os.environ.get(
+            "LAB_URL", "http://localhost:8080/api/ml/evaluate"
+        )
         
-        # State: 14 dimensions
+        # State: 18 dimensions
         # [0]  Webdriver    [1]  Canvas       [2]  ClientHints   [3]  Isomorphic
         # [4]  Hardware     [5]  Network      [6]  Plugins       [7]  Geometry
         # [8]  Video        [9]  Permissions  [10] Timezone
         # [11] CaptchaPresented [12] CaptchaSolved [13] CaptchaDifficulty
-        self.state = [1.0] * 11 + [0.0, 0.0, 0.0]
-        
-        self.action_space = 14
-        self.observation_space = 14
+        # [14] MouseVelocity [15] TypingSpeed [16] Straightness [17] SolveTime
+        self.state = [1.0] * 11 + [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+
+        self.action_space = 18
+        self.observation_space = 18
         
         self.fsm_config = {
             "Enabled": True,
@@ -40,33 +45,40 @@ class LiveGoProxyEnv:
             "TimezoneSync": False,
             "CaptchaSolver": False,
             "HumanizeInteraction": False,
-            "DelayedNavigation": False
+            "DelayedNavigation": False,
+            "WebRTCDisable": False,
+            "CanvasNoiseStrength": False,
+            "HeadlessPatches": False
         }
 
     def reset(self):
-        self.state = [1.0] * 11 + [0.0, 0.0, 0.0]
+        self.state = [1.0] * 11 + [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         for k in self.fsm_config:
             if k != "Enabled":
                 self.fsm_config[k] = False
         return torch.tensor(self.state, dtype=torch.float32)
 
     def step(self, action):
-        # Action mappings: 0-10 = fingerprint evasion, 11-13 = CAPTCHA specific
+        # Action mappings: 0-11 = fingerprint evasion, 12-13 = CAPTCHA, 14-17 = behavioral
         actions_map = {
             0: "RemoveWebDriver",
             1: "CanvasNoise",
             2: "ClientHints",
             3: "RandomUserAgent",
-            4: "HardwareSync",
-            5: "NetworkSync",
-            6: "PluginsSync",
-            7: "GeometrySync",
-            8: "VideoSync",
-            9: "PermissionsSync",
-            10: "TimezoneSync",
-            11: "CaptchaSolver",
-            12: "HumanizeInteraction",
-            13: "DelayedNavigation"
+            4: "WebGLSpoof",
+            5: "HardwareSync",
+            6: "NetworkSync",
+            7: "PluginsSync",
+            8: "GeometrySync",
+            9: "VideoSync",
+            10: "PermissionsSync",
+            11: "TimezoneSync",
+            12: "CaptchaSolver",
+            13: "HumanizeInteraction",
+            14: "DelayedNavigation",
+            15: "WebRTCDisable",
+            16: "CanvasNoiseStrength",
+            17: "HeadlessPatches",
         }
         
         if action in actions_map:
@@ -94,7 +106,7 @@ class LiveGoProxyEnv:
             captcha_type = result.get("captcha_type", "")
             
             # Update 11-dim fingerprint state from anomalies
-            self.state = [0.0] * 14
+            self.state = [0.0] * 18
             for a in anomalies:
                 a_lower = a.lower()
                 if "webdriver" in a_lower: self.state[0] = 1.0
@@ -119,7 +131,15 @@ class LiveGoProxyEnv:
                 self.state[13] = 1.0
             else:
                 self.state[13] = 0.0
-            
+
+            # Behavioral dimensions [14-17]
+            behavioral = result.get("behavioral", {})
+            self.state[14] = min(behavioral.get("mouse_velocity", 0.0) / 2000.0, 1.0)
+            self.state[15] = min(behavioral.get("typing_speed", 0.0) / 500.0, 1.0)
+            self.state[16] = behavioral.get("straightness", 0.0)
+            solve_time = result.get("solve_time_ms", 0)
+            self.state[17] = min(solve_time / 30000.0, 1.0)
+
             # Reward shaping with CAPTCHA awareness
             reward = 0.0
             
@@ -170,10 +190,10 @@ class DQNAgent(nn.Module):
 # -------------------------------------------------------------
 # 3. Live Training Loop (The Infinite Shield vs Sword)
 # -------------------------------------------------------------
-def train_live_agent():
-    env = LiveGoProxyEnv()
-    
-    episodes = 50
+def train_live_agent(lab_url=None, num_episodes=50, model_dir="models"):
+    env = LiveGoProxyEnv(target_api=lab_url)
+
+    episodes = num_episodes
     gamma = 0.95
     epsilon = 1.0
     epsilon_min = 0.01
@@ -272,11 +292,52 @@ def train_live_agent():
     print(f"\n--- Phase 17 Training Complete ---")
     print(f"CAPTCHA Stats: {captcha_stats['presented']} presented, "
           f"{captcha_stats['solved']} solved, {captcha_stats['failed']} failed")
-    
-    import os
-    os.makedirs("models", exist_ok=True)
-    torch.save(model.state_dict(), "models/shield_sword_policy.pt")
-    print("Optimal live-validated evasion policy saved to models/shield_sword_policy.pt")
+
+    os.makedirs(model_dir, exist_ok=True)
+
+    pt_path = os.path.join(model_dir, "shield_sword_policy.pt")
+    torch.save(model.state_dict(), pt_path)
+    print(f"Optimal live-validated evasion policy saved to {pt_path}")
+
+    # Export weights as JSON for Go inference
+    weights = {
+        "w1": model.fc1.weight.detach().cpu().numpy().tolist(),
+        "b1": model.fc1.bias.detach().cpu().numpy().tolist(),
+        "w2": model.fc2.weight.detach().cpu().numpy().tolist(),
+        "b2": model.fc2.bias.detach().cpu().numpy().tolist(),
+        "w3": model.fc3.weight.detach().cpu().numpy().tolist(),
+        "b3": model.fc3.bias.detach().cpu().numpy().tolist(),
+        "w4": model.fc4.weight.detach().cpu().numpy().tolist(),
+        "b4": model.fc4.bias.detach().cpu().numpy().tolist(),
+    }
+    weights_path = os.path.join(model_dir, "shield_sword_weights.json")
+    with open(weights_path, "w") as f:
+        json.dump(weights, f)
+    print(f"Go-compatible weights exported to {weights_path}")
+
+    # Export training report for Go CLI
+    report = {
+        "episodes": episodes,
+        "best_reward": best_reward,
+        "final_epsilon": epsilon,
+        "captcha_stats": captcha_stats,
+        "model_path": pt_path,
+        "weights_path": weights_path,
+    }
+    report_path = os.path.join(model_dir, "training_report.json")
+    with open(report_path, "w") as f:
+        json.dump(report, f, indent=2)
+    print(f"Training report exported to {report_path}")
 
 if __name__ == "__main__":
-    train_live_agent()
+    parser = argparse.ArgumentParser(description="Train DQN shield/sword agent")
+    parser.add_argument("--lab-url", default=None, help="Lab evaluation API URL")
+    parser.add_argument("--episodes", type=int, default=50, help="Number of training episodes")
+    parser.add_argument("--model-dir", default="models", help="Model output directory")
+    args = parser.parse_args()
+
+    train_live_agent(
+        lab_url=args.lab_url,
+        num_episodes=args.episodes,
+        model_dir=args.model_dir,
+    )

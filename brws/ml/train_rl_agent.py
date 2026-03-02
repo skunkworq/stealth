@@ -1,3 +1,4 @@
+import json
 import os
 import random
 import torch
@@ -9,63 +10,108 @@ from collections import deque
 # -------------------------------------------------------------
 # 1. Environment Simulation (Mimicking brws/adversarial/stealth_detector.go)
 # -------------------------------------------------------------
-# States are observed anomalies: [webdriver_exposed, canvas_static, ja4_banned, typing_static]
-# The goal is to reach [0, 0, 0, 0] (A totally organic stealth fingerprint)
+# 18-dimensional state space matching the live Go proxy environment:
+# [0]  Webdriver    [1]  Canvas       [2]  ClientHints   [3]  Isomorphic
+# [4]  Hardware     [5]  Network      [6]  Plugins       [7]  Geometry
+# [8]  Video        [9]  Permissions  [10] Timezone
+# [11] CaptchaPresented [12] CaptchaSolved [13] CaptchaDifficulty
+# [14] MouseVelocity [15] TypingSpeed [16] Straightness [17] SolveTime
 class StealthWAFEnv:
     def __init__(self):
-        self.state = [1.0, 1.0, 1.0, 1.0] # Initial bot: everything is suspicious
-        # Actions:
-        # 0: Toggle Webdriver Spoofing
-        # 1: Toggle Canvas Randomization
-        # 2: Reroll TLS JA4 Fingerprint
-        # 3: Inject FSM Human Typing Timing
-        self.action_space = 4
-        self.observation_space = 4
-        
+        # Initial bot: all fingerprint dimensions suspicious, behavioral/captcha zeroed
+        self.state = [1.0] * 11 + [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        # 18 actions matching the full stealth config action space
+        self.action_space = 18
+        self.observation_space = 18
+
+        # Action mappings
+        self.actions_map = {
+            0: "RemoveWebDriver",
+            1: "CanvasNoise",
+            2: "ClientHints",
+            3: "RandomUserAgent",
+            4: "WebGLSpoof",
+            5: "HardwareSync",
+            6: "NetworkSync",
+            7: "PluginsSync",
+            8: "GeometrySync",
+            9: "VideoSync",
+            10: "PermissionsSync",
+            11: "TimezoneSync",
+            12: "CaptchaSolver",
+            13: "HumanizeInteraction",
+            14: "DelayedNavigation",
+            15: "WebRTCDisable",
+            16: "CanvasNoiseStrength",
+            17: "HeadlessPatches",
+        }
+
     def reset(self):
         # Start a new request completely detected
-        self.state = [1.0, 1.0, 1.0, 1.0]
+        self.state = [1.0] * 11 + [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         return torch.tensor(self.state, dtype=torch.float32)
 
     def step(self, action):
-        # Apply the FSM toggle based on the agent's decision
-        if action == 0 and self.state[0] == 1.0:
-            self.state[0] = 0.0 # Successfully spoofed webdriver
-        elif action == 1 and self.state[1] == 1.0:
-            self.state[1] = 0.0 # Successfully randomized canvas
-        elif action == 2 and self.state[2] == 1.0:
-            self.state[2] = 0.0 # Successfully evaded banned TLS JA4
-        elif action == 3 and self.state[3] == 1.0:
-            self.state[3] = 0.0 # Successfully added human timing variance
-            
-        # Calculate Reward
-        # WAF Logic: If any flag is 1.0, the bot is blocked (HTTP 403)
-        is_blocked = sum(self.state) > 0
-        
+        # Actions 0-10: fingerprint evasion toggles (clear the corresponding detection flag)
+        if 0 <= action <= 10 and self.state[action] == 1.0:
+            self.state[action] = 0.0
+
+        # Actions 11-13: CAPTCHA-related
+        elif action == 12:
+            # CaptchaSolver: if captcha presented, attempt solve
+            if self.state[11] > 0:
+                self.state[12] = 1.0  # Mark solved
+                self.state[17] = random.uniform(0.1, 0.5)  # Solve time normalized
+        elif action == 13:
+            # HumanizeInteraction: improve behavioral signals
+            self.state[14] = random.uniform(0.3, 0.8)  # Mouse velocity
+            self.state[15] = random.uniform(0.3, 0.7)  # Typing speed
+            self.state[16] = random.uniform(0.5, 0.9)  # Straightness (higher = more human)
+
+        # Actions 14-17: advanced behavioral toggles
+        elif action == 14:
+            # DelayedNavigation: adds human-like delay patterns
+            self.state[14] = max(self.state[14], random.uniform(0.2, 0.6))
+        elif action == 15:
+            # WebRTCDisable: clears network-related detection
+            self.state[5] = 0.0  # Network dimension
+        elif action == 16:
+            # CanvasNoiseStrength: fine-tune canvas noise
+            self.state[1] = 0.0  # Clear canvas detection
+        elif action == 17:
+            # HeadlessPatches: clears webdriver and hardware flags
+            self.state[0] = 0.0  # Webdriver
+            self.state[4] = 0.0  # Hardware
+
+        # Calculate Reward: fingerprint dimensions [0-10] must all be zero
+        fingerprint_score = sum(self.state[:11])
+        is_blocked = fingerprint_score > 0
+
         if not is_blocked:
-            reward = 100.0 # Bypassed!
+            reward = 100.0  # Bypassed!
             done = True
         else:
-            reward = -1.0 # Still blocked, small penalty for taking time
+            reward = -1.0  # Still blocked, small penalty for taking time
             done = False
-            
+
         return torch.tensor(self.state, dtype=torch.float32), reward, done
 
 # -------------------------------------------------------------
-# 2. PyTorch DQN Model Architecture 
+# 2. PyTorch DQN Model Architecture (4-layer, matches Go PolicyLoader)
 # -------------------------------------------------------------
 class DQNAgent(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(DQNAgent, self).__init__()
-        # A lightweight Multi-Layer Perceptron to evaluate FSM States
-        self.fc1 = nn.Linear(input_dim, 24)
-        self.fc2 = nn.Linear(24, 24)
-        self.fc3 = nn.Linear(24, output_dim)
+        self.fc1 = nn.Linear(input_dim, 64)
+        self.fc2 = nn.Linear(64, 64)
+        self.fc3 = nn.Linear(64, 32)
+        self.fc4 = nn.Linear(32, output_dim)
 
     def forward(self, x):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
-        return self.fc3(x)
+        x = F.relu(self.fc3(x))
+        return self.fc4(x)
 
 # -------------------------------------------------------------
 # 3. Training Loop (Q-Learning)
@@ -160,22 +206,38 @@ def train_fsm_agent():
     os.makedirs("models", exist_ok=True)
     torch.save(model.state_dict(), "models/fsm_rl_policy.pt")
     print(f"Optimal Evasion Policy saved to models/fsm_rl_policy.pt")
-    
+
+    # Export weights as JSON for Go inference
+    weights = {
+        "w1": model.fc1.weight.detach().cpu().numpy().tolist(),
+        "b1": model.fc1.bias.detach().cpu().numpy().tolist(),
+        "w2": model.fc2.weight.detach().cpu().numpy().tolist(),
+        "b2": model.fc2.bias.detach().cpu().numpy().tolist(),
+        "w3": model.fc3.weight.detach().cpu().numpy().tolist(),
+        "b3": model.fc3.bias.detach().cpu().numpy().tolist(),
+        "w4": model.fc4.weight.detach().cpu().numpy().tolist(),
+        "b4": model.fc4.bias.detach().cpu().numpy().tolist(),
+    }
+    with open("models/fsm_rl_weights.json", "w") as f:
+        json.dump(weights, f)
+    print("Go-compatible weights exported to models/fsm_rl_weights.json")
+
     # Demonstrate the trained model
     print("\n[+] Testing Trained DQN Agent against fresh WAF Block...")
     state = env.reset().unsqueeze(0)
     print(f"Initial WAF Trace State: {state[0].tolist()} (Bot Detected)")
-    while True:
+    action_names = {v: v for v in env.actions_map.values()}
+    for step in range(30):
         with torch.no_grad():
             q_values = model(state)
             action = torch.argmax(q_values[0]).item()
-            
-        action_names = ["Toggle Webdriver", "Toggle Canvas", "Reroll JA4", "Inject Timing"]
-        print(f"-> Agent decides to: {action_names[action]}")
-        
+
+        name = env.actions_map.get(action, f"Action-{action}")
+        print(f"-> Agent decides to: {name}")
+
         state, reward, done = env.step(action)
         state = state.unsqueeze(0)
-        
+
         if done:
             print(f"Final WAF Trace State: {state[0].tolist()} (HTTP 200 OK - Bypassed!)")
             break

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
 
 interface Toast {
   id: string;
@@ -20,14 +20,17 @@ export function useToasts() {
 
     setToasts(prev => [...prev, toast]);
 
-    // Fade out after 3 seconds
+    const FADE_DURATION = 300;
+    const DISPLAY_DURATION = 3000;
+
+    // Fade out after display duration
     setTimeout(() => {
-      setToasts(prev => prev.map(t => t.id === id ? { ...t, visible: false } : t));
+      setToasts(prev => prev.map(t => (t.id === id ? { ...t, visible: false } : t)));
       // Remove after fade animation
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== id));
-      }, 300);
-    }, 3000);
+      }, FADE_DURATION);
+    }, DISPLAY_DURATION);
   }, []);
 
   return { toasts, addToast };
@@ -35,24 +38,25 @@ export function useToasts() {
 
 export function ToastContainer({ toasts }: { toasts: Toast[] }) {
   return (
-    <div className="fixed top-4 right-4 z-[10000] flex flex-col gap-2 pointer-events-none">
+    <div
+      aria-live="polite"
+      aria-label="Notifications"
+      className="fixed top-4 right-4 z-[10000] flex flex-col gap-2 pointer-events-none"
+    >
       {toasts.map(toast => (
         <div
           key={toast.id}
           className={`
             pointer-events-auto skeuo-raised rounded-lg px-4 py-3 max-w-sm
             transition-all duration-300
-            ${toast.visible
-              ? "translate-x-0 opacity-100"
-              : "translate-x-[400px] opacity-0"
-            }
+            ${toast.visible ? "translate-x-0 opacity-100" : "translate-x-[100%] opacity-0"}
           `}
           style={{
             animation: toast.visible ? "slideInRight 0.3s ease" : undefined,
           }}
         >
           <div className="flex items-center gap-2 mb-0.5">
-            <span className="led-green" />
+            <span className="led-green" aria-hidden="true" />
             <span className="text-sm font-semibold text-foreground">{toast.title}</span>
           </div>
           <p className="text-xs text-muted-foreground font-mono ml-[18px]">{toast.description}</p>
@@ -60,8 +64,14 @@ export function ToastContainer({ toasts }: { toasts: Toast[] }) {
       ))}
       <style jsx global>{`
         @keyframes slideInRight {
-          from { transform: translateX(400px); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
         }
       `}</style>
     </div>

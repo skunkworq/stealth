@@ -51,6 +51,15 @@ type CaptchaConfig struct {
 	Rotate          bool
 	Wave            bool
 	UseFonts        []string
+
+	// Advanced deformation fields
+	OverlapPx       int     // Negative char spacing (px overlap between adjacent chars)
+	WaveFrequencies int     // Number of sine wave layers (1=mild, 3=heavy)
+	WaveAmplitude   float64 // Max amplitude for each wave layer (px)
+	PerCharColor    bool    // Each character gets a distinct random color
+	PerCharSize     bool    // Each character gets ±20% font size variation
+	ThickNoiseLines bool    // Noise lines 2-4px thick instead of 1px
+	BackgroundGrid  bool    // Faint grid pattern behind text (anti-segmentation)
 }
 
 // DefaultConfig provides default settings for CAPTCHA generation.
@@ -68,6 +77,98 @@ var DefaultConfig = CaptchaConfig{
 	Rotate:          true,
 	Wave:            true,
 	UseFonts:        []string{"arial", "times", "courier"},
+	WaveFrequencies: 1,
+	WaveAmplitude:   2,
+}
+
+// EasyConfig provides easy CAPTCHA settings — no overlap, mild wave, no grid.
+var EasyConfig = CaptchaConfig{
+	Length:          6,
+	Width:           200,
+	Height:          80,
+	FontSize:        36,
+	CharSet:         "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+	NoiseLines:      2,
+	NoiseDots:       30,
+	BackgroundColor: color.RGBA{255, 255, 255, 255},
+	TextColor:       color.RGBA{0, 0, 0, 255},
+	Difficulty:      DifficultyEasy,
+	Rotate:          true,
+	Wave:            true,
+	OverlapPx:       0,
+	WaveFrequencies: 1,
+	WaveAmplitude:   2,
+	PerCharColor:    false,
+	PerCharSize:     false,
+	ThickNoiseLines: false,
+	BackgroundGrid:  false,
+}
+
+// HardConfig provides hard CAPTCHA settings — overlapping chars, multi-wave, thick lines, grid.
+var HardConfig = CaptchaConfig{
+	Length:          6,
+	Width:           200,
+	Height:          80,
+	FontSize:        36,
+	CharSet:         "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+	NoiseLines:      5,
+	NoiseDots:       80,
+	BackgroundColor: color.RGBA{255, 255, 255, 255},
+	TextColor:       color.RGBA{0, 0, 0, 255},
+	Difficulty:      DifficultyHard,
+	Rotate:          true,
+	Wave:            true,
+	OverlapPx:       5,
+	WaveFrequencies: 3,
+	WaveAmplitude:   4,
+	PerCharColor:    true,
+	PerCharSize:     true,
+	ThickNoiseLines: true,
+	BackgroundGrid:  true,
+}
+
+// ExtremeConfig provides extreme CAPTCHA settings — heavy overlap, max deformation.
+var ExtremeConfig = CaptchaConfig{
+	Length:          6,
+	Width:           200,
+	Height:          80,
+	FontSize:        36,
+	CharSet:         "ABCDEFGHJKLMNPQRSTUVWXYZ23456789",
+	NoiseLines:      7,
+	NoiseDots:       120,
+	BackgroundColor: color.RGBA{255, 255, 255, 255},
+	TextColor:       color.RGBA{0, 0, 0, 255},
+	Difficulty:      DifficultyExtreme,
+	Rotate:          true,
+	Wave:            true,
+	OverlapPx:       8,
+	WaveFrequencies: 3,
+	WaveAmplitude:   5,
+	PerCharColor:    true,
+	PerCharSize:     true,
+	ThickNoiseLines: true,
+	BackgroundGrid:  true,
+}
+
+// ConfigForDifficulty returns the appropriate config preset for a given difficulty.
+func ConfigForDifficulty(d Difficulty) *CaptchaConfig {
+	switch d {
+	case DifficultyEasy:
+		cfg := EasyConfig
+		return &cfg
+	case DifficultyMedium:
+		cfg := DefaultConfig
+		return &cfg
+	case DifficultyHard:
+		cfg := HardConfig
+		return &cfg
+	case DifficultyExtreme:
+		cfg := ExtremeConfig
+		return &cfg
+	default:
+		cfg := DefaultConfig
+		return &cfg
+	}
 }
 
 // Captcha represents a generated CAPTCHA challenge.

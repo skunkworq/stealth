@@ -15,7 +15,8 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Browser Fingerprint Lab",
-  description: "Capture, analyze, and compare browser signatures across TLS, HTTP/2, and HTTP layers",
+  description:
+    "Capture, analyze, and compare browser signatures across TLS, HTTP/2, and HTTP layers",
 };
 
 export default function RootLayout({
@@ -26,9 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased`}>
-        <TooltipProvider>
-          {children}
-        </TooltipProvider>
+        <TooltipProvider>{children}</TooltipProvider>
       </body>
     </html>
   );

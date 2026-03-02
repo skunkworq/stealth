@@ -49,3 +49,27 @@ docs/curl-impersonate/
 docs/curl-original/
 docs/curl/
 docs/nodrive/
+
+# Go binaries
+stealth
+semantic
+semantic-mcp
+semantic-server
+semanticcrawl
+benchmark
+train
+extract
+pipeline
+crawl
+test_semantic
+vecbench
+ml_datagen
+cmd/benchmark/benchmark
+cmd/extract/extract
+cmd/stealth/stealth
+cmd/train/train
+cmd/ml_datagen/ml_datagen
+
+# Node
+node_modules/
+.lab-ui/
