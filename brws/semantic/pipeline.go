@@ -662,6 +662,10 @@ func compressLeafChunk(ctx context.Context, chunk DomChunk, url string, index in
 		}
 	}
 
+	if config.LLMClient == nil {
+		return buildNodeFromChunkNoLLM(chunk, index), nil
+	}
+
 	stats.recordLLMCall()
 
 	matchedElements := matchInteractiveElements(chunk.HTML, extractInteractiveElements(chunk.HTML))
@@ -771,6 +775,10 @@ Output ONE JSON object. No markdown. No explanation.`, interactiveSection, chunk
 }
 
 func compressParentChunk(ctx context.Context, chunk DomChunk, childNodes []SemanticNode, config *PipelineConfig) (*SemanticNode, error) {
+	if config.LLMClient == nil {
+		return buildParentNodeFromChunkNoLLM(chunk, childNodes), nil
+	}
+
 	var childContext strings.Builder
 	for i, child := range childNodes {
 		actionStr := ""
