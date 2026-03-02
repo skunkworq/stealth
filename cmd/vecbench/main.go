@@ -30,14 +30,14 @@ type SearchResult struct {
 
 type BackendStats struct {
 	TotalVectors int
-	Dimension     int
+	Dimension    int
 	IndexSize    int64
 }
 
 type InMemoryIndex struct {
-	vectors  []*vectorEntry
-	dim      int
-	mu       sync.RWMutex
+	vectors []*vectorEntry
+	dim     int
+	mu      sync.RWMutex
 }
 
 type vectorEntry struct {
@@ -263,16 +263,16 @@ func sqrt32(x float32) float32 {
 }
 
 type BenchResult struct {
-	Backend      string
-	VectorCount  int
-	Dimension    int
-	InsertTime   time.Duration
-	InsertQPS    float64
-	SearchTime   time.Duration
-	SearchQPS    float64
-	MemorySize   int64
-	LatencyP50   time.Duration
-	LatencyP99   time.Duration
+	Backend     string
+	VectorCount int
+	Dimension   int
+	InsertTime  time.Duration
+	InsertQPS   float64
+	SearchTime  time.Duration
+	SearchQPS   float64
+	MemorySize  int64
+	LatencyP50  time.Duration
+	LatencyP99  time.Duration
 }
 
 func runBenchmark(backend VectorBackend, numVectors, dim, queries int) (*BenchResult, error) {
