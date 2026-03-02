@@ -47,7 +47,7 @@ type chatResponse struct {
 func NewLLMClient(apiKey string) *LLMClient {
 	return &LLMClient{
 		client: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: 120 * time.Second,
 		},
 		apiKey:        apiKey,
 		compressModel: DefaultLLMModel,
