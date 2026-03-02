@@ -47,12 +47,14 @@ func NewVisionClient(llmClient *LLMClient) *VisionClient {
 }
 
 type PipelineConfig struct {
-	LLMClient       *LLMClient
-	EmbeddingClient *EmbeddingClient
-	VisionClient    *VisionClient
-	Cache           *CacheStore
-	MaxDepth        int
-	MinContentLen   int
+	LLMClient        *LLMClient
+	EmbeddingClient  *EmbeddingClient
+	VisionClient     *VisionClient
+	Cache            *CacheStore
+	MaxDepth         int
+	MinContentLen    int
+	MaxChunks        int
+	MaxConcurrentLLM int
 }
 
 type DomChunk struct {
@@ -67,14 +69,28 @@ type DomChunk struct {
 }
 
 type pipelineStats struct {
-	cacheHits uint32
-	llmCalls  uint32
+	cacheHits        uint32
+	llmCalls         uint32
+	llmSemaphore     chan struct{}
+	maxConcurrentLLM int
 }
 
 func (s *pipelineStats) recordCacheHit() { atomic.AddUint32(&s.cacheHits, 1) }
 func (s *pipelineStats) recordLLMCall()  { atomic.AddUint32(&s.llmCalls, 1) }
 func (s *pipelineStats) snapshot() (uint32, uint32) {
 	return atomic.LoadUint32(&s.cacheHits), atomic.LoadUint32(&s.llmCalls)
+}
+
+func (s *pipelineStats) acquireLLMSlot() {
+	if s.llmSemaphore != nil {
+		s.llmSemaphore <- struct{}{}
+	}
+}
+
+func (s *pipelineStats) releaseLLMSlot() {
+	if s.llmSemaphore != nil {
+		<-s.llmSemaphore
+	}
 }
 
 func HTMLToSemanticTree(ctx context.Context, htmlStr, url string, config *PipelineConfig) (*SemanticTree, *CompressionStats, error) {
@@ -87,6 +103,11 @@ func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *
 	domain := ExtractDomain(url)
 
 	var stats pipelineStats
+	maxConcurrent := config.MaxConcurrentLLM
+	if maxConcurrent <= 0 {
+		maxConcurrent = 10
+	}
+	stats.llmSemaphore = make(chan struct{}, maxConcurrent)
 
 	cleanHTML, doc, err := cleanAndParseHTML(htmlStr)
 	if err != nil {
@@ -102,6 +123,10 @@ func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *
 	chunks := chunkDOM(doc, url)
 
 	totalChunks := countChunks(chunks)
+
+	if config.MaxChunks > 0 && len(chunks) > config.MaxChunks {
+		chunks = chunks[:config.MaxChunks]
+	}
 
 	nodes, err := compressChunksParallel(ctx, chunks, url, config, &stats)
 	if err != nil {
@@ -709,9 +734,12 @@ Output ONE JSON object. No markdown. No explanation.`, interactiveSection, chunk
 	}
 
 	var parsed leafResponse
-	if err := config.LLMClient.CompleteJSON(ctx,
+	stats.acquireLLMSlot()
+	err := config.LLMClient.CompleteJSON(ctx,
 		"You compress HTML into structured JSON. Output valid JSON only. Never output markdown or commentary.",
-		prompt, &parsed); err != nil {
+		prompt, &parsed)
+	stats.releaseLLMSlot()
+	if err != nil {
 		return nil, err
 	}
 

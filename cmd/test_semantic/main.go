@@ -20,7 +20,7 @@ func main() {
 	}
 
 	testURL := os.Args[1]
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	fmt.Printf("Testing semantic extraction against: %s\n\n", testURL)
@@ -85,9 +85,11 @@ func main() {
 	// Step 6: Build semantic tree (requires LLM API key)
 	fmt.Println("Step 6: Building semantic tree...")
 	config := &semantic.PipelineConfig{
-		Cache:         cache,
-		MaxDepth:      4,
-		MinContentLen: 100,
+		Cache:            cache,
+		MaxDepth:         4,
+		MinContentLen:    100,
+		MaxChunks:        200,
+		MaxConcurrentLLM: 10,
 	}
 
 	apiKey := os.Getenv("OPENROUTER_API_KEY")

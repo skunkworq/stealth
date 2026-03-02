@@ -3,6 +3,7 @@ package semantic
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/stealth/brwslab/brws/engine"
 )
@@ -82,8 +83,8 @@ func FromHTMLResponse(resp *engine.Response, config *PipelineConfig) (*SemanticT
 }
 
 func NewConfigFromEnv() (*PipelineConfig, error) {
-	apiKey := ""
-	if apiKey == "" {
+	apiKey := os.Getenv("OPENROUTER_API_KEY")
+	if apiKey == "" || apiKey == "-" {
 		return nil, fmt.Errorf("OPENROUTER_API_KEY not set")
 	}
 
@@ -91,11 +92,13 @@ func NewConfigFromEnv() (*PipelineConfig, error) {
 	embedClient := NewEmbeddingClient(apiKey)
 
 	return &PipelineConfig{
-		LLMClient:       llmClient,
-		EmbeddingClient: embedClient,
-		VisionClient:    NewVisionClient(llmClient),
-		Cache:           nil,
-		MaxDepth:        8,
-		MinContentLen:   100,
+		LLMClient:        llmClient,
+		EmbeddingClient:  embedClient,
+		VisionClient:     NewVisionClient(llmClient),
+		Cache:            nil,
+		MaxDepth:         8,
+		MinContentLen:    100,
+		MaxChunks:        500,
+		MaxConcurrentLLM: 10,
 	}, nil
 }

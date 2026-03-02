@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 const (
@@ -45,7 +46,9 @@ type chatResponse struct {
 
 func NewLLMClient(apiKey string) *LLMClient {
 	return &LLMClient{
-		client:        &http.Client{},
+		client: &http.Client{
+			Timeout: 60 * time.Second,
+		},
 		apiKey:        apiKey,
 		compressModel: DefaultLLMModel,
 		visionModel:   DefaultVisionModel,
