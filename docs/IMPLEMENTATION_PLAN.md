@@ -374,3 +374,99 @@ type PipelineConfig struct {
 - `docs/SEMANTIC_COSTS.md` - Token cost analysis
 - `docs/BENCHMARK.md` - Performance benchmarks
 - `AGENTS.md` - Agent instructions (bd issue tracking)
+
+---
+
+## Production Crawler with Full Instrumentation
+
+### Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                        cmd/crawl (CLI)                                │
+│                                                                       │
+│  Flags: -url, -urls, -prom, -otel, -concurrency, -timeout, -v       │
+└───────────────────────────────┬──────────────────────────────────────┘
+                                │
+        ┌───────────────────────┼───────────────────────┐
+        ▼                       ▼                       ▼
+┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│   Telemetry     │   │  Prometheus     │   │    Pipeline     │
+│  (OTLP/OTel)    │   │   /metrics      │   │   Processing    │
+└─────────────────┘   └─────────────────┘   └─────────────────┘
+```
+
+### OpenTelemetry Integration
+
+The system uses OpenTelemetry for distributed tracing:
+
+```bash
+# With OTLP exporter (Jaeger, Tempo, etc.)
+go run ./cmd/crawl -url "https://example.com" \
+  -otel localhost:4317 \
+  -prom :9090
+```
+
+Spans recorded:
+- `crawl_batch` - Main batch operation
+- `page_processed` - Per-page processing
+- `fetch` - HTTP fetch (inherited from pipeline)
+- `extract` - Semantic extraction
+- `embed` - Vector indexing
+
+### Prometheus Metrics
+
+Available at `/metrics` endpoint:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `semantic_crawler_urls_processed_total` | Counter | Total URLs processed |
+| `semantic_crawler_urls_failed_total` | Counter | Total URLs failed |
+| `semantic_crawler_fetch_duration_seconds` | Histogram | Fetch latency |
+| `semantic_crawler_extract_duration_seconds` | Histogram | Extract latency |
+| `semantic_crawler_embed_duration_seconds` | Histogram | Embed latency |
+| `semantic_crawler_tokens_compressed_total` | Counter | Compressed tokens |
+| `semantic_crawler_tokens_full_total` | Counter | Original tokens |
+| `semantic_crawler_chunks_llm_total` | Counter | LLM API calls |
+| `semantic_crawler_chunks_cached_total` | Counter | Cache hits |
+| `semantic_crawler_bytes_fetched_total` | Counter | Bytes fetched |
+| `semantic_crawler_compression_ratio` | Gauge | Current ratio |
+
+### Example Crawl Results
+
+**Wikipedia Programming Languages (2 pages):**
+
+```
+URLs processed: 2 (success: 2, errors: 0)
+HTML fetched: 1.0 MB
+Compression: 115,458 → 189 tokens (611x reduction)
+Cache hits: 1,289 (99.8% hit rate)
+Duration: 50.7s total, 25.4s avg per URL
+```
+
+Cross-page caching benefit:
+- Go article processed first → chunks cached
+- Python article reuses similar chunks → 99.8% cache hit rate
+- Only 3 LLM calls for both pages combined
+
+### Grafana Dashboard Queries
+
+```promql
+# Processing rate (URLs/min)
+rate(semantic_crawler_urls_processed_total[1m]) * 60
+
+# Average compression ratio
+semantic_crawler_compression_ratio
+
+# Cache hit rate
+rate(semantic_crawler_chunks_cached_total[5m]) / 
+  (rate(semantic_crawler_chunks_cached_total[5m]) + rate(semantic_crawler_chunks_llm_total[5m]))
+
+# P99 extraction latency
+histogram_quantile(0.99, 
+  rate(semantic_crawler_extract_duration_seconds_bucket[5m]))
+
+# Bytes per second
+rate(semantic_crawler_bytes_fetched_total[1m])
+```
+
