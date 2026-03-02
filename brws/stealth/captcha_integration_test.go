@@ -313,7 +313,7 @@ func TestSwordTimezonePresent(t *testing.T) {
 }
 
 // TestSwordEvadesFully runs the sword through the full shield detection pipeline
-// and verifies the shield catches it after the boost.
+// and verifies the sword evades after the latest upgrade.
 func TestSwordEvadesFully(t *testing.T) {
 	detector := adversarial.NewStealthDetector()
 	rg := behavior.NewRequestGenerator(nil)
@@ -324,12 +324,12 @@ func TestSwordEvadesFully(t *testing.T) {
 		t.Fatal("expected detection result")
 	}
 
-	// After shield boost, the sword should be detected (score >= 0.35, IsBot=true).
-	if !result.IsBot {
-		t.Errorf("sword should be detected after shield boost (score: %.3f)", result.Score)
+	// After sword boost, the sword should evade (score < 0.25, IsBot=false).
+	if result.IsBot {
+		t.Errorf("sword should evade after upgrade (score: %.3f)", result.Score)
 	}
-	if result.Score < 0.35 {
-		t.Errorf("sword score should be >= 0.35, got %.3f", result.Score)
+	if result.Score >= 0.25 {
+		t.Errorf("sword score should be < 0.25, got %.3f", result.Score)
 	}
 
 	// Specifically check that the two previously fixed indicators are still absent

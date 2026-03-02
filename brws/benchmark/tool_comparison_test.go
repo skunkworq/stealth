@@ -94,24 +94,27 @@ func TestToolComparisonBasicRanking(t *testing.T) {
 			r.DetectionRate*100, r.AvgBotScore)
 	}
 
-	// Our stealth sword: should be 100% detected after shield boost
+	// Our stealth sword: should evade detection (0% detection rate)
 	sword, ok := resultMap["our_stealth_sword"]
 	if !ok {
 		t.Fatal("missing tool result for our_stealth_sword")
 	}
-	if sword.DetectionRate < 1.0 {
-		t.Errorf("our_stealth_sword: expected 100%% detection rate after shield boost, got %.0f%% (avg score: %.3f)",
+	if sword.DetectionRate > 0.0 {
+		t.Errorf("our_stealth_sword: expected 0%% detection rate after sword upgrade, got %.0f%% (avg score: %.3f)",
 			sword.DetectionRate*100, sword.AvgBotScore)
 		for _, s := range sword.Scenarios {
-			if !s.IsBot {
-				t.Errorf("  scenario %s evaded (score: %.3f), indicators: %v", s.Name, s.BotScore, s.Indicators)
+			if s.IsBot {
+				t.Errorf("  scenario %s detected (score: %.3f), indicators: %v", s.Name, s.BotScore, s.Indicators)
 			}
 		}
 	}
 
-	// Ranking: verify ranking has entries (sword is no longer #1 since it's detected)
+	// Ranking: sword should be #1 (best evasion)
 	if len(report.Ranking) == 0 {
 		t.Fatal("expected ranking entries, got none")
+	}
+	if report.Ranking[0].ToolName != "our_stealth_sword" {
+		t.Errorf("expected our_stealth_sword to be #1, got %s", report.Ranking[0].ToolName)
 	}
 
 	// Verify vector matrix was built
@@ -137,13 +140,13 @@ func TestCaptchaBenchmark(t *testing.T) {
 			r.ToolName, r.CaptchaSolveRate*100, r.BehavioralPassRate*100, r.EndToEndPassRate*100)
 	}
 
-	// Sword: behavioral events should have some pass rate (>30% after shield boost)
+	// Sword: behavioral events should pass (>80% behavioral pass rate)
 	sword, ok := resultMap["our_stealth_sword"]
 	if !ok {
 		t.Fatal("missing sword in captcha results")
 	}
-	if sword.BehavioralPassRate < 0.30 {
-		t.Errorf("sword behavioral pass rate too low: %.0f%% (want >=30%%)", sword.BehavioralPassRate*100)
+	if sword.BehavioralPassRate < 0.80 {
+		t.Errorf("sword behavioral pass rate too low: %.0f%% (want >=80%%)", sword.BehavioralPassRate*100)
 	}
 
 	// Sword: should solve some captchas (>10% solve rate — template matching is imperfect)

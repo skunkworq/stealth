@@ -359,8 +359,11 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 	data.TypingTimestamps = timestamps
 }
 
-// generateScrollEvents creates human-like scroll events with deceleration.
-// Real users scroll 3-10 times with variable delta amounts and inter-scroll intervals.
+// generateScrollEvents creates human-like scroll events with bimodal timing
+// and irregular delta patterns. Real users alternate between fast inertial
+// scrolling (<100ms) and reading pauses (>600ms), producing high CV (>0.60).
+// Scroll deltas vary irregularly — users speed up, slow down, and re-accelerate
+// rather than following a smooth deceleration curve.
 func (g *EventGenerator) generateScrollEvents(data *EventData) {
 	numScrolls := 3 + g.rng.Intn(8) // 3-10 events
 
@@ -368,7 +371,6 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 	deltas := make([]float64, 0, numScrolls)
 
 	// Start scrolls during mouse activity (20-50% through the mouse timeline).
-	// Real users scroll while moving the mouse — event types interleave.
 	var ts int64
 	if len(data.MouseTimestamps) > 2 {
 		startFrac := 0.2 + g.rng.Float64()*0.3
@@ -386,21 +388,37 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 	for i := 0; i < numScrolls; i++ {
 		timestamps = append(timestamps, ts)
 
-		// Scroll delta: 100-300px with deceleration over time + noise
-		baseDelta := 100.0 + g.rng.Float64()*200.0
-		// Deceleration factor: scrolls slow down as user finds content
-		decel := 1.0 - float64(i)*0.08
-		if decel < 0.3 {
-			decel = 0.3
+		// Irregular scroll deltas: alternate between fast flicks (200-400px),
+		// gentle scrolls (40-120px), and moderate scrolls (120-250px).
+		// This produces ratio stddev > 0.15 (defeats Check 19).
+		var delta float64
+		r := g.rng.Float64()
+		switch {
+		case r < 0.30:
+			// Fast flick — large delta
+			delta = 200 + g.rng.Float64()*200
+		case r < 0.55:
+			// Gentle scroll — small delta
+			delta = 40 + g.rng.Float64()*80
+		default:
+			// Moderate scroll
+			delta = 120 + g.rng.Float64()*130
 		}
-		delta := baseDelta * decel
-		// Add noise ±15%
-		delta *= (0.85 + g.rng.Float64()*0.30)
+		// Add noise ±20%
+		delta *= (0.80 + g.rng.Float64()*0.40)
 		delta = math.Round(delta*10) / 10
 		deltas = append(deltas, delta)
 
-		// Inter-scroll interval: 80-400ms
-		interval := 80 + g.rng.Intn(321) // 80-400ms
+		// Bimodal scroll intervals (defeats Check 18: CV > 0.50).
+		// Real scrolling: fast inertial bursts followed by reading pauses.
+		var interval int
+		if g.rng.Float64() < 0.40 {
+			// Reading pause: 500-1500ms
+			interval = 500 + g.rng.Intn(1001)
+		} else {
+			// Fast inertial scroll: 30-120ms
+			interval = 30 + g.rng.Intn(91)
+		}
 		ts += int64(interval)
 	}
 
@@ -408,9 +426,10 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 	data.ScrollDeltas = deltas
 }
 
-// generateClickEvents creates click events at positions along the mouse path.
-// Real users click 2-6 times during a browsing session with mouse activity.
-// Clicks occur at mouse positions with sub-pixel jitter to avoid integer-coordinate precision.
+// generateClickEvents creates click events near mouse positions.
+// Real browsers fire click events 1-5ms after the nearest mousemove, not at the
+// exact same timestamp. Click positions have varied offsets — some precise (2-5px),
+// some approximate (5-15px), mimicking real targeting imprecision.
 func (g *EventGenerator) generateClickEvents(data *EventData) {
 	if len(data.MouseTimestamps) < 3 {
 		return
@@ -440,22 +459,31 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 	clickPositions := make([]map[string]float64, 0, numClicks)
 
 	for _, idx := range indices {
-		clickTimestamps = append(clickTimestamps, data.MouseTimestamps[idx])
+		// Add 1-5ms offset from the mouse timestamp (defeats Check 16).
+		// Real browsers have event dispatch delay between mousemove and click.
+		offset := int64(1 + g.rng.Intn(5))
+		clickTimestamps = append(clickTimestamps, data.MouseTimestamps[idx]+offset)
 
 		pos := data.MousePositions[idx]
-		// Sub-pixel jitter (±[0.1, 0.9]) ensures non-integer coordinates
-		jitterX := (0.1 + g.rng.Float64()*0.8)
-		jitterY := (0.1 + g.rng.Float64()*0.8)
-		if g.rng.Float64() < 0.5 {
-			jitterX = -jitterX
+		// Varied click offset distribution (defeats Check 17):
+		// - 30% precise clicks: 2-5px offset (user clicking carefully)
+		// - 40% moderate clicks: 5-12px offset (normal targeting)
+		// - 30% approximate clicks: 8-18px offset (hasty clicks / misclicks)
+		var jitterRadius float64
+		r := g.rng.Float64()
+		switch {
+		case r < 0.30:
+			jitterRadius = 2.0 + g.rng.Float64()*3.0 // 2-5px
+		case r < 0.70:
+			jitterRadius = 5.0 + g.rng.Float64()*7.0 // 5-12px
+		default:
+			jitterRadius = 8.0 + g.rng.Float64()*10.0 // 8-18px
 		}
-		if g.rng.Float64() < 0.5 {
-			jitterY = -jitterY
-		}
+		angle := g.rng.Float64() * 2 * math.Pi
 
 		clickPositions = append(clickPositions, map[string]float64{
-			"x": math.Round((pos["x"]+jitterX)*100) / 100,
-			"y": math.Round((pos["y"]+jitterY)*100) / 100,
+			"x": math.Round((pos["x"]+jitterRadius*math.Cos(angle))*100) / 100,
+			"y": math.Round((pos["y"]+jitterRadius*math.Sin(angle))*100) / 100,
 		})
 	}
 

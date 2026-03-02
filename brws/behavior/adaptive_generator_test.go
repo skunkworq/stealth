@@ -51,10 +51,11 @@ func TestAdversarialFeedbackLoop(t *testing.T) {
 			report.TotalScore, adaptedReport.TotalScore)
 	}
 
-	// After shield boost, even the adapted request is caught by new behavioral checks.
-	// The adaptation should still improve the score vs the broken request.
-	if !adaptedReport.IsBot {
-		t.Log("adapted request evaded shield (unexpected after shield boost)")
+	// The adapted request should not be detected as bot
+	if adaptedReport.IsBot {
+		adaptedFired := adaptedReport.FiredCheckNames()
+		t.Errorf("adapted request still detected as bot: score=%.3f, fired=%v",
+			adaptedReport.TotalScore, adaptedFired)
 	}
 
 	// Verify history was recorded
@@ -66,7 +67,7 @@ func TestAdversarialFeedbackLoop(t *testing.T) {
 
 // TestAdaptiveGenerator_EvasionRate runs 50 trials with the adapted generator
 // and verifies >= 90% evasion rate.
-func TestAdaptiveGenerator_CaughtByShield(t *testing.T) {
+func TestAdaptiveGenerator_EvasionRate(t *testing.T) {
 	detector := adversarial.NewStealthDetector()
 
 	for _, profile := range DefaultProfiles() {
@@ -76,15 +77,15 @@ func TestAdaptiveGenerator_CaughtByShield(t *testing.T) {
 			})
 
 			trials := 50
-			detections := 0
+			evasions := 0
 
 			for i := 0; i < trials; i++ {
 				req := ag.GenerateRequest("https://example.com/page")
 				result := detector.AnalyzeRequest(req, nil)
 
 				report := result.ToDetectionReport()
-				if result.IsBot {
-					detections++
+				if !result.IsBot {
+					evasions++
 				}
 
 				// Feed back any failures to improve subsequent rounds
@@ -93,12 +94,12 @@ func TestAdaptiveGenerator_CaughtByShield(t *testing.T) {
 				}
 			}
 
-			detectionRate := float64(detections) / float64(trials)
-			fmt.Printf("%s adaptive: %d/%d detections (%.0f%%)\n",
-				profile.Name, detections, trials, detectionRate*100)
+			evasionRate := float64(evasions) / float64(trials)
+			fmt.Printf("%s adaptive: %d/%d evasions (%.0f%%)\n",
+				profile.Name, evasions, trials, evasionRate*100)
 
-			if detectionRate < 0.90 {
-				t.Errorf("shield detection rate %.0f%% < 90%% (%d/%d)", detectionRate*100, detections, trials)
+			if evasionRate < 0.90 {
+				t.Errorf("evasion rate %.0f%% < 90%% (%d/%d)", evasionRate*100, evasions, trials)
 			}
 		})
 	}
@@ -141,9 +142,10 @@ func TestAdaptiveFromBroken_FeedbackConvergence(t *testing.T) {
 	t.Logf("Round 2 (adapted): score=%.3f, is_bot=%v, fired=%d",
 		report2.TotalScore, report2.IsBot, report2.FiredChecks)
 
-	// After shield boost, even the adapted generator is caught
-	if !report2.IsBot {
-		t.Log("adapted generator evaded shield (unexpected after shield boost)")
+	if report2.IsBot {
+		fired := report2.FiredCheckNames()
+		t.Errorf("adapted generator still detected: score=%.3f, fired=%v",
+			report2.TotalScore, fired)
 	}
 
 	// Verify score improved

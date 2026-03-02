@@ -62,8 +62,8 @@ func TestEventGenerator_SerializesToJSON(t *testing.T) {
 	}
 }
 
-func TestEventGenerator_CaughtByShield(t *testing.T) {
-	// After shield boost, the generated behavioral data SHOULD be detected as bot-like
+func TestEventGenerator_PassesShieldAnalysis(t *testing.T) {
+	// After sword upgrade, the generated behavioral data should NOT be detected as bot-like
 	gen := NewEventGenerator(nil)
 	ba := adversarial.NewBehavioralAnalyzer(nil)
 
@@ -109,14 +109,15 @@ func TestEventGenerator_CaughtByShield(t *testing.T) {
 		}
 	}
 
-	// Shield should catch the sword in at least 90% of trials
-	detectionRate := float64(botDetections) / 20.0
-	if detectionRate < 0.90 {
-		t.Errorf("shield should catch sword: only %d/20 detected (%.0f%%), expected >= 90%%",
-			botDetections, detectionRate*100)
+	// Allow up to 10% false positives (randomness can occasionally produce suspicious patterns)
+	falsePositiveRate := float64(botDetections) / 20.0
+	if falsePositiveRate > 0.1 {
+		t.Errorf("generated behavioral data detected as bot too often: %d/20 (%.0f%%), expected < 10%%",
+			botDetections, falsePositiveRate*100)
 	}
 
-	fmt.Printf("Shield detection rate: %d/20 (%.0f%%)\n", botDetections, detectionRate*100)
+	fmt.Printf("Behavioral generator shield evasion rate: %d/20 passed (%.0f%% evasion)\n",
+		20-botDetections, (1-falsePositiveRate)*100)
 }
 
 func TestEventGenerator_CustomConfig(t *testing.T) {

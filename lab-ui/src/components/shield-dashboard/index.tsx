@@ -3,12 +3,7 @@
 import { Button } from "@/components/ui/button";
 import { Panel, PanelHeader, PanelContent, PanelSection, PanelEmpty } from "@/components/Panel";
 import { useShieldData } from "./hooks";
-import {
-  SummaryMetrics,
-  ProfileTable,
-  VectorHeatmap,
-  IndicatorsList,
-} from "./panels";
+import { SummaryMetrics, ProfileTable, VectorHeatmap, IndicatorsList } from "./panels";
 
 export function ShieldDashboard() {
   const { data, loading, error, runEvaluation } = useShieldData();
@@ -16,10 +11,7 @@ export function ShieldDashboard() {
   return (
     <div className="space-y-5">
       <Panel>
-        <PanelHeader
-          title="Shield vs Sword Evaluation"
-          icon={<span className="led-red" />}
-        />
+        <PanelHeader title="Shield vs Sword Evaluation" icon={<span className="led-red" />} />
         <PanelContent>
           <PanelSection title="Run Evaluation">
             <div className="flex items-center gap-3">
@@ -32,11 +24,7 @@ export function ShieldDashboard() {
               >
                 {loading ? "Evaluating..." : "Run Evaluation"}
               </Button>
-              {error && (
-                <span className="text-xs text-red-400 font-mono">
-                  Error: {error}
-                </span>
-              )}
+              {error && <span className="text-xs text-red-400 font-mono">Error: {error}</span>}
             </div>
           </PanelSection>
 
@@ -47,7 +35,7 @@ export function ShieldDashboard() {
           )}
 
           {!data && !loading && (
-            <PanelEmpty message="No Data — Click &quot;Run Evaluation&quot; to test sword profiles against the shield." />
+            <PanelEmpty message='No Data — Click "Run Evaluation" to test sword profiles against the shield.' />
           )}
         </PanelContent>
       </Panel>
@@ -55,33 +43,21 @@ export function ShieldDashboard() {
       {data && (
         <>
           <Panel>
-            <PanelHeader
-              title="Profile Results"
-              icon={<span className="led-amber" />}
-            />
+            <PanelHeader title="Profile Results" icon={<span className="led-amber" />} />
             <PanelContent>
-              <ProfileTable
-                profiles={data.profiles}
-                threshold={data.summary.threshold}
-              />
+              <ProfileTable profiles={data.profiles} threshold={data.summary.threshold} />
             </PanelContent>
           </Panel>
 
           <Panel>
-            <PanelHeader
-              title="Vector Heatmap"
-              icon={<span className="led-cyan" />}
-            />
+            <PanelHeader title="Vector Heatmap" icon={<span className="led-cyan" />} />
             <PanelContent>
               <VectorHeatmap profiles={data.profiles} />
             </PanelContent>
           </Panel>
 
           <Panel>
-            <PanelHeader
-              title="Detection Indicators"
-              icon={<span className="led-red" />}
-            />
+            <PanelHeader title="Detection Indicators" icon={<span className="led-red" />} />
             <PanelContent>
               <IndicatorsList profiles={data.profiles} />
             </PanelContent>

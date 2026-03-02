@@ -25,6 +25,8 @@ const MAIN_CONTENT_ID = "main-content";
 const FINGERPRINT_ID_PREVIEW_LENGTH = 12;
 const JA3_PREVIEW_LENGTH = 16;
 const MAX_PACKETS = 2000;
+const PERCENTAGE_MULTIPLIER = 100;
+const RATE_DECIMAL_PLACES = 0;
 
 const CaptchaDashboard = dynamic(
   () => import("@/components/CaptchaDashboard").then(m => ({ default: m.CaptchaDashboard })),
@@ -143,8 +145,11 @@ function useAppState() {
 
   const handleShieldDetection = useCallback(
     (msg: WebSocketMessage) => {
-      const rate = msg.catch_rate != null ? `${(msg.catch_rate * 100).toFixed(0)}%` : "N/A";
-      const avg = msg.avg_score?.toFixed(3) ?? "N/A";
+      const rate =
+        msg.catch_rate != null
+          ? `${(msg.catch_rate * PERCENTAGE_MULTIPLIER).toFixed(RATE_DECIMAL_PLACES)}%`
+          : "N/A";
+      const avg = msg.avg_score?.toFixed(SCORE_DECIMAL_PLACES) ?? "N/A";
       addToast("Shield Detection", `catch ${rate} • avg ${avg}`);
     },
     [addToast]
@@ -183,7 +188,7 @@ function ModeLabel({ activeTab }: { activeTab: string }) {
           ? "RECAPTCHA_ANALYSIS"
           : activeTab === "shield"
             ? "SHIELD_EVALUATION"
-          : "ML_TRAINING_PIPELINE";
+            : "ML_TRAINING_PIPELINE";
 
   return (
     <div className="hidden md:flex items-center gap-2">

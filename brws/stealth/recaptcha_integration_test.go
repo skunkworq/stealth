@@ -222,10 +222,10 @@ func TestSwordScoresWellOnV3(t *testing.T) {
 	avgScore := totalScore / float64(trials)
 	t.Logf("v3 summary: avg_score=%.3f pass_rate=%d/%d", avgScore, passCount, trials)
 
-	// After shield boost, the sword is caught — v3 score will be lower.
-	// We still expect a reasonable score (> 0.3) from the behavioral events.
-	if avgScore <= 0.3 {
-		t.Errorf("expected average v3 score > 0.3, got %.3f", avgScore)
+	// After sword upgrade, the sword evades — v3 score should be decent.
+	// Expect > 0.45 average from the behavioral events.
+	if avgScore <= 0.45 {
+		t.Errorf("expected average v3 score > 0.45, got %.3f", avgScore)
 	}
 }
 

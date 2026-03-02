@@ -9,8 +9,8 @@ import (
 )
 
 // TestSwordVsShield runs the actual Sword (behavior.RequestGenerator) against the
-// Shield (StealthDetector) across all 4 default profiles. After the shield boost,
-// the sword should be detected (score >= 0.35, IsBot=true).
+// Shield (StealthDetector) across all 4 default profiles. After the sword boost,
+// the sword should evade (score < 0.25, IsBot=false).
 func TestSwordVsShield(t *testing.T) {
 	profiles := behavior.DefaultProfiles()
 
@@ -31,11 +31,11 @@ func TestSwordVsShield(t *testing.T) {
 				}
 			}
 
-			if detection.Score < 0.35 {
-				t.Errorf("sword profile %q should be detected (score >= 0.35), got %.3f", profile.Name, detection.Score)
+			if detection.Score >= 0.25 {
+				t.Errorf("sword profile %q should evade (score < 0.25), got %.3f", profile.Name, detection.Score)
 			}
-			if !detection.IsBot {
-				t.Errorf("sword profile %q should be classified as bot", profile.Name)
+			if detection.IsBot {
+				t.Errorf("sword profile %q should NOT be classified as bot", profile.Name)
 			}
 		})
 	}
