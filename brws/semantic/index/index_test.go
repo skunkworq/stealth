@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"os"
 	"testing"
@@ -79,7 +80,7 @@ func countHops(results []MultiHopResult) int {
 }
 
 func TestSQLiteVecIndex(t *testing.T) {
-	tmpFile := "/tmp/test_sqlite_vec_" + string(rune(rand.Intn(10000))) + ".db"
+	tmpFile := fmt.Sprintf("/tmp/test_sqlite_vec_%d.db", rand.Intn(100000))
 	defer os.Remove(tmpFile)
 
 	idx, err := NewSQLiteVecIndex(tmpFile, 128)
@@ -90,9 +91,11 @@ func TestSQLiteVecIndex(t *testing.T) {
 
 	for i := 0; i < 50; i++ {
 		vector := randVector(128)
-		nodeID := "node_" + string(rune('a'+i%26)) + string(rune('0'+i/26))
-		url := "https://example.com/page" + string(rune('0'+i%5))
-		idx.Add(nodeID, url, vector, "Summary "+nodeID)
+		nodeID := fmt.Sprintf("node_%c%d", 'a'+rune(i%26), i/26)
+		url := fmt.Sprintf("https://example.com/page%d", i%5)
+		if err := idx.Add(nodeID, url, vector, "Summary "+nodeID); err != nil {
+			t.Fatalf("failed to add: %v", err)
+		}
 	}
 
 	ctx := context.Background()

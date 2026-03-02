@@ -3,7 +3,9 @@ package index
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
 	"time"
@@ -320,33 +322,18 @@ func (s *SQLiteVecIndex) Path() string {
 }
 
 func floatsToBytes(floats []float32) []byte {
-	bytes := make([]byte, len(floats)*4)
+	buf := make([]byte, len(floats)*4)
 	for i, f := range floats {
-		bits := uint32(0)
-		for j := 0; j < 32; j++ {
-			if f < 0 {
-				f = -f
-				bits |= 1 << 31
-			}
-			if f >= 1 {
-				f = f - float32(int(f))
-				bits |= 1 << uint(30-j%31)
-			}
-			f = f * 2
-		}
-		bytes[i*4] = byte(bits >> 24)
-		bytes[i*4+1] = byte(bits >> 16)
-		bytes[i*4+2] = byte(bits >> 8)
-		bytes[i*4+3] = byte(bits)
+		binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(f))
 	}
-	return bytes
+	return buf
 }
 
-func bytesToFloats(bytes []byte) []float32 {
-	floats := make([]float32, len(bytes)/4)
+func bytesToFloats(buf []byte) []float32 {
+	floats := make([]float32, len(buf)/4)
 	for i := range floats {
-		bits := uint32(bytes[i*4])<<24 | uint32(bytes[i*4+1])<<16 | uint32(bytes[i*4+2])<<8 | uint32(bytes[i*4+3])
-		floats[i] = float32(bits) / float32(1<<31)
+		bits := binary.LittleEndian.Uint32(buf[i*4:])
+		floats[i] = math.Float32frombits(bits)
 	}
 	return floats
 }

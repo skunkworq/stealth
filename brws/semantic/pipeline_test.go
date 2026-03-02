@@ -33,7 +33,7 @@ func TestCleanHTML(t *testing.T) {
 </body>
 </html>`
 
-	cleaned, doc, err := cleanAndParseHTML(htmlStr)
+	cleaned, doc, _, err := cleanAndParseHTML(htmlStr)
 	if err != nil {
 		t.Fatalf("cleanAndParseHTML failed: %v", err)
 	}
@@ -75,7 +75,12 @@ func TestExtractTitle(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := extractTitle(tt.html)
+		_, doc, got, err := cleanAndParseHTML(tt.html)
+		if err != nil {
+			t.Errorf("parse error: %v", err)
+			continue
+		}
+		_ = doc
 		if got != tt.expected {
 			t.Errorf("expected %q, got %q", tt.expected, got)
 		}
@@ -119,7 +124,7 @@ func TestChunkDOM(t *testing.T) {
 </body>
 </html>`
 
-	_, doc, err := cleanAndParseHTML(htmlStr)
+	_, doc, _, err := cleanAndParseHTML(htmlStr)
 	if err != nil {
 		t.Fatalf("cleanAndParseHTML failed: %v", err)
 	}

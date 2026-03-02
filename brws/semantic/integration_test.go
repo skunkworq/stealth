@@ -83,7 +83,7 @@ func TestSemanticExtractionIntegration(t *testing.T) {
 	// This validates the pipeline structure and data flow
 
 	t.Run("dom_cleaning", func(t *testing.T) {
-		cleaned, doc, err := cleanAndParseHTML(html)
+		cleaned, doc, _, err := cleanAndParseHTML(html)
 		if err != nil {
 			t.Fatalf("cleanAndParseHTML failed: %v", err)
 		}
@@ -100,7 +100,10 @@ func TestSemanticExtractionIntegration(t *testing.T) {
 	})
 
 	t.Run("title_extraction", func(t *testing.T) {
-		title := extractTitle(html)
+		_, _, title, err := cleanAndParseHTML(html)
+		if err != nil {
+			t.Fatalf("cleanAndParseHTML failed: %v", err)
+		}
 		if title != "E-Commerce Product Page" {
 			t.Errorf("title = %q, want %q", title, "E-Commerce Product Page")
 		}
@@ -138,7 +141,7 @@ func TestSemanticExtractionIntegration(t *testing.T) {
 	})
 
 	t.Run("dom_chunking", func(t *testing.T) {
-		_, doc, err := cleanAndParseHTML(html)
+		_, doc, _, err := cleanAndParseHTML(html)
 		if err != nil {
 			t.Fatalf("cleanAndParseHTML failed: %v", err)
 		}
@@ -161,7 +164,7 @@ func TestSemanticExtractionIntegration(t *testing.T) {
 	})
 
 	t.Run("structural_hashing", func(t *testing.T) {
-		_, doc, err := cleanAndParseHTML(html)
+		_, doc, _, err := cleanAndParseHTML(html)
 		if err != nil {
 			t.Fatalf("cleanAndParseHTML failed: %v", err)
 		}
@@ -517,7 +520,7 @@ func TestEndToEndWithMockLLM(t *testing.T) {
 		url := "https://example.com"
 
 		// Stage 1: Clean and parse
-		cleaned, doc, err := cleanAndParseHTML(html)
+		cleaned, doc, _, err := cleanAndParseHTML(html)
 		if err != nil {
 			t.Fatalf("Stage 1 failed: %v", err)
 		}
@@ -548,10 +551,11 @@ func TestEndToEndWithMockLLM(t *testing.T) {
 		}
 
 		// Stage 6: Create tree
+		_, _, title, _ := cleanAndParseHTML(html)
 		tree := &SemanticTree{
 			URL:                  url,
 			Domain:               ExtractDomain(url),
-			Title:                extractTitle(html),
+			Title:                title,
 			RootNodes:            nodes,
 			CompressedTokenCount: sumTokenCounts(nodes),
 			FullTokenCount:       sumSubtreeTokenCounts(nodes),

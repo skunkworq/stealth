@@ -40,7 +40,7 @@ func TestIntegration_ParseHTML(t *testing.T) {
 </html>`
 
 	t.Run("clean_and_chunk", func(t *testing.T) {
-		cleanHTML, doc, err := cleanAndParseHTML(html)
+		cleanHTML, doc, _, err := cleanAndParseHTML(html)
 		if err != nil {
 			t.Fatalf("cleanAndParseHTML failed: %v", err)
 		}

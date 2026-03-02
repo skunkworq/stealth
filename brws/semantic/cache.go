@@ -51,6 +51,7 @@ func (s *CacheStore) ensureSchema(ctx context.Context) error {
 			accessed_at INTEGER NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_chunk_created ON chunk_cache(created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_chunk_accessed ON chunk_cache(accessed_at)`,
 		`CREATE TABLE IF NOT EXISTS image_descriptions (
 			url_hash TEXT PRIMARY KEY,
 			description TEXT NOT NULL,
@@ -77,7 +78,6 @@ func (s *CacheStore) ensureSchema(ctx context.Context) error {
 
 func (s *CacheStore) GetChunk(ctx context.Context, contentHash string) (*SemanticNode, error) {
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 
 	var nodeJSON string
 	var createdAt int64
@@ -86,6 +86,8 @@ func (s *CacheStore) GetChunk(ctx context.Context, contentHash string) (*Semanti
 		"SELECT node_json, created_at FROM chunk_cache WHERE content_hash = ?",
 		contentHash,
 	).Scan(&nodeJSON, &createdAt)
+
+	s.mu.RUnlock()
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -99,10 +101,14 @@ func (s *CacheStore) GetChunk(ctx context.Context, contentHash string) (*Semanti
 		return nil, NewCacheError(fmt.Sprintf("failed to decode node: %v", err))
 	}
 
-	_, _ = s.db.ExecContext(ctx,
-		"UPDATE chunk_cache SET accessed_at = ? WHERE content_hash = ?",
-		time.Now().Unix(), contentHash,
-	)
+	go func() {
+		s.mu.Lock()
+		s.db.ExecContext(context.Background(),
+			"UPDATE chunk_cache SET accessed_at = ? WHERE content_hash = ?",
+			time.Now().Unix(), contentHash,
+		)
+		s.mu.Unlock()
+	}()
 
 	return &node, nil
 }

@@ -109,13 +109,12 @@ func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *
 	}
 	stats.llmSemaphore = make(chan struct{}, maxConcurrent)
 
-	cleanHTML, doc, err := cleanAndParseHTML(htmlStr)
+	cleanHTML, doc, title, err := cleanAndParseHTML(htmlStr)
 	if err != nil {
 		return nil, nil, err
 	}
 	cleanBytes := len(cleanHTML)
 
-	title := extractTitle(htmlStr)
 	structuralHash := computeStructuralHash(doc)
 	pageImages := extractImagesFromDoc(doc, url)
 
@@ -177,13 +176,30 @@ func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *
 	return tree, runStats, nil
 }
 
-func cleanAndParseHTML(htmlStr string) (string, *html.Node, error) {
+func cleanAndParseHTML(htmlStr string) (string, *html.Node, string, error) {
 	doc, err := html.Parse(strings.NewReader(htmlStr))
 	if err != nil {
-		return "", nil, NewParseError(err.Error())
+		return "", nil, "", NewParseError(err.Error())
 	}
+	title := findTitleInDoc(doc)
 	cleaned := cleanHTMLNode(doc)
-	return cleaned, doc, nil
+	return cleaned, doc, title, nil
+}
+
+func findTitleInDoc(doc *html.Node) string {
+	var findTitle func(n *html.Node) string
+	findTitle = func(n *html.Node) string {
+		if n.Type == html.ElementNode && n.Data == "title" {
+			return extractTextContent(n)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if title := findTitle(c); title != "" {
+				return title
+			}
+		}
+		return ""
+	}
+	return findTitle(doc)
 }
 
 func cleanHTMLNode(doc *html.Node) string {
@@ -325,27 +341,6 @@ func renderNodeToBuilder(n *html.Node, b *strings.Builder) {
 			renderNodeToBuilder(c, b)
 		}
 	}
-}
-
-func extractTitle(htmlStr string) string {
-	doc, err := html.Parse(strings.NewReader(htmlStr))
-	if err != nil {
-		return ""
-	}
-
-	var findTitle func(n *html.Node) string
-	findTitle = func(n *html.Node) string {
-		if n.Type == html.ElementNode && n.Data == "title" {
-			return extractTextContent(n)
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			if title := findTitle(c); title != "" {
-				return title
-			}
-		}
-		return ""
-	}
-	return findTitle(doc)
 }
 
 func computeStructuralHash(doc *html.Node) string {
