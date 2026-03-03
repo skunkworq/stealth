@@ -366,9 +366,10 @@ func TestBehavioralAnalyzer_VelocityLag2Anomaly(t *testing.T) {
 func TestBehavioralAnalyzer_VelocityLag_HumanLike(t *testing.T) {
 	ba := NewBehavioralAnalyzer(nil)
 
-	// Human-like: smooth velocity curve (positive lag-2 and lag-3 autocorrelation)
+	// Human-like: gradual rise then gentle decline (asymmetric arc)
+	// Asymmetry ensures positive lag-3 autocorrelation unlike symmetric arcs.
 	events := &EnhancedBehavioralEvents{
-		MouseVelocities: []float64{40, 65, 110, 175, 250, 290, 270, 230, 180, 120, 80, 50},
+		MouseVelocities: []float64{40, 60, 90, 130, 175, 230, 270, 250, 230, 200, 180, 170},
 	}
 
 	result := ba.Analyze(events)

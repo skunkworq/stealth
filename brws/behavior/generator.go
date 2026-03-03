@@ -310,12 +310,15 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 				// lag-1/2/3 autocorrelation structure (defeats Checks 27, 28).
 				// Human motor control produces correlated velocity sequences —
 				// the hand doesn't change speed independently each sample.
+				// Heavy smoothing (55% new + 45% history) creates the strong
+				// lag-2 (0.15-0.60) and lag-3 (0.05-0.40) autocorrelation
+				// expected by the shield's checks.
 				if velHistoryLen >= 3 {
-					v = 0.74*v + 0.15*velHistory[0] + 0.08*velHistory[1] + 0.03*velHistory[2]
+					v = 0.55*v + 0.25*velHistory[0] + 0.13*velHistory[1] + 0.07*velHistory[2]
 				} else if velHistoryLen == 2 {
-					v = 0.77*v + 0.15*velHistory[0] + 0.08*velHistory[1]
+					v = 0.60*v + 0.25*velHistory[0] + 0.15*velHistory[1]
 				} else if velHistoryLen == 1 {
-					v = 0.85*v + 0.15*velHistory[0]
+					v = 0.70*v + 0.30*velHistory[0]
 				}
 
 				finalV := math.Round(v*10) / 10
@@ -332,6 +335,29 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 		}
 
 		prevX, prevY = x, y
+	}
+
+	// Post-process velocities with a weighted moving average to create
+	// smooth temporal structure. The inline smoothing alone is insufficient
+	// because micro-tremor ↔ major-move alternation creates jagged velocities.
+	// A 5-point Gaussian-weighted average produces lag-2 ∈ [0.15, 0.60]
+	// and lag-3 ∈ [0.05, 0.40] that match human motor control patterns.
+	if len(velocities) > 5 {
+		smoothed := make([]float64, len(velocities))
+		weights := [5]float64{0.06, 0.24, 0.40, 0.24, 0.06}
+		for i := range velocities {
+			var wSum, vSum float64
+			for j := -2; j <= 2; j++ {
+				idx := i + j
+				if idx >= 0 && idx < len(velocities) {
+					w := weights[j+2]
+					vSum += velocities[idx] * w
+					wSum += w
+				}
+			}
+			smoothed[i] = math.Round(vSum/wSum*10) / 10
+		}
+		velocities = smoothed
 	}
 
 	data.MousePositions = positions
@@ -487,20 +513,37 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 	// Real users scroll down 70-85% of the time, with up-scrolls for re-reading.
 	// Direction changes are clustered (once you scroll up, you tend to continue up
 	// for 1-3 events before switching back), creating positive autocorrelation.
+	// With >5 events, guarantee at least one up-scroll to avoid monotonic detection.
 	directions := make([]float64, 0, numScrolls)
 	currentDir := 1.0 // Start scrolling down
 	dirRun := 0       // How many events in current direction
+
+	// If >5 events, force an up-scroll at a random position
+	forceUpAt := -1
+	if numScrolls > 5 {
+		forceUpAt = 2 + g.rng.Intn(numScrolls-3) // Not first or last
+	}
+
 	for i := 0; i < numScrolls; i++ {
-		if dirRun > 0 && currentDir < 0 && dirRun >= 1+g.rng.Intn(3) {
+		if i == forceUpAt && currentDir > 0 {
+			currentDir = -1.0
+			dirRun = 0
+		} else if dirRun > 0 && currentDir < 0 && dirRun >= 1+g.rng.Intn(3) {
 			// After 1-3 up-scrolls, switch back to down
 			currentDir = 1.0
 			dirRun = 0
-		} else if currentDir > 0 && g.rng.Float64() < 0.15 {
-			// 15% chance to start scrolling up
+		} else if currentDir > 0 && g.rng.Float64() < 0.20 {
+			// 20% chance to start scrolling up
 			currentDir = -1.0
 			dirRun = 0
 		}
-		directions = append(directions, currentDir*deltas[i])
+		// When changing direction, scale down the delta to simulate deceleration
+		// before reversal (defeats Check 31: no abrupt direction changes at full speed).
+		delta := deltas[i]
+		if i > 0 && (directions[i-1] > 0) != (currentDir > 0) {
+			delta *= 0.3 + g.rng.Float64()*0.3 // 30-60% of original delta
+		}
+		directions = append(directions, currentDir*delta)
 		dirRun++
 	}
 
@@ -541,13 +584,35 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 	clickTimestamps := make([]int64, 0, numClicks)
 	clickPositions := make([]map[string]float64, 0, numClicks)
 
-	for _, idx := range indices {
-		// Add 1-5ms offset from the mouse timestamp (defeats Check 16).
-		// Real browsers have event dispatch delay between mousemove and click.
-		offset := int64(1 + g.rng.Intn(5))
-		clickTimestamps = append(clickTimestamps, data.MouseTimestamps[idx]+offset)
-
+	for ci, idx := range indices {
 		pos := data.MousePositions[idx]
+
+		// Fitts' law-compliant click timing (defeats Check 29).
+		// Movement time ∝ log2(D/W + 1), where D=distance, W=target width.
+		// After the first click, adjust the timestamp so that inter-click time
+		// correlates with distance to the previous click position.
+		var clickTs int64
+		if ci == 0 {
+			// First click: use mouse timestamp + small offset
+			clickTs = data.MouseTimestamps[idx] + int64(1+g.rng.Intn(5))
+		} else {
+			prevPos := clickPositions[ci-1]
+			dx := pos["x"] - prevPos["x"]
+			dy := pos["y"] - prevPos["y"]
+			dist := math.Sqrt(dx*dx + dy*dy)
+			if dist < 1.0 {
+				dist = 1.0
+			}
+			// Fitts' law: MT = a + b * log2(D/W + 1) with noise
+			// a=300ms base, b=200ms slope, W=40px target width
+			fittsID := math.Log2(dist/40.0 + 1)
+			movementTime := 300.0 + 200.0*fittsID
+			// Add 15-30% noise to avoid perfect Fitts correlation (r > 0.95)
+			noise := 0.85 + g.rng.Float64()*0.30
+			movementTime *= noise
+			clickTs = clickTimestamps[ci-1] + int64(movementTime)
+		}
+		clickTimestamps = append(clickTimestamps, clickTs)
 		// Varied click offset distribution (defeats Check 17):
 		// - 30% precise clicks: 2-5px offset (user clicking carefully)
 		// - 40% moderate clicks: 5-12px offset (normal targeting)

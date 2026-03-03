@@ -3,6 +3,7 @@ package behavior
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/stealth/brwslab/brws/adversarial"
@@ -259,15 +260,7 @@ func computeMeanStddev(values []float64) (float64, float64) {
 		variance += diff * diff
 	}
 	variance /= float64(len(values))
-	stddev := 0.0
-	if variance > 0 {
-		stddev = variance // take sqrt
-		// Use manual sqrt since math isn't imported in this scope
-		for i := 0; i < 20; i++ {
-			stddev = (stddev + variance/stddev) / 2
-		}
-	}
-	return mean, stddev
+	return mean, math.Sqrt(variance)
 }
 
 func TestEventGenerator_CustomConfig(t *testing.T) {
