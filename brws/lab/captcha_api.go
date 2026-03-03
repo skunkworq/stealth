@@ -213,6 +213,27 @@ func (s *EnhancedServer) handleCaptchaCatalogue(w http.ResponseWriter, r *http.R
 			Example:     "Click on the sphere",
 			Metrics:     []string{"3d_interaction_time", "camera_movement", "object_selection"},
 		},
+		{
+			Type:        "cloudflare_js",
+			Name:        "Cloudflare JS Challenge",
+			Description: "503 JS proof-of-work challenge (SHA-256 hashcash)",
+			Example:     "Automatic PoW computation",
+			Metrics:     []string{"pow_time_ms", "pow_iterations", "difficulty_bits"},
+		},
+		{
+			Type:        "cloudflare_managed",
+			Name:        "Cloudflare Managed Challenge",
+			Description: "\"Just a moment...\" challenge with PoW + fingerprint + behavioral analysis",
+			Example:     "Checking if the site connection is secure",
+			Metrics:     []string{"pow_time_ms", "fingerprint_score", "behavioral_score", "composite_score"},
+		},
+		{
+			Type:        "cloudflare_turnstile",
+			Name:        "Cloudflare Turnstile",
+			Description: "Turnstile widget with light PoW + behavioral verification",
+			Example:     "Invisible Turnstile verification",
+			Metrics:     []string{"pow_time_ms", "behavioral_score", "token_issued"},
+		},
 	}
 	//nolint:errchkjson // Dynamic response
 	_ = json.NewEncoder(w).Encode(catalogue)

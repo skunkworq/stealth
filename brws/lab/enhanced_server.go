@@ -303,6 +303,16 @@ func (s *EnhancedServer) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/recaptcha/v3/assessments", s.handleV3Assessments)
 	mux.HandleFunc("/api/recaptcha/v3/metrics", s.handleV3Metrics)
 
+	// Cloudflare challenge endpoints
+	cf := s.stealthServer.CloudflareChallenger
+	mux.HandleFunc("/api/cloudflare/challenge", cf.HandleChallengePage)
+	mux.HandleFunc("/api/cloudflare/init", cf.HandleInit)
+	mux.HandleFunc("/api/cloudflare/solve/js", cf.HandleSolveJS)
+	mux.HandleFunc("/api/cloudflare/solve/managed", cf.HandleSolveManaged)
+	mux.HandleFunc("/api/cloudflare/solve/turnstile", cf.HandleSolveTurnstile)
+	mux.HandleFunc("/api/cloudflare/verify", cf.HandleVerifyClearance)
+	mux.HandleFunc("/api/cloudflare/status", cf.HandleStatus)
+
 	// CAPTCHA API endpoints
 	mux.HandleFunc("/api/captcha/catalogue", s.handleCaptchaCatalogue)
 	mux.HandleFunc("/api/captcha/generate", s.handleCaptchaGenerate)

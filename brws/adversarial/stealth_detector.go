@@ -2250,10 +2250,11 @@ func getClientIP(req *http.Request) string {
 type AdvancedStealthServer struct {
 	*StealthDetector
 
-	Server          *TestServer
-	CaptchaShield   *CaptchaShield
-	Tracer          *CaptchaTracer
-	RecaptchaWidget *ReCaptchaWidget
+	Server               *TestServer
+	CaptchaShield        *CaptchaShield
+	Tracer               *CaptchaTracer
+	RecaptchaWidget      *ReCaptchaWidget
+	CloudflareChallenger *CloudflareChallenger
 
 	// CaptchaMode controls which captcha flow HandleRequest uses for suspicious
 	// requests (score 0.20–0.60). Values: "recaptcha_v2" (default), "inline".
@@ -2286,14 +2287,16 @@ func NewAdvancedStealthServer() *AdvancedStealthServer {
 
 	shield := NewCaptchaShield(nil, nil, tracer)
 	widget := NewReCaptchaWidget(shield)
+	cfChallenger := NewCloudflareChallenger(tracer, nil)
 
 	as := &AdvancedStealthServer{
-		StealthDetector: detector,
-		Server:          testServer,
-		CaptchaShield:   shield,
-		Tracer:          tracer,
-		RecaptchaWidget: widget,
-		CaptchaMode:     "recaptcha_v2",
+		StealthDetector:      detector,
+		Server:               testServer,
+		CaptchaShield:        shield,
+		Tracer:               tracer,
+		RecaptchaWidget:      widget,
+		CloudflareChallenger: cfChallenger,
+		CaptchaMode:          "recaptcha_v2",
 		captchaSecret:   secret,
 		solvedTokens:    make(map[string]time.Time),
 		v3Assessments:   make([]*V3AssessmentRecord, 0, 100),
@@ -2363,10 +2366,16 @@ func (as *AdvancedStealthServer) GetV3Assessments() []*V3AssessmentRecord {
 
 // selectCaptchaTypeFromScore selects the CAPTCHA type based on the WAF detection score.
 func selectCaptchaTypeFromScore(score float64) string {
-	if score < 0.35 {
-		return "text" // math/text-based CAPTCHA for low suspicion
+	switch {
+	case score >= 0.80:
+		return "cloudflare_managed"
+	case score >= 0.60:
+		return "cloudflare_js"
+	case score >= 0.35:
+		return "hcaptcha"
+	default:
+		return "text"
 	}
-	return "hcaptcha" // harder CAPTCHA for higher suspicion
 }
 
 // HandleCaptchaVerify verifies a submitted CAPTCHA solution.

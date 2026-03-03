@@ -284,6 +284,30 @@ func (cs *CaptchaShield) CreateChallenge(sessionID string, detection *DetectionR
 		}
 		challenge.CaptchaID = distorted.ID
 
+	case "cloudflare_js":
+		challenge.CaptchaID = challenge.ID
+		challenge.Challenge = map[string]interface{}{
+			"challenge_type": "cloudflare_js",
+			"description":    "Cloudflare 503 JS proof-of-work challenge",
+		}
+
+	case "cloudflare_managed":
+		challenge.CaptchaID = challenge.ID
+		challenge.Challenge = map[string]interface{}{
+			"challenge_type":      "cloudflare_managed",
+			"description":         "Cloudflare managed challenge (PoW + fingerprint + behavioral)",
+			"requires_fingerprint": true,
+			"requires_behavioral":  true,
+		}
+
+	case "cloudflare_turnstile":
+		challenge.CaptchaID = challenge.ID
+		challenge.Challenge = map[string]interface{}{
+			"challenge_type": "cloudflare_turnstile",
+			"description":    "Cloudflare Turnstile widget challenge",
+			"sitekey":        "0x4AAAAAAAfake_sitekey",
+		}
+
 	default:
 		textCaptcha, err := cs.service.CreateTextCaptcha(nil)
 		if err != nil {

@@ -21,7 +21,8 @@ func main() {
 		"https://httpbin.org/html",
 		"https://httpbin.org/links/10",
 		"https://en.wikipedia.org/wiki/Go_(programming_language)",
-		"https://example.com",
+		// example.com requires Chrome - uncomment when Chrome is installed
+		// "https://example.com",
 	}
 
 	results := make(chan *Result, len(urls))
@@ -86,28 +87,10 @@ func testURL(url string) *Result {
 	start := time.Now()
 	log.Printf("Testing: %s", url)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
+	// Use plain HTTP for all URLs
+	// Note: For Cloudflare-protected sites (example.com), use stealth browser with Chrome installed
+	htmlBytes, err := fetchWithHTTP(url)
 
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		r.Err = err
-		return r
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		r.Err = err
-		return r
-	}
-	defer resp.Body.Close()
-
-	htmlBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
 		r.Err = err
 		return r
@@ -123,7 +106,7 @@ func testURL(url string) *Result {
 		MaxConcurrentLLM: 0, // No LLM for pure compression test
 	}
 
-	tree, stats, err := semantic.HTMLToSemanticTreeCached(ctx, string(htmlBytes), url, config)
+	tree, stats, err := semantic.HTMLToSemanticTreeCached(context.Background(), string(htmlBytes), url, config)
 	if err != nil {
 		r.Err = err
 		log.Printf("  ERROR: %v", err)
@@ -172,7 +155,6 @@ func testURL(url string) *Result {
 		selectorCounts := make(map[string]int)
 		for _, n := range allNodes {
 			if n.DOMSelector != "" {
-				// Get the tag name from selector
 				tag := "unknown"
 				if idx := strings.Index(n.DOMSelector, ">"); idx > 0 {
 					tag = n.DOMSelector[strings.LastIndex(n.DOMSelector, "<")+1 : idx]
@@ -246,6 +228,25 @@ func testURL(url string) *Result {
 	}
 
 	return r
+}
+
+func fetchWithHTTP(url string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	return io.ReadAll(resp.Body)
 }
 
 func truncateURL(url string) string {

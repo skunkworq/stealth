@@ -1,6 +1,7 @@
 package adversarial
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -32,6 +33,7 @@ type CloudflareChallenge struct {
 	SiteKey    string                  `json:"site_key,omitempty"`
 	URL        string                  `json:"url"`
 	DetectedAt time.Time               `json:"detected_at"`
+	PoWParams  *PoWChallenge           `json:"pow_params,omitempty"`
 }
 
 // CloudflareSolution represents a solved challenge.
@@ -73,6 +75,15 @@ func DetectChallenge(statusCode int, headers http.Header, body []byte) *Cloudfla
 			strings.Contains(bodyStr, "cf-browser-verification") {
 			challenge.Type = ChallengeJS
 			challenge.SiteKey = extractTurnstileSiteKey(bodyStr)
+			challenge.PoWParams = extractPoWParams(bodyStr)
+
+			// Upgrade to managed if body contains managed challenge class/id markers
+			// (not URL paths like "/cdn-cgi/challenge-platform")
+			if strings.Contains(bodyStr, `class="managed_challenge"`) ||
+				strings.Contains(bodyStr, `"managed_challenge"`) ||
+				strings.Contains(bodyStr, "cf-challenge-running") {
+				challenge.Type = ChallengeManaged
+			}
 			return challenge
 		}
 	}
@@ -136,6 +147,39 @@ func IsCloudflarePage(headers http.Header) bool {
 		return true
 	}
 	return false
+}
+
+// cfChlOptRe extracts the _cf_chl_opt JSON from the challenge page body.
+var cfChlOptRe = regexp.MustCompile(`var\s+_cf_chl_opt\s*=\s*(\{[^;]+\})`)
+
+// extractPoWParams parses PoW parameters from the _cf_chl_opt JSON in the page body.
+func extractPoWParams(body string) *PoWChallenge {
+	matches := cfChlOptRe.FindStringSubmatch(body)
+	if len(matches) < 2 {
+		return nil
+	}
+
+	var opts struct {
+		PoW struct {
+			Prefix     string `json:"prefix"`
+			Difficulty int    `json:"difficulty"`
+			Algorithm  string `json:"algorithm"`
+		} `json:"pow"`
+	}
+
+	if err := json.Unmarshal([]byte(matches[1]), &opts); err != nil {
+		return nil
+	}
+
+	if opts.PoW.Prefix == "" {
+		return nil
+	}
+
+	return &PoWChallenge{
+		Prefix:    opts.PoW.Prefix,
+		Difficulty: opts.PoW.Difficulty,
+		Algorithm: opts.PoW.Algorithm,
+	}
 }
 
 // String formats the CloudflareChallenge for logging.
