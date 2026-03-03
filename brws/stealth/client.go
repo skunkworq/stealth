@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"net/http"
 	"strings"
 	"time"
 
+	"github.com/stealth/brwslab/brws/adversarial"
 	"github.com/stealth/brwslab/brws/behavior"
 	"github.com/stealth/brwslab/brws/challenge"
 	"github.com/stealth/brwslab/brws/engine"
@@ -26,6 +28,7 @@ type Client struct {
 	policyLoader  *ml.PolicyLoader
 	behavTracker  *BehavioralTracker
 	captchaSolver *CaptchaSolver
+	cfSolver      *CloudflareSolverClient
 
 	logger *instrumentation.Logger
 	tracer *instrumentation.Tracer
@@ -177,6 +180,13 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		logger.Info("captcha auto-solver initialized")
 	}
 
+	// Initialize Cloudflare solver if auto-solve is enabled
+	var cfSolver *CloudflareSolverClient
+	if cfg.Challenge.AutoSolve {
+		cfSolver = NewCloudflareSolverClient()
+		logger.Info("cloudflare auto-solver initialized")
+	}
+
 	logger.Info("stealth client initialized")
 
 	return &Client{
@@ -187,6 +197,7 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		policyLoader:  policyLoader,
 		behavTracker:  NewBehavioralTracker(),
 		captchaSolver: captchaSolver,
+		cfSolver:      cfSolver,
 		logger:        logger,
 		tracer:        tracer,
 		hooks:         hooks,
@@ -246,6 +257,28 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 
 		// Unblocked response received
 		break
+	}
+
+	// Cloudflare challenge auto-solve
+	if c.cfSolver != nil && c.config.Challenge.AutoSolve {
+		cfChallenge := c.detectCFChallenge(resp)
+		if cfChallenge != nil {
+			span.AddEvent("cf_challenge_detected", map[string]interface{}{
+				"type": string(cfChallenge.Type),
+				"ray":  cfChallenge.RayID,
+			})
+			c.logger.Info("cloudflare challenge detected", "type", cfChallenge.Type, "ray", cfChallenge.RayID)
+			_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected)
+
+			solvedResp, solveErr := c.solveCFChallenge(ctx, url, resp, cfChallenge)
+			if solveErr == nil && solvedResp != nil {
+				resp = solvedResp
+				c.logger.Info("cloudflare challenge bypassed", "type", cfChallenge.Type)
+				span.AddEvent("cf_challenge_solved", nil)
+			} else if solveErr != nil {
+				c.logger.Warn("cloudflare challenge solve failed", "error", solveErr)
+			}
+		}
 	}
 
 	// Captcha auto-solve: detect X-Captcha-Required and solve via ML solver
@@ -548,6 +581,69 @@ func WithTracing(enabled bool) Option {
 			c.Instrumentation = &InstrumentationConfig{}
 		}
 		c.Instrumentation.EnableTracing = enabled
+	}
+}
+
+// detectCFChallenge checks if the response is a Cloudflare challenge page.
+func (c *Client) detectCFChallenge(resp *engine.Response) *adversarial.CloudflareChallenge {
+	httpHeaders := make(http.Header)
+	for k, vals := range resp.Headers {
+		for _, v := range vals {
+			httpHeaders.Add(k, v)
+		}
+	}
+	return adversarial.DetectChallenge(resp.Status, httpHeaders, resp.Body)
+}
+
+// solveCFChallenge attempts to solve a detected CF challenge and retry the request.
+func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *engine.Response, ch *adversarial.CloudflareChallenge) (*engine.Response, error) {
+	switch ch.Type {
+	case adversarial.ChallengeJS, adversarial.ChallengeManaged:
+		// Extract PoW params from the challenge page body
+		if ch.PoWParams == nil {
+			return nil, fmt.Errorf("no PoW params in challenge page")
+		}
+
+		// Solve the PoW
+		solution, err := c.cfSolver.solvePoW(ch.PoWParams.Prefix, ch.PoWParams.Difficulty)
+		if err != nil {
+			return nil, fmt.Errorf("PoW solve failed: %w", err)
+		}
+
+		// For managed challenges, also generate fingerprint + behavioral events
+		var fp *adversarial.FingerprintPayload
+		var events []adversarial.CaptchaEvent
+		if ch.Type == adversarial.ChallengeManaged {
+			fp = c.cfSolver.generateFingerprint()
+			events = c.cfSolver.eventGen.GenerateHumanEvents(5000)
+		}
+
+		// Human-like delay before submitting
+		//nolint:gosec
+		time.Sleep(time.Duration(1500+rand.Intn(3000)) * time.Millisecond)
+
+		// Submit solution to the challenge API endpoint
+		baseURL := deriveBaseURL(targetURL)
+		clearanceCookie, err := c.cfSolver.submitSolution(baseURL, ch, solution, fp, events)
+		if err != nil {
+			return nil, err
+		}
+
+		// Retry the original request with the clearance cookie
+		retryReq := &engine.Request{
+			URL:     targetURL,
+			Timeout: c.options.Timeout,
+			ExtraHeaders: map[string]string{
+				"Cookie": fmt.Sprintf("cf_clearance=%s", clearanceCookie.Value),
+			},
+		}
+		return c.engine.Do(ctx, retryReq)
+
+	case adversarial.ChallengeBlocked:
+		return nil, fmt.Errorf("hard blocked by Cloudflare (403, no challenge to solve)")
+
+	default:
+		return nil, fmt.Errorf("unsupported CF challenge type: %s", ch.Type)
 	}
 }
 

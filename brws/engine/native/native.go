@@ -5,6 +5,8 @@ package native
 
 import (
 	"bytes"
+	"compress/flate"
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -13,10 +15,11 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"strings"
+	"sync"
 	"time"
 
-	"sync"
-
+	"github.com/andybalholm/brotli"
 	"github.com/google/uuid"
 	utls "github.com/refraction-networking/utls"
 	"github.com/stealth/brwslab/brws/constants"
@@ -230,8 +233,10 @@ func (n *Native) Do(ctx context.Context, req *engine.Request) (*engine.Response,
 	}
 	defer func() { _ = httpResp.Body.Close() }()
 
-	// Read body
-	body, err := io.ReadAll(httpResp.Body)
+	// Read and decompress body if needed.
+	// When stealth headers set Accept-Encoding explicitly, Go's transport
+	// won't auto-decompress, so we handle it ourselves.
+	body, err := readAndDecompress(httpResp)
 	if err != nil {
 		return nil, fmt.Errorf("reading body: %w", err)
 	}
@@ -288,6 +293,31 @@ func (n *Native) Do(ctx context.Context, req *engine.Request) (*engine.Response,
 func (n *Native) Close() error {
 	n.client.CloseIdleConnections()
 	return nil
+}
+
+// readAndDecompress reads the response body, decompressing if Content-Encoding
+// is set. When stealth headers explicitly set Accept-Encoding, Go's transport
+// won't auto-decompress, so we handle gzip/deflate/br ourselves.
+func readAndDecompress(resp *http.Response) ([]byte, error) {
+	encoding := strings.ToLower(resp.Header.Get("Content-Encoding"))
+	var reader io.Reader = resp.Body
+
+	switch encoding {
+	case "gzip":
+		gr, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			// If gzip fails, fall back to raw read
+			return io.ReadAll(resp.Body)
+		}
+		defer gr.Close()
+		reader = gr
+	case "deflate":
+		reader = flate.NewReader(resp.Body)
+	case "br":
+		reader = brotli.NewReader(resp.Body)
+	}
+
+	return io.ReadAll(reader)
 }
 
 func flattenHeaders(headers map[string][]string) map[string]string {
@@ -363,6 +393,8 @@ func (u *uTLSRoundTripper) dialTLS(ctx context.Context, network, addr string) (n
 }
 
 // getH2Transport returns the HTTP/2 transport, creating it lazily.
+// Uses Chrome-like HTTP/2 SETTINGS to avoid detection by CF which compares
+// HTTP/2 frame values against the User-Agent's expected behavior.
 func (u *uTLSRoundTripper) getH2Transport() *http2.Transport {
 	u.h2mu.Lock()
 	defer u.h2mu.Unlock()
@@ -371,6 +403,13 @@ func (u *uTLSRoundTripper) getH2Transport() *http2.Transport {
 			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
 				return u.dialTLS(ctx, network, addr)
 			},
+			// Chrome-like HTTP/2 SETTINGS to match the browser profile.
+			// CF fingerprints HTTP/2 SETTINGS frames and compares them
+			// against the claimed User-Agent. Go defaults differ from
+			// Chrome's values, causing detection.
+			MaxHeaderListSize:         262144, // Chrome: 262144 (Go default: 10<<20)
+			MaxDecoderHeaderTableSize: 65536,  // Chrome: 65536  (Go default: 4096)
+			MaxReadFrameSize:          16384,  // Chrome: 16384  (Go default: 16384)
 		}
 	}
 	return u.h2

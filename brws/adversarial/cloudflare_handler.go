@@ -47,7 +47,18 @@ func (cc *CloudflareChallenger) HandleChallengePage(w http.ResponseWriter, r *ht
 
 	w.Header().Set("Server", "cloudflare")
 	w.Header().Set("Cf-Ray", session.RayID)
+	w.Header().Set("Cf-Mitigated", "challenge")
+	w.Header().Set("Cache-Control", "private, max-age=0, no-store, no-cache, must-revalidate, post-check=0, pre-check=0")
+	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 	w.Header().Set("Content-Type", "text/html")
+	http.SetCookie(w, &http.Cookie{
+		Name:     "__cf_bm",
+		Value:    session.CFBMValue,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   true,
+		Expires:  time.Now().Add(30 * time.Minute),
+	})
 	w.WriteHeader(http.StatusServiceUnavailable)
 
 	html := fmt.Sprintf(`<!DOCTYPE html>
@@ -164,6 +175,8 @@ func (cc *CloudflareChallenger) HandleSolveJS(w http.ResponseWriter, r *http.Req
 	result, err := cc.CompleteChallengeJS(req.SessionID, &req.Solution)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cf-Mitigated", "challenge")
+		w.Header().Set("Server", "cloudflare")
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -172,12 +185,14 @@ func (cc *CloudflareChallenger) HandleSolveJS(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Successful solve — no Cf-Mitigated header (real CF removes it)
 	http.SetCookie(w, result.ClearanceCookie)
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Server", "cloudflare")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":     true,
-		"method":      result.Method,
-		"solve_ms":    result.SolveTimeMs,
+		"success":      true,
+		"method":       result.Method,
+		"solve_ms":     result.SolveTimeMs,
 		"cf_clearance": result.ClearanceCookie.Value,
 	})
 }
@@ -206,6 +221,8 @@ func (cc *CloudflareChallenger) HandleSolveManaged(w http.ResponseWriter, r *htt
 	result, err := cc.CompleteChallengeManaged(req.SessionID, &req.Solution, req.Fingerprint, req.Events)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cf-Mitigated", "challenge")
+		w.Header().Set("Server", "cloudflare")
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -214,12 +231,14 @@ func (cc *CloudflareChallenger) HandleSolveManaged(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Successful solve — no Cf-Mitigated header (real CF removes it)
 	http.SetCookie(w, result.ClearanceCookie)
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Server", "cloudflare")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":     true,
-		"method":      result.Method,
-		"solve_ms":    result.SolveTimeMs,
+		"success":      true,
+		"method":       result.Method,
+		"solve_ms":     result.SolveTimeMs,
 		"cf_clearance": result.ClearanceCookie.Value,
 	})
 }
@@ -247,6 +266,8 @@ func (cc *CloudflareChallenger) HandleSolveTurnstile(w http.ResponseWriter, r *h
 	result, err := cc.CompleteTurnstile(req.SessionID, &req.Solution, req.Events)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cf-Mitigated", "challenge")
+		w.Header().Set("Server", "cloudflare")
 		w.WriteHeader(http.StatusForbidden)
 		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"success": false,
@@ -255,8 +276,10 @@ func (cc *CloudflareChallenger) HandleSolveTurnstile(w http.ResponseWriter, r *h
 		return
 	}
 
+	// Successful solve — no Cf-Mitigated header
 	http.SetCookie(w, result.ClearanceCookie)
 	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Server", "cloudflare")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"success":         true,
 		"method":          result.Method,
@@ -295,6 +318,23 @@ func (cc *CloudflareChallenger) HandleVerifyClearance(w http.ResponseWriter, r *
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
 		"valid": valid,
 	})
+}
+
+// HandleProtectedPage serves a challenge page for ANY request that lacks a valid
+// cf_clearance cookie. Once solved, proxies through to real content. This emulates
+// real CF behavior: the sword hits a normal-looking URL and gets a challenge page back.
+func (cc *CloudflareChallenger) HandleProtectedPage(contentHandler http.Handler) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Check for valid cf_clearance cookie
+		if cookie, err := r.Cookie("cf_clearance"); err == nil {
+			if cc.ValidateClearanceCookie(cookie.Value) {
+				contentHandler.ServeHTTP(w, r)
+				return
+			}
+		}
+		// Serve challenge page instead
+		cc.HandleChallengePage(w, r)
+	}
 }
 
 // HandleStatus returns challenge session statistics.

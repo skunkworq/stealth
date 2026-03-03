@@ -25,14 +25,14 @@ func main() {
 	}
 
 	fmt.Println("=== Testing with Chromium-Stealth Engine ===")
-	fmt.Println("Using real Chrome browser with stealth evasion")
+	fmt.Println("Using Chrome via CDP with stealth flags")
 	fmt.Println()
 
 	// Test with chromium-stealth engine
 	eng, err := engine.New("chromium-stealth", engine.Options{
 		Headless:       true,
 		ExecutablePath: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-		Timeout:        60 * time.Second,
+		Timeout:        90 * time.Second,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create native engine: %v", err)

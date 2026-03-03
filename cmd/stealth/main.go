@@ -3,8 +3,10 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"strings"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/stealth/brwslab/brws/engine"
 	_ "github.com/stealth/brwslab/brws/engine/native"
+	"github.com/stealth/brwslab/brws/semantic"
 	"github.com/stealth/brwslab/brws/spider"
 )
 
@@ -50,6 +53,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "fetch":
+		if err := runFetch(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "version":
 		printVersion()
 	case "-h", "--help", "help":
@@ -70,6 +78,7 @@ Commands:
   crawl, run    Run a spider
   list          List available spiders  
   shell         Open interactive shell
+  fetch         Fetch URL and extract semantic tree
   version       Show version info
 
 Run 'stealth <command> --help' for more information on a command.
@@ -80,6 +89,120 @@ Available engines: %s
 
 func printVersion() {
 	fmt.Printf("Stealth Spider Framework v%s (revision: %s, %s)\n", version, revision, goVersion)
+}
+
+func runFetch(args []string) error {
+	// Simple flags
+	engName := "native"
+	jsonOutput := false
+
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "-e":
+			if i+1 < len(args) {
+				engName = args[i+1]
+				i++
+			}
+		case "-j":
+			jsonOutput = true
+		default:
+			if !strings.HasPrefix(args[i], "-") {
+				break
+			}
+		}
+	}
+
+	url := ""
+	for _, a := range args {
+		if !strings.HasPrefix(a, "-") && a != "fetch" {
+			url = a
+			break
+		}
+	}
+
+	if url == "" {
+		return fmt.Errorf("URL required: stealth fetch <url>")
+	}
+
+	// Create engine
+	eng, err := engine.New(engName, engine.Options{
+		Stealth:     true,
+		StealthTLS:  true,
+		ProfileName: "chrome-120-macos",
+		Timeout:     30 * time.Second,
+	})
+	if err != nil {
+		return fmt.Errorf("create engine: %w", err)
+	}
+	defer eng.Close()
+
+	// Make request with retry
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	var resp *engine.Response
+	retries := 3
+	for i := 0; i < retries; i++ {
+		resp, err = eng.Do(ctx, &engine.Request{
+			URL:               url,
+			Timeout:           30 * time.Second,
+			WaitForNavigation: engName == "chromium",
+		})
+		if err == nil {
+			break
+		}
+		log.Printf("Attempt %d failed: %v", i+1, err)
+		if i < retries-1 {
+			time.Sleep(time.Duration(i+1) * time.Second)
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("request failed after %d retries: %w", retries, err)
+	}
+
+	// Extract semantic tree
+	config := &semantic.PipelineConfig{
+		MaxChunks:        50,
+		MaxConcurrentLLM: 0,
+	}
+
+	tree, stats, err := semantic.HTMLToSemanticTreeCached(ctx, string(resp.Body), url, config)
+	if err != nil {
+		return fmt.Errorf("extract semantic: %w", err)
+	}
+
+	if jsonOutput {
+		out, _ := json.MarshalIndent(tree, "", "  ")
+		fmt.Println(string(out))
+		return nil
+	}
+
+	// Print summary
+	fmt.Printf("Status: %d\n", resp.Status)
+	fmt.Printf("Size: %d bytes\n", len(resp.Body))
+
+	if tree != nil {
+		fmt.Printf("\n=== Semantic Tree ===\n")
+		fmt.Printf("Title: %s\n", tree.Title)
+		fmt.Printf("Domain: %s\n", tree.Domain)
+
+		allNodes := tree.AllNodes()
+		fmt.Printf("Nodes: %d\n", len(allNodes))
+
+		actionCount := 0
+		for _, n := range allNodes {
+			actionCount += len(n.Actions)
+		}
+		fmt.Printf("Actions: %d\n", actionCount)
+
+		if stats != nil && stats.FullTreeTokens > 0 {
+			ratio := float64(stats.CompressedTokens) / float64(stats.FullTreeTokens) * 100
+			fmt.Printf("Tokens: %d -> %d (%.1f%% compression)\n",
+				stats.FullTreeTokens, stats.CompressedTokens, ratio)
+		}
+	}
+
+	return nil
 }
 
 func runCrawl(args []string) error {

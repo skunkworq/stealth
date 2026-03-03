@@ -13,6 +13,17 @@ import (
 	"time"
 )
 
+// ChallengeState tracks the lifecycle of a challenge session.
+type ChallengeState string
+
+const (
+	StatePending    ChallengeState = "pending"
+	StateInProgress ChallengeState = "in_progress"
+	StateSolved     ChallengeState = "solved"
+	StateEscalated  ChallengeState = "escalated"
+	StateFailed     ChallengeState = "failed"
+)
+
 // PoWChallenge holds proof-of-work challenge parameters sent to the client.
 type PoWChallenge struct {
 	ChallengeID   string    `json:"challenge_id"`
@@ -64,6 +75,12 @@ type CloudflareChallengeSession struct {
 	ClearanceCookie     string
 	Passed              bool
 	Score               float64
+
+	// Phase 6: session state machine fields
+	State          ChallengeState
+	FailedAttempts int
+	EscalatedFrom  string // previous challenge type before escalation
+	CFBMValue      string // bound __cf_bm cookie value
 }
 
 // PoWDifficultyConfig controls PoW difficulty bounds.
@@ -123,6 +140,7 @@ func (cc *CloudflareChallenger) CreateJSChallenge(sessionID string, detectionSco
 	pow := cc.generatePoW(difficulty)
 	rayID := cc.generateRayID()
 
+	cfbm := generateCFBMValue(sessionID)
 	session := &CloudflareChallengeSession{
 		ID:                  sessionID,
 		Type:                ChallengeJS,
@@ -131,6 +149,8 @@ func (cc *CloudflareChallenger) CreateJSChallenge(sessionID string, detectionSco
 		RequiresFingerprint: false,
 		RequiresBehavioral:  false,
 		CreatedAt:           time.Now(),
+		State:               StatePending,
+		CFBMValue:           cfbm,
 	}
 
 	cc.sessions[sessionID] = session
@@ -147,6 +167,7 @@ func (cc *CloudflareChallenger) CreateManagedChallenge(sessionID string, detecti
 	pow := cc.generatePoW(difficulty)
 	rayID := cc.generateRayID()
 
+	cfbm := generateCFBMValue(sessionID)
 	session := &CloudflareChallengeSession{
 		ID:                  sessionID,
 		Type:                ChallengeManaged,
@@ -155,6 +176,8 @@ func (cc *CloudflareChallenger) CreateManagedChallenge(sessionID string, detecti
 		RequiresFingerprint: true,
 		RequiresBehavioral:  true,
 		CreatedAt:           time.Now(),
+		State:               StatePending,
+		CFBMValue:           cfbm,
 	}
 
 	cc.sessions[sessionID] = session
@@ -169,6 +192,7 @@ func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteK
 	pow := cc.generatePoW(cc.powConfig.MinBits)
 	rayID := cc.generateRayID()
 
+	cfbm := generateCFBMValue(sessionID)
 	session := &CloudflareChallengeSession{
 		ID:                  sessionID,
 		Type:                ChallengeTurnstile,
@@ -178,6 +202,8 @@ func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteK
 		RequiresFingerprint: false,
 		RequiresBehavioral:  true,
 		CreatedAt:           time.Now(),
+		State:               StatePending,
+		CFBMValue:           cfbm,
 	}
 
 	cc.sessions[sessionID] = session
@@ -298,6 +324,7 @@ func (cc *CloudflareChallenger) ValidateBehavioral(sessionID string, events []Ca
 // CompleteChallengeJS validates a JS challenge (PoW only).
 func (cc *CloudflareChallenger) CompleteChallengeJS(sessionID string, solution *PoWSolution) (*CloudflareSolution, error) {
 	if err := cc.ValidatePoW(sessionID, solution); err != nil {
+		cc.recordFailedAttempt(sessionID)
 		return nil, fmt.Errorf("PoW validation failed: %w", err)
 	}
 
@@ -309,6 +336,7 @@ func (cc *CloudflareChallenger) CompleteChallengeJS(sessionID string, solution *
 		session.SolvedAt = time.Now()
 		session.ClearanceCookie = cookie.Value
 		session.Score = 0.0
+		session.State = StateSolved
 	}
 	cc.mu.Unlock()
 
@@ -327,7 +355,20 @@ func (cc *CloudflareChallenger) CompleteChallengeManaged(
 	fp *FingerprintPayload,
 	events []CaptchaEvent,
 ) (*CloudflareSolution, error) {
+	// Solve time bounds: reject superhuman solve times (< 1.5s for managed)
+	cc.mu.RLock()
+	session, exists := cc.sessions[sessionID]
+	cc.mu.RUnlock()
+	if exists {
+		elapsed := time.Since(session.CreatedAt)
+		if elapsed < 1500*time.Millisecond {
+			cc.recordFailedAttempt(sessionID)
+			return nil, fmt.Errorf("solve time too fast: %dms (minimum 1500ms)", elapsed.Milliseconds())
+		}
+	}
+
 	if err := cc.ValidatePoW(sessionID, solution); err != nil {
+		cc.recordFailedAttempt(sessionID)
 		return nil, fmt.Errorf("PoW validation failed: %w", err)
 	}
 
@@ -344,22 +385,19 @@ func (cc *CloudflareChallenger) CompleteChallengeManaged(
 	}
 
 	if compositeScore > 0.50 {
-		cc.mu.Lock()
-		if session, ok := cc.sessions[sessionID]; ok {
-			session.Score = compositeScore
-		}
-		cc.mu.Unlock()
+		cc.recordFailedAttempt(sessionID)
 		return nil, fmt.Errorf("managed challenge failed: composite score %.2f exceeds threshold", compositeScore)
 	}
 
 	cookie := cc.generateClearanceCookie(sessionID)
 
 	cc.mu.Lock()
-	if session, ok := cc.sessions[sessionID]; ok {
-		session.Passed = true
-		session.SolvedAt = time.Now()
-		session.ClearanceCookie = cookie.Value
-		session.Score = compositeScore
+	if s, ok := cc.sessions[sessionID]; ok {
+		s.Passed = true
+		s.SolvedAt = time.Now()
+		s.ClearanceCookie = cookie.Value
+		s.Score = compositeScore
+		s.State = StateSolved
 	}
 	cc.mu.Unlock()
 
@@ -402,11 +440,7 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 	}
 
 	if behScore > 0.70 {
-		cc.mu.Lock()
-		if session, ok := cc.sessions[sessionID]; ok {
-			session.Score = behScore
-		}
-		cc.mu.Unlock()
+		cc.recordFailedAttempt(sessionID)
 		return nil, fmt.Errorf("turnstile challenge failed: behavioral score %.2f exceeds threshold", behScore)
 	}
 
@@ -419,6 +453,7 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		session.SolvedAt = time.Now()
 		session.ClearanceCookie = cookie.Value
 		session.Score = behScore
+		session.State = StateSolved
 	}
 	cc.mu.Unlock()
 
@@ -713,6 +748,70 @@ func SolvePoWRandom(prefix string, difficulty int, maxIterations int64) (*PoWSol
 	}
 
 	return nil, fmt.Errorf("failed to solve PoW after %d iterations", maxIterations)
+}
+
+// recordFailedAttempt increments the failed attempt counter and updates state.
+func (cc *CloudflareChallenger) recordFailedAttempt(sessionID string) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+	if session, ok := cc.sessions[sessionID]; ok {
+		session.FailedAttempts++
+		if session.State == StatePending {
+			session.State = StateInProgress
+		}
+		if session.FailedAttempts >= 3 {
+			session.State = StateFailed
+		}
+	}
+}
+
+// EscalateChallenge escalates a challenge: JS → Managed → Blocked.
+// Returns the new session if escalated, or nil if already at maximum level.
+func (cc *CloudflareChallenger) EscalateChallenge(sessionID string) *CloudflareChallengeSession {
+	cc.mu.Lock()
+	session, ok := cc.sessions[sessionID]
+	if !ok {
+		cc.mu.Unlock()
+		return nil
+	}
+	previousType := string(session.Type)
+	cc.mu.Unlock()
+
+	switch CloudflareChallengeType(previousType) {
+	case ChallengeJS:
+		newSession := cc.CreateManagedChallenge(sessionID+"_esc", 0.7)
+		cc.mu.Lock()
+		newSession.State = StateEscalated
+		newSession.EscalatedFrom = previousType
+		session.State = StateEscalated
+		cc.mu.Unlock()
+		return newSession
+	case ChallengeManaged:
+		// Escalate to blocked — no more challenges to solve
+		cc.mu.Lock()
+		session.State = StateFailed
+		blocked := &CloudflareChallengeSession{
+			ID:            sessionID + "_blocked",
+			Type:          ChallengeBlocked,
+			RayID:         session.RayID,
+			CreatedAt:     time.Now(),
+			State:         StateFailed,
+			EscalatedFrom: previousType,
+		}
+		cc.sessions[blocked.ID] = blocked
+		cc.mu.Unlock()
+		return blocked
+	default:
+		return nil
+	}
+}
+
+// generateCFBMValue creates a realistic __cf_bm cookie value tied to a session ID.
+func generateCFBMValue(sessionID string) string {
+	b := make([]byte, 24)
+	_, _ = rand.Read(b)
+	hash := sha256.Sum256(append([]byte(sessionID), b...))
+	return hex.EncodeToString(hash[:])[:43] + "-" + fmt.Sprintf("%d", time.Now().Unix()) + "-1-1"
 }
 
 // EstimatePoWIterations returns the expected number of iterations for a given difficulty.
