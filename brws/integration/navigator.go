@@ -7,9 +7,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/pipeline"
-	"github.com/stealth/brwslab/brws/semantic"
-	"github.com/stealth/brwslab/brws/stealth"
+	"github.com/skunkworq/stealth/brws/pipeline"
+	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 type SemanticNavigator struct {

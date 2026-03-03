@@ -11,8 +11,8 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-	"github.com/stealth/brwslab/brws/semantic"
-	"github.com/stealth/brwslab/brws/semantic/index"
+	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/semantic/index"
 )
 
 type Tools struct {

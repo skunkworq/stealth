@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/adversarial"
 )
 
 // mountReCaptchaServer creates an AdvancedStealthServer with all detection +

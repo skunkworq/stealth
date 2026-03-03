@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/engine"
-	"github.com/stealth/brwslab/brws/engine/testserver"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine/testserver"
 )
 
 func TestAdvancedSpoofingDetection(t *testing.T) {

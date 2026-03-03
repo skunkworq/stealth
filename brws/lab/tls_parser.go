@@ -2,7 +2,7 @@
 package lab
 
 import (
-	"github.com/stealth/brwslab/brws/tlsparser"
+	"github.com/skunkworq/stealth/brws/tlsparser"
 )
 
 // Re-export types from tlsparser for backwards compatibility

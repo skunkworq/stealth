@@ -264,7 +264,7 @@
 //
 // The pipeline uses brws/observability for metrics:
 //
-//	import "github.com/stealth/brwslab/brws/observability"
+//	import "github.com/skunkworq/stealth/brws/observability"
 //
 //	// Global metrics collector
 //	observability.IncCounter("custom_metric", map[string]string{"key": "value"})

@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 // DetectionResult contains the results of fingerprint analysis.

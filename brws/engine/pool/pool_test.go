@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 type mockEngine struct {

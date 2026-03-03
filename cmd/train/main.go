@@ -19,8 +19,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
-	"github.com/stealth/brwslab/brws/ml"
-	"github.com/stealth/brwslab/brws/ml/datagen"
+	"github.com/skunkworq/stealth/brws/ml"
+	"github.com/skunkworq/stealth/brws/ml/datagen"
 )
 
 var version = "0.1.0"

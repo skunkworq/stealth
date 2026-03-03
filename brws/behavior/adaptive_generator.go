@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/constants"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/constants"
 )
 
 // MutationFunc is a function that modifies the generator to fix a specific check.

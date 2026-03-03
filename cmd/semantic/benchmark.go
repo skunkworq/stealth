@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stealth/brwslab/brws/semantic"
-	"github.com/stealth/brwslab/brws/semantic/bench"
+	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/semantic/bench"
 )
 
 func runBenchmark(urls []string, outputFile string) error {

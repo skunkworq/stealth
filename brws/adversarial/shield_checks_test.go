@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/constants"
+	"github.com/skunkworq/stealth/brws/constants"
 )
 
 func TestWebGLVendorGPUKeywords(t *testing.T) {

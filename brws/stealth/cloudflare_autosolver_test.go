@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/adversarial"
 )
 
 // mountProtectedServer creates a test server with CF protection wrapping actual content.

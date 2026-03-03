@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
-	_ "github.com/stealth/brwslab/brws/engine/native"
+	"github.com/skunkworq/stealth/brws/engine"
+	_ "github.com/skunkworq/stealth/brws/engine/native"
 )
 
 var (

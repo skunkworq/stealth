@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
-	_ "github.com/stealth/brwslab/brws/engine/native"
+	"github.com/skunkworq/stealth/brws/engine"
+	_ "github.com/skunkworq/stealth/brws/engine/native"
 )
 
 func TestStealthClient_AgainstAdversarialServer(t *testing.T) {

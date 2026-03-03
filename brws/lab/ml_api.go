@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	_ "github.com/stealth/brwslab/brws/engine/chromium"
-	"github.com/stealth/brwslab/brws/ml/datagen"
-	"github.com/stealth/brwslab/brws/stealth"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	_ "github.com/skunkworq/stealth/brws/engine/chromium"
+	"github.com/skunkworq/stealth/brws/ml/datagen"
+	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 // MLEvaluationResponse represents the reward output from the WAF Shield.

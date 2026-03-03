@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/stealth/brwslab/brws/observability"
+	"github.com/skunkworq/stealth/brws/observability"
 )
 
 // BehavioralCheckResult captures one behavioral analysis check outcome.

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/semantic"
+	"github.com/skunkworq/stealth/brws/semantic"
 )
 
 type SessionState struct {

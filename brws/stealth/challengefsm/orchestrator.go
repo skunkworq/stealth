@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/challenge"
-	"github.com/stealth/brwslab/brws/engine"
-	"github.com/stealth/brwslab/brws/instrumentation"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/challenge"
+	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/instrumentation"
 )
 
 // ChallengeOrchestrator is the top-level coordinator for challenge detection and

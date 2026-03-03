@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/stealth/brwslab/brws/constants"
+	"github.com/skunkworq/stealth/brws/constants"
 )
 
 // Config holds configuration for creating an HTTP client.

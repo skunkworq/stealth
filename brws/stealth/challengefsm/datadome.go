@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stealth/brwslab/brws/challenge"
-	"github.com/stealth/brwslab/brws/engine"
-	"github.com/stealth/brwslab/brws/instrumentation"
+	"github.com/skunkworq/stealth/brws/challenge"
+	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/instrumentation"
 )
 
 // dataDomeCaptchaURLRe extracts the captcha delivery URL from a DataDome response.

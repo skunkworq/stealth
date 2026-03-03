@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/stealth/brwslab/brws/benchmark"
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/benchmark"
+	"github.com/skunkworq/stealth/brws/engine"
 
 	// Import engines to register them
-	_ "github.com/stealth/brwslab/brws/engine/chromium"
-	_ "github.com/stealth/brwslab/brws/engine/firefox"
-	_ "github.com/stealth/brwslab/brws/engine/native"
-	_ "github.com/stealth/brwslab/brws/engine/webkit"
+	_ "github.com/skunkworq/stealth/brws/engine/chromium"
+	_ "github.com/skunkworq/stealth/brws/engine/firefox"
+	_ "github.com/skunkworq/stealth/brws/engine/native"
+	_ "github.com/skunkworq/stealth/brws/engine/webkit"
 )
 
 var (

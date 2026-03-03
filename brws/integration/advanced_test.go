@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/semantic"
+	"github.com/skunkworq/stealth/brws/semantic"
 )
 
 func TestAdaptiveCrawlerSelectStrategy(t *testing.T) {

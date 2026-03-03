@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/stealth/brwslab/brws/semantic"
-	"github.com/stealth/brwslab/brws/stealth"
+	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 type SmartNavigator struct {

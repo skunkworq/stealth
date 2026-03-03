@@ -9,8 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/engine"
-	_ "github.com/stealth/brwslab/brws/engine/native"
+	"github.com/skunkworq/stealth/brws/engine"
+	_ "github.com/skunkworq/stealth/brws/engine/native"
 )
 
 func TestStealthBrowserDetection(t *testing.T) {

@@ -3,7 +3,7 @@ package challengefsm
 import (
 	"sync"
 
-	"github.com/stealth/brwslab/brws/challenge"
+	"github.com/skunkworq/stealth/brws/challenge"
 )
 
 // SolverRegistry maps challenge types to solvers. Solvers are checked in

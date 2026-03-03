@@ -9,9 +9,9 @@ import (
 	"os"
 	"sync"
 
-	"github.com/stealth/brwslab/brws/engine"
-	_ "github.com/stealth/brwslab/brws/engine/native"
-	"github.com/stealth/brwslab/brws/semantic"
+	"github.com/skunkworq/stealth/brws/engine"
+	_ "github.com/skunkworq/stealth/brws/engine/native"
+	"github.com/skunkworq/stealth/brws/semantic"
 )
 
 type MCPRequest struct {

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/semantic"
+	"github.com/skunkworq/stealth/brws/semantic"
 )
 
 func TestHNSWIndex(t *testing.T) {

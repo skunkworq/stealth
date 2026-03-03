@@ -1,7 +1,7 @@
 package challengefsm
 
 import (
-	"github.com/stealth/brwslab/brws/instrumentation"
+	"github.com/skunkworq/stealth/brws/instrumentation"
 )
 
 // ChallengeStates defines the generic states shared by all challenge solvers.

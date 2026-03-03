@@ -13,10 +13,10 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	"github.com/stealth/brwslab/brws/behavior"
-	"github.com/stealth/brwslab/brws/engine"
-	"github.com/stealth/brwslab/brws/instrumentation"
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/behavior"
+	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/instrumentation"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 func init() {

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/engine"
-	_ "github.com/stealth/brwslab/brws/engine/native" // register native engine
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/engine"
+	_ "github.com/skunkworq/stealth/brws/engine/native" // register native engine
 )
 
 // TestCloudflareBypass_RealWorld demonstrates the full bypass flow:

@@ -1,4 +1,4 @@
-module github.com/stealth/brwslab
+module github.com/skunkworq/stealth
 
 go 1.26.0
 

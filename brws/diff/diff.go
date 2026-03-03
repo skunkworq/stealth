@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 // EngineResult holds the result from one engine.

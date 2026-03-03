@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 func TestDetector_New(t *testing.T) {

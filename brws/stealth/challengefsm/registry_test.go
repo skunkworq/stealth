@@ -3,7 +3,7 @@ package challengefsm
 import (
 	"testing"
 
-	"github.com/stealth/brwslab/brws/challenge"
+	"github.com/skunkworq/stealth/brws/challenge"
 )
 
 func TestRegistryEmpty(t *testing.T) {

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/adversarial"
 )
 
 // handleManualSolve handles POST /api/captcha/manual-solve

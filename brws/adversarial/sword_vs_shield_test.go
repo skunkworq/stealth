@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/behavior"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/behavior"
 )
 
 // TestSwordVsShield runs the actual Sword (behavior.RequestGenerator) against the

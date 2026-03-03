@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/adversarial/captcha"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/adversarial/captcha"
 )
 
 // CaptchaSolver detects and auto-solves captcha challenges from shield responses.

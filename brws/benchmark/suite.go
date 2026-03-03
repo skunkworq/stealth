@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 // SuiteType represents the type of benchmark suite

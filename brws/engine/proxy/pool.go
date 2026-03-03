@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/constants"
+	"github.com/skunkworq/stealth/brws/constants"
 )
 
 // Proxy represents a single proxy

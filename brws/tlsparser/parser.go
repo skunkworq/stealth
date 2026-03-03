@@ -9,7 +9,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 // TLSRecord represents a TLS record layer

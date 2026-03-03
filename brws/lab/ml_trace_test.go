@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 func TestMLEvasionTraceExtraction(t *testing.T) {

@@ -3,7 +3,7 @@ package stealth
 import (
 	"strings"
 
-	"github.com/stealth/brwslab/brws/ml"
+	"github.com/skunkworq/stealth/brws/ml"
 )
 
 // BuildStateVector constructs an 18-dimensional vector from detection indicators,

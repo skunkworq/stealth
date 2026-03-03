@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 // TestPlainHTTPS tests basic HTTPS without any spoofing

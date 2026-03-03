@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/engine"
-	_ "github.com/stealth/brwslab/brws/engine/native" // register native engine
-	"github.com/stealth/brwslab/brws/engine/profiles"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/engine"
+	_ "github.com/skunkworq/stealth/brws/engine/native" // register native engine
+	"github.com/skunkworq/stealth/brws/engine/profiles"
 )
 
 // cfTarget is a site to test against.

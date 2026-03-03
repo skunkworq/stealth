@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
-	"github.com/stealth/brwslab/brws/constants"
+	"github.com/skunkworq/stealth/brws/constants"
 )
 
 // Client provides HTTP/3 client capabilities

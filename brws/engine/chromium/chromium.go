@@ -12,8 +12,8 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/google/uuid"
-	"github.com/stealth/brwslab/brws/constants"
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/constants"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 func init() {

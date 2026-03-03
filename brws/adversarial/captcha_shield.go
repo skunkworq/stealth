@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial/captcha"
+	"github.com/skunkworq/stealth/brws/adversarial/captcha"
 )
 
 // CaptchaShield provides CAPTCHA challenge management and bot detection.

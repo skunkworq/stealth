@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/sniffer"
+	"github.com/skunkworq/stealth/brws/sniffer"
 )
 
 func TestSnifferIntegrationLifecycle(t *testing.T) {

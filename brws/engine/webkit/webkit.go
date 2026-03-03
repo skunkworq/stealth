@@ -9,7 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/playwright-community/playwright-go"
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 func init() {

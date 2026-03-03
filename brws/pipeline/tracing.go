@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stealth/brwslab/brws/observability"
+	"github.com/skunkworq/stealth/brws/observability"
 )
 
 type TraceID string

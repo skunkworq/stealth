@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/stealth/brwslab/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/adversarial"
 )
 
 // ShieldSuiteConfig configures the shield evaluation benchmark.

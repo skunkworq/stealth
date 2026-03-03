@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stealth/brwslab/brws/constants"
+	"github.com/skunkworq/stealth/brws/constants"
 )
 
 // RequestGeneratorConfig controls the full request generation.

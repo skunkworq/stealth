@@ -13,8 +13,8 @@ import (
 
 	"github.com/andybalholm/brotli"
 	utls "github.com/refraction-networking/utls"
-	"github.com/stealth/brwslab/brws/engine"
-	_ "github.com/stealth/brwslab/brws/engine/native"
+	"github.com/skunkworq/stealth/brws/engine"
+	_ "github.com/skunkworq/stealth/brws/engine/native"
 	"golang.org/x/net/http2"
 )
 

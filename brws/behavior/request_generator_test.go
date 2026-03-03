@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/constants"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/constants"
 )
 
 func TestRequestGenerator_AllHeadersPresent(t *testing.T) {

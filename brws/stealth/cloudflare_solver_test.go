@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/adversarial"
 )
 
 // mountCloudflareServer creates a test server with all Cloudflare challenge endpoints.

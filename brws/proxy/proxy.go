@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/constants"
-	"github.com/stealth/brwslab/brws/tlsparser"
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/constants"
+	"github.com/skunkworq/stealth/brws/tlsparser"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 // Proxy is a MITM TLS/HTTP proxy for capturing fingerprints

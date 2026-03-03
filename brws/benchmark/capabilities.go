@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 // CapabilityResult represents the result of a single capability test

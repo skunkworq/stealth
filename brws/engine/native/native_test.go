@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 func TestNew(t *testing.T) {

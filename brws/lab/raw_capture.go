@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/tlsparser"
+	"github.com/skunkworq/stealth/brws/tlsparser"
 )
 
 // RawCaptureListener wraps a net.Listener to capture raw TLS handshakes

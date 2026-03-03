@@ -8,10 +8,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 	// Import engines to register them
-	_ "github.com/stealth/brwslab/brws/engine/chromium"
-	_ "github.com/stealth/brwslab/brws/engine/native"
+	_ "github.com/skunkworq/stealth/brws/engine/chromium"
+	_ "github.com/skunkworq/stealth/brws/engine/native"
 )
 
 func main() {

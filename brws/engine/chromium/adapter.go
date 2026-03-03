@@ -3,7 +3,7 @@ package chromium
 import (
 	"strings"
 
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 // StealthConfigFromFingerprint maps a raw proxy capture into a Javascript injection payload constraint

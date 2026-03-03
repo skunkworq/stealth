@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 // CompleteFingerprint captures all layers of browser signature

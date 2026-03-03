@@ -5,7 +5,7 @@ package benchmark
 import (
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 // ProtectionLevel categorizes the type of protection on a target endpoint

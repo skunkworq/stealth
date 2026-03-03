@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/stealth/brwslab/brws/semantic"
-	"github.com/stealth/brwslab/brws/semantic/index"
+	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/semantic/index"
 )
 
 func runIndexMode(urls []string, query string, k int) error {

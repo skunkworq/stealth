@@ -14,10 +14,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/adversarial/captcha"
-	"github.com/stealth/brwslab/brws/behavior"
-	"github.com/stealth/brwslab/brws/constants"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/adversarial/captcha"
+	"github.com/skunkworq/stealth/brws/behavior"
+	"github.com/skunkworq/stealth/brws/constants"
 )
 
 // TestCaptchaAutoSolveEndToEnd tests the full captcha flow:

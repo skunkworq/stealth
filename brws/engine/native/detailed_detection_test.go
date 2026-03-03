@@ -6,9 +6,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/engine"
-	"github.com/stealth/brwslab/brws/engine/testserver"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine/testserver"
 )
 
 func TestDetailedDetectionTrace(t *testing.T) {

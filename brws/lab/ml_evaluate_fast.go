@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/behavior"
-	chromiumstealth "github.com/stealth/brwslab/brws/engine/chromium"
-	"github.com/stealth/brwslab/brws/ml/datagen"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/behavior"
+	chromiumstealth "github.com/skunkworq/stealth/brws/engine/chromium"
+	"github.com/skunkworq/stealth/brws/ml/datagen"
 )
 
 // StealthConfigSnapshot mirrors datagen.StealthConfigSnapshot for unified request parsing.

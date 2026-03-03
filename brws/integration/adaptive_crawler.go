@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/semantic"
-	"github.com/stealth/brwslab/brws/stealth"
+	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 type AdaptiveCrawler struct {

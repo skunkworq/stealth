@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 type SemanticExtractor struct {

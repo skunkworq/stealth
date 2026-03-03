@@ -10,7 +10,7 @@ import (
 	"time"
 
 	utls "github.com/refraction-networking/utls"
-	"github.com/stealth/brwslab/brws/constants"
+	"github.com/skunkworq/stealth/brws/constants"
 )
 
 // SpoofEngine implements browser fingerprint spoofing

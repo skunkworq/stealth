@@ -8,15 +8,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/behavior"
-	"github.com/stealth/brwslab/brws/challenge"
-	"github.com/stealth/brwslab/brws/engine"
-	"github.com/stealth/brwslab/brws/instrumentation"
-	"github.com/stealth/brwslab/brws/ml"
-	"github.com/stealth/brwslab/brws/session"
-	"github.com/stealth/brwslab/brws/solver"
-	"github.com/stealth/brwslab/brws/stealth/challengefsm"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/behavior"
+	"github.com/skunkworq/stealth/brws/challenge"
+	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/instrumentation"
+	"github.com/skunkworq/stealth/brws/ml"
+	"github.com/skunkworq/stealth/brws/session"
+	"github.com/skunkworq/stealth/brws/solver"
+	"github.com/skunkworq/stealth/brws/stealth/challengefsm"
 )
 
 // Client is the main entry point for the stealth browser automation library.

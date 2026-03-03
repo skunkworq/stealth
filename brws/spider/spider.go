@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 )

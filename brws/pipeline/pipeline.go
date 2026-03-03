@@ -7,9 +7,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/stealth/brwslab/brws/observability"
-	"github.com/stealth/brwslab/brws/semantic"
-	"github.com/stealth/brwslab/brws/semantic/index"
+	"github.com/skunkworq/stealth/brws/observability"
+	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/semantic/index"
 )
 
 type StageResult struct {

@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
-	_ "github.com/stealth/brwslab/brws/engine/native"
-	"github.com/stealth/brwslab/brws/semantic"
-	"github.com/stealth/brwslab/brws/spider"
+	"github.com/skunkworq/stealth/brws/engine"
+	_ "github.com/skunkworq/stealth/brws/engine/native"
+	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/spider"
 )
 
 var (

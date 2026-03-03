@@ -12,8 +12,8 @@ import (
 	"net/http/cookiejar"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/behavior"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/behavior"
 )
 
 // CloudflareSolverClient solves lab-reproduced Cloudflare challenges.

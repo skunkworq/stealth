@@ -13,12 +13,12 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/stealth/brwslab/brws/engine"
-	_ "github.com/stealth/brwslab/brws/engine/chromium"
-	_ "github.com/stealth/brwslab/brws/engine/firefox"
-	_ "github.com/stealth/brwslab/brws/engine/native"
-	_ "github.com/stealth/brwslab/brws/engine/spoof"
-	_ "github.com/stealth/brwslab/brws/engine/webkit"
+	"github.com/skunkworq/stealth/brws/engine"
+	_ "github.com/skunkworq/stealth/brws/engine/chromium"
+	_ "github.com/skunkworq/stealth/brws/engine/firefox"
+	_ "github.com/skunkworq/stealth/brws/engine/native"
+	_ "github.com/skunkworq/stealth/brws/engine/spoof"
+	_ "github.com/skunkworq/stealth/brws/engine/webkit"
 )
 
 // TestTarget represents a URL to test against

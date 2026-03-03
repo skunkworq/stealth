@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/constants"
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/constants"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 // TestServer is a test server for adversarial detection testing

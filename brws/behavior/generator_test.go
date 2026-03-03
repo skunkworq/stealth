@@ -6,7 +6,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/stealth/brwslab/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/adversarial"
 )
 
 func TestEventGenerator_ProducesValidData(t *testing.T) {

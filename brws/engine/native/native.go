@@ -22,9 +22,9 @@ import (
 	"github.com/andybalholm/brotli"
 	"github.com/google/uuid"
 	utls "github.com/refraction-networking/utls"
-	"github.com/stealth/brwslab/brws/constants"
-	"github.com/stealth/brwslab/brws/engine"
-	"github.com/stealth/brwslab/brws/engine/profiles"
+	"github.com/skunkworq/stealth/brws/constants"
+	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine/profiles"
 	"golang.org/x/net/http2"
 )
 

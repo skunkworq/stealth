@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/tlsparser"
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/tlsparser"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 // tlsCaptureStore holds captured fingerprints keyed by remote address

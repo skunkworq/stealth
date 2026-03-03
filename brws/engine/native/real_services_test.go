@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 // TestRealHTTPServices tests standard Go TLS fingerprint against real services

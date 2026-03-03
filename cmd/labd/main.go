@@ -22,7 +22,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/stealth/brwslab/brws/lab"
+	"github.com/skunkworq/stealth/brws/lab"
 )
 
 func main() {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/pipeline"
+	"github.com/skunkworq/stealth/brws/pipeline"
 )
 
 func TestPipelineBasic(t *testing.T) {

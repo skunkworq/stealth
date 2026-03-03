@@ -19,13 +19,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
-	"github.com/stealth/brwslab/brws/constants"
-	"github.com/stealth/brwslab/brws/engine/spoof"
-	"github.com/stealth/brwslab/brws/proxy"
-	"github.com/stealth/brwslab/brws/sniffer"
-	"github.com/stealth/brwslab/brws/tlsparser"
-	"github.com/stealth/brwslab/brws/types"
+	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/constants"
+	"github.com/skunkworq/stealth/brws/engine/spoof"
+	"github.com/skunkworq/stealth/brws/proxy"
+	"github.com/skunkworq/stealth/brws/sniffer"
+	"github.com/skunkworq/stealth/brws/tlsparser"
+	"github.com/skunkworq/stealth/brws/types"
 	"golang.org/x/net/websocket"
 )
 

@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 // FingerprintResult represents a single fingerprint capture

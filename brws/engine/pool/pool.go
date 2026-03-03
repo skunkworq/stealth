@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/stealth/brwslab/brws/constants"
-	"github.com/stealth/brwslab/brws/engine"
+	"github.com/skunkworq/stealth/brws/constants"
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 // BrowserInstance represents a pooled browser instance

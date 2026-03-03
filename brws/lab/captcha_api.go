@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/stealth/brwslab/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/adversarial"
 )
 
 // CaptchaCatalogueEntry represents an entry in the CAPTCHA catalogue.

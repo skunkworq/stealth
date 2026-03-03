@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
-	"github.com/stealth/brwslab/brws/engine/testserver"
+	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine/testserver"
 )
 
 func TestNativeWithTestserver(t *testing.T) {

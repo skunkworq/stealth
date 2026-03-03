@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stealth/brwslab/brws/engine"
-	"github.com/stealth/brwslab/brws/engine/pool"
-	"github.com/stealth/brwslab/brws/engine/profiles"
-	"github.com/stealth/brwslab/brws/engine/proxy"
-	"github.com/stealth/brwslab/brws/engine/spoof"
-	"github.com/stealth/brwslab/brws/session"
+	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine/pool"
+	"github.com/skunkworq/stealth/brws/engine/profiles"
+	"github.com/skunkworq/stealth/brws/engine/proxy"
+	"github.com/skunkworq/stealth/brws/engine/spoof"
+	"github.com/skunkworq/stealth/brws/session"
 )
 
 // ============================================================================
