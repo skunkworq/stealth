@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/network"
@@ -341,6 +342,39 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		s.logger.Error("FSM transition failed", "error", err)
 	}
 
+	// Set up network event listener to capture all sub-resource requests.
+	var netMu sync.Mutex
+	netRequests := make(map[network.RequestID]*engine.TraceEntry)
+	chromedp.ListenTarget(tabCtx, func(ev interface{}) {
+		switch e := ev.(type) {
+		case *network.EventRequestWillBeSent:
+			netMu.Lock()
+			netRequests[e.RequestID] = &engine.TraceEntry{
+				RequestID:   string(e.RequestID),
+				URL:         e.Request.URL,
+				Method:      e.Request.Method,
+				RequestTime: time.Now(),
+				Request: engine.TraceRequest{
+					Headers: flattenHeaders(e.Request.Headers),
+				},
+			}
+			netMu.Unlock()
+		case *network.EventResponseReceived:
+			netMu.Lock()
+			if entry, ok := netRequests[e.RequestID]; ok {
+				entry.Status = int(e.Response.Status)
+				entry.Protocol = e.Response.Protocol
+				entry.RemoteAddr = fmt.Sprintf("%s:%d", e.Response.RemoteIPAddress, e.Response.RemotePort)
+				entry.Response = engine.TraceResponse{
+					Headers:  flattenHeaders(e.Response.Headers),
+					BodySize: int64(e.Response.EncodedDataLength),
+					MimeType: e.Response.MimeType,
+				}
+			}
+			netMu.Unlock()
+		}
+	})
+
 	// Navigate
 	actions = append(actions, chromedp.Navigate(req.URL))
 
@@ -368,13 +402,23 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	}
 	total := time.Since(start)
 
-	trace.Entries = append(trace.Entries, engine.TraceEntry{
-		RequestID:   requestID,
-		URL:         req.URL,
-		Method:      "GET",
-		RequestTime: start,
-		Timing:      engine.TimingInfo{Total: total},
-	})
+	// Collect captured network entries into the trace.
+	netMu.Lock()
+	for _, entry := range netRequests {
+		trace.Entries = append(trace.Entries, *entry)
+	}
+	netMu.Unlock()
+
+	// If no network entries were captured, add the primary navigation entry.
+	if len(trace.Entries) == 0 {
+		trace.Entries = append(trace.Entries, engine.TraceEntry{
+			RequestID:   requestID,
+			URL:         req.URL,
+			Method:      "GET",
+			RequestTime: start,
+			Timing:      engine.TimingInfo{Total: total},
+		})
+	}
 
 	span.SetAttribute("status", 200)
 	span.SetAttribute("body_size", len(body))
@@ -520,3 +564,4 @@ func (s *StealthEngine) FSM() *instrumentation.FSM {
 func (s *StealthEngine) Logger() *instrumentation.Logger {
 	return s.logger
 }
+
