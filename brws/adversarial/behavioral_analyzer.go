@@ -344,12 +344,12 @@ func (ba *BehavioralAnalyzer) Analyze(events *EnhancedBehavioralEvents) *VectorR
 		if maxMouse < minTyping && maxMouse < minScroll {
 			weight := 0.30
 			result.Indicators = append(result.Indicators, VectorIndicator{
-				Check:   "sequential_event_ordering",
+				Check: "sequential_event_ordering",
 				Message: fmt.Sprintf("All mouse events (%d) finish before typing/scroll begin (mouse_end=%d < typing_start=%d, scroll_start=%d)",
 					len(events.MouseTimestamps), maxMouse, minTyping, minScroll),
-				Weight:  weight,
-				Field:   "event_ordering",
-				Value:   "sequential",
+				Weight: weight,
+				Field:  "event_ordering",
+				Value:  "sequential",
 			})
 			result.Score += weight
 		}
