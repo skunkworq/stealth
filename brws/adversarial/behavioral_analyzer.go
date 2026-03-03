@@ -3,6 +3,7 @@ package adversarial
 import (
 	"fmt"
 	"math"
+	"sort"
 )
 
 // BehavioralAnalyzerConfig configures the enhanced behavioral analysis engine.
@@ -873,4 +874,84 @@ func (ba *BehavioralAnalyzer) pathEfficiencyRatio(positions []Position) float64 
 
 func formatFloat(f float64) string {
 	return fmt.Sprintf("%.6f", f)
+}
+
+// lag1Autocorrelation computes the lag-1 autocorrelation of a sequence.
+// Positive values indicate temporal clustering (consecutive values are similar).
+// Zero indicates independence. Negative indicates alternating pattern.
+func (ba *BehavioralAnalyzer) lag1Autocorrelation(values []float64) float64 {
+	n := len(values)
+	if n < 3 {
+		return 0
+	}
+
+	mean := 0.0
+	for _, v := range values {
+		mean += v
+	}
+	mean /= float64(n)
+
+	var num, den float64
+	for i := 0; i < n-1; i++ {
+		num += (values[i] - mean) * (values[i+1] - mean)
+	}
+	for i := 0; i < n; i++ {
+		den += (values[i] - mean) * (values[i] - mean)
+	}
+
+	if den == 0 {
+		return 0
+	}
+	return num / den
+}
+
+// spearmanCorrelation computes Spearman's rank correlation coefficient between
+// two sequences. Values near +1 or -1 indicate monotonic relationship.
+// Values near 0 indicate no monotonic relationship (independence).
+func (ba *BehavioralAnalyzer) spearmanCorrelation(x, y []float64) float64 {
+	n := len(x)
+	if n != len(y) || n < 3 {
+		return 0
+	}
+
+	rankX := ba.computeRanks(x)
+	rankY := ba.computeRanks(y)
+
+	// Pearson correlation of ranks
+	var sumXY, sumX, sumY, sumX2, sumY2 float64
+	for i := 0; i < n; i++ {
+		sumXY += rankX[i] * rankY[i]
+		sumX += rankX[i]
+		sumY += rankY[i]
+		sumX2 += rankX[i] * rankX[i]
+		sumY2 += rankY[i] * rankY[i]
+	}
+
+	nf := float64(n)
+	num := nf*sumXY - sumX*sumY
+	den := math.Sqrt((nf*sumX2 - sumX*sumX) * (nf*sumY2 - sumY*sumY))
+	if den == 0 {
+		return 0
+	}
+	return num / den
+}
+
+// computeRanks assigns ranks to values (1-based, ascending).
+func (ba *BehavioralAnalyzer) computeRanks(values []float64) []float64 {
+	n := len(values)
+	type indexedValue struct {
+		val float64
+		idx int
+	}
+	sorted := make([]indexedValue, n)
+	for i, v := range values {
+		sorted[i] = indexedValue{v, i}
+	}
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].val < sorted[j].val })
+
+	result := make([]float64, n)
+	for rank, s := range sorted {
+		result[s.idx] = float64(rank + 1)
+	}
+	return result
 }
