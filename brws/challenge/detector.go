@@ -26,6 +26,9 @@ const (
 	// ChallengeChallengeBot represents bot challenge type.
 	ChallengeChallengeBot ChallengeType = "challenge-bot"
 
+	// ChallengeDataDome represents a DataDome challenge type
+	ChallengeDataDome ChallengeType = "datadome"
+
 	// ChallengeGeneric represents a generic challenge type
 	ChallengeGeneric ChallengeType = "generic"
 )

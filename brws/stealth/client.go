@@ -1,4 +1,3 @@
-// Package stealth provides a high-level API for stealth browser automation.
 package stealth
 
 import (
@@ -17,6 +16,7 @@ import (
 	"github.com/stealth/brwslab/brws/ml"
 	"github.com/stealth/brwslab/brws/session"
 	"github.com/stealth/brwslab/brws/solver"
+	"github.com/stealth/brwslab/brws/stealth/challengefsm"
 )
 
 // Client is the main entry point for the stealth browser automation library.
@@ -30,10 +30,11 @@ type Client struct {
 	captchaSolver *CaptchaSolver
 	cfSolver      *CloudflareSolverClient
 
-	logger *instrumentation.Logger
-	tracer *instrumentation.Tracer
-	hooks  *instrumentation.HookRegistry
-	fsm    *instrumentation.FSM
+	logger       *instrumentation.Logger
+	tracer       *instrumentation.Tracer
+	hooks        *instrumentation.HookRegistry
+	fsm          *instrumentation.FSM
+	orchestrator *challengefsm.ChallengeOrchestrator
 }
 
 // Config holds configuration for the stealth client.
@@ -187,9 +188,30 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		logger.Info("cloudflare auto-solver initialized")
 	}
 
+	// Initialize challenge orchestrator if auto-solve is enabled
+	var orchestrator *challengefsm.ChallengeOrchestrator
+	if cfg.Challenge.AutoSolve {
+		registry := challengefsm.NewSolverRegistry()
+		solverConfig := &challengefsm.SolverConfig{
+			APIKey:     cfg.Challenge.SolverAPIKey,
+			MaxRetries: cfg.Challenge.MaxSolveRetries,
+			Timeout:    30 * time.Second,
+			HumanDelay: true,
+			VerifyURL:  cfg.Challenge.VerifyURL,
+		}
+		if solverConfig.MaxRetries <= 0 {
+			solverConfig.MaxRetries = 1
+		}
+
+		orchestrator = challengefsm.NewChallengeOrchestrator(registry, solverConfig, logger)
+		logger.Info("challenge orchestrator initialized")
+
+		// Solvers will be registered after client creation (need client methods)
+	}
+
 	logger.Info("stealth client initialized")
 
-	return &Client{
+	c := &Client{
 		engine:        eng,
 		options:       &Options{Timeout: 30 * time.Second},
 		config:        cfg,
@@ -202,7 +224,15 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		tracer:        tracer,
 		hooks:         hooks,
 		fsm:           fsm,
-	}, nil
+		orchestrator:  orchestrator,
+	}
+
+	// Register solvers with the orchestrator (need client methods bound)
+	if orchestrator != nil {
+		c.registerSolvers(orchestrator.Registry())
+	}
+
+	return c, nil
 }
 
 // Navigate performs a GET request to the specified URL.
@@ -259,116 +289,16 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		break
 	}
 
-	// Cloudflare challenge auto-solve
-	if c.cfSolver != nil && c.config.Challenge.AutoSolve {
-		cfChallenge := c.detectCFChallenge(resp)
-		if cfChallenge != nil {
-			span.AddEvent("cf_challenge_detected", map[string]interface{}{
-				"type": string(cfChallenge.Type),
-				"ray":  cfChallenge.RayID,
-			})
-			c.logger.Info("cloudflare challenge detected", "type", cfChallenge.Type, "ray", cfChallenge.RayID)
-			_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected)
-
-			solvedResp, solveErr := c.solveCFChallenge(ctx, url, resp, cfChallenge)
-			if solveErr == nil && solvedResp != nil {
-				resp = solvedResp
-				c.logger.Info("cloudflare challenge bypassed", "type", cfChallenge.Type)
-				span.AddEvent("cf_challenge_solved", nil)
-			} else if solveErr != nil {
-				c.logger.Warn("cloudflare challenge solve failed", "error", solveErr)
-			}
-		}
-	}
-
-	// Captcha auto-solve: detect X-Captcha-Required and solve via ML solver
-	if c.captchaSolver != nil && c.config.Challenge.AutoSolve {
-		cr := c.captchaSolver.DetectCaptchaResponse(resp.Body, resp.Headers)
-		if cr != nil {
-			span.AddEvent("captcha_detected", map[string]interface{}{"type": cr.Type, "challenge_id": cr.ChallengeID})
-			c.logger.Info("captcha challenge detected", "type", cr.Type, "challenge_id", cr.ChallengeID)
-			_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected)
-
-			if cr.Type == "recaptcha-v2" {
-				// Dispatch to full reCAPTCHA v2 flow
-				baseURL := deriveBaseURL(url)
-				v2Result, v2Err := c.captchaSolver.SolveReCaptchaV2(baseURL)
-				if v2Err == nil && v2Result.Passed && v2Result.Token != "" {
-					c.logger.Info("reCAPTCHA v2 solved", "score", v2Result.BehavioralScore, "attempts", v2Result.SolveAttempts)
-					span.AddEvent("recaptcha_v2_solved", nil)
-
-					retryReq := &engine.Request{
-						URL:     url,
-						Timeout: c.options.Timeout,
-						Headers: map[string][]string{"X-Captcha-Token": {v2Result.Token}},
-					}
-					retryResp, retryErr := c.engine.Do(ctx, retryReq)
-					if retryErr == nil {
-						resp = retryResp
-					}
-				} else if v2Err != nil {
-					c.logger.Warn("reCAPTCHA v2 solve failed", "error", v2Err)
-				}
-			} else {
-				// Inline captcha flow
-				solveResult, _, solveErr := c.captchaSolver.SolveFromResponse(resp.Body, resp.Headers)
-				if solveErr == nil && solveResult != nil {
-					// Human-like delay before submitting (2-8 seconds)
-					//nolint:gosec
-					humanDelay := time.Duration(2000+rand.Intn(6000)) * time.Millisecond
-					time.Sleep(humanDelay)
-
-					events := c.captchaSolver.GenerateHumanEvents(
-						solveResult.SolveTimeMs+humanDelay.Milliseconds(),
-						HumanEventOpts{Solution: solveResult.Solution},
-					)
-
-					verifyURL := c.config.Challenge.VerifyURL
-					if verifyURL == "" {
-						verifyURL = deriveVerifyURL(url)
-					}
-
-					maxRetries := c.config.Challenge.MaxSolveRetries
-					if maxRetries <= 0 {
-						maxRetries = 1
-					}
-
-					for solveAttempt := 0; solveAttempt < maxRetries; solveAttempt++ {
-						solved, submitErr := c.captchaSolver.SubmitSolution(verifyURL, cr.ChallengeID, solveResult.Solution, events)
-						if submitErr != nil {
-							c.logger.Warn("captcha submit failed", "error", submitErr)
-							break
-						}
-						if solved {
-							c.logger.Info("captcha solved, retrying original request", "confidence", solveResult.Confidence)
-							span.AddEvent("captcha_solved", nil)
-
-							retryReq := &engine.Request{
-								URL:     url,
-								Timeout: c.options.Timeout,
-							}
-							if token := c.captchaSolver.LastToken(); token != "" {
-								if retryReq.Headers == nil {
-									retryReq.Headers = make(map[string][]string)
-								}
-								retryReq.Headers["X-Captcha-Token"] = []string{token}
-								c.logger.Info("attaching captcha session token to retry")
-							}
-							retryResp, retryErr := c.engine.Do(ctx, retryReq)
-							if retryErr == nil {
-								resp = retryResp
-							}
-							break
-						}
-						c.logger.Warn("captcha solve rejected", "attempt", solveAttempt+1)
-					}
-				} else if solveErr != nil {
-					c.logger.Warn("captcha solve failed", "error", solveErr)
-				}
-			}
+	// CHALLENGE HANDLING: delegate entirely to orchestrator
+	if c.orchestrator != nil && c.config.Challenge.AutoSolve {
+		_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected)
+		solvedResp, _ := c.orchestrator.HandleResponse(ctx, url, resp, c.engine, c.options.Timeout)
+		if solvedResp != nil {
+			resp = solvedResp
+			span.AddEvent("challenge_solved", nil)
 		}
 	} else if c.config.Challenge.AutoDetect {
-		// Fallback to generic challenge detection
+		// Fallback to generic challenge detection (no orchestrator)
 		detector := challenge.NewDetector()
 		if ch := detector.Detect(resp.Body, resp.Headers); ch != nil {
 			span.AddEvent("challenge_detected", map[string]interface{}{"type": string(ch.Type)})
@@ -481,6 +411,98 @@ func (c *Client) Close() error {
 	c.logger.Info("closing stealth client")
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnBrowserClose)
 	return c.engine.Close()
+}
+
+// Orchestrator returns the challenge orchestrator, if configured.
+func (c *Client) Orchestrator() *challengefsm.ChallengeOrchestrator {
+	return c.orchestrator
+}
+
+// registerSolvers registers all available solvers with the orchestrator registry.
+// Solvers are registered in priority order: CF → CAPTCHA → DataDome.
+func (c *Client) registerSolvers(registry *challengefsm.SolverRegistry) {
+	// 1. Cloudflare solver (wraps existing cfSolver)
+	if c.cfSolver != nil {
+		cfSolver := challengefsm.NewCloudflareFSMSolver(
+			c.detectCFChallenge,
+			c.solveCFChallenge,
+		)
+		registry.Register(cfSolver)
+		c.logger.Info("registered cloudflare FSM solver")
+	}
+
+	// 2. Captcha solver (wraps existing captchaSolver)
+	if c.captchaSolver != nil {
+		captchaSolver := challengefsm.NewCaptchaFSMSolver(
+			func(body []byte, headers map[string][]string) *challengefsm.CaptchaDetection {
+				cr := c.captchaSolver.DetectCaptchaResponse(body, headers)
+				if cr == nil {
+					return nil
+				}
+				return &challengefsm.CaptchaDetection{
+					ChallengeID:   cr.ChallengeID,
+					Type:          cr.Type,
+					CaptchaID:     cr.CaptchaID,
+					ImageBase64:   cr.ImageBase64,
+					ChallengeData: cr.ChallengeData,
+				}
+			},
+			func(body []byte, headers map[string][]string) (*challengefsm.CaptchaSolveOutput, *challengefsm.CaptchaDetection, error) {
+				result, cr, err := c.captchaSolver.SolveFromResponse(body, headers)
+				if err != nil {
+					return nil, nil, err
+				}
+				var out *challengefsm.CaptchaSolveOutput
+				if result != nil {
+					out = &challengefsm.CaptchaSolveOutput{
+						Solution:    result.Solution,
+						Confidence:  result.Confidence,
+						SolveTimeMs: result.SolveTimeMs,
+						Token:       result.Token,
+					}
+				}
+				var det *challengefsm.CaptchaDetection
+				if cr != nil {
+					det = &challengefsm.CaptchaDetection{
+						ChallengeID:   cr.ChallengeID,
+						Type:          cr.Type,
+						CaptchaID:     cr.CaptchaID,
+						ImageBase64:   cr.ImageBase64,
+						ChallengeData: cr.ChallengeData,
+					}
+				}
+				return out, det, nil
+			},
+			func(baseURL string) (*challengefsm.ReCaptchaV2Output, error) {
+				result, err := c.captchaSolver.SolveReCaptchaV2(baseURL)
+				if err != nil {
+					return nil, err
+				}
+				return &challengefsm.ReCaptchaV2Output{
+					Token:           result.Token,
+					BehavioralScore: result.BehavioralScore,
+					Passed:          result.Passed,
+					NeedChallenge:   result.NeedChallenge,
+					SolveAttempts:   result.SolveAttempts,
+					RefreshCount:    result.RefreshCount,
+					TotalTimeMs:     result.TotalTimeMs,
+				}, nil
+			},
+			c.captchaSolver.SubmitSolution,
+			func(solveTimeMs int64, solution string) []adversarial.CaptchaEvent {
+				return c.captchaSolver.GenerateHumanEvents(solveTimeMs, HumanEventOpts{Solution: solution})
+			},
+			c.captchaSolver.LastToken,
+			c.engine,
+		)
+		registry.Register(captchaSolver)
+		c.logger.Info("registered captcha FSM solver")
+	}
+
+	// 3. DataDome solver (new)
+	dataDomeSolver := challengefsm.NewDataDomeFSMSolver()
+	registry.Register(dataDomeSolver)
+	c.logger.Info("registered datadome FSM solver")
 }
 
 // Hooks returns the hook registry for custom behavior.
