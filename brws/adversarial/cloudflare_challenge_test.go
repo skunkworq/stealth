@@ -410,6 +410,173 @@ func TestSelectCaptchaTypeFromScore(t *testing.T) {
 	}
 }
 
+// --- Phase 7: Fingerprint Binding + Drift Detection Tests ---
+
+func TestFingerprintBinding_FirstCallBinds(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	cc.CreateManagedChallenge("test-bind", 0.5)
+
+	fp := &FingerprintPayload{
+		CanvasHash:          "canvas_abc123",
+		WebGLVendor:         "Google Inc. (NVIDIA)",
+		WebGLRenderer:       "ANGLE (NVIDIA GeForce GTX 1080)",
+		Platform:            "Win32",
+		Languages:           []string{"en-US", "en"},
+		HardwareConcurrency: 8,
+		DeviceMemory:        16,
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		TimezoneOffset:      -300,
+		Timezone:            "America/New_York",
+		ColorDepth:          24,
+	}
+
+	// First call should bind
+	score := cc.ValidateFingerprint("test-bind", fp)
+	if score > 0.3 {
+		t.Errorf("clean fingerprint should score low: got %.2f", score)
+	}
+
+	cc.mu.RLock()
+	session := cc.sessions["test-bind"]
+	cc.mu.RUnlock()
+
+	if session.BoundFingerprint == nil {
+		t.Fatal("fingerprint should be bound after first call")
+	}
+	if session.BoundFingerprint.Platform != "Win32" {
+		t.Errorf("bound fingerprint platform = %q, want Win32", session.BoundFingerprint.Platform)
+	}
+	if session.FingerprintDrift != 0.0 {
+		t.Errorf("drift should be 0.0 on first call, got %.2f", session.FingerprintDrift)
+	}
+}
+
+func TestFingerprintBinding_SameFingerprint_NoDrift(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	cc.CreateManagedChallenge("test-no-drift", 0.5)
+
+	fp := &FingerprintPayload{
+		CanvasHash:          "canvas_abc123",
+		WebGLVendor:         "Google Inc. (NVIDIA)",
+		WebGLRenderer:       "ANGLE (NVIDIA GeForce GTX 1080)",
+		Platform:            "Win32",
+		Languages:           []string{"en-US"},
+		HardwareConcurrency: 8,
+		DeviceMemory:        16,
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		Timezone:            "America/New_York",
+		ColorDepth:          24,
+	}
+
+	// First call binds, second with same fp → no drift
+	cc.ValidateFingerprint("test-no-drift", fp)
+	score := cc.ValidateFingerprint("test-no-drift", fp)
+
+	drift := cc.GetFingerprintDrift("test-no-drift")
+	if drift != 0.0 {
+		t.Errorf("same fingerprint should produce 0.0 drift, got %.2f", drift)
+	}
+	t.Logf("score with no drift: %.2f", score)
+}
+
+func TestFingerprintBinding_DriftDetected_PlatformChange(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	cc.CreateManagedChallenge("test-drift-platform", 0.5)
+
+	fp1 := &FingerprintPayload{
+		CanvasHash:          "canvas_abc123",
+		WebGLVendor:         "Google Inc. (NVIDIA)",
+		WebGLRenderer:       "ANGLE (NVIDIA GeForce GTX 1080)",
+		Platform:            "Win32",
+		Languages:           []string{"en-US"},
+		HardwareConcurrency: 8,
+		DeviceMemory:        16,
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		Timezone:            "America/New_York",
+		ColorDepth:          24,
+	}
+
+	fp2 := &FingerprintPayload{
+		CanvasHash:          "canvas_abc123",
+		WebGLVendor:         "Google Inc. (NVIDIA)",
+		WebGLRenderer:       "ANGLE (NVIDIA GeForce GTX 1080)",
+		Platform:            "MacIntel", // CHANGED — impossible mid-session
+		Languages:           []string{"en-US"},
+		HardwareConcurrency: 8,
+		DeviceMemory:        16,
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		Timezone:            "America/New_York",
+		ColorDepth:          24,
+	}
+
+	cc.ValidateFingerprint("test-drift-platform", fp1)
+	score := cc.ValidateFingerprint("test-drift-platform", fp2)
+
+	drift := cc.GetFingerprintDrift("test-drift-platform")
+	if drift <= 0.0 {
+		t.Errorf("platform change should produce drift > 0.0, got %.2f", drift)
+	}
+	t.Logf("platform drift: %.2f, resulting score: %.2f", drift, score)
+}
+
+func TestFingerprintBinding_DriftDetected_HardwareChange(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	cc.CreateManagedChallenge("test-drift-hw", 0.5)
+
+	fp1 := &FingerprintPayload{
+		CanvasHash:          "canvas_abc123",
+		WebGLVendor:         "Google Inc. (NVIDIA)",
+		WebGLRenderer:       "ANGLE (NVIDIA GeForce GTX 1080)",
+		Platform:            "Win32",
+		Languages:           []string{"en-US"},
+		HardwareConcurrency: 8,
+		DeviceMemory:        16,
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		Timezone:            "America/New_York",
+		ColorDepth:          24,
+	}
+
+	// Change GPU, core count, and memory — everything that can't change mid-session
+	fp2 := &FingerprintPayload{
+		CanvasHash:          "canvas_different",
+		WebGLVendor:         "Apple",
+		WebGLRenderer:       "Apple M1 GPU",
+		Platform:            "MacIntel",
+		Languages:           []string{"en-US"},
+		HardwareConcurrency: 10,
+		DeviceMemory:        32,
+		ScreenWidth:         2560,
+		ScreenHeight:        1440,
+		Timezone:            "Europe/London",
+		ColorDepth:          30,
+	}
+
+	cc.ValidateFingerprint("test-drift-hw", fp1)
+	score := cc.ValidateFingerprint("test-drift-hw", fp2)
+
+	drift := cc.GetFingerprintDrift("test-drift-hw")
+	if drift < 0.5 {
+		t.Errorf("total hardware swap should produce high drift (>0.5), got %.2f", drift)
+	}
+	if score < 0.3 {
+		t.Errorf("drifted fingerprint should boost bot score, got %.2f", score)
+	}
+	t.Logf("full hardware drift: %.4f, resulting score: %.4f", drift, score)
+}
+
+func TestFingerprintDrift_NonexistentSession(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	drift := cc.GetFingerprintDrift("nonexistent")
+	if drift != 0.0 {
+		t.Errorf("nonexistent session should return 0.0 drift, got %.2f", drift)
+	}
+}
+
 // hmacSHA256 is a helper for test cookie creation.
 func hmacSHA256(key []byte, data string) string {
 	mac := hmac.New(sha256.New, key)

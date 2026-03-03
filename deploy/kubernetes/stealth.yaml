@@ -1,0 +1,124 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: stealth-config
+data:
+  config.yaml: |
+    engine:
+      name: native
+      stealth_tls: true
+      stealth: true
+      profile: chrome-120-macos
+      http2: true
+    
+    retry:
+      enabled: true
+      max_retries: 3
+      initial_delay: 1s
+      max_delay: 30s
+      backoff_multiplier: 2.0
+    
+    rate_limit:
+      enabled: true
+      requests_per_second: 5
+      delay: 200ms
+      respect_robots_txt: true
+      max_concurrent: 10
+    
+    cloudflare:
+      detect: true
+      solve: false
+      wait_time: 5s
+      max_attempts: 3
+    
+    semantic:
+      enabled: true
+      max_chunks: 50
+      max_concurrent_llm: 0
+      use_cache: true
+    
+    monitoring:
+      metrics: true
+      metrics_port: 9090
+      tracing: false
+      log_level: info
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: stealth
+  labels:
+    app: stealth
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: stealth
+  template:
+    metadata:
+      labels:
+        app: stealth
+    spec:
+      containers:
+      - name: stealth
+        image: stealth:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 9090
+          name: metrics
+        env:
+        - name: STEALTH_CONFIG
+          value: /app/config.yaml
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        volumeMounts:
+        - name: config
+          mountPath: /app/config.yaml
+          subPath: config.yaml
+      volumes:
+      - name: config
+        configMap:
+          name: stealth-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: stealth
+spec:
+  selector:
+    app: stealth
+  ports:
+  - port: 80
+    targetPort: 9090
+    name: http
+  - port: 9090
+    targetPort: 9090
+    name: metrics
+  type: ClusterIP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: stealth
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: stealth
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70

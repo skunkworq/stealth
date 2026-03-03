@@ -1,6 +1,7 @@
 package behavior
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -370,5 +371,107 @@ func TestRequestGenerator_EvadeShield(t *testing.T) {
 				t.Errorf("detection rate %.0f%% < 80%% after shield upgrade (%d/%d detected)", detectionRate*100, trials-evasions, trials)
 			}
 		})
+	}
+}
+
+// --- Phase 8: PNG CRC + Timing baseURL Tests ---
+
+func TestCanvasFingerprint_ValidPNGWithCRC(t *testing.T) {
+	rg := NewRequestGenerator(nil)
+	canvas := rg.generateCanvas()
+
+	if !strings.HasPrefix(canvas, "data:image/png;base64,") {
+		t.Fatalf("canvas should be data:image/png;base64,... got: %s", canvas[:40])
+	}
+
+	// Decode
+	b64 := canvas[len("data:image/png;base64,"):]
+	decoded, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		t.Fatalf("base64 decode failed: %v", err)
+	}
+
+	// PNG signature (bytes 0-7)
+	pngSig := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+	if len(decoded) < 8 {
+		t.Fatal("decoded PNG too short for signature")
+	}
+	for i := 0; i < 8; i++ {
+		if decoded[i] != pngSig[i] {
+			t.Fatalf("PNG signature mismatch at byte %d: got %02x want %02x", i, decoded[i], pngSig[i])
+		}
+	}
+
+	// IHDR chunk type at bytes 12-15
+	if string(decoded[12:16]) != "IHDR" {
+		t.Fatalf("expected IHDR at offset 12, got %q", string(decoded[12:16]))
+	}
+
+	// CRC at bytes 29-32 should NOT be all zeros (was the bug)
+	ihdrCRC := decoded[29:33]
+	allZero := true
+	for _, b := range ihdrCRC {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	if allZero {
+		t.Error("IHDR CRC is all zeros — CRC fix not applied")
+	}
+
+	// Find IDAT chunk
+	found := false
+	for i := 33; i < len(decoded)-4; i++ {
+		if string(decoded[i:i+4]) == "IDAT" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("no IDAT chunk found in PNG")
+	}
+
+	t.Logf("valid PNG: %d bytes, CRC present", len(decoded))
+}
+
+func TestCanvasFingerprint_StablePerInstance(t *testing.T) {
+	rg := NewRequestGenerator(nil)
+	h1 := rg.generateCanvas()
+	h2 := rg.generateCanvas()
+	if h1 != h2 {
+		t.Error("canvas hash should be stable per instance")
+	}
+}
+
+func TestTimingData_UsesTargetURL(t *testing.T) {
+	rg := NewRequestGenerator(nil)
+
+	// Without target URL, should use example.com
+	h1 := rg.GenerateHeaders()
+	timing1 := h1.Get(constants.HeaderTimingData)
+	if !strings.Contains(timing1, "example.com") {
+		t.Error("default timing should reference example.com")
+	}
+
+	// With target URL set
+	rg.SetTargetURL("https://mysite.com/page")
+	h2 := rg.GenerateHeaders()
+	timing2 := h2.Get(constants.HeaderTimingData)
+	if !strings.Contains(timing2, "https://mysite.com/page") {
+		t.Error("timing should reference the set target URL")
+	}
+	if strings.Contains(timing2, "example.com") {
+		t.Error("timing should NOT reference example.com when target URL is set")
+	}
+}
+
+func TestGenerateRequest_SetsTargetURL(t *testing.T) {
+	rg := NewRequestGenerator(nil)
+	req := rg.GenerateRequest("https://target.com/path")
+
+	timing := req.Header.Get(constants.HeaderTimingData)
+	if !strings.Contains(timing, "https://target.com/path") {
+		t.Error("GenerateRequest should set targetURL for timing referrers")
 	}
 }

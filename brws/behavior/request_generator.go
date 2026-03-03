@@ -5,8 +5,10 @@ import (
 	"compress/zlib"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"hash/crc32"
 	"math"
 	"math/rand"
 	"net/http"
@@ -30,6 +32,7 @@ type RequestGenerator struct {
 	profile    *BrowserProfile
 	rng        *rand.Rand
 	canvasHash string // stable per instance
+	targetURL  string // target URL for timing referrer chain
 }
 
 // NewRequestGenerator creates a new RequestGenerator. If config is nil, a random
@@ -72,8 +75,12 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 		0x08,                   // bit depth = 8
 		0x06,                   // color type = RGBA
 		0x00, 0x00, 0x00,       // compression, filter, interlace
-		0x00, 0x00, 0x00, 0x00, // CRC placeholder
+		0x00, 0x00, 0x00, 0x00, // CRC (filled below)
 	}
+	// Compute CRC32 over chunk type + data (bytes 4..20 of ihdrChunk)
+	ihdrCRC := crc32.NewIEEE()
+	ihdrCRC.Write(ihdrChunk[4:21])
+	binary.BigEndian.PutUint32(ihdrChunk[21:25], ihdrCRC.Sum32())
 
 	// IDAT chunk: zlib-compressed pixel data (valid DEFLATE stream)
 	var idatBuf bytes.Buffer
@@ -93,7 +100,11 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 	)
 	idatChunk = append(idatChunk, 0x49, 0x44, 0x41, 0x54) // "IDAT"
 	idatChunk = append(idatChunk, idatData...)
-	idatChunk = append(idatChunk, 0x00, 0x00, 0x00, 0x00) // CRC placeholder
+	idatChunk = append(idatChunk, 0x00, 0x00, 0x00, 0x00) // CRC (filled below)
+	// Compute CRC32 over chunk type + data (bytes 4 to end-4 of idatChunk)
+	idatCRC := crc32.NewIEEE()
+	idatCRC.Write(idatChunk[4 : len(idatChunk)-4])
+	binary.BigEndian.PutUint32(idatChunk[len(idatChunk)-4:], idatCRC.Sum32())
 
 	// IEND chunk: 4 bytes length (0) + 4 bytes "IEND" + 4 bytes CRC = 12 bytes
 	iendChunk := []byte{
@@ -118,8 +129,14 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 	}
 }
 
+// SetTargetURL sets the target URL used for timing referrer chains.
+func (rg *RequestGenerator) SetTargetURL(url string) {
+	rg.targetURL = url
+}
+
 // GenerateRequest creates a complete HTTP request with all stealth headers set.
 func (rg *RequestGenerator) GenerateRequest(targetURL string) *http.Request {
+	rg.SetTargetURL(targetURL)
 	req, _ := http.NewRequest("GET", targetURL, nil)
 	headers := rg.GenerateHeaders()
 	for k, vals := range headers {
@@ -295,6 +312,9 @@ func (rg *RequestGenerator) generatePlugins() string {
 // with variable intervals and proper referrer chain to pass the too_few_timing_entries check.
 func (rg *RequestGenerator) generateTiming() string {
 	baseURL := "https://example.com"
+	if rg.targetURL != "" {
+		baseURL = rg.targetURL
+	}
 
 	type entry struct {
 		TimestampMs int64  `json:"timestamp_ms"`

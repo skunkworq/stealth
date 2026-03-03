@@ -1,0 +1,53 @@
+groups:
+- name: stealth
+  interval: 30s
+  rules:
+  # High error rate alert
+  - alert: StealthHighErrorRate
+    expr: rate(stealth_requests_total{status=~"5.."}[5m]) > 0.1
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High error rate on {{ $labels.instance }}"
+      description: "Error rate is {{ $value | humanizePercentage }}"
+
+  # Cloudflare challenge detected
+  - alert: StealthCloudflareDetected
+    expr: increase(stealth_cloudflare_detected_total[1h]) > 10
+    for: 1m
+    labels:
+      severity: info
+    annotations:
+      summary: "Cloudflare challenges detected"
+      description: "{{ $value }} challenges in the last hour"
+
+  # High latency
+  - alert: StealthHighLatency
+    expr: histogram_quantile(0.95, rate(stealth_request_duration_seconds_bucket[5m])) > 30
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High request latency"
+      description: "95th percentile is {{ $value }}s"
+
+  # Cache miss rate
+  - alert: StealthHighCacheMiss
+    expr: rate(stealth_cache_misses_total[5m]) > rate(stealth_cache_hits_total[5m])
+    for: 10m
+    labels:
+      severity: info
+    annotations:
+      summary: "Cache miss rate exceeds hit rate"
+      description: "Cache efficiency is low"
+
+  # Request timeout
+  - alert: StealthRequestTimeout
+    expr: increase(stealth_requests_timeout_total[5m]) > 5
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Multiple request timeouts"
+      description: "{{ $value }} timeouts in the last 5 minutes"

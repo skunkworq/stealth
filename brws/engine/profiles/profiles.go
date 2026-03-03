@@ -138,7 +138,7 @@ func GetFirefox120Mac() *Profile {
 }
 
 // GetFirefox120Win returns a Firefox 120 on Windows profile
-// NOTE: Includes Chrome Client Hints for better evasion
+// Real Firefox doesn't send Chrome Client Hints - keep it authentic
 func GetFirefox120Win() *Profile {
 	return &Profile{
 		Name:                    "firefox",
@@ -149,19 +149,20 @@ func GetFirefox120Win() *Profile {
 		Accept:                  "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
 		AcceptLanguage:          "en-US,en;q=0.5",
 		AcceptEncoding:          "gzip, deflate, br",
-		SecChUa:                 "\"Not_A Brand\";v=\"8\", \"Chromium\";v=\"120\", \"Google Chrome\";v=\"120\"",
-		SecChUaMobile:           "?0",
-		SecChUaPlatform:         "\"Windows\"",
-		SecFetchDest:            "document",
-		SecFetchMode:            "navigate",
-		SecFetchSite:            "none",
-		SecFetchUser:            "?1",
+		SecChUa:                 "", // Firefox doesn't send these
+		SecChUaMobile:           "",
+		SecChUaPlatform:         "",
+		SecFetchDest:            "", // Firefox doesn't send Sec-Fetch
+		SecFetchMode:            "",
+		SecFetchSite:            "",
+		SecFetchUser:            "",
 		UpgradeInsecureRequests: "1",
 		TLSFingerprint:          utls.HelloFirefox_120,
 	}
 }
 
 // GetSafari16Mac returns a Safari 16 on macOS profile
+// Real Safari doesn't send Chrome Client Hints - keep it authentic
 func GetSafari16Mac() *Profile {
 	return &Profile{
 		Name:                    "safari",
@@ -172,9 +173,9 @@ func GetSafari16Mac() *Profile {
 		Accept:                  "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 		AcceptLanguage:          "en-US,en;q=0.5",
 		AcceptEncoding:          "gzip, deflate, br",
-		SecChUa:                 `"Not_A Brand";v="8", "Chromium";v="120", "Safari";v="16.6"`,
-		SecChUaMobile:           "?0",
-		SecChUaPlatform:         `"macOS"`,
+		SecChUa:                 "", // Safari doesn't send these
+		SecChUaMobile:           "",
+		SecChUaPlatform:         "",
 		UpgradeInsecureRequests: "1",
 		TLSFingerprint:          utls.HelloSafari_16_0,
 	}
