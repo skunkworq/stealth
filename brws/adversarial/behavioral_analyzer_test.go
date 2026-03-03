@@ -177,6 +177,238 @@ func TestBehavioralAnalyzer_NilEvents(t *testing.T) {
 	}
 }
 
+// --- Phase 10 Shield Tests ---
+
+func TestBehavioralAnalyzer_KeystrokeHoldTimeCV_Uniform(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Bot-like: all keys held for exactly 100ms (CV ≈ 0)
+	events := &EnhancedBehavioralEvents{
+		KeystrokeHoldTimes: []float64{100, 100, 100, 100, 100, 100, 100, 100},
+	}
+
+	result := ba.Analyze(events)
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind.Check == "keystroke_hold_time_cv" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'keystroke_hold_time_cv' indicator for uniform hold times")
+	}
+}
+
+func TestBehavioralAnalyzer_KeystrokeHoldTimeCV_Natural(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Human-like: varied hold times (taps, moderate, long holds)
+	events := &EnhancedBehavioralEvents{
+		KeystrokeHoldTimes: []float64{65, 90, 180, 70, 110, 250, 85, 130},
+	}
+
+	result := ba.Analyze(events)
+
+	for _, ind := range result.Indicators {
+		if ind.Check == "keystroke_hold_time_cv" {
+			t.Errorf("natural hold times should not trigger hold time CV check, got CV=%s", ind.Value)
+		}
+	}
+}
+
+func TestBehavioralAnalyzer_DigraphTiming_Uniform(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Bot-like: perfectly uniform typing intervals (no digraph variation)
+	events := &EnhancedBehavioralEvents{
+		TypingTimestamps: []int64{0, 100, 200, 300, 400, 500, 600, 700, 800},
+	}
+
+	result := ba.Analyze(events)
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind.Check == "digraph_timing_anomaly" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'digraph_timing_anomaly' indicator for uniform intervals")
+	}
+}
+
+func TestBehavioralAnalyzer_DigraphTiming_Natural(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Human-like: varied typing intervals with digraph effects
+	events := &EnhancedBehavioralEvents{
+		TypingTimestamps: []int64{0, 65, 180, 220, 420, 510, 700, 850, 1200},
+	}
+
+	result := ba.Analyze(events)
+
+	for _, ind := range result.Indicators {
+		if ind.Check == "digraph_timing_anomaly" {
+			t.Errorf("natural typing should not trigger digraph anomaly check, got CV=%s", ind.Value)
+		}
+	}
+}
+
+func TestBehavioralAnalyzer_ScrollDirectionMonotonic(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Bot-like: all scrolls in same direction (100% down)
+	events := &EnhancedBehavioralEvents{
+		ScrollDirections: []float64{100, 200, 150, 180, 120, 160},
+	}
+
+	result := ba.Analyze(events)
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind.Check == "scroll_direction_monotonic" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'scroll_direction_monotonic' indicator for all-down scrolls")
+	}
+}
+
+func TestBehavioralAnalyzer_ScrollDirectionAlternating(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Bot-like: perfect up-down alternation
+	events := &EnhancedBehavioralEvents{
+		ScrollDirections: []float64{100, -100, 100, -100, 100, -100},
+	}
+
+	result := ba.Analyze(events)
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind.Check == "scroll_direction_alternating" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'scroll_direction_alternating' indicator for perfect alternation")
+	}
+}
+
+func TestBehavioralAnalyzer_ScrollDirectionNatural(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Human-like: mostly down, occasional up-scrolls clustered together
+	events := &EnhancedBehavioralEvents{
+		ScrollDirections: []float64{200, 150, 180, -80, -60, 120, 200, 150},
+	}
+
+	result := ba.Analyze(events)
+
+	for _, ind := range result.Indicators {
+		if ind.Check == "scroll_direction_monotonic" || ind.Check == "scroll_direction_alternating" {
+			t.Errorf("natural scroll directions should not trigger %s", ind.Check)
+		}
+	}
+}
+
+func TestBehavioralAnalyzer_ScrollAbruptDirectionChange(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Bot-like: direction changes at full velocity (no deceleration)
+	events := &EnhancedBehavioralEvents{
+		ScrollDirections: []float64{300, -250, 280, -200, 260, -230},
+		ScrollDeltas:     []float64{300, 250, 280, 200, 260, 230},
+	}
+
+	result := ba.Analyze(events)
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind.Check == "scroll_direction_change_abrupt" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'scroll_direction_change_abrupt' indicator for high-velocity direction changes")
+	}
+}
+
+func TestBehavioralAnalyzer_VelocityLag2Anomaly(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Bot-like: i.i.d. random velocities with no temporal structure (lag-2 ≈ 0)
+	events := &EnhancedBehavioralEvents{
+		MouseVelocities: []float64{300, 50, 450, 20, 280, 100, 350, 60, 400},
+	}
+
+	result := ba.Analyze(events)
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind.Check == "mouse_velocity_lag2_anomaly" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'mouse_velocity_lag2_anomaly' for random velocity sequence")
+	}
+}
+
+func TestBehavioralAnalyzer_VelocityLag_HumanLike(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Human-like: smooth velocity curve (positive lag-2 and lag-3 autocorrelation)
+	events := &EnhancedBehavioralEvents{
+		MouseVelocities: []float64{40, 65, 110, 175, 250, 290, 270, 230, 180, 120, 80, 50},
+	}
+
+	result := ba.Analyze(events)
+
+	for _, ind := range result.Indicators {
+		if ind.Check == "mouse_velocity_lag2_anomaly" || ind.Check == "mouse_velocity_lag3_anomaly" {
+			t.Errorf("smooth velocity curve should not trigger %s, value=%s", ind.Check, ind.Value)
+		}
+	}
+}
+
+func TestBehavioralAnalyzer_FittsLawViolation(t *testing.T) {
+	ba := NewBehavioralAnalyzer(nil)
+
+	// Bot-like: click timing has no correlation with distance (random times)
+	events := &EnhancedBehavioralEvents{
+		ClickTimestamps: []int64{0, 500, 1000, 1500},
+		ClickPositions: []Position{
+			{100, 100},    // → 50px to next
+			{150, 100},    // → 300px to next
+			{450, 100},    // → 80px to next
+			{530, 100},
+		},
+		// Uniform intervals (500ms each) regardless of distance = violates Fitts'
+	}
+
+	result := ba.Analyze(events)
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind.Check == "fitts_law_violation" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected 'fitts_law_violation' for distance-independent click timing")
+	}
+}
+
 func TestIntervalEntropy(t *testing.T) {
 	ba := NewBehavioralAnalyzer(nil)
 

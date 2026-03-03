@@ -64,6 +64,11 @@ type EnhancedBehavioralEvents struct {
 
 	// Scroll data for uniformity analysis
 	ScrollDeltas []float64
+
+	// Phase 10: Keystroke hold times (ms) — duration of keydown→keyup per keystroke
+	KeystrokeHoldTimes []float64
+	// Phase 10: Scroll directions — positive=down, negative=up
+	ScrollDirections []float64
 }
 
 // Position represents an x,y coordinate.
@@ -697,6 +702,241 @@ func (ba *BehavioralAnalyzer) Analyze(events *EnhancedBehavioralEvents) *VectorR
 		}
 	}
 
+	// Check 25: Keystroke hold time coefficient of variation.
+	// Human key hold times (keydown→keyup) vary significantly: fast taps (60-80ms),
+	// moderate presses (100-150ms), and occasional long holds (200-400ms).
+	// Bots that use fixed hold times or narrow uniform ranges have CV < 0.25.
+	if len(events.KeystrokeHoldTimes) > 4 {
+		holdMean, holdStddev := meanStddev(events.KeystrokeHoldTimes)
+		holdCV := 0.0
+		if holdMean > 0 {
+			holdCV = holdStddev / holdMean
+		}
+		if holdCV < 0.25 {
+			weight := 0.25
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "keystroke_hold_time_cv",
+				Message: fmt.Sprintf("Keystroke hold times too uniform (CV=%.3f < 0.25)", holdCV),
+				Weight:  weight,
+				Field:   "hold_time_cv",
+				Value:   formatFloat(holdCV),
+			})
+			result.Score += weight
+		}
+	}
+
+	// Check 26: Digraph timing anomaly (inter-key interval variance across pairs).
+	// Human typing shows digraph effects: certain key transitions are faster than
+	// others due to finger proximity (e.g., "th" is fast, "qp" is slow).
+	// If the variance of consecutive inter-key intervals is extremely low (CV < 0.20),
+	// it means all pairs are typed at the same speed — no digraph effect.
+	if len(events.TypingTimestamps) > 6 {
+		intervals := make([]float64, 0, len(events.TypingTimestamps)-1)
+		for i := 1; i < len(events.TypingTimestamps); i++ {
+			diff := float64(events.TypingTimestamps[i] - events.TypingTimestamps[i-1])
+			if diff > 0 {
+				intervals = append(intervals, diff)
+			}
+		}
+		if len(intervals) > 3 {
+			// Check consecutive interval ratios: human typing has alternating
+			// fast/slow pairs. Ratio CV > 0.30 is normal.
+			pairRatios := make([]float64, 0, len(intervals)-1)
+			for i := 1; i < len(intervals); i++ {
+				if intervals[i-1] > 0 {
+					pairRatios = append(pairRatios, intervals[i]/intervals[i-1])
+				}
+			}
+			if len(pairRatios) > 2 {
+				ratioMean, ratioStddev := meanStddev(pairRatios)
+				ratioCV := 0.0
+				if ratioMean > 0 {
+					ratioCV = ratioStddev / ratioMean
+				}
+				if ratioCV < 0.20 {
+					weight := 0.20
+					result.Indicators = append(result.Indicators, VectorIndicator{
+						Check:   "digraph_timing_anomaly",
+						Message: fmt.Sprintf("Typing interval ratios too uniform (CV=%.3f < 0.20) — no digraph effect", ratioCV),
+						Weight:  weight,
+						Field:   "digraph_ratio_cv",
+						Value:   formatFloat(ratioCV),
+					})
+					result.Score += weight
+				}
+			}
+		}
+	}
+
+	// Check 30: Scroll direction entropy.
+	// Real users predominantly scroll down (70-85%) with occasional up-scrolls.
+	// Bots that scroll 100% in one direction or alternate perfectly are suspicious.
+	// Low entropy = all same direction. Very high entropy with few events = alternating.
+	if len(events.ScrollDirections) > 3 {
+		downCount := 0
+		for _, d := range events.ScrollDirections {
+			if d > 0 {
+				downCount++
+			}
+		}
+		downRatio := float64(downCount) / float64(len(events.ScrollDirections))
+		// Flag if 100% same direction (no up-scrolls at all) with enough events
+		if (downRatio == 1.0 || downRatio == 0.0) && len(events.ScrollDirections) > 5 {
+			weight := 0.15
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "scroll_direction_monotonic",
+				Message: fmt.Sprintf("All %d scrolls in same direction (down_ratio=%.2f)", len(events.ScrollDirections), downRatio),
+				Weight:  weight,
+				Field:   "scroll_down_ratio",
+				Value:   formatFloat(downRatio),
+			})
+			result.Score += weight
+		}
+		// Flag perfect alternation (up-down-up-down)
+		if len(events.ScrollDirections) > 4 {
+			alternations := 0
+			for i := 1; i < len(events.ScrollDirections); i++ {
+				if (events.ScrollDirections[i] > 0) != (events.ScrollDirections[i-1] > 0) {
+					alternations++
+				}
+			}
+			altRatio := float64(alternations) / float64(len(events.ScrollDirections)-1)
+			if altRatio > 0.85 {
+				weight := 0.20
+				result.Indicators = append(result.Indicators, VectorIndicator{
+					Check:   "scroll_direction_alternating",
+					Message: fmt.Sprintf("Scroll direction alternates too regularly (%.0f%% changes)", altRatio*100),
+					Weight:  weight,
+					Field:   "scroll_alt_ratio",
+					Value:   formatFloat(altRatio),
+				})
+				result.Score += weight
+			}
+		}
+	}
+
+	// Check 31: Scroll direction change velocity discontinuity.
+	// When a human reverses scroll direction, velocity decreases to near-zero
+	// before reversing. Bots that flip direction at full speed show high
+	// velocity magnitude at direction-change points.
+	if len(events.ScrollDirections) > 3 && len(events.ScrollDeltas) > 3 {
+		n := len(events.ScrollDirections)
+		if n > len(events.ScrollDeltas) {
+			n = len(events.ScrollDeltas)
+		}
+		dirChangeCount := 0
+		highVelChanges := 0
+		for i := 1; i < n; i++ {
+			if (events.ScrollDirections[i] > 0) != (events.ScrollDirections[i-1] > 0) {
+				dirChangeCount++
+				// Check if delta at change point is still large
+				if math.Abs(events.ScrollDeltas[i]) > 150 {
+					highVelChanges++
+				}
+			}
+		}
+		if dirChangeCount >= 2 && highVelChanges == dirChangeCount {
+			weight := 0.20
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "scroll_direction_change_abrupt",
+				Message: fmt.Sprintf("All %d direction changes at high velocity (no deceleration)", dirChangeCount),
+				Weight:  weight,
+				Field:   "abrupt_dir_changes",
+				Value:   fmt.Sprintf("%d/%d", highVelChanges, dirChangeCount),
+			})
+			result.Score += weight
+		}
+	}
+
+	// Check 27: Mouse velocity lag-2 autocorrelation anomaly.
+	// Human mouse velocities exhibit moderate lag-2 autocorrelation (0.15-0.30)
+	// due to motor planning: the hand accelerates and decelerates over multi-step
+	// arcs. Bots produce near-zero lag-2 autocorrelation (i.i.d. velocities) or
+	// very high values (>0.60) from overly smooth interpolation.
+	if len(events.MouseVelocities) > 5 {
+		lag2 := ba.lagNAutocorrelation(events.MouseVelocities, 2)
+		if lag2 < 0.15 || lag2 > 0.60 {
+			weight := 0.15
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "mouse_velocity_lag2_anomaly",
+				Message: fmt.Sprintf("Mouse velocity lag-2 autocorrelation anomalous (%.3f, expected 0.15-0.30)", lag2),
+				Weight:  weight,
+				Field:   "velocity_lag2_autocorr",
+				Value:   formatFloat(lag2),
+			})
+			result.Score += weight
+		}
+	}
+
+	// Check 28: Mouse velocity lag-3 autocorrelation anomaly.
+	// Human mouse velocities have weak but positive lag-3 autocorrelation (0.05-0.15)
+	// from sustained movement phases. Bots have near-zero (no temporal structure)
+	// or high values (>0.40) from deterministic velocity curves.
+	if len(events.MouseVelocities) > 6 {
+		lag3 := ba.lagNAutocorrelation(events.MouseVelocities, 3)
+		if lag3 < 0.05 || lag3 > 0.40 {
+			weight := 0.10
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "mouse_velocity_lag3_anomaly",
+				Message: fmt.Sprintf("Mouse velocity lag-3 autocorrelation anomalous (%.3f, expected 0.05-0.15)", lag3),
+				Weight:  weight,
+				Field:   "velocity_lag3_autocorr",
+				Value:   formatFloat(lag3),
+			})
+			result.Score += weight
+		}
+	}
+
+	// Check 29: Fitts' law violation.
+	// Fitts' law: movement time = a + b * log2(D/W + 1), where D = distance to target,
+	// W = target width. For human clicks, the correlation between log2(D/W+1) and
+	// actual movement time should be moderate (0.3-0.95). Random bots have low
+	// correlation (<0.3); scripted bots with perfect timing have correlation >0.95.
+	// Constants: a=150ms, b=100ms, targetWidth=40px (typical button).
+	if len(events.ClickTimestamps) >= 3 && len(events.ClickPositions) >= 3 {
+		// Fitts' law constants: a=150ms intercept, b=100ms slope (used in the
+		// theoretical model; the check measures correlation of ID vs actual time).
+		const targetWidth = 40.0 // px typical button width
+
+		fittsIDs := make([]float64, 0, len(events.ClickTimestamps)-1)
+		actualTimes := make([]float64, 0, len(events.ClickTimestamps)-1)
+
+		for i := 1; i < len(events.ClickTimestamps) && i < len(events.ClickPositions); i++ {
+			dx := events.ClickPositions[i].X - events.ClickPositions[i-1].X
+			dy := events.ClickPositions[i].Y - events.ClickPositions[i-1].Y
+			dist := math.Sqrt(dx*dx + dy*dy)
+			if dist < 1.0 {
+				continue // Skip clicks at same position
+			}
+
+			id := math.Log2(dist/targetWidth + 1) // Index of Difficulty
+			actualTime := float64(events.ClickTimestamps[i] - events.ClickTimestamps[i-1])
+			if actualTime <= 0 {
+				continue
+			}
+
+			fittsIDs = append(fittsIDs, id)
+			actualTimes = append(actualTimes, actualTime)
+		}
+
+		if len(fittsIDs) >= 3 {
+			// Need at least 3 pairs for a meaningful Pearson correlation
+			// (2 points always yields r = +/-1.0 which is degenerate).
+			corr := ba.pearsonCorrelation(fittsIDs, actualTimes)
+			if corr < 0.3 || corr > 0.95 {
+				weight := 0.20
+				result.Indicators = append(result.Indicators, VectorIndicator{
+					Check:   "fitts_law_violation",
+					Message: fmt.Sprintf("Click timing vs Fitts' law ID correlation anomalous (r=%.3f, expected 0.3-0.95)", corr),
+					Weight:  weight,
+					Field:   "fitts_correlation",
+					Value:   formatFloat(corr),
+				})
+				result.Score += weight
+			}
+		}
+	}
+
 	result.Score = math.Min(1.0, result.Score)
 	result.Detected = result.Score > 0.3
 
@@ -1056,8 +1296,14 @@ func formatFloat(f float64) string {
 // Positive values indicate temporal clustering (consecutive values are similar).
 // Zero indicates independence. Negative indicates alternating pattern.
 func (ba *BehavioralAnalyzer) lag1Autocorrelation(values []float64) float64 {
+	return ba.lagNAutocorrelation(values, 1)
+}
+
+// lagNAutocorrelation computes the autocorrelation of a sequence at arbitrary lag.
+// Returns 0 if insufficient data (need at least lag+2 values).
+func (ba *BehavioralAnalyzer) lagNAutocorrelation(values []float64, lag int) float64 {
 	n := len(values)
-	if n < 3 {
+	if n < lag+2 {
 		return 0
 	}
 
@@ -1068,13 +1314,39 @@ func (ba *BehavioralAnalyzer) lag1Autocorrelation(values []float64) float64 {
 	mean /= float64(n)
 
 	var num, den float64
-	for i := 0; i < n-1; i++ {
-		num += (values[i] - mean) * (values[i+1] - mean)
+	for i := 0; i < n-lag; i++ {
+		num += (values[i] - mean) * (values[i+lag] - mean)
 	}
 	for i := 0; i < n; i++ {
 		den += (values[i] - mean) * (values[i] - mean)
 	}
 
+	if den == 0 {
+		return 0
+	}
+	return num / den
+}
+
+// pearsonCorrelation computes the Pearson product-moment correlation coefficient
+// between two sequences. Returns a value in [-1, 1].
+func (ba *BehavioralAnalyzer) pearsonCorrelation(x, y []float64) float64 {
+	n := len(x)
+	if n != len(y) || n < 2 {
+		return 0
+	}
+
+	var sumX, sumY, sumXY, sumX2, sumY2 float64
+	for i := 0; i < n; i++ {
+		sumX += x[i]
+		sumY += y[i]
+		sumXY += x[i] * y[i]
+		sumX2 += x[i] * x[i]
+		sumY2 += y[i] * y[i]
+	}
+
+	nf := float64(n)
+	num := nf*sumXY - sumX*sumY
+	den := math.Sqrt((nf*sumX2 - sumX*sumX) * (nf*sumY2 - sumY*sumY))
 	if den == 0 {
 		return 0
 	}

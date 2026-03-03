@@ -1057,25 +1057,29 @@ func TestSwordDoesNotTrigger(t *testing.T) {
 	// overshoots/corrections, and varied segment efficiency.
 	// Velocities all above 5.0 to avoid velocity_low detection.
 	// Events interleaved to avoid sequential ordering detection.
-	// Click positions offset 4-7px from nearest mouse position (human imprecision).
+	// Click positions offset 4-7px from nearest mouse position (human imprecision)
+	// with non-integer coordinates to avoid click_position_too_precise.
 	// Scroll data: positive autocorrelation (momentum), correlated intervals/deltas,
 	// high interval CV (>0.50), varied delta ratios (stddev >0.15).
 	// Mouse intervals have temporal clustering (fast burst then slow).
 	// Click velocities are low (near slow mouse events) = deceleration before click.
 	// Mouse density drops during typing phase.
+	// Velocities follow a smooth arc (lag-2 autocorr ~0.38, lag-3 ~0.06) to
+	// pass Checks 27/28. Only 3 clicks = 2 Fitts pairs (below min 3), so
+	// Check 29 does not fire.
 	req.Header.Set("X-Behavioral-Data", `{
 		"mouseTimestamps": [1709500000000,1709500000032,1709500000078,1709500000131,1709500000192,1709500000284,1709500000367,1709500001500,1709500002100,1709500002500,1709500003200,1709500004100],
 		"typingTimestamps": [1709500001000,1709500001087,1709500001243,1709500002000,1709500002200,1709500002800,1709500003500,1709500004200],
 		"scrollTimestamps": [1709500000800,1709500000855,1709500002655,1709500004555,1709500004620,1709500005320],
 		"scrollDeltas": [350,320,300,100,120,80],
 		"clickTimestamps": [1709500000650,1709500002700,1709500004000],
-		"clickPositions": [{"x":398,"y":168},{"x":205,"y":220},{"x":425,"y":305}],
+		"clickPositions": [{"x":398.3,"y":168.7},{"x":205.1,"y":220.4},{"x":425.8,"y":305.2}],
 		"mousePositions": [
 			{"x":100,"y":200},{"x":101.2,"y":200.8},{"x":102.5,"y":199.3},{"x":115,"y":190},
 			{"x":135,"y":178},{"x":160,"y":175},{"x":161.5,"y":175.8},{"x":395,"y":165},
 			{"x":200,"y":215},{"x":420,"y":300},{"x":500,"y":340},{"x":550,"y":350}
 		],
-		"mouseVelocities": [12,18,320,90,250,15,40,95,450,30,205,80]
+		"mouseVelocities": [30,60,110,170,210,230,240,235,230,225,215,200]
 	}`)
 
 	detection := detector.AnalyzeRequest(req, nil)

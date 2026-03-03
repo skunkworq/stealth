@@ -19,6 +19,11 @@ type EventData struct {
 	ScrollDeltas     []float64                `json:"scrollDeltas"`
 	ClickTimestamps  []int64                  `json:"clickTimestamps,omitempty"`
 	ClickPositions   []map[string]float64     `json:"clickPositions,omitempty"`
+
+	// Phase 10: Keystroke hold times (ms) — duration of keydown→keyup per keystroke
+	KeystrokeHoldTimes []float64 `json:"keystrokeHoldTimes,omitempty"`
+	// Phase 10: Scroll directions — positive=down, negative=up
+	ScrollDirections []float64 `json:"scrollDirections,omitempty"`
 }
 
 // GeneratorConfig controls the behavioral data generation parameters.
@@ -158,6 +163,12 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 	timestamps := make([]int64, 0, numEvents)
 	velocities := make([]float64, 0, numEvents)
 
+	// Velocity history for temporal smoothing (lag-1/2/3 autocorrelation).
+	// Blending past velocities creates natural autocorrelation structure
+	// that matches human motor control patterns.
+	var velHistory [3]float64 // [lag-1, lag-2, lag-3]
+	velHistoryLen := 0
+
 	// Preferred tremor direction (simulates wrist anatomy bias).
 	// Real hand tremor clusters around a dominant angle due to arm mechanics.
 	// Using wrapped normal distribution gives Rayleigh R ≈ 0.49 (well above 0.15 threshold).
@@ -294,7 +305,29 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 				if v > 2500 {
 					v = 2500 + g.rng.Float64()*400 // 2500-2900 px/s (fast flick band)
 				}
-				velocities = append(velocities, math.Round(v*10)/10)
+
+				// Temporal smoothing: blend past velocities to create natural
+				// lag-1/2/3 autocorrelation structure (defeats Checks 27, 28).
+				// Human motor control produces correlated velocity sequences —
+				// the hand doesn't change speed independently each sample.
+				if velHistoryLen >= 3 {
+					v = 0.74*v + 0.15*velHistory[0] + 0.08*velHistory[1] + 0.03*velHistory[2]
+				} else if velHistoryLen == 2 {
+					v = 0.77*v + 0.15*velHistory[0] + 0.08*velHistory[1]
+				} else if velHistoryLen == 1 {
+					v = 0.85*v + 0.15*velHistory[0]
+				}
+
+				finalV := math.Round(v*10) / 10
+				velocities = append(velocities, finalV)
+
+				// Shift velocity history
+				velHistory[2] = velHistory[1]
+				velHistory[1] = velHistory[0]
+				velHistory[0] = finalV
+				if velHistoryLen < 3 {
+					velHistoryLen++
+				}
 			}
 		}
 
@@ -357,6 +390,34 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 	}
 
 	data.TypingTimestamps = timestamps
+
+	// Generate keystroke hold times (keydown→keyup duration).
+	// Human hold times vary by key type: short for common letters (60-120ms),
+	// longer for modifiers/space (100-200ms), with occasional long holds (200-350ms).
+	// CV should be > 0.30 to avoid mechanical-typing detection.
+	holdTimes := make([]float64, 0, numKeys)
+	for i := 0; i < numKeys; i++ {
+		var hold float64
+		r := g.rng.Float64()
+		switch {
+		case r < 0.55:
+			// Common letter: 60-120ms (fast taps)
+			hold = 60 + g.rng.Float64()*60
+		case r < 0.80:
+			// Space/modifier: 100-200ms (slightly longer)
+			hold = 100 + g.rng.Float64()*100
+		case r < 0.95:
+			// Deliberate press: 150-300ms
+			hold = 150 + g.rng.Float64()*150
+		default:
+			// Occasional long hold (thinking/hesitation): 250-450ms
+			hold = 250 + g.rng.Float64()*200
+		}
+		// Add noise ±15%
+		hold *= (0.85 + g.rng.Float64()*0.30)
+		holdTimes = append(holdTimes, math.Round(hold*10)/10)
+	}
+	data.KeystrokeHoldTimes = holdTimes
 }
 
 // generateScrollEvents creates human-like scroll events with bimodal timing
@@ -422,8 +483,30 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 		ts += int64(interval)
 	}
 
+	// Generate scroll directions: mostly down (positive), occasionally up (negative).
+	// Real users scroll down 70-85% of the time, with up-scrolls for re-reading.
+	// Direction changes are clustered (once you scroll up, you tend to continue up
+	// for 1-3 events before switching back), creating positive autocorrelation.
+	directions := make([]float64, 0, numScrolls)
+	currentDir := 1.0 // Start scrolling down
+	dirRun := 0       // How many events in current direction
+	for i := 0; i < numScrolls; i++ {
+		if dirRun > 0 && currentDir < 0 && dirRun >= 1+g.rng.Intn(3) {
+			// After 1-3 up-scrolls, switch back to down
+			currentDir = 1.0
+			dirRun = 0
+		} else if currentDir > 0 && g.rng.Float64() < 0.15 {
+			// 15% chance to start scrolling up
+			currentDir = -1.0
+			dirRun = 0
+		}
+		directions = append(directions, currentDir*deltas[i])
+		dirRun++
+	}
+
 	data.ScrollTimestamps = timestamps
 	data.ScrollDeltas = deltas
+	data.ScrollDirections = directions
 }
 
 // generateClickEvents creates click events near mouse positions.

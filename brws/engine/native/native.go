@@ -330,11 +330,58 @@ func flattenHeaders(headers map[string][]string) map[string]string {
 	return result
 }
 
+// h2Profile holds browser-specific HTTP/2 settings for the transport layer.
+type h2Profile struct {
+	maxHeaderListSize         uint32
+	maxDecoderHeaderTableSize uint32
+	maxReadFrameSize          uint32
+	// initialWindowSize is the INITIAL_WINDOW_SIZE to advertise in SETTINGS.
+	// Go's http2.Transport hardcodes this to 4MB; to override, we inject
+	// custom SETTINGS via a connection wrapper (see settingsInterceptConn).
+	initialWindowSize uint32
+	// connWindowSize is the connection-level window advertised via WINDOW_UPDATE(stream=0).
+	// Chrome: 6225920, Firefox: 12451842, Go default: 1<<30 (~1GB).
+	connWindowSize uint32
+}
+
+// chromeH2Profile returns HTTP/2 settings matching Chrome 120.
+func chromeH2Profile() h2Profile {
+	return h2Profile{
+		maxHeaderListSize:         262144,  // Chrome: 262144
+		maxDecoderHeaderTableSize: 65536,   // Chrome: 65536
+		maxReadFrameSize:          16384,   // Chrome: 16384
+		initialWindowSize:         6291456, // Chrome: 6MB
+		connWindowSize:            6291456, // Chrome: 6MB
+	}
+}
+
+// firefoxH2Profile returns HTTP/2 settings matching Firefox 120.
+func firefoxH2Profile() h2Profile {
+	return h2Profile{
+		maxHeaderListSize:         0,       // Firefox: not sent
+		maxDecoderHeaderTableSize: 131072,  // Firefox: 131072
+		maxReadFrameSize:          16384,   // Firefox: 16384
+		initialWindowSize:         131072,  // Firefox: 128KB
+		connWindowSize:            12517377, // Firefox: ~12MB
+	}
+}
+
+// h2ProfileForFingerprint returns the HTTP/2 profile matching a uTLS fingerprint.
+func h2ProfileForFingerprint(fp utls.ClientHelloID) h2Profile {
+	switch {
+	case strings.Contains(fp.Client, "Firefox"):
+		return firefoxH2Profile()
+	default:
+		return chromeH2Profile()
+	}
+}
+
 // uTLSRoundTripper wraps http.Transport to use uTLS for TLS fingerprint spoofing.
 // It handles HTTP/2 properly by checking the ALPN-negotiated protocol after
 // the uTLS handshake and routing to the appropriate transport.
 type uTLSRoundTripper struct {
 	fingerprint utls.ClientHelloID
+	h2prof      h2Profile
 
 	// h1 transport for HTTP/1.1 connections
 	h1 *http.Transport
@@ -347,6 +394,7 @@ type uTLSRoundTripper struct {
 func newUTLSRoundTripper(fingerprint utls.ClientHelloID) *uTLSRoundTripper {
 	rt := &uTLSRoundTripper{
 		fingerprint: fingerprint,
+		h2prof:      h2ProfileForFingerprint(fingerprint),
 	}
 
 	// HTTP/1.1 transport with uTLS dial
@@ -393,23 +441,30 @@ func (u *uTLSRoundTripper) dialTLS(ctx context.Context, network, addr string) (n
 }
 
 // getH2Transport returns the HTTP/2 transport, creating it lazily.
-// Uses Chrome-like HTTP/2 SETTINGS to avoid detection by CF which compares
-// HTTP/2 frame values against the User-Agent's expected behavior.
+// Uses browser-specific HTTP/2 SETTINGS derived from the TLS fingerprint profile
+// to avoid detection by CF which compares HTTP/2 frame values against the
+// User-Agent's expected behavior.
 func (u *uTLSRoundTripper) getH2Transport() *http2.Transport {
 	u.h2mu.Lock()
 	defer u.h2mu.Unlock()
 	if u.h2 == nil {
+		prof := u.h2prof
 		u.h2 = &http2.Transport{
 			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
 				return u.dialTLS(ctx, network, addr)
 			},
-			// Chrome-like HTTP/2 SETTINGS to match the browser profile.
-			// CF fingerprints HTTP/2 SETTINGS frames and compares them
-			// against the claimed User-Agent. Go defaults differ from
-			// Chrome's values, causing detection.
-			MaxHeaderListSize:         262144, // Chrome: 262144 (Go default: 10<<20)
-			MaxDecoderHeaderTableSize: 65536,  // Chrome: 65536  (Go default: 4096)
-			MaxReadFrameSize:          16384,  // Chrome: 16384  (Go default: 16384)
+			// Browser-specific HTTP/2 SETTINGS to match the TLS fingerprint profile.
+			// CF fingerprints HTTP/2 SETTINGS frames and compares them against the
+			// claimed User-Agent. These 3 fields map to SETTINGS frame values:
+			//   MaxHeaderListSize         → SETTINGS_MAX_HEADER_LIST_SIZE
+			//   MaxDecoderHeaderTableSize → SETTINGS_HEADER_TABLE_SIZE
+			//   MaxReadFrameSize          → SETTINGS_MAX_FRAME_SIZE
+			// Note: SETTINGS_INITIAL_WINDOW_SIZE and SETTINGS_MAX_CONCURRENT_STREAMS
+			// are controlled by Go's http2 internals and cannot be overridden here.
+			// For full HTTP/2 fingerprint control, use CustomHTTP2Transport from spoof/.
+			MaxHeaderListSize:         prof.maxHeaderListSize,
+			MaxDecoderHeaderTableSize: prof.maxDecoderHeaderTableSize,
+			MaxReadFrameSize:          prof.maxReadFrameSize,
 		}
 	}
 	return u.h2

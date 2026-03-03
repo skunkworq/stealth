@@ -27,6 +27,13 @@ type CustomHTTP2Transport struct {
 	PseudoHeaderOrder []string
 	HeaderOrder       []string
 
+	// PRIORITY frame configuration (P9.2)
+	// Chrome sends PRIORITY on initial stream: weight=256, exclusive=true, depends=0
+	PriorityWeight    uint8
+	PriorityExclusive bool
+	PriorityDependsOn uint32
+	SendPriority      bool // whether to emit PRIORITY frames
+
 	// Internal state
 	conn     net.Conn
 	framer   *http2.Framer
@@ -72,6 +79,12 @@ func ChromeHTTP2Transport() *CustomHTTP2Transport {
 			"accept-encoding",
 			"accept-language",
 		},
+
+		// Chrome sends PRIORITY: weight=256, exclusive, depends on stream 0
+		PriorityWeight:    255, // http2 wire weight is 0-255, maps to 1-256
+		PriorityExclusive: true,
+		PriorityDependsOn: 0,
+		SendPriority:      true,
 	}
 }
 
@@ -108,6 +121,9 @@ func FirefoxHTTP2Transport() *CustomHTTP2Transport {
 			"sec-fetch-user",
 			"te",
 		},
+
+		// Firefox uses urgency-based priority (RFC 9218), not PRIORITY frames
+		SendPriority: false,
 	}
 }
 
@@ -188,25 +204,25 @@ func (t *CustomHTTP2Transport) SendRequest(
 	// Send HEADERS frame
 	endStream := len(body) == 0
 
-	if err := t.framer.WriteHeaders(
-		http2.HeadersFrameParam{
-			StreamID:      streamID,
-			BlockFragment: headerBlock,
-			EndStream:     endStream,
-			EndHeaders:    true,
-		},
-	); err != nil {
-		return nil, fmt.Errorf("writing headers: %w", err)
+	// Chrome sends PRIORITY in the HEADERS frame via the Priority field
+	headersParam := http2.HeadersFrameParam{
+		StreamID:      streamID,
+		BlockFragment: headerBlock,
+		EndStream:     endStream,
+		EndHeaders:    true,
 	}
 
-	// Send WINDOW_UPDATE for stream if needed
-	if t.InitialStreamWindowSize > 0 {
-		increment := t.InitialStreamWindowSize - 65535
-		if increment > 0 {
-			if err := t.framer.WriteWindowUpdate(streamID, increment); err != nil {
-				return nil, fmt.Errorf("writing stream window update: %w", err)
-			}
+	// Attach PRIORITY data to the HEADERS frame if configured (P9.2)
+	if t.SendPriority {
+		headersParam.Priority = http2.PriorityParam{
+			StreamDep: t.PriorityDependsOn,
+			Exclusive: t.PriorityExclusive,
+			Weight:    t.PriorityWeight,
 		}
+	}
+
+	if err := t.framer.WriteHeaders(headersParam); err != nil {
+		return nil, fmt.Errorf("writing headers: %w", err)
 	}
 
 	// Send body if present
@@ -216,7 +232,8 @@ func (t *CustomHTTP2Transport) SendRequest(
 		}
 	}
 
-	// Read response (simplified - would need proper state machine)
+	// Read response. Stream WINDOW_UPDATE is sent after first DATA frame (P9.3),
+	// matching Chrome's behavior of deferring flow control until data arrives.
 	return t.readResponse(streamID)
 }
 
@@ -285,10 +302,14 @@ func (t *CustomHTTP2Transport) encodeHeaders(
 	return buf.Bytes(), nil
 }
 
-// readResponse reads HTTP/2 response (simplified)
+// readResponse reads HTTP/2 response, assembling multi-frame bodies.
+// Sends a stream-level WINDOW_UPDATE after the first DATA frame to match
+// Chrome's deferred flow control behavior (P9.3).
 func (t *CustomHTTP2Transport) readResponse(streamID uint32) (*http.Response, error) {
 	var headers http.Header
 	var statusCode int
+	var bodyBuf bytes.Buffer
+	sentStreamWindowUpdate := false
 
 	for {
 		frame, err := t.framer.ReadFrame()
@@ -323,8 +344,18 @@ func (t *CustomHTTP2Transport) readResponse(streamID uint32) (*http.Response, er
 				continue
 			}
 
-			// Collect body data
-			// In real implementation, would use a pipe or channel
+			// P9.3: Send stream WINDOW_UPDATE after first DATA frame (Chrome behavior).
+			// Real browsers defer this until data arrives, not at connection setup.
+			if !sentStreamWindowUpdate && t.InitialStreamWindowSize > 0 {
+				increment := t.InitialStreamWindowSize - 65535
+				if increment > 0 {
+					_ = t.framer.WriteWindowUpdate(streamID, increment)
+				}
+				sentStreamWindowUpdate = true
+			}
+
+			// Accumulate body data across frames
+			bodyBuf.Write(f.Data())
 
 			if f.StreamEnded() {
 				return &http.Response{
@@ -332,13 +363,26 @@ func (t *CustomHTTP2Transport) readResponse(streamID uint32) (*http.Response, er
 					Header:     headers,
 					Proto:      "HTTP/2.0",
 					ProtoMajor: 2,
-					Body:       io.NopCloser(bytes.NewReader(f.Data())),
+					Body:       io.NopCloser(bytes.NewReader(bodyBuf.Bytes())),
 				}, nil
 			}
 
 		case *http2.RSTStreamFrame:
 			if f.StreamID == streamID {
 				return nil, fmt.Errorf("stream reset: %d", f.ErrCode)
+			}
+
+		case *http2.GoAwayFrame:
+			return nil, fmt.Errorf("server sent GOAWAY: %d", f.ErrCode)
+
+		case *http2.WindowUpdateFrame:
+			// Server flow control — acknowledge and continue
+			continue
+
+		case *http2.SettingsFrame:
+			// Server settings update — ACK if not already acked
+			if !f.IsAck() {
+				_ = t.framer.WriteSettingsAck()
 			}
 		}
 	}

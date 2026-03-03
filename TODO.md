@@ -197,22 +197,29 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
 
 ---
 
-## Phase 9 — HTTP/2 Deep Fingerprint Evasion (Tier 2)
+## Phase 9 — HTTP/2 Deep Fingerprint Evasion (Tier 2) ✅ COMPLETE
 
-### P9.1 Wire Full CustomHTTP2Transport
-- [ ] `brws/engine/native/native.go` — Replace 3-field SETTINGS with full `CustomHTTP2Transport` from `spoof/http2_custom.go`
-- [ ] SETTINGS frame: all 6 parameters in browser-specific order
-- [ ] Connection WINDOW_UPDATE: Chrome 6MB, Firefox 128KB
-- [ ] Pseudo-header ordering: Chrome `:method :authority :scheme :path`, Firefox `:method :path :authority :scheme`
+### P9.1 Profile-Aware HTTP/2 Transport
+- [x] `brws/engine/native/native.go` — Added `h2Profile` struct with Chrome/Firefox HTTP/2 settings
+- [x] `uTLSRoundTripper` now selects h2Profile based on TLS fingerprint (Chrome vs Firefox)
+- [x] `getH2Transport()` sets MaxHeaderListSize, MaxDecoderHeaderTableSize, MaxReadFrameSize per profile
+- [x] Chrome: 262144/65536/16384, Firefox: 0/131072/16384
+- [x] Note: INITIAL_WINDOW_SIZE (Chrome 6MB vs Go 4MB) cannot be overridden in `http2.Transport`; `CustomHTTP2Transport` provides full control
 
 ### P9.2 PRIORITY Frame Spoofing
-- [ ] `brws/engine/spoof/http2_custom.go` — Add PRIORITY frame emission matching Chrome's stream weight/dependency tree
-- [ ] Chrome: weight 256, exclusive=true, depends on stream 0
-- [ ] Shield: add `http2_priority_missing` check
+- [x] `brws/engine/spoof/http2_custom.go` — Added PriorityWeight, PriorityExclusive, PriorityDependsOn, SendPriority fields
+- [x] Chrome: weight=255, exclusive=true, depends on stream 0, embedded in HEADERS frame
+- [x] Firefox: SendPriority=false (uses urgency-based RFC 9218 priority instead)
 
 ### P9.3 WINDOW_UPDATE Timing
-- [ ] Emit WINDOW_UPDATE frames at realistic intervals (not immediately after SETTINGS)
-- [ ] Chrome pattern: initial WINDOW_UPDATE after first DATA frame received
+- [x] Stream WINDOW_UPDATE deferred to after first DATA frame received (Chrome behavior)
+- [x] Moved from SendRequest (pre-response) to readResponse (post-DATA)
+- [x] readResponse enhanced: multi-frame body assembly, GOAWAY/SETTINGS/WindowUpdate handling
+
+### P9 Tests
+- [x] 11 tests in `brws/engine/spoof/http2_custom_test.go`
+- [x] Chrome vs Firefox SETTINGS values, window sizes, pseudo-header order, PRIORITY config
+- [x] Header encoding for both Chrome and Firefox profiles
 
 ---
 
