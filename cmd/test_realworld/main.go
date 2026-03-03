@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -149,6 +150,99 @@ func testURL(url string) *Result {
 			actionCount += len(n.Actions)
 		}
 		log.Printf("  Actions: %d", actionCount)
+
+		// === TRAVERSAL TEST ===
+		log.Printf("\n  === TREE TRAVERSAL TEST ===")
+
+		// Test 1: Find specific nodes
+		log.Printf("  Finding nodes with 'Go' in summary...")
+		found := 0
+		for _, n := range allNodes {
+			if strings.Contains(n.Summary, "Go") || strings.Contains(n.Summary, "programming") {
+				found++
+				if found <= 3 {
+					log.Printf("    Node[%d]: %s", n.ID, truncate(n.Summary, 60))
+				}
+			}
+		}
+		log.Printf("  Found %d nodes with 'Go' or 'programming'", found)
+
+		// Test 2: Find by selector
+		log.Printf("  Finding nodes by selector patterns...")
+		selectorCounts := make(map[string]int)
+		for _, n := range allNodes {
+			if n.DOMSelector != "" {
+				// Get the tag name from selector
+				tag := "unknown"
+				if idx := strings.Index(n.DOMSelector, ">"); idx > 0 {
+					tag = n.DOMSelector[strings.LastIndex(n.DOMSelector, "<")+1 : idx]
+					tag = strings.Trim(tag, " ")
+				}
+				selectorCounts[tag]++
+			}
+		}
+		log.Printf("  Selector tag distribution: %v", selectorCounts)
+
+		// Test 3: Traverse tree hierarchy
+		log.Printf("  Tree hierarchy traversal:")
+		for i, root := range tree.RootNodes {
+			if i >= 2 {
+				log.Printf("    ... and %d more root nodes", len(tree.RootNodes)-i)
+				break
+			}
+			log.Printf("    Root[%d]: %s (children: %d)", root.ID, truncate(root.Summary, 40), len(root.Children))
+			for j, child := range root.Children {
+				if j >= 3 {
+					log.Printf("      ... and %d more children", len(root.Children)-j)
+					break
+				}
+				log.Printf("        Child[%d]: %s", child.ID, truncate(child.Summary, 40))
+			}
+		}
+
+		// Test 4: Extract actions
+		log.Printf("  Action extraction:")
+		actionTypes := make(map[semantic.ActionType]int)
+		for _, n := range allNodes {
+			for _, a := range n.Actions {
+				actionTypes[a.Type]++
+			}
+		}
+		log.Printf("    Action types: %v", actionTypes)
+
+		// Show some click actions
+		clickCount := 0
+		for _, n := range allNodes {
+			for _, a := range n.Actions {
+				if a.Type == semantic.ActionClick && clickCount < 3 {
+					log.Printf("    Click action: %s -> %s", a.Selector, truncate(a.Description, 40))
+					clickCount++
+				}
+			}
+		}
+
+		// Test 5: JSON serialization
+		log.Printf("  JSON serialization test...")
+		jsonBytes, err := json.Marshal(tree)
+		if err != nil {
+			log.Printf("    ERROR: %v", err)
+		} else {
+			log.Printf("    Serialized to %d bytes", len(jsonBytes))
+		}
+
+		// Test 6: Find node by ID
+		log.Printf("  FindNode by ID test...")
+		if len(allNodes) > 5 {
+			targetID := allNodes[5].ID
+			foundNode := tree.FindNode(targetID)
+			if foundNode != nil {
+				log.Printf("    Found node %s: %s", targetID, truncate(foundNode.Summary, 40))
+			} else {
+				log.Printf("    ERROR: Could not find node %s", targetID)
+			}
+		}
+
+		log.Printf("  === TRAVERSAL COMPLETE ===\n")
 	}
 
 	return r
@@ -159,4 +253,11 @@ func truncateURL(url string) string {
 		return url[:37] + "..."
 	}
 	return url
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) > maxLen {
+		return s[:maxLen-3] + "..."
+	}
+	return s
 }

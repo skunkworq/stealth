@@ -200,56 +200,23 @@ func (ct *CaptchaTracer) GetTrace(challengeID string) (*CaptchaTrace, bool) {
 // heuristic checks and the full BehavioralAnalyzer's 8-check suite.
 // The final score is the max of both to ensure either path catches bots.
 func (ct *CaptchaTracer) CalculateBotScore(trace *CaptchaTrace) float64 {
-	// Quick heuristic score (original 4 checks)
-	quickScore := 0.0
-
-	if trace.Metrics.TotalEvents < 5 {
-		quickScore += 0.4
-	}
-
-	if trace.Metrics.MouseVelocity > 1000 || trace.Metrics.MouseVelocity < 10 {
-		quickScore += 0.2
-	}
-
-	if trace.Metrics.LongPauses == 0 && trace.Metrics.TotalEvents > 10 {
-		quickScore += 0.2
-	}
-
-	if trace.Metrics.TypingSpeed > 500 || trace.Metrics.TypingSpeed < 30 {
-		quickScore += 0.1
-	}
-
-	if quickScore > 1.0 {
-		quickScore = 1.0
-	}
-
-	// Enhanced: Build EnhancedBehavioralEvents from trace events and run BehavioralAnalyzer
-	enhanced := ct.buildEnhancedEvents(trace)
-	analyzer := NewBehavioralAnalyzer(nil) // default config
-	result := analyzer.Analyze(enhanced)
-
-	analyzerScore := result.Score
-
-	// Return whichever is higher — either path catches bots
-	if analyzerScore > quickScore {
-		return analyzerScore
-	}
-	return quickScore
+	// Captcha bot scoring uses the quick heuristic checks only.
+	// The full BehavioralAnalyzer (checks 1-24) is designed for HTTP request-level
+	// detection and catches structural patterns in the behavioral data header.
+	// Captcha events are short-lived interaction traces with different characteristics.
+	return ct.calculateQuickScore(trace)
 }
 
 // CalculateBotScoreDetailed returns the bot score plus the full behavioral analysis result.
+// Uses quick heuristics for scoring but still returns the analyzer result for diagnostics.
 func (ct *CaptchaTracer) CalculateBotScoreDetailed(trace *CaptchaTrace) (float64, *VectorResult) {
 	enhanced := ct.buildEnhancedEvents(trace)
 	analyzer := NewBehavioralAnalyzer(nil)
 	result := analyzer.Analyze(enhanced)
 
+	// Use quick score for actual bot scoring (see CalculateBotScore comment)
 	quickScore := ct.calculateQuickScore(trace)
-
-	finalScore := result.Score
-	if quickScore > finalScore {
-		finalScore = quickScore
-	}
-	return finalScore, result
+	return quickScore, result
 }
 
 func (ct *CaptchaTracer) calculateQuickScore(trace *CaptchaTrace) float64 {

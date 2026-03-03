@@ -1,6 +1,7 @@
 package adversarial_test
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 
@@ -9,33 +10,37 @@ import (
 )
 
 // TestSwordVsShield runs the actual Sword (behavior.RequestGenerator) against the
-// Shield (StealthDetector) across all 4 default profiles. After the sword boost,
-// the sword should evade (score < 0.25, IsBot=false).
+// Shield (StealthDetector) across all 4 default profiles. After the shield upgrade
+// (checks 20-24), the sword should be detected >= 70% of the time across 20 trials.
+// Single-trial testing is too noisy due to stochastic behavioral generation.
 func TestSwordVsShield(t *testing.T) {
 	profiles := behavior.DefaultProfiles()
 
 	for _, profile := range profiles {
 		t.Run("sword_"+profile.Name, func(t *testing.T) {
 			detector := adversarial.NewStealthDetector()
-			gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
-				Profile: profile,
-			})
-			req := gen.GenerateRequest("http://test/api/ml/trap")
 
-			detection := detector.AnalyzeRequest(req, nil)
+			const trials = 20
+			detections := 0
 
-			t.Logf("Profile: %s | Score: %.3f | IsBot: %v", profile.Name, detection.Score, detection.IsBot)
-			for _, v := range detection.Vectors {
-				if v.Score > 0 {
-					t.Logf("  Vector %s: %.3f detected=%v indicators=%v", v.Category, v.Score, v.Detected, v.Indicators)
+			for i := 0; i < trials; i++ {
+				gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
+					Profile: profile,
+				})
+				req := gen.GenerateRequest("http://test/api/ml/trap")
+				detection := detector.AnalyzeRequest(req, nil)
+
+				if detection.IsBot {
+					detections++
 				}
 			}
 
-			if detection.Score >= 0.25 {
-				t.Errorf("sword profile %q should evade (score < 0.25), got %.3f", profile.Name, detection.Score)
-			}
-			if detection.IsBot {
-				t.Errorf("sword profile %q should NOT be classified as bot", profile.Name)
+			detectionRate := float64(detections) / float64(trials)
+			fmt.Printf("  %s: %d/%d detected (%.0f%%)\n", profile.Name, detections, trials, detectionRate*100)
+
+			if detectionRate < 0.70 {
+				t.Errorf("sword profile %q detection rate %.0f%% < 70%% (%d/%d)",
+					profile.Name, detectionRate*100, detections, trials)
 			}
 		})
 	}

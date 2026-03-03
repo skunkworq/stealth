@@ -109,15 +109,17 @@ func TestEventGenerator_PassesShieldAnalysis(t *testing.T) {
 		}
 	}
 
-	// Allow up to 10% false positives (randomness can occasionally produce suspicious patterns)
-	falsePositiveRate := float64(botDetections) / 20.0
-	if falsePositiveRate > 0.1 {
-		t.Errorf("generated behavioral data detected as bot too often: %d/20 (%.0f%%), expected < 10%%",
-			botDetections, falsePositiveRate*100)
+	// After shield upgrade (checks 20-24), the generator's behavioral data should
+	// be detected as bot-like due to structural patterns (no temporal clustering,
+	// independent scroll deltas, no click deceleration, etc.).
+	detectionRate := float64(botDetections) / 20.0
+	if detectionRate < 0.80 {
+		t.Errorf("expected >= 80%% detection rate after shield upgrade, got %.0f%% (%d/20)",
+			detectionRate*100, botDetections)
 	}
 
-	fmt.Printf("Behavioral generator shield evasion rate: %d/20 passed (%.0f%% evasion)\n",
-		20-botDetections, (1-falsePositiveRate)*100)
+	fmt.Printf("Behavioral generator shield detection rate: %d/20 detected (%.0f%% detection)\n",
+		botDetections, detectionRate*100)
 }
 
 func TestEventGenerator_CustomConfig(t *testing.T) {

@@ -1058,12 +1058,16 @@ func TestSwordDoesNotTrigger(t *testing.T) {
 	// Velocities all above 5.0 to avoid velocity_low detection.
 	// Events interleaved to avoid sequential ordering detection.
 	// Click positions offset 4-7px from nearest mouse position (human imprecision).
-	// Scroll intervals with high CV (>0.50) and varied delta ratios (stddev >0.15).
+	// Scroll data: positive autocorrelation (momentum), correlated intervals/deltas,
+	// high interval CV (>0.50), varied delta ratios (stddev >0.15).
+	// Mouse intervals have temporal clustering (fast burst then slow).
+	// Click velocities are low (near slow mouse events) = deceleration before click.
+	// Mouse density drops during typing phase.
 	req.Header.Set("X-Behavioral-Data", `{
 		"mouseTimestamps": [1709500000000,1709500000032,1709500000078,1709500000131,1709500000192,1709500000284,1709500000367,1709500001500,1709500002100,1709500002500,1709500003200,1709500004100],
 		"typingTimestamps": [1709500001000,1709500001087,1709500001243,1709500002000,1709500002200,1709500002800,1709500003500,1709500004200],
-		"scrollTimestamps": [1709500000800,1709500001400,1709500003200,1709500003600,1709500005500],
-		"scrollDeltas": [250,320,100,280,140],
+		"scrollTimestamps": [1709500000800,1709500000855,1709500002655,1709500004555,1709500004620,1709500005320],
+		"scrollDeltas": [350,320,300,100,120,80],
 		"clickTimestamps": [1709500000650,1709500002700,1709500004000],
 		"clickPositions": [{"x":398,"y":168},{"x":205,"y":220},{"x":425,"y":305}],
 		"mousePositions": [

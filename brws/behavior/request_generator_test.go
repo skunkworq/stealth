@@ -324,8 +324,9 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 						detections++
 					}
 				}
-				if float64(detections)/float64(trials) > 0.15 {
-					t.Errorf("Behavioral detected %d/%d times", detections, trials)
+				// After shield upgrade (checks 20-24), expect high detection rate
+				if float64(detections)/float64(trials) < 0.80 {
+					t.Errorf("Behavioral should be detected >= 80%% of the time after shield upgrade, got %d/%d", detections, trials)
 				}
 			})
 		})
@@ -362,10 +363,11 @@ func TestRequestGenerator_EvadeShield(t *testing.T) {
 			}
 
 			evasionRate := float64(evasions) / float64(trials)
-			fmt.Printf("%s: %d/%d evasions (%.0f%%)\n", profile.Name, evasions, trials, evasionRate*100)
+			detectionRate := 1.0 - evasionRate
+			fmt.Printf("%s: %d/%d detected (%.0f%% detection)\n", profile.Name, trials-evasions, trials, detectionRate*100)
 
-			if evasionRate < 0.90 {
-				t.Errorf("evasion rate %.0f%% < 90%% (%d/%d)", evasionRate*100, evasions, trials)
+			if detectionRate < 0.80 {
+				t.Errorf("detection rate %.0f%% < 80%% after shield upgrade (%d/%d detected)", detectionRate*100, trials-evasions, trials)
 			}
 		})
 	}

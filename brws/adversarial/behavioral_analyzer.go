@@ -521,6 +521,182 @@ func (ba *BehavioralAnalyzer) Analyze(events *EnhancedBehavioralEvents) *VectorR
 		}
 	}
 
+	// Check 20: Mouse interval temporal clustering (lag-1 autocorrelation).
+	// Real human mouse movements have temporal clustering — bursts of fast movement
+	// followed by slower deliberation. This creates positive lag-1 autocorrelation
+	// in inter-event intervals (> 0.10). Synthetic generators with shuffled interval
+	// modes produce near-zero autocorrelation.
+	if len(events.MouseTimestamps) > 8 {
+		mouseIntervals := make([]float64, 0, len(events.MouseTimestamps)-1)
+		for i := 1; i < len(events.MouseTimestamps); i++ {
+			mouseIntervals = append(mouseIntervals, float64(events.MouseTimestamps[i]-events.MouseTimestamps[i-1]))
+		}
+		if len(mouseIntervals) > 5 {
+			autocorr := ba.lag1Autocorrelation(mouseIntervals)
+			if autocorr < 0.10 {
+				weight := 0.20
+				result.Indicators = append(result.Indicators, VectorIndicator{
+					Check:   "mouse_interval_no_clustering",
+					Message: fmt.Sprintf("Mouse intervals lack temporal clustering (lag-1 autocorr=%.3f < 0.10)", autocorr),
+					Weight:  weight,
+					Field:   "mouse_interval_autocorr",
+					Value:   formatFloat(autocorr),
+				})
+				result.Score += weight
+			}
+		}
+	}
+
+	// Check 21: Scroll delta-interval independence (Spearman rank correlation).
+	// Real scrolling: short intervals (fast scrolling) correlate with larger deltas —
+	// users who scroll quickly also scroll farther per event. Synthetic generators
+	// pick delta and interval from independent distributions (|ρ| ≈ 0).
+	if len(events.ScrollDeltas) > 2 && len(events.ScrollTimestamps) > 2 {
+		spearN := len(events.ScrollTimestamps)
+		if spearN > len(events.ScrollDeltas) {
+			spearN = len(events.ScrollDeltas)
+		}
+		if spearN > 2 {
+			spearIntervals := make([]float64, 0, spearN-1)
+			spearDeltas := make([]float64, 0, spearN-1)
+			for i := 1; i < spearN; i++ {
+				diff := float64(events.ScrollTimestamps[i] - events.ScrollTimestamps[i-1])
+				if diff > 0 {
+					spearIntervals = append(spearIntervals, diff)
+					spearDeltas = append(spearDeltas, events.ScrollDeltas[i])
+				}
+			}
+			if len(spearIntervals) >= 2 {
+				rho := ba.spearmanCorrelation(spearIntervals, spearDeltas)
+				if math.Abs(rho) < 0.15 {
+					weight := 0.25
+					result.Indicators = append(result.Indicators, VectorIndicator{
+						Check:   "scroll_delta_interval_independence",
+						Message: fmt.Sprintf("Scroll deltas independent of intervals (Spearman ρ=%.3f)", rho),
+						Weight:  weight,
+						Field:   "scroll_spearman_rho",
+						Value:   formatFloat(rho),
+					})
+					result.Score += weight
+				}
+			}
+		}
+	}
+
+	// Check 22: Scroll delta momentum (lag-1 autocorrelation).
+	// Real scrolling exhibits positive autocorrelation: consecutive deltas are
+	// similar due to physical momentum (finger stays on wheel/trackpad).
+	// Synthetic i.i.d. deltas from random distributions have autocorrelation ≈ 0.
+	if len(events.ScrollDeltas) > 2 {
+		scrollAutocorr := ba.lag1Autocorrelation(events.ScrollDeltas)
+		if scrollAutocorr < 0.10 {
+			weight := 0.20
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "scroll_delta_no_momentum",
+				Message: fmt.Sprintf("Scroll deltas lack momentum (lag-1 autocorr=%.3f < 0.10)", scrollAutocorr),
+				Weight:  weight,
+				Field:   "scroll_delta_autocorr",
+				Value:   formatFloat(scrollAutocorr),
+			})
+			result.Score += weight
+		}
+	}
+
+	// Check 23: No velocity depression near click events (Fitts' law).
+	// Humans decelerate before clicking — motor planning requires slowing to
+	// acquire the target. If velocities near click timestamps are not lower than
+	// the overall mean, clicks were placed without motor-planning deceleration.
+	if len(events.ClickTimestamps) >= 2 && len(events.MouseVelocities) > 5 && len(events.MouseTimestamps) > 5 {
+		overallMean, _ := meanStddev(events.MouseVelocities)
+		if overallMean > 0 {
+			var clickVelSum float64
+			clickVelCount := 0
+
+			for _, ct := range events.ClickTimestamps {
+				bestIdx := -1
+				bestDiff := int64(math.MaxInt64)
+				for j, mt := range events.MouseTimestamps {
+					diff := ct - mt
+					if diff < 0 {
+						diff = -diff
+					}
+					if diff < bestDiff {
+						bestDiff = diff
+						bestIdx = j
+					}
+				}
+				if bestIdx >= 0 && bestIdx < len(events.MouseVelocities) {
+					clickVelSum += events.MouseVelocities[bestIdx]
+					clickVelCount++
+				}
+			}
+
+			if clickVelCount >= 2 {
+				clickVelMean := clickVelSum / float64(clickVelCount)
+				decelRatio := clickVelMean / overallMean
+				if decelRatio > 0.85 {
+					weight := 0.25
+					result.Indicators = append(result.Indicators, VectorIndicator{
+						Check:   "no_click_deceleration",
+						Message: fmt.Sprintf("No velocity depression near clicks (click_vel/mean=%.2f > 0.85)", decelRatio),
+						Weight:  weight,
+						Field:   "click_decel_ratio",
+						Value:   formatFloat(decelRatio),
+					})
+					result.Score += weight
+				}
+			}
+		}
+	}
+
+	// Check 24: Mouse event density unchanged during typing phase.
+	// Real users reduce mouse movement when typing (hands move to keyboard).
+	// Mouse event density should drop to < 70% of pre-typing density during
+	// the typing phase. Synthetic generators produce mouse events independently
+	// of typing, maintaining uniform density throughout.
+	if len(events.MouseTimestamps) > 8 && len(events.TypingTimestamps) > 3 {
+		typingStart := events.TypingTimestamps[0]
+		typingEnd := events.TypingTimestamps[len(events.TypingTimestamps)-1]
+
+		preTypingMouse := 0
+		duringTypingMouse := 0
+		var firstMouseTs int64
+		var lastPreTypingTs int64
+
+		for i, mt := range events.MouseTimestamps {
+			if mt < typingStart {
+				preTypingMouse++
+				if i == 0 {
+					firstMouseTs = mt
+				}
+				lastPreTypingTs = mt
+			} else if mt <= typingEnd {
+				duringTypingMouse++
+			}
+		}
+
+		preDuration := float64(lastPreTypingTs - firstMouseTs)
+		typingDuration := float64(typingEnd - typingStart)
+
+		if preDuration > 0 && typingDuration > 0 && preTypingMouse > 3 && duringTypingMouse > 2 {
+			preDensity := float64(preTypingMouse) / preDuration
+			duringDensity := float64(duringTypingMouse) / typingDuration
+			densityRatio := duringDensity / preDensity
+
+			if densityRatio > 0.70 {
+				weight := 0.20
+				result.Indicators = append(result.Indicators, VectorIndicator{
+					Check:   "mouse_density_during_typing",
+					Message: fmt.Sprintf("Mouse density doesn't decrease during typing (ratio=%.2f > 0.70)", densityRatio),
+					Weight:  weight,
+					Field:   "typing_density_ratio",
+					Value:   formatFloat(densityRatio),
+				})
+				result.Score += weight
+			}
+		}
+	}
+
 	result.Score = math.Min(1.0, result.Score)
 	result.Detected = result.Score > 0.3
 

@@ -51,10 +51,12 @@ func TestAdversarialFeedbackLoop(t *testing.T) {
 			report.TotalScore, adaptedReport.TotalScore)
 	}
 
-	// The adapted request should not be detected as bot
+	// After shield upgrade (checks 20-24), adaptation alone can't fix fundamental
+	// behavioral patterns. The adapted request may still be detected, but score
+	// should have improved from the broken request.
 	if adaptedReport.IsBot {
 		adaptedFired := adaptedReport.FiredCheckNames()
-		t.Errorf("adapted request still detected as bot: score=%.3f, fired=%v",
+		t.Logf("adapted request still detected (expected after shield upgrade): score=%.3f, fired=%v",
 			adaptedReport.TotalScore, adaptedFired)
 	}
 
@@ -95,11 +97,14 @@ func TestAdaptiveGenerator_EvasionRate(t *testing.T) {
 			}
 
 			evasionRate := float64(evasions) / float64(trials)
-			fmt.Printf("%s adaptive: %d/%d evasions (%.0f%%)\n",
-				profile.Name, evasions, trials, evasionRate*100)
+			detectionRate := 1.0 - evasionRate
+			fmt.Printf("%s adaptive: %d/%d detected (%.0f%% detection)\n",
+				profile.Name, trials-evasions, trials, detectionRate*100)
 
-			if evasionRate < 0.90 {
-				t.Errorf("evasion rate %.0f%% < 90%% (%d/%d)", evasionRate*100, evasions, trials)
+			// After shield upgrade, even adaptive generation can't achieve high evasion
+			// because checks 20-24 detect fundamental structural patterns.
+			if evasionRate > 0.20 {
+				t.Errorf("expected <= 20%% evasion after shield upgrade, got %.0f%% (%d/%d)", evasionRate*100, evasions, trials)
 			}
 		})
 	}
@@ -142,9 +147,11 @@ func TestAdaptiveFromBroken_FeedbackConvergence(t *testing.T) {
 	t.Logf("Round 2 (adapted): score=%.3f, is_bot=%v, fired=%d",
 		report2.TotalScore, report2.IsBot, report2.FiredChecks)
 
+	// After shield upgrade, adaptation can't fix fundamental behavioral patterns.
+	// We only verify the score improved, not that it evades entirely.
 	if report2.IsBot {
 		fired := report2.FiredCheckNames()
-		t.Errorf("adapted generator still detected: score=%.3f, fired=%v",
+		t.Logf("adapted generator still detected (expected after shield upgrade): score=%.3f, fired=%v",
 			report2.TotalScore, fired)
 	}
 

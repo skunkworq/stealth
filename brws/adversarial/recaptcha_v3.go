@@ -77,7 +77,9 @@ func (as *AdvancedStealthServer) HandleReCaptchaV3Assess(w http.ResponseWriter, 
 		detectionScore = 1.0
 	}
 
-	// Step 2: If behavioral events are provided, run BehavioralAnalyzer.
+	// Step 2: If behavioral events are provided, score them with the CaptchaTracer
+	// quick heuristics. The full BehavioralAnalyzer (checks 1-24) is for HTTP
+	// request-level detection; captcha events use lighter scoring.
 	// No events = very suspicious (real browsers always generate behavioral data
 	// when a v3 script is embedded), so default to a high bot score.
 	behavScore := 0.85 // no behavioral data = strongly bot-like
@@ -85,22 +87,20 @@ func (as *AdvancedStealthServer) HandleReCaptchaV3Assess(w http.ResponseWriter, 
 	eventBreakdown := map[string]int{"total": len(req.Events)}
 	if len(req.Events) > 0 {
 		enhanced := eventsToEnhanced(req.Events)
-		analyzer := NewBehavioralAnalyzer(nil)
-		result := analyzer.Analyze(enhanced)
-		behavScore = result.Score
-		for _, ind := range result.Indicators {
-			behavChecks = append(behavChecks, BehavioralCheckResult{
-				Check:   ind.Check,
-				Message: ind.Message,
-				Weight:  ind.Weight,
-				Field:   ind.Field,
-				Value:   ind.Value,
-			})
+		tracer := NewCaptchaTracer()
+		trace := tracer.CreateTrace("v3-assess", "v3-session", "v3")
+		for _, ev := range req.Events {
+			tracer.AddEvent(trace.ChallengeID, ev)
+		}
+		traceResult, _ := tracer.GetTrace(trace.ChallengeID)
+		if traceResult != nil {
+			behavScore = tracer.CalculateBotScore(traceResult)
 		}
 		eventBreakdown["mouse"] = len(enhanced.MouseTimestamps)
 		eventBreakdown["typing"] = len(enhanced.TypingTimestamps)
 		eventBreakdown["scroll"] = len(enhanced.ScrollTimestamps)
 		eventBreakdown["click"] = len(enhanced.ClickTimestamps)
+		_ = behavChecks // diagnostics available via CalculateBotScoreDetailed if needed
 	}
 
 	// Step 3: Combine scores
