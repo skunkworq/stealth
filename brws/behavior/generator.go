@@ -607,8 +607,9 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 			// a=300ms base, b=200ms slope, W=40px target width
 			fittsID := math.Log2(dist/40.0 + 1)
 			movementTime := 300.0 + 200.0*fittsID
-			// Add 15-30% noise to avoid perfect Fitts correlation (r > 0.95)
-			noise := 0.85 + g.rng.Float64()*0.30
+			// Add 25-50% noise to produce moderate Fitts correlation (0.3-0.95)
+			// rather than perfect correlation (> 0.95) which also triggers detection.
+			noise := 0.75 + g.rng.Float64()*0.50
 			movementTime *= noise
 			clickTs = clickTimestamps[ci-1] + int64(movementTime)
 		}
