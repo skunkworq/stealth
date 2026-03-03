@@ -15,11 +15,14 @@ import (
 	"net/url"
 	"time"
 
+	"sync"
+
 	"github.com/google/uuid"
 	utls "github.com/refraction-networking/utls"
 	"github.com/stealth/brwslab/brws/constants"
 	"github.com/stealth/brwslab/brws/engine"
 	"github.com/stealth/brwslab/brws/engine/profiles"
+	"golang.org/x/net/http2"
 )
 
 func init() {
@@ -67,11 +70,6 @@ func New(opts engine.Options) (engine.Engine, error) {
 			NextProtos:         []string{"h2", "http/1.1"},
 			MinVersion:         tls.VersionTLS12,
 		}
-		// TODO: Fix uTLS integration for production use
-		// client.Transport = &uTLSRoundTripper{
-		// 	base:        transport,
-		// 	fingerprint: profile.TLSFingerprint,
-		// }
 	} else {
 		transport.TLSClientConfig = tlsConfig
 	}
@@ -112,11 +110,7 @@ func New(opts engine.Options) (engine.Engine, error) {
 
 	// Update TLS fingerprint based on profile
 	if opts.StealthTLS {
-		// Use uTLS wrapper around the transport
-		client.Transport = &uTLSRoundTripper{
-			base:        transport,
-			fingerprint: profile.TLSFingerprint,
-		}
+		client.Transport = newUTLSRoundTripper(profile.TLSFingerprint)
 	}
 
 	// Store custom headers
@@ -307,70 +301,94 @@ func flattenHeaders(headers map[string][]string) map[string]string {
 }
 
 // uTLSRoundTripper wraps http.Transport to use uTLS for TLS fingerprint spoofing.
+// It handles HTTP/2 properly by checking the ALPN-negotiated protocol after
+// the uTLS handshake and routing to the appropriate transport.
 type uTLSRoundTripper struct {
-	base        http.RoundTripper
 	fingerprint utls.ClientHelloID
+
+	// h1 transport for HTTP/1.1 connections
+	h1 *http.Transport
+	// h2 transport for HTTP/2 connections (lazy-initialized)
+	h2   *http2.Transport
+	h2mu sync.Mutex
 }
 
-// RoundTrip implements http.RoundTripper, upgrading TLS to use uTLS fingerprint.
+// newUTLSRoundTripper creates a new uTLSRoundTripper.
+func newUTLSRoundTripper(fingerprint utls.ClientHelloID) *uTLSRoundTripper {
+	rt := &uTLSRoundTripper{
+		fingerprint: fingerprint,
+	}
+
+	// HTTP/1.1 transport with uTLS dial
+	rt.h1 = &http.Transport{
+		ForceAttemptHTTP2: false, // We handle h2 ourselves
+		DialTLSContext:    rt.dialTLS,
+	}
+
+	return rt
+}
+
+// dialTLS performs a uTLS handshake and returns the connection.
+func (u *uTLSRoundTripper) dialTLS(ctx context.Context, network, addr string) (net.Conn, error) {
+	// Dial TCP connection
+	conn, err := (&net.Dialer{
+		Timeout:   constants.DefaultTimeout,
+		KeepAlive: constants.KeepAliveTimeout,
+	}).DialContext(ctx, network, addr)
+	if err != nil {
+		return nil, fmt.Errorf("dial: %w", err)
+	}
+
+	// Extract host from address
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+	}
+
+	// Create uTLS connection with spoofed fingerprint
+	tlsConn := utls.UClient(conn, &utls.Config{
+		ServerName: host,
+		//nolint:gosec // InsecureSkipVerify required for stealth TLS testing
+		InsecureSkipVerify: true,
+		NextProtos:         []string{"h2", "http/1.1"},
+	}, u.fingerprint)
+
+	// Perform TLS handshake
+	if err := tlsConn.Handshake(); err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("tls handshake: %w", err)
+	}
+
+	return tlsConn, nil
+}
+
+// getH2Transport returns the HTTP/2 transport, creating it lazily.
+func (u *uTLSRoundTripper) getH2Transport() *http2.Transport {
+	u.h2mu.Lock()
+	defer u.h2mu.Unlock()
+	if u.h2 == nil {
+		u.h2 = &http2.Transport{
+			DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+				return u.dialTLS(ctx, network, addr)
+			},
+		}
+	}
+	return u.h2
+}
+
+// RoundTrip implements http.RoundTripper, routing through uTLS.
+// For HTTPS requests, it first tries HTTP/2 (since CF servers support h2).
+// If the server doesn't support h2, it falls back to HTTP/1.1.
 func (u *uTLSRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
-	// For non-HTTPS requests, pass through to base transport
 	if req.URL.Scheme != "https" {
-		return u.base.RoundTrip(req)
+		return u.h1.RoundTrip(req)
 	}
 
-	// Get the underlying transport
-	transport, ok := u.base.(*http.Transport)
-	if !ok {
-		return nil, fmt.Errorf("uTLS round tripper requires *http.Transport")
+	// Try HTTP/2 first (most CF-protected sites support it)
+	resp, err := u.getH2Transport().RoundTrip(req)
+	if err != nil {
+		// Fall back to HTTP/1.1 if h2 fails
+		return u.h1.RoundTrip(req)
 	}
-
-	// Store original dial context and TLS config
-	originalDialContext := transport.DialContext
-	originalTLSConfig := transport.TLSClientConfig
-
-	// Clear TLSClientConfig so transport doesn't try to do TLS
-	transport.TLSClientConfig = nil
-
-	// Create dial function that upgrades to uTLS
-	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		// Dial TCP connection
-		conn, err := (&net.Dialer{
-			Timeout:   constants.DefaultTimeout,
-			KeepAlive: constants.KeepAliveTimeout,
-		}).DialContext(ctx, network, addr)
-		if err != nil {
-			return nil, fmt.Errorf("dial: %w", err)
-		}
-
-		// Extract host from address
-		host, _, err := net.SplitHostPort(addr)
-		if err != nil {
-			host = addr
-		}
-
-		// Create uTLS connection with spoofed fingerprint
-		tlsConn := utls.UClient(conn, &utls.Config{
-			ServerName:         host,
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"h2", "http/1.1"},
-		}, u.fingerprint)
-
-		// Perform TLS handshake
-		if err := tlsConn.Handshake(); err != nil {
-			_ = conn.Close()
-			return nil, fmt.Errorf("tls handshake: %w", err)
-		}
-
-		return tlsConn, nil
-	}
-
-	// Make request
-	resp, err := transport.RoundTrip(req)
-
-	// Restore original settings
-	transport.DialContext = originalDialContext
-	transport.TLSClientConfig = originalTLSConfig
-
-	return resp, err
+	return resp, nil
 }
