@@ -396,8 +396,11 @@ test: ## Run full validation: lint + build + tests (Go + Frontend)
 		echo "Warning: golangci-lint not found, skipping"; \
 	fi
 	@echo ""
-	@echo "--- Go Tests ---"
-	go test -count=1 -timeout 120s ./...
+	@echo "--- Go Tests (short) ---"
+	go test -short -count=1 -timeout 120s ./...
+	@echo ""
+	@echo "--- Go Tests with Race Detector ---"
+	go test -race -count=1 -timeout 120s ./...
 	@echo ""
 	@echo "--- Frontend ESLint ---"
 	@cd lab-ui && npx eslint src/ --max-warnings 50
@@ -411,6 +414,14 @@ test: ## Run full validation: lint + build + tests (Go + Frontend)
 	@echo "=========================================="
 	@echo "  All checks passed!"
 	@echo "=========================================="
+
+test-go-race: ## Run Go tests with race detector
+	@echo "Running Go tests with race detector..."
+	go test -race -count=1 -timeout 120s ./...
+
+test-go-cover: ## Run Go tests with coverage
+	@echo "Running Go tests with coverage..."
+	go test -cover -count=1 -timeout 120s ./...
 
 test-go: ## Run Go tests only
 	@echo "Running Go tests..."
