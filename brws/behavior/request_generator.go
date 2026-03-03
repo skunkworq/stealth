@@ -269,17 +269,23 @@ func (rg *RequestGenerator) generateScreen(dims sharedDimensions) string {
 	// Scrollbar width shared with navigator
 	innerWidth := outerWidth - dims.scrollbarW
 
+	// P11: Screen orientation — desktops are always landscape-primary at angle 0
+	orientationType := "landscape-primary"
+	orientationAngle := 0
+
 	data := map[string]interface{}{
-		"width":        width,
-		"height":       height,
-		"avail_width":  width,
-		"avail_height": availHeight,
-		"color_depth":  colorDepth,
-		"pixel_ratio":  pixelRatio,
-		"outer_width":  outerWidth,
-		"outer_height": outerHeight,
-		"inner_width":  innerWidth,
-		"inner_height": innerHeight,
+		"width":             width,
+		"height":            height,
+		"avail_width":       width,
+		"avail_height":      availHeight,
+		"color_depth":       colorDepth,
+		"pixel_ratio":       pixelRatio,
+		"outer_width":       outerWidth,
+		"outer_height":      outerHeight,
+		"inner_width":       innerWidth,
+		"inner_height":      innerHeight,
+		"orientation_type":  orientationType,
+		"orientation_angle": orientationAngle,
 	}
 
 	b, _ := json.Marshal(data)
@@ -287,15 +293,18 @@ func (rg *RequestGenerator) generateScreen(dims sharedDimensions) string {
 }
 
 // generatePlugins creates the X-Plugin-Data header JSON.
-// Chrome profiles get 5 PDF plugins; Firefox gets empty (but won't trigger since
-// the empty check only fires score > 0 check happens after).
+// Chrome profiles get 5 PDF plugins with MIME types; Firefox gets empty.
 func (rg *RequestGenerator) generatePlugins() string {
-	plugins := make([]map[string]string, 0, len(rg.profile.Plugins))
+	plugins := make([]map[string]interface{}, 0, len(rg.profile.Plugins))
 	for _, p := range rg.profile.Plugins {
-		plugins = append(plugins, map[string]string{
+		entry := map[string]interface{}{
 			"name":     p.Name,
 			"filename": p.Filename,
-		})
+		}
+		if len(p.MimeTypes) > 0 {
+			entry["mimeTypes"] = p.MimeTypes
+		}
+		plugins = append(plugins, entry)
 	}
 
 	data := map[string]interface{}{
@@ -461,13 +470,29 @@ func (rg *RequestGenerator) generateNavigator(dims sharedDimensions) string {
 		data["timezone"] = p.Timezone
 	}
 
-	// Chrome-specific: add chrome runtime object and loadTimes
+	// Chrome-specific: add chrome runtime object, chrome.app, chrome.csi, loadTimes
 	if p.Browser == "chrome" {
 		data["chrome"] = map[string]interface{}{}
 
-		// chrome.loadTimes() — real Chrome returns timing data
+		// P11: chrome.app — real Chrome always has chrome.app with these properties
+		data["chrome_app"] = map[string]interface{}{
+			"isInstalled":  false,
+			"InstallState": map[string]interface{}{"DISABLED": "disabled", "INSTALLED": "installed", "NOT_INSTALLED": "not_installed"},
+			"RunningState": map[string]interface{}{"CANNOT_RUN": "cannot_run", "READY_TO_RUN": "ready_to_run", "RUNNING": "running"},
+		}
+
+		// P11: chrome.csi() — real Chrome returns page timing data
 		nowSec := float64(time.Now().UnixMilli()) / 1000.0
 		requestTime := nowSec - 2.0 - rg.rng.Float64()*1.0
+		pageT := int64((nowSec - requestTime) * 1000)
+		data["chrome_csi"] = map[string]interface{}{
+			"onloadT":  pageT + int64(200+rg.rng.Intn(500)),
+			"pageT":    pageT,
+			"startE":   int64(requestTime * 1000),
+			"tran":     15, // navigation type
+		}
+
+		// chrome.loadTimes() — real Chrome returns timing data
 		startLoadTime := requestTime + 0.1 + rg.rng.Float64()*0.3
 		commitLoadTime := startLoadTime + 0.3 + rg.rng.Float64()*0.5
 		firstPaintTime := commitLoadTime + 0.1 + rg.rng.Float64()*0.3
@@ -487,6 +512,17 @@ func (rg *RequestGenerator) generateNavigator(dims sharedDimensions) string {
 			"wasAlternateProtocolAvailable": false,
 			"wasFetchedViaSpdy":           true,
 			"wasNpnNegotiated":            true,
+		}
+
+		// P11: performance.memory — Chrome-only API exposing JS heap stats.
+		// Realistic values: limit ~4GB, total 20-80MB, used 10-60MB.
+		jsHeapLimit := 4294705152 // ~4GB (Chrome default)
+		totalHeap := 20*1024*1024 + rg.rng.Intn(60*1024*1024)
+		usedHeap := int(float64(totalHeap) * (0.3 + rg.rng.Float64()*0.5)) // 30-80% of total
+		data["performance_memory"] = map[string]interface{}{
+			"jsHeapSizeLimit": jsHeapLimit,
+			"totalJSHeapSize": totalHeap,
+			"usedJSHeapSize":  usedHeap,
 		}
 	}
 

@@ -8,8 +8,9 @@ import (
 
 // PluginEntry represents a single browser plugin.
 type PluginEntry struct {
-	Name     string `json:"name"`
-	Filename string `json:"filename"`
+	Name      string   `json:"name"`
+	Filename  string   `json:"filename"`
+	MimeTypes []string `json:"mimeTypes,omitempty"`
 }
 
 // PluginData holds plugin enumeration data for analysis.
@@ -110,6 +111,36 @@ func (pa *PluginAnalyzer) Analyze(data *PluginData) *VectorResult {
 				Weight:  weight,
 				Field:   "plugins",
 				Value:   "no_pdf_viewer",
+			})
+			result.Score += weight
+		}
+	}
+
+	// Check 5: P11 — Missing MIME types on Chrome PDF plugins.
+	// Real Chrome PDF plugins each report "application/pdf" in their MimeType array.
+	// A plugin with the right name but no MIME types is a shallow stub.
+	if isChrome && len(data.Plugins) > 0 {
+		pdfPluginCount := 0
+		pdfWithMime := 0
+		for _, p := range data.Plugins {
+			if strings.Contains(strings.ToLower(p.Name), "pdf") {
+				pdfPluginCount++
+				for _, mt := range p.MimeTypes {
+					if strings.Contains(strings.ToLower(mt), "application/pdf") {
+						pdfWithMime++
+						break
+					}
+				}
+			}
+		}
+		if pdfPluginCount > 0 && pdfWithMime == 0 {
+			weight := 0.20
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "plugin_missing_mime_types",
+				Message: fmt.Sprintf("%d PDF plugins but none report application/pdf MIME type", pdfPluginCount),
+				Weight:  weight,
+				Field:   "mimeTypes",
+				Value:   "empty",
 			})
 			result.Score += weight
 		}

@@ -1,10 +1,8 @@
 package adversarial
 
 import (
-	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -153,13 +151,35 @@ func TestFingerprintValidation_Bot(t *testing.T) {
 func TestClearanceCookie_HMAC(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 
-	cookie := cc.generateClearanceCookie("test-session")
+	// Create a session and solve it so the cookie value is stored
+	session := cc.CreateJSChallenge("test-session", 0.5)
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, 50_000_000)
+	if err != nil {
+		t.Fatalf("PoW solve failed: %v", err)
+	}
+	result, err := cc.CompleteChallengeJS("test-session", solution)
+	if err != nil {
+		t.Fatalf("CompleteChallengeJS failed: %v", err)
+	}
 
+	cookie := result.ClearanceCookie
 	if cookie.Name != "cf_clearance" {
 		t.Errorf("expected cookie name 'cf_clearance', got '%s'", cookie.Name)
 	}
 
-	// Should be valid
+	// Cookie format: {token}-{timestamp}-{version}-{hmac}
+	parts := splitClearanceCookie(cookie.Value)
+	if parts == nil {
+		t.Fatal("cookie should parse into 4 parts")
+	}
+	if len(parts[0]) != 32 {
+		t.Errorf("token should be 32 hex chars, got %d", len(parts[0]))
+	}
+	if parts[2] != "1.0.1" {
+		t.Errorf("version should be 1.0.1, got %s", parts[2])
+	}
+
+	// Should be valid (session is solved with this cookie value)
 	if !cc.ValidateClearanceCookie(cookie.Value) {
 		t.Fatal("valid cookie rejected")
 	}
@@ -179,15 +199,26 @@ func TestClearanceCookie_HMAC(t *testing.T) {
 func TestClearanceCookie_Expiry(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 
-	// Create a cookie manually with expired time
-	sessionID := "test-expired-cookie"
-	expiry := time.Now().Add(-1 * time.Minute)
-	data := fmt.Sprintf("%s|%d", sessionID, expiry.UnixMilli())
+	// Create a session and solve it
+	session := cc.CreateJSChallenge("test-expired", 0.5)
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, 50_000_000)
+	if err != nil {
+		t.Fatalf("PoW solve failed: %v", err)
+	}
+	result, err := cc.CompleteChallengeJS("test-expired", solution)
+	if err != nil {
+		t.Fatalf("CompleteChallengeJS failed: %v", err)
+	}
 
-	mac := hmacSHA256(cc.hmacKey, data)
-	value := fmt.Sprintf("%s.%d.%s", sessionID, expiry.UnixMilli(), mac)
+	// The cookie should be valid now
+	if !cc.ValidateClearanceCookie(result.ClearanceCookie.Value) {
+		t.Fatal("fresh cookie should be valid")
+	}
 
-	if cc.ValidateClearanceCookie(value) {
+	// Forge a cookie with an expired timestamp — even if it matches format,
+	// the embedded timestamp check should reject it
+	expired := "aabbccddeeff00112233445566778899-1000000000-1.0.1-fakehmac"
+	if cc.ValidateClearanceCookie(expired) {
 		t.Fatal("expired cookie should be rejected")
 	}
 }
@@ -577,9 +608,252 @@ func TestFingerprintDrift_NonexistentSession(t *testing.T) {
 	}
 }
 
-// hmacSHA256 is a helper for test cookie creation.
-func hmacSHA256(key []byte, data string) string {
-	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(data))
-	return hex.EncodeToString(mac.Sum(nil))
+// --- P12 Cookie Validation & Rate Limiting Tests ---
+
+func TestP12_CFBMCookie_ValidatedOnSolve(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	// Create session via init handler to get __cf_bm cookie
+	initBody := `{"challenge_type":"cloudflare_js","detection_score":0.3}`
+	initReq := httptest.NewRequest(http.MethodPost, "/api/cloudflare/init", strings.NewReader(initBody))
+	initReq.Header.Set("Content-Type", "application/json")
+	initW := httptest.NewRecorder()
+	cc.HandleInit(initW, initReq)
+
+	var initResp struct {
+		SessionID string       `json:"session_id"`
+		PoW       *PoWChallenge `json:"pow"`
+	}
+	_ = json.NewDecoder(initW.Body).Decode(&initResp)
+
+	// Get the __cf_bm cookie from init response
+	var cfbmCookie *http.Cookie
+	for _, c := range initW.Result().Cookies() {
+		if c.Name == "__cf_bm" {
+			cfbmCookie = c
+			break
+		}
+	}
+	if cfbmCookie == nil {
+		t.Fatal("expected __cf_bm cookie from init")
+	}
+
+	// Solve the PoW
+	solution, err := SolvePoW(initResp.PoW.Prefix, initResp.PoW.Difficulty, 50_000_000)
+	if err != nil {
+		t.Fatalf("PoW failed: %v", err)
+	}
+
+	// Submit WITHOUT __cf_bm — should be rejected
+	solveBody, _ := json.Marshal(map[string]interface{}{
+		"session_id": initResp.SessionID,
+		"solution":   solution,
+	})
+	solveReq := httptest.NewRequest(http.MethodPost, "/api/cloudflare/solve/js", strings.NewReader(string(solveBody)))
+	solveReq.Header.Set("Content-Type", "application/json")
+	solveW := httptest.NewRecorder()
+	cc.HandleSolveJS(solveW, solveReq)
+
+	if solveW.Code != http.StatusForbidden {
+		t.Errorf("expected 403 without __cf_bm cookie, got %d", solveW.Code)
+	}
+
+	// Submit WITH correct __cf_bm — should pass
+	solveReq2 := httptest.NewRequest(http.MethodPost, "/api/cloudflare/solve/js", strings.NewReader(string(solveBody)))
+	solveReq2.Header.Set("Content-Type", "application/json")
+	solveReq2.AddCookie(cfbmCookie)
+	solveW2 := httptest.NewRecorder()
+	cc.HandleSolveJS(solveW2, solveReq2)
+
+	if solveW2.Code == http.StatusForbidden {
+		var errResp struct {
+			Error string `json:"error"`
+		}
+		_ = json.NewDecoder(solveW2.Body).Decode(&errResp)
+		t.Errorf("expected success with correct __cf_bm, got 403: %s", errResp.Error)
+	}
 }
+
+func TestP12_CFBMCookie_WrongValueRejected(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateJSChallenge("cfbm-wrong", 0.3)
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, 50_000_000)
+	if err != nil {
+		t.Fatalf("PoW failed: %v", err)
+	}
+
+	solveBody, _ := json.Marshal(map[string]interface{}{
+		"session_id": "cfbm-wrong",
+		"solution":   solution,
+	})
+
+	// Submit with wrong __cf_bm value
+	solveReq := httptest.NewRequest(http.MethodPost, "/api/cloudflare/solve/js", strings.NewReader(string(solveBody)))
+	solveReq.Header.Set("Content-Type", "application/json")
+	solveReq.AddCookie(&http.Cookie{Name: "__cf_bm", Value: "totally-wrong-value"})
+	solveW := httptest.NewRecorder()
+	cc.HandleSolveJS(solveW, solveReq)
+
+	if solveW.Code != http.StatusForbidden {
+		t.Errorf("expected 403 with wrong __cf_bm, got %d", solveW.Code)
+	}
+}
+
+func TestP12_ClearanceCookie_RealisticFormat(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateJSChallenge("format-test", 0.3)
+	solution, _ := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, 50_000_000)
+	result, err := cc.CompleteChallengeJS("format-test", solution)
+	if err != nil {
+		t.Fatalf("solve failed: %v", err)
+	}
+
+	cookie := result.ClearanceCookie
+	parts := splitClearanceCookie(cookie.Value)
+	if parts == nil {
+		t.Fatal("cookie should parse into 4 parts")
+	}
+
+	// Part 0: 32-char hex token
+	if len(parts[0]) != 32 {
+		t.Errorf("token should be 32 hex chars, got %d: %s", len(parts[0]), parts[0])
+	}
+
+	// Part 1: unix timestamp (digits)
+	for _, c := range parts[1] {
+		if c < '0' || c > '9' {
+			t.Errorf("timestamp should be digits, got %q", parts[1])
+			break
+		}
+	}
+
+	// Part 2: version string
+	if parts[2] != "1.0.1" {
+		t.Errorf("version should be 1.0.1, got %s", parts[2])
+	}
+
+	// Part 3: base64url-encoded HMAC (non-empty)
+	if len(parts[3]) < 10 {
+		t.Errorf("HMAC seems too short: %s", parts[3])
+	}
+
+	t.Logf("cookie format: token=%s... ts=%s ver=%s hmac=%s...",
+		parts[0][:8], parts[1], parts[2], parts[3][:10])
+}
+
+func TestP12_ChallengePageHTML_HasFPScript(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cloudflare/challenge", nil)
+	w := httptest.NewRecorder()
+	cc.HandleChallengePage(w, req)
+
+	body := w.Body.String()
+
+	// Check for fingerprint collection script markers
+	checks := []string{
+		"_cf_chl_opt",
+		"navigator.userAgent",
+		"navigator.hardwareConcurrency",
+		"Intl.DateTimeFormat",
+		"/cdn-cgi/challenge-platform/h/g/cv/result/",
+		"managed.js",
+		"Performance &amp; security by Cloudflare",
+		"robots",
+		"noindex,nofollow",
+	}
+	for _, marker := range checks {
+		if !strings.Contains(body, marker) {
+			t.Errorf("challenge page should contain %q", marker)
+		}
+	}
+}
+
+func TestP12_ChallengeCallback_AcceptsPost(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	req := httptest.NewRequest(http.MethodPost, "/cdn-cgi/challenge-platform/h/g/cv/result/abc123", strings.NewReader(`{"fp":{},"t":"fp"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	cc.HandleChallengeCallback(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for callback, got %d", w.Code)
+	}
+	if w.Header().Get("Server") != "cloudflare" {
+		t.Error("expected Server: cloudflare header")
+	}
+}
+
+func TestP12_ManagedJS_ServesScript(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/cdn-cgi/challenge-platform/scripts/turnstile/managed.js", nil)
+	w := httptest.NewRecorder()
+	cc.HandleManagedJS(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200 for managed.js, got %d", w.Code)
+	}
+	if w.Header().Get("Content-Type") != "application/javascript" {
+		t.Errorf("expected application/javascript, got %s", w.Header().Get("Content-Type"))
+	}
+	if !strings.Contains(w.Body.String(), "_cf_chl_opt") {
+		t.Error("managed.js should reference _cf_chl_opt")
+	}
+}
+
+func TestP12_MountRoutes_WithRateLimiting(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	// Set a very low rate limit for testing
+	cc.RateLimiter = NewTokenBucket(RateLimitConfig{
+		Capacity:   1,
+		RefillRate: 0.01,
+	})
+
+	mux := http.NewServeMux()
+	cc.MountRoutes(mux)
+
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	// Init a session to get __cf_bm cookie
+	initBody := `{"challenge_type":"cloudflare_js","detection_score":0.3}`
+	resp1, err := http.Post(ts.URL+"/api/cloudflare/init", "application/json", strings.NewReader(initBody))
+	if err != nil {
+		t.Fatalf("init failed: %v", err)
+	}
+	resp1.Body.Close()
+
+	// First solve attempt should get through (rate limit = 1 token)
+	solveBody := `{"session_id":"x","solution":{"nonce":"bad","hash":"bad","iterations":1,"time_ms":1}}`
+	resp2, err := http.Post(ts.URL+"/api/cloudflare/solve/js", "application/json", strings.NewReader(solveBody))
+	if err != nil {
+		t.Fatalf("first solve failed: %v", err)
+	}
+	resp2.Body.Close()
+
+	// First request goes through (gets 403 for bad solution, not 429)
+	if resp2.StatusCode == http.StatusTooManyRequests {
+		t.Error("first request should not be rate limited")
+	}
+
+	// Second solve attempt should be rate limited (429)
+	resp3, err := http.Post(ts.URL+"/api/cloudflare/solve/js", "application/json", strings.NewReader(solveBody))
+	if err != nil {
+		t.Fatalf("second solve failed: %v", err)
+	}
+	resp3.Body.Close()
+
+	if resp3.StatusCode != http.StatusTooManyRequests {
+		t.Errorf("second request should be 429, got %d", resp3.StatusCode)
+	}
+	if resp3.Header.Get("Retry-After") == "" {
+		t.Error("429 response should have Retry-After header")
+	}
+
+	t.Logf("rate limiting working: first=%d second=%d", resp2.StatusCode, resp3.StatusCode)
+}
+

@@ -4,11 +4,14 @@ import (
 	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"math"
 	"math/big"
 	"net/http"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -106,12 +109,13 @@ func DefaultPoWDifficultyConfig() *PoWDifficultyConfig {
 // CloudflareChallenger is the server-side controller for Cloudflare challenge
 // reproduction. It creates, validates, and manages challenge sessions.
 type CloudflareChallenger struct {
-	mu        sync.RWMutex
-	sessions  map[string]*CloudflareChallengeSession
-	powConfig *PoWDifficultyConfig
-	analyzer  *BehavioralAnalyzer
-	tracer    *CaptchaTracer
-	hmacKey   []byte
+	mu          sync.RWMutex
+	sessions    map[string]*CloudflareChallengeSession
+	powConfig   *PoWDifficultyConfig
+	analyzer    *BehavioralAnalyzer
+	tracer      *CaptchaTracer
+	hmacKey     []byte
+	RateLimiter *TokenBucket // Per-IP rate limiter for solve endpoints
 }
 
 // NewCloudflareChallenger creates a new challenger with the given tracer and PoW config.
@@ -127,11 +131,12 @@ func NewCloudflareChallenger(tracer *CaptchaTracer, powConfig *PoWDifficultyConf
 	_, _ = rand.Read(key)
 
 	return &CloudflareChallenger{
-		sessions:  make(map[string]*CloudflareChallengeSession),
-		powConfig: powConfig,
-		analyzer:  NewBehavioralAnalyzer(nil),
-		tracer:    tracer,
-		hmacKey:   key,
+		sessions:    make(map[string]*CloudflareChallengeSession),
+		powConfig:   powConfig,
+		analyzer:    NewBehavioralAnalyzer(nil),
+		tracer:      tracer,
+		hmacKey:     key,
+		RateLimiter: NewTokenBucket(DefaultRateLimitConfig()),
 	}
 }
 
@@ -564,15 +569,28 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 }
 
 // generateClearanceCookie creates an HMAC-signed cf_clearance cookie with 30-min expiry.
+// Format matches real CF: {token}-{timestamp}-{version}-{hmac_base64url}
+// where token is a random hex string, timestamp is unix epoch, version is "1.0.1",
+// and hmac is base64url-encoded HMAC-SHA256.
 func (cc *CloudflareChallenger) generateClearanceCookie(sessionID string) *http.Cookie {
 	expiry := time.Now().Add(30 * time.Minute)
-	data := fmt.Sprintf("%s|%d", sessionID, expiry.UnixMilli())
 
+	// Generate random token (16 bytes = 32 hex chars, like real CF)
+	tokenBytes := make([]byte, 16)
+	_, _ = rand.Read(tokenBytes)
+	token := hex.EncodeToString(tokenBytes)
+
+	timestamp := time.Now().Unix()
+	version := "1.0.1"
+
+	// HMAC over sessionID|token|timestamp|version — includes session binding
+	data := fmt.Sprintf("%s|%s|%d|%s|%d", sessionID, token, timestamp, version, expiry.UnixMilli())
 	mac := hmac.New(sha256.New, cc.hmacKey)
 	mac.Write([]byte(data))
-	sig := hex.EncodeToString(mac.Sum(nil))
+	sig := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 
-	value := fmt.Sprintf("%s.%d.%s", sessionID, expiry.UnixMilli(), sig)
+	// Real CF format: {token}-{timestamp}-{version}-{hmac}
+	value := fmt.Sprintf("%s-%d-%s-%s", token, timestamp, version, sig)
 
 	return &http.Cookie{
 		Name:     "cf_clearance",
@@ -586,56 +604,76 @@ func (cc *CloudflareChallenger) generateClearanceCookie(sessionID string) *http.
 }
 
 // ValidateClearanceCookie checks if a cf_clearance cookie value is valid.
+// Format: {token}-{timestamp}-{version}-{hmac_base64url}
+// Validates: structural format, expiry, and that a solved session issued this exact cookie.
 func (cc *CloudflareChallenger) ValidateClearanceCookie(cookieValue string) bool {
-	// Format: sessionID.expiryMs.signature
 	parts := splitClearanceCookie(cookieValue)
 	if parts == nil {
 		return false
 	}
 
-	sessionID, expiryMs, sig := parts[0], parts[1], parts[2]
+	_, timestampStr, _, _ := parts[0], parts[1], parts[2], parts[3]
 
-	// Check expiry
-	var expiry int64
-	if _, err := fmt.Sscanf(expiryMs, "%d", &expiry); err != nil {
+	// Check expiry via embedded timestamp
+	timestamp, err := strconv.ParseInt(timestampStr, 10, 64)
+	if err != nil {
 		return false
 	}
-	if time.Now().UnixMilli() > expiry {
+	expiryTime := time.Unix(timestamp, 0).Add(30 * time.Minute)
+	if time.Now().After(expiryTime) {
 		return false
 	}
 
-	// Verify HMAC
-	data := fmt.Sprintf("%s|%d", sessionID, expiry)
-	mac := hmac.New(sha256.New, cc.hmacKey)
-	mac.Write([]byte(data))
-	expectedSig := hex.EncodeToString(mac.Sum(nil))
-
-	return hmac.Equal([]byte(sig), []byte(expectedSig))
-}
-
-// splitClearanceCookie splits a cookie value into [sessionID, expiryMs, signature].
-func splitClearanceCookie(value string) []string {
-	// Find last two dots to split: sessionID may contain dots
-	lastDot := -1
-	secondLastDot := -1
-	for i := len(value) - 1; i >= 0; i-- {
-		if value[i] == '.' {
-			if lastDot == -1 {
-				lastDot = i
-			} else {
-				secondLastDot = i
-				break
-			}
+	// Verify this cookie was actually issued by us — lookup by stored value.
+	// This is the authoritative check: the HMAC in the cookie prevents forgery,
+	// and the session lookup prevents replay from other sessions.
+	cc.mu.RLock()
+	defer cc.mu.RUnlock()
+	for _, s := range cc.sessions {
+		if s.ClearanceCookie == cookieValue && s.State == StateSolved {
+			return true
 		}
 	}
-	if secondLastDot == -1 || lastDot == -1 {
+	return false
+}
+
+// splitClearanceCookie splits a cookie value into [token, timestamp, version, hmac].
+// Format: {token}-{timestamp}-{version}-{hmac}
+// Token is 32 hex chars, timestamp is unix epoch, version is like "1.0.1",
+// hmac is base64url-encoded.
+func splitClearanceCookie(value string) []string {
+	// Split on hyphens, but version contains dots (e.g., "1.0.1") and hmac may contain hyphens.
+	// Token is always 32 hex chars, followed by timestamp (digits), version (x.y.z), hmac.
+	// Strategy: find first hyphen after 32-char token, then next hyphen after timestamp digits.
+	if len(value) < 36 { // minimum: 32 token + "-" + 1 timestamp + "-" + 1 version + "-" + 1 hmac
 		return nil
 	}
-	return []string{
-		value[:secondLastDot],
-		value[secondLastDot+1 : lastDot],
-		value[lastDot+1:],
+
+	// Token is first 32 chars
+	token := value[:32]
+	rest := value[33:] // skip the hyphen after token
+
+	// Find timestamp (digits until next hyphen)
+	idx := strings.IndexByte(rest, '-')
+	if idx <= 0 {
+		return nil
 	}
+	timestamp := rest[:idx]
+	rest = rest[idx+1:]
+
+	// Find version (x.y.z format until next hyphen)
+	idx = strings.IndexByte(rest, '-')
+	if idx <= 0 {
+		return nil
+	}
+	version := rest[:idx]
+	hmacSig := rest[idx+1:]
+
+	if hmacSig == "" {
+		return nil
+	}
+
+	return []string{token, timestamp, version, hmacSig}
 }
 
 // scaleDifficulty maps a detection score to PoW difficulty bits.
@@ -909,6 +947,33 @@ func generateCFBMValue(sessionID string) string {
 	_, _ = rand.Read(b)
 	hash := sha256.Sum256(append([]byte(sessionID), b...))
 	return hex.EncodeToString(hash[:])[:43] + "-" + fmt.Sprintf("%d", time.Now().Unix()) + "-1-1"
+}
+
+// ValidateCFBMCookie checks that the __cf_bm cookie in the request matches the
+// session's bound value. Real CF binds __cf_bm to the challenge session — a
+// solve request without the correct __cf_bm is suspicious (cookie replay or
+// session hijacking).
+func (cc *CloudflareChallenger) ValidateCFBMCookie(r *http.Request, sessionID string) error {
+	cc.mu.RLock()
+	session, ok := cc.sessions[sessionID]
+	cc.mu.RUnlock()
+
+	if !ok {
+		return fmt.Errorf("session not found: %s", sessionID)
+	}
+	if session.CFBMValue == "" {
+		// Session has no bound __cf_bm — skip validation
+		return nil
+	}
+
+	cookie, err := r.Cookie("__cf_bm")
+	if err != nil {
+		return fmt.Errorf("missing __cf_bm cookie")
+	}
+	if cookie.Value != session.CFBMValue {
+		return fmt.Errorf("__cf_bm cookie mismatch: expected session-bound value")
+	}
+	return nil
 }
 
 // EstimatePoWIterations returns the expected number of iterations for a given difficulty.

@@ -56,28 +56,69 @@ func (cc *CloudflareChallenger) HandleChallengePage(w http.ResponseWriter, r *ht
 		Value:    session.CFBMValue,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   true,
 		Expires:  time.Now().Add(30 * time.Minute),
 	})
 	w.WriteHeader(http.StatusServiceUnavailable)
 
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html>
-<head><title>Just a moment...</title></head>
+<head>
+  <title>Just a moment...</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+  <meta name="robots" content="noindex,nofollow">
+  <style>
+    body{margin:0;padding:0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5}
+    .main-wrapper{text-align:center;padding:20px}
+    .challenge-platform{margin:20px 0}
+    #cf-spinner-please-wait{width:40px;height:40px;border:4px solid #ddd;border-top-color:#f38020;border-radius:50%%;animation:spin 1s linear infinite;margin:20px auto}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .cf-error-footer{color:#999;font-size:12px;margin-top:20px}
+  </style>
+</head>
 <body>
-  <div id="cf-browser-verification" class="cf-im-under-attack">
-    <noscript><h1>Enable JavaScript and cookies to continue</h1></noscript>
-    <div id="cf-challenge-running" class="challenge-platform">
-      <h2 data-translate="checking_browser">Checking if the site connection is secure</h2>
-      <div class="managed_challenge" id="challenge-stage">
-        <div id="cf-spinner-please-wait"></div>
+  <div class="main-wrapper">
+    <div id="cf-browser-verification" class="cf-im-under-attack">
+      <noscript><h1>Enable JavaScript and cookies to continue</h1></noscript>
+      <div id="cf-challenge-running" class="challenge-platform">
+        <h2 data-translate="checking_browser">Checking if the site connection is secure</h2>
+        <div class="managed_challenge" id="challenge-stage">
+          <div id="cf-spinner-please-wait"></div>
+          <p id="cf-spinner-text">This process is automatic. Your browser will redirect shortly.</p>
+        </div>
       </div>
+      <script>var _cf_chl_opt=%s;</script>
+      <script>
+      // CF fingerprint collection stub — collects browser environment data
+      // and reports back via XHR before solving the challenge.
+      (function(){
+        var opt = window._cf_chl_opt;
+        if (!opt) return;
+        var fp = {
+          ts: Date.now(),
+          ray: opt.cRay,
+          screen: [screen.width, screen.height, screen.colorDepth],
+          nav: navigator.userAgent,
+          lang: navigator.language,
+          platform: navigator.platform,
+          cores: navigator.hardwareConcurrency || 0,
+          mem: navigator.deviceMemory || 0,
+          tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          webgl: (function(){try{var c=document.createElement('canvas'),g=c.getContext('webgl');return g?g.getParameter(g.RENDERER):''}catch(e){return''}})()
+        };
+        // Report fingerprint to callback endpoint
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/cdn-cgi/challenge-platform/h/g/cv/result/' + opt.cRay, true);
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({fp: fp, t: 'fp'}));
+      })();
+      </script>
+      <script src="/cdn-cgi/challenge-platform/scripts/turnstile/managed.js" defer></script>
     </div>
-    <script>var _cf_chl_opt=%s;</script>
-    <script src="/cdn-cgi/challenge-platform/scripts/turnstile/managed.js" defer></script>
-  </div>
-  <div class="cf-error-footer">
-    <p><span>Ray ID: <strong>%s</strong></span></p>
+    <div class="cf-error-footer">
+      <p><span>Performance &amp; security by Cloudflare</span></p>
+      <p><span>Ray ID: <strong>%s</strong></span></p>
+    </div>
   </div>
 </body>
 </html>`, string(powJSON), session.RayID)
@@ -150,6 +191,15 @@ func (cc *CloudflareChallenger) HandleInit(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Server", "cloudflare")
 	w.Header().Set("Cf-Ray", session.RayID)
+	// Set __cf_bm cookie — binds this session to subsequent solve requests
+	http.SetCookie(w, &http.Cookie{
+		Name:     "__cf_bm",
+		Value:    session.CFBMValue,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false, // false for test servers (http, not https)
+		Expires:  time.Now().Add(30 * time.Minute),
+	})
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
@@ -169,6 +219,19 @@ func (cc *CloudflareChallenger) HandleSolveJS(w http.ResponseWriter, r *http.Req
 	var req cfSolveJSRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Validate __cf_bm cookie is present and matches the session
+	if err := cc.ValidateCFBMCookie(r, req.SessionID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cf-Mitigated", "challenge")
+		w.Header().Set("Server", "cloudflare")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "cookie validation failed: " + err.Error(),
+		})
 		return
 	}
 
@@ -218,6 +281,19 @@ func (cc *CloudflareChallenger) HandleSolveManaged(w http.ResponseWriter, r *htt
 		return
 	}
 
+	// Validate __cf_bm cookie is present and matches the session
+	if err := cc.ValidateCFBMCookie(r, req.SessionID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cf-Mitigated", "challenge")
+		w.Header().Set("Server", "cloudflare")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "cookie validation failed: " + err.Error(),
+		})
+		return
+	}
+
 	result, err := cc.CompleteChallengeManaged(req.SessionID, &req.Solution, req.Fingerprint, req.Events)
 	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
@@ -260,6 +336,19 @@ func (cc *CloudflareChallenger) HandleSolveTurnstile(w http.ResponseWriter, r *h
 	var req cfSolveTurnstileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Validate __cf_bm cookie is present and matches the session
+	if err := cc.ValidateCFBMCookie(r, req.SessionID); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cf-Mitigated", "challenge")
+		w.Header().Set("Server", "cloudflare")
+		w.WriteHeader(http.StatusForbidden)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"success": false,
+			"error":   "cookie validation failed: " + err.Error(),
+		})
 		return
 	}
 
@@ -347,4 +436,62 @@ func (cc *CloudflareChallenger) HandleStatus(w http.ResponseWriter, r *http.Requ
 	stats := cc.GetStats()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)
+}
+
+// HandleChallengeCallback accepts XHR callbacks from the challenge page JS.
+// Real CF challenge pages send fingerprint data, timing signals, and behavioral
+// events to /cdn-cgi/challenge-platform/h/g/cv/result/{rayID} before submitting
+// the final solve. This endpoint logs those signals for observability.
+func (cc *CloudflareChallenger) HandleChallengeCallback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Accept the callback data (discard for now — logging only)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Server", "cloudflare")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"status":"ok"}`))
+}
+
+// HandleManagedJS serves a stub managed.js script that would normally orchestrate
+// the challenge flow client-side. In the lab, this returns a minimal script that
+// signals the page is ready.
+func (cc *CloudflareChallenger) HandleManagedJS(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/javascript")
+	w.Header().Set("Server", "cloudflare")
+	w.Header().Set("Cache-Control", "public, max-age=3600")
+	_, _ = w.Write([]byte(`
+// Cloudflare managed challenge orchestrator (lab stub)
+(function(){
+  var opt = window._cf_chl_opt;
+  if (!opt || !opt.pow) return;
+  document.getElementById('cf-spinner-text').textContent = 'Verifying you are human...';
+  // In the real flow, this script would:
+  // 1. Solve the PoW challenge
+  // 2. Collect fingerprint data
+  // 3. Record behavioral events
+  // 4. Submit the solution via XHR
+  // The lab solver handles this server-side instead.
+})();
+`))
+}
+
+// MountRoutes registers all Cloudflare challenge API routes on the given mux.
+// Solve endpoints are wrapped with the per-IP rate limiter.
+func (cc *CloudflareChallenger) MountRoutes(mux *http.ServeMux) {
+	mux.HandleFunc("/api/cloudflare/init", cc.HandleInit)
+	mux.HandleFunc("/api/cloudflare/challenge", cc.HandleChallengePage)
+	mux.HandleFunc("/api/cloudflare/verify", cc.HandleVerifyClearance)
+	mux.HandleFunc("/api/cloudflare/status", cc.HandleStatus)
+
+	// Solve endpoints are rate-limited
+	mux.HandleFunc("/api/cloudflare/solve/js", cc.RateLimiter.RateLimitMiddleware(cc.HandleSolveJS))
+	mux.HandleFunc("/api/cloudflare/solve/managed", cc.RateLimiter.RateLimitMiddleware(cc.HandleSolveManaged))
+	mux.HandleFunc("/api/cloudflare/solve/turnstile", cc.RateLimiter.RateLimitMiddleware(cc.HandleSolveTurnstile))
+
+	// XHR callback endpoints (used by challenge page JS)
+	mux.HandleFunc("/cdn-cgi/challenge-platform/h/g/cv/result/", cc.HandleChallengeCallback)
+	mux.HandleFunc("/cdn-cgi/challenge-platform/scripts/turnstile/managed.js", cc.HandleManagedJS)
 }

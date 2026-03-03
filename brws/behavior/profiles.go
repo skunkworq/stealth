@@ -74,18 +74,21 @@ type BrowserProfile struct {
 
 // PluginInfo represents a browser plugin entry.
 type PluginInfo struct {
-	Name     string `json:"name"`
-	Filename string `json:"filename"`
+	Name      string   `json:"name"`
+	Filename  string   `json:"filename"`
+	MimeTypes []string `json:"mimeTypes,omitempty"`
 }
 
 // chromePDFPlugins returns the standard Chrome PDF plugins.
+// Each plugin includes its MIME type array matching real Chrome behavior.
 func chromePDFPlugins() []PluginInfo {
+	pdfMime := []string{"application/pdf"}
 	return []PluginInfo{
-		{Name: "PDF Viewer", Filename: "internal-pdf-viewer"},
-		{Name: "Chrome PDF Viewer", Filename: "internal-pdf-viewer"},
-		{Name: "Chromium PDF Viewer", Filename: "internal-pdf-viewer"},
-		{Name: "Microsoft Edge PDF Viewer", Filename: "internal-pdf-viewer"},
-		{Name: "WebKit built-in PDF", Filename: "internal-pdf-viewer"},
+		{Name: "PDF Viewer", Filename: "internal-pdf-viewer", MimeTypes: pdfMime},
+		{Name: "Chrome PDF Viewer", Filename: "internal-pdf-viewer", MimeTypes: pdfMime},
+		{Name: "Chromium PDF Viewer", Filename: "internal-pdf-viewer", MimeTypes: pdfMime},
+		{Name: "Microsoft Edge PDF Viewer", Filename: "internal-pdf-viewer", MimeTypes: pdfMime},
+		{Name: "WebKit built-in PDF", Filename: "internal-pdf-viewer", MimeTypes: pdfMime},
 	}
 }
 

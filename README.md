@@ -1,138 +1,122 @@
 # brwslab
 
-A Go CLI + library for **browser-grade network fidelity** and **fingerprint observability**.
+A Go toolkit for **browser-grade network fidelity**, **semantic web extraction**, and **stealth browser automation**.
 
-## Overview
+## What It Does
 
-`brwslab` provides legitimate testing capabilities by supporting real browser engines alongside native Go networking. It focuses on:
+brwslab provides three layers of capability:
 
-1. **Real browser networking stacks** - Use Chromium (CDP), Firefox, or WebKit for authentic TLS/HTTP2/HTTP3 behavior
-2. **Instrumentation and fingerprint diffs** - See exactly what a server/CDN/WAF would see
-3. **Authorized automation and compatibility testing** - Deterministic, testable, observable behavior
-
-## Philosophy
-
-This tool is designed for **legitimate testing**, not evasion:
-- ✅ Network compatibility testing
-- ✅ Security research on your own systems
-- ✅ Performance benchmarking across engines
-- ✅ Fingerprint baseline tracking
-- ❌ Bot detection bypass
-- ❌ Unauthorized automation
-- ❌ "Indistinguishable from human" spoofing
+1. **Engine Layer** — Unified HTTP client abstraction across native Go, Chromium (CDP), Firefox, and WebKit with real browser TLS/HTTP2/HTTP3 fingerprints
+2. **Semantic Layer** — Extract hierarchical semantic trees from web pages with LLM-powered compression, diffing, form schemas, and token budget management
+3. **Stealth Layer** — Anti-detection browser automation with Cloudflare challenge auto-solving, behavioral simulation, and RL-driven policy selection
 
 ## Installation
 
+### Library
+
 ```bash
+go get github.com/stealth/brwslab
+```
+
+### CLI Tools
+
+```bash
+# Core tools
 go install github.com/stealth/brwslab/cmd/brwslab@latest
+go install github.com/stealth/brwslab/cmd/stealth@latest
 go install github.com/stealth/brwslab/cmd/labd@latest
+
+# Semantic extraction
+go install github.com/stealth/brwslab/cmd/semantic@latest
+
+# MCP servers (for Claude Desktop)
+go install github.com/stealth/brwslab/cmd/stealth-mcp@latest
+go install github.com/stealth/brwslab/cmd/semantic-mcp@latest
 ```
 
 ### Prerequisites
 
-**For Chromium engine:**
-- Chrome or Chromium browser installed
+- **Go 1.26+**
+- **For Chromium engine:** Chrome or Chromium browser installed
+- **For Firefox/WebKit engines:**
+  ```bash
+  go run github.com/playwright-community/playwright-go/cmd/playwright@latest install --with-deps
+  ```
 
-**For Firefox/WebKit engines:**
-```bash
-go run github.com/playwright-community/playwright-go/cmd/playwright@latest install --with-deps
-```
+---
 
 ## Quick Start
 
-### 1. Start the fingerprint lab server
+### Fetch a page with stealth
 
-```bash
-labd --addr :8080
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+
+    "github.com/stealth/brwslab/brws/stealth"
+)
+
+func main() {
+    client, err := stealth.NewWithConfig(&stealth.Config{
+        EngineName: "native",
+        Stealth: &stealth.StealthConfig{
+            Enabled:         true,
+            RemoveWebDriver: true,
+            CanvasNoise:     true,
+        },
+        Challenge: &stealth.ChallengeConfig{
+            AutoDetect: true,
+            AutoSolve:  true,
+        },
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer client.Close()
+
+    resp, err := client.Navigate(context.Background(), "https://example.com")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("Status: %d, Size: %d bytes\n", resp.Status, len(resp.Body))
+}
 ```
 
-### 2. Fetch with different engines
+### Extract semantic tree
 
-```bash
-# Native Go engine
-brwslab fetch https://example.com --engine=native
+```go
+package main
 
-# Real Chromium browser
-brwslab fetch https://example.com --engine=chromium
+import (
+    "context"
+    "fmt"
+    "log"
 
-# Firefox via Playwright
-brwslab fetch https://example.com --engine=firefox
+    "github.com/stealth/brwslab/brws/semantic"
+)
+
+func main() {
+    html := `<html><body><h1>Hello</h1><p>World</p></body></html>`
+
+    tree, stats, err := semantic.HTMLToSemanticTree(
+        context.Background(), html, "https://example.com", nil,
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Printf("Title: %s, Nodes: %d\n", tree.Title, len(tree.RootNodes))
+    fmt.Printf("Compression: %d -> %d tokens\n",
+        stats.FullTreeTokens, stats.CompressedTokens)
+}
 ```
 
-### 3. Capture your fingerprint
-
-```bash
-brwslab fingerprint --engine=chromium --lab=http://localhost:8080
-```
-
-### 4. Compare engines
-
-```bash
-brwslab diff --engine=native --engine=chromium --lab=http://localhost:8080
-```
-
-## CLI Commands
-
-### `fetch <url>`
-
-Fetch a URL using the specified engine.
-
-```bash
-brwslab fetch https://example.com \
-  --engine=chromium \
-  --proxy=http://localhost:8080 \
-  --output=json \
-  --trace=har
-```
-
-### `session`
-
-Manage persistent browser sessions.
-
-```bash
-# Create a session
-brwslab session new --name=mytest --engine=chromium
-
-# List sessions
-brwslab session list
-
-# Use session in fetch
-brwslab fetch https://example.com --session=<session-id>
-```
-
-### `fingerprint`
-
-Capture and display network fingerprint against a lab server.
-
-```bash
-brwslab fingerprint --engine=chromium --lab=http://localhost:8080
-```
-
-### `diff`
-
-Compare fingerprints between multiple engines.
-
-```bash
-brwslab diff --engine=native --engine=chromium --engine=firefox --lab=http://localhost:8080
-```
-
-### `trace`
-
-Trace a request with detailed timing and HAR output.
-
-```bash
-brwslab trace https://example.com --engine=chromium --output=json
-```
-
-### `engines`
-
-List available engines.
-
-```bash
-brwslab engines
-```
-
-## Library Usage
+### Use the engine directly
 
 ```go
 package main
@@ -148,190 +132,532 @@ import (
 )
 
 func main() {
-    // Create engine
-    eng, err := engine.New("chromium", engine.Options{
-        Headless: true,
-    })
+    eng, err := engine.New("chromium", engine.Options{Headless: true})
     if err != nil {
         log.Fatal(err)
     }
     defer eng.Close()
 
-    // Make request
     resp, err := eng.Do(context.Background(), &engine.Request{
-        Method: "GET",
-        URL:    "https://example.com",
+        URL: "https://example.com",
     })
     if err != nil {
         log.Fatal(err)
     }
 
-    fmt.Printf("Status: %d\n", resp.Status)
-    fmt.Printf("Protocol: %s\n", resp.Protocol)
+    fmt.Printf("Status: %d, Protocol: %s\n", resp.Status, resp.Protocol)
 }
 ```
 
-## Engines
+---
 
-| Engine | TLS | HTTP/2 | HTTP/3 | JS | Profile | Notes |
-|--------|-----|--------|--------|-----|---------|-------|
-| `native` | Go stdlib | Yes | No | No | No | Fast, stable, not browser-identical |
-| `chromium` | Chrome | Yes | Yes | Yes | Yes | Full CDP access, NetLog export |
-| `firefox` | Firefox | Yes | Yes | Yes | Yes | Via Playwright |
-| `webkit` | Safari | Yes | Yes | Yes | Yes | Via Playwright |
+## Library API
 
-## Fingerprint Lab Server
+### `brws/engine` — HTTP Engine Abstraction
 
-The `labd` server captures complete browser fingerprints:
+Unified interface for HTTP requests across different browser implementations.
 
-### Quick Start
+```go
+// Create an engine
+eng, err := engine.New("native", engine.Options{
+    Headless:    true,
+    Timeout:     30 * time.Second,
+    Stealth:     true,
+    StealthTLS:  true,
+    ProfileName: "chrome-120-macos",
+})
 
-```bash
-# Start with auto-generated certificates and MITM proxy
-go run ./cmd/labd
+// Make a request
+resp, err := eng.Do(ctx, &engine.Request{
+    URL:     "https://example.com",
+    Method:  "GET",
+    Headers: map[string][]string{"Accept": {"text/html"}},
+    Timeout: 10 * time.Second,
+})
 
-# Or launch Chrome automatically with proxy configured
-go run ./cmd/labd -chrome
-
-# Configure browser manually to use:
-#   PAC file: http://localhost:8080/proxy.pac
-#   Or proxy: localhost:8081
+// Response includes timing, protocol info, and trace data
+fmt.Println(resp.Status, resp.Protocol, resp.Timing.Total)
 ```
 
-### What It Captures
+**Available engines:**
 
-- **TLS ClientHello**: Version, cipher suites, extensions, JA3/JA4 hashes
-- **HTTP/2**: SETTINGS, WINDOW_UPDATE, pseudo-header ordering
-- **HTTP**: Headers, ordering, compression
+| Engine | TLS | HTTP/2 | HTTP/3 | JavaScript | Notes |
+|--------|-----|--------|--------|------------|-------|
+| `native` | Go + uTLS | Yes | No | No | Fast, TLS fingerprint spoofing via uTLS |
+| `chromium` | Chrome | Yes | Yes | Yes | Full CDP, NetLog export |
+| `firefox` | Firefox | Yes | Yes | Yes | Via Playwright |
+| `webkit` | Safari | Yes | Yes | Yes | Via Playwright |
 
-### Endpoints
+### `brws/stealth` — Stealth Browser Client
+
+High-level client with anti-detection, challenge solving, and behavioral simulation.
+
+```go
+client, _ := stealth.NewWithConfig(&stealth.Config{
+    EngineName: "native",
+    Headless:   true,
+
+    // Anti-detection
+    Stealth: &stealth.StealthConfig{
+        Enabled:         true,
+        RemoveWebDriver: true,
+        CanvasNoise:     true,
+        WebGLSpoof:      true,
+        RandomUserAgent: true,
+    },
+
+    // Human-like behavior
+    Behavior: &stealth.BehaviorConfig{
+        HumanizeMouse:  true,
+        RandomDelays:   true,
+        TypingSpeedMin: 50 * time.Millisecond,
+        TypingSpeedMax: 150 * time.Millisecond,
+    },
+
+    // Cloudflare challenge auto-solving
+    Challenge: &stealth.ChallengeConfig{
+        AutoDetect:     true,
+        AutoSolve:      true,
+        MaxSolveRetries: 3,
+    },
+})
+
+// Navigate auto-solves CF challenges when encountered
+resp, err := client.Navigate(ctx, "https://protected-site.com")
+```
+
+### `brws/semantic` — Semantic Tree Extraction
+
+Extract structured, hierarchical representations of web pages with LLM compression.
+
+```go
+// Basic extraction (no LLM, structural only)
+tree, stats, err := semantic.HTMLToSemanticTree(ctx, html, url, nil)
+
+// With LLM compression
+config := &semantic.PipelineConfig{
+    LLMClient:       semantic.NewLLMClient(apiKey),
+    EmbeddingClient: semantic.NewEmbeddingClient(apiKey),
+    Cache:           cache,
+}
+tree, stats, err := semantic.HTMLToSemanticTreeCached(ctx, html, url, config)
+
+// Compare two pages
+diff := semantic.ComputeDiff(oldTree, newTree)
+fmt.Printf("Changes: %s\n", diff.Summary())
+
+// Serialize for LLM context with token budget
+state := semantic.InitialPack(tree, 4000, 16000)
+text := semantic.SerializeTree(tree, state, nil)
+
+// Extract form schemas
+forms := semantic.ExtractFormSchemas(html)
+```
+
+### `brws/adversarial` — Cloudflare Challenge Lab
+
+Reproduce and test against realistic Cloudflare challenges locally.
+
+```go
+// Create a CF challenge emulator
+cc := adversarial.NewCloudflareChallenger()
+
+// Mount on an HTTP server
+mux := http.NewServeMux()
+cc.MountRoutes(mux)  // Mounts /api/cloudflare/* with rate limiting
+
+// Or protect any handler with CF-style challenges
+protected := cc.HandleProtectedPage(myHandler)
+
+// Challenge types: JS, Managed, Turnstile
+// Includes: PoW validation, fingerprint checking, behavioral analysis,
+//           __cf_bm cookies, cf_clearance tokens, rate limiting
+```
+
+### `brws/session` — Session Management
+
+Persistent cookie jars and browser profiles.
+
+```go
+mgr := session.NewManager(session.Options{
+    StorageDir: "~/.brwslab/sessions",
+})
+
+sess, _ := mgr.Create("my-session", session.Config{
+    Engine: "chromium",
+})
+
+// Sessions persist cookies, local storage, and browser state
+```
+
+---
+
+## CLI Tools
+
+### `brwslab` — Network Fingerprinting CLI
+
+Multi-engine HTTP client with fingerprint capture and comparison.
+
+```bash
+# Fetch with a specific engine
+brwslab fetch https://example.com --engine=chromium
+
+# Capture TLS/HTTP2 fingerprint against the lab
+brwslab fingerprint --engine=chromium --lab=http://localhost:8080
+
+# Compare fingerprints across engines
+brwslab diff --engine=native --engine=chromium --lab=http://localhost:8080
+
+# Trace a request with timing data
+brwslab trace https://example.com --engine=chromium --output=json
+
+# Manage persistent browser sessions
+brwslab session new --name=mytest --engine=chromium
+brwslab session list
+brwslab fetch https://example.com --session=<session-id>
+
+# Interactive REPL
+brwslab repl
+
+# List available engines
+brwslab engines
+```
+
+### `stealth` — Spider & Web Crawling Framework
+
+```bash
+# Crawl with a spider
+stealth crawl -s myspider -e native -d 5 -c 16
+
+# Fetch URL with semantic extraction
+stealth fetch -e native https://example.com
+stealth fetch -e native -j https://example.com  # JSON output
+
+# Interactive shell
+stealth shell
+> get https://example.com
+> help
+> exit
+
+# List spiders and engines
+stealth list
+```
+
+### `semantic` — Semantic Extraction CLI
+
+Extract and compress web page content for LLM consumption.
+
+```bash
+# Extract semantic tree (default: tree format)
+semantic -url https://example.com
+
+# JSON output
+semantic -url https://example.com -format json -pretty
+
+# Serialized text format for LLM context
+semantic -url https://example.com -format serialized
+
+# Compression statistics only
+semantic -url https://example.com -format stats
+
+# With LLM compression (requires OpenRouter API key)
+export OPENROUTER_API_KEY=sk-or-...
+semantic -url https://example.com -model openai/gpt-oss-120b
+
+# Custom token budgets
+semantic -url https://example.com -initial-budget 5000 -max-budget 128000
+
+# With stealth engine
+semantic -url https://example.com -engine native -stealth
+```
+
+### `labd` — Fingerprint Lab Server
+
+Captures complete TLS, HTTP/2, and HTTP fingerprints from any browser.
+
+```bash
+# Start the lab server
+labd --http-port 8080 --https-port 8443
+
+# With MITM proxy for transparent capture
+labd --proxy-port 8081 --tls-cert server.crt --tls-key server.key
+
+# Auto-launch Chrome with proxy configured
+labd --chrome -v
+```
+
+**Lab endpoints:**
 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /` | Web UI with real-time updates |
 | `GET /capture/json` | JSON fingerprint |
 | `GET /capture/yaml` | YAML export |
-| `GET /debug` | Server status |
+| `GET /health` | Server health check |
 | `GET /proxy.pac` | Proxy auto-configuration |
-| `WS /ws` | WebSocket for live updates |
+| `WS /ws` | WebSocket for live fingerprint updates |
 
-### MITM Proxy Mode
+---
 
-Configure your browser to use the proxy:
-- **PAC file**: `http://localhost:8080/proxy.pac`
-- **Manual**: HTTP proxy `localhost:8081`
+## MCP Servers
 
-All HTTPS traffic through the proxy will have its TLS ClientHello captured.
+Both MCP servers integrate with [Claude Desktop](https://claude.ai/download) to provide browser automation and semantic extraction as tools.
 
-### Options
+### `stealth-mcp` — Browser Automation Server
 
-```
--bind string        Bind address (default "0.0.0.0")
--http-port int      HTTP port (default 8080)
--https-port int     HTTPS port (default 8443)
--proxy-port int     MITM proxy port, 0 to disable (default 8081)
--auto-certs         Auto-generate certificates (default true)
--tls-cert string    TLS certificate file (optional)
--tls-key string     TLS private key file (optional)
--store string       Directory to store captures
--chrome             Launch Chrome with proxy configured
--chrome-path string Path to Chrome executable (auto-detected if empty)
--v                  Verbose logging
+Provides browser fetching with stealth mode and semantic extraction.
+
+**Claude Desktop config** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "stealth": {
+      "command": "/path/to/stealth-mcp"
+    }
+  }
+}
 ```
 
-### Chrome Integration
+**Tools:**
 
-**Auto-launch Chrome (easiest):**
-```bash
-./labd -chrome -v
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `stealth_fetch` | Fetch URL with stealth browser and extract semantic tree | `url` (required) |
+| `stealth_search` | Search within last fetched page by CSS selector or text | `query` (required) |
+| `stealth_links` | Extract all links from last fetched page | — |
+| `stealth_forms` | Extract all forms from last fetched page | — |
+
+**Example interaction with Claude:**
+> "Fetch https://example.com and tell me what forms are on the page"
+>
+> Claude calls `stealth_fetch` then `stealth_forms` and describes the results.
+
+### `semantic-mcp` — Semantic Analysis Server
+
+Advanced semantic tree extraction with LLM compression, diffing, and form analysis.
+
+**Claude Desktop config:**
+
+```json
+{
+  "mcpServers": {
+    "semantic": {
+      "command": "/path/to/semantic-mcp",
+      "env": {
+        "OPENROUTER_API_KEY": "sk-or-..."
+      }
+    }
+  }
+}
 ```
 
-**Transparent mode (preserves Chrome's TLS fingerprint):**
-```bash
-./labd -proxy-mode transparent -chrome -v
+**Tools:**
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `extract_semantic_tree` | Extract hierarchical page structure with compression | `url` (required), `html`, `include_forms`, `include_grounding` |
+| `diff_semantic_trees` | Compare two pages and find differences | `old_url`, `new_url` (required) |
+| `get_form_schemas` | Extract form field types, labels, validation constraints | `html` (required) |
+| `serialize_tree` | Serialize tree to text format for LLM context | `url` (required), `token_budget` (default: 4000) |
+
+---
+
+## Adversarial Testing Lab
+
+The `brws/adversarial` package provides a local Cloudflare challenge emulation environment for testing the stealth solver.
+
+### Challenge Types
+
+- **JS Challenge** — Proof-of-Work (SHA-256 hash prefix matching)
+- **Managed Challenge** — PoW + fingerprint validation + behavioral analysis
+- **Turnstile** — PoW + CAPTCHA token simulation
+
+### Running the Lab
+
+```go
+// In test code
+cc := adversarial.NewCloudflareChallenger()
+mux := http.NewServeMux()
+cc.MountRoutes(mux)  // Rate-limited CF endpoints
+
+ts := httptest.NewServer(mux)
+defer ts.Close()
+
+// Now point the solver at ts.URL
+solver := stealth.NewCloudflareSolverClient()
+result, err := solver.SolveChallenge(ts.URL, adversarial.ChallengeJS)
 ```
-In transparent mode, the proxy captures the ClientHello then forwards the raw TLS connection. Chrome negotiates TLS directly with the target server, preserving its original fingerprint (JA3). Use this for sites with bot protection.
 
-**Manual Chrome launch:**
-```bash
-# macOS
-/Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome \
-  --proxy-server="localhost:8081" \
-  --ignore-certificate-errors \
-  --user-data-dir=/tmp/chrome-test
+### What It Emulates
 
-# Linux  
-google-chrome \
-  --proxy-server="localhost:8081" \
-  --ignore-certificate-errors \
-  --user-data-dir=/tmp/chrome-test
+- `__cf_bm` session cookies with validation
+- `cf_clearance` tokens in realistic format (`{token}-{timestamp}-{version}-{hmac}`)
+- Per-IP token bucket rate limiting with 429 responses
+- `Cf-Mitigated`, `Cf-Ray`, `Server: cloudflare` headers
+- Challenge page HTML with fingerprint collection JavaScript
+- XHR callbacks to `/cdn-cgi/challenge-platform/h/g/cv/result/{rayID}`
+- Solve time bounds (rejects superhuman < 1.5s solves)
+- Challenge escalation (JS -> Managed -> Blocked)
 
-# Windows
-chrome --proxy-server="localhost:8081" ^
-       --ignore-certificate-errors ^
-       --user-data-dir=C:\temp\chrome-test
-```
-
-**Using PAC file:**
-1. Open Chrome Settings → System → Open proxy settings
-2. Enable "Automatic proxy configuration"
-3. Enter URL: `http://localhost:8080/proxy.pac`
+---
 
 ## Project Structure
 
 ```
 brwslab/
-├── brws/               # Library
-│   ├── client/         # High-level client API
-│   ├── engine/         # Engine interfaces
-│   │   ├── native/     # Go net/http
-│   │   ├── chromium/   # Chrome CDP
-│   │   ├── firefox/    # Firefox via Playwright
-│   │   └── webkit/     # WebKit via Playwright
-│   ├── session/        # Cookie jars, profiles
-│   ├── trace/          # HAR-like tracing
-│   ├── lab/            # Fingerprint protocols
-│   ├── proxy/          # MITM proxy for capture
-│   ├── tlsparser/      # TLS ClientHello parser
-│   ├── types/          # Shared fingerprint types
-│   └── diff/           # Comparison utilities
+├── brws/                   # Library packages
+│   ├── engine/             # HTTP engine abstraction
+│   │   ├── native/         # Go net/http + uTLS
+│   │   ├── chromium/       # Chrome CDP
+│   │   ├── firefox/        # Firefox via Playwright
+│   │   ├── webkit/         # WebKit via Playwright
+│   │   ├── spoof/          # HTTP/2 fingerprint spoofing
+│   │   ├── http3/          # QUIC/HTTP3
+│   │   ├── pool/           # Connection pooling
+│   │   └── cdpstealth/     # CDP stealth enhancements
+│   ├── stealth/            # Stealth automation client
+│   ├── semantic/           # Semantic tree extraction + LLM compression
+│   │   └── index/          # HNSW vector indexing
+│   ├── adversarial/        # Cloudflare challenge emulation lab
+│   ├── behavior/           # Behavioral simulation (mouse, typing, scroll)
+│   ├── session/            # Cookie jars and browser profiles
+│   ├── lab/                # Fingerprint lab server + UI
+│   ├── pipeline/           # Batch processing pipeline
+│   ├── spider/             # Web spider framework
+│   ├── instrumentation/    # OpenTelemetry tracing + metrics
+│   ├── observability/      # Prometheus metrics
+│   ├── ml/                 # RL policy loading
+│   ├── resilience/         # Circuit breakers, retry logic
+│   ├── proxy/              # MITM proxy for capture
+│   ├── tlsparser/          # TLS ClientHello parser
+│   ├── types/              # Shared fingerprint types
+│   └── diff/               # Comparison utilities
 ├── cmd/
-│   ├── brwslab/        # CLI tool
-│   └── labd/           # Fingerprint server
-└── internal/
-    └── fingerprint/    # Internal fingerprinting
+│   ├── brwslab/            # Network fingerprinting CLI
+│   ├── stealth/            # Spider framework CLI
+│   ├── labd/               # Fingerprint lab server
+│   ├── semantic/           # Semantic extraction CLI
+│   ├── stealth-mcp/        # MCP server (browser automation)
+│   ├── semantic-mcp/       # MCP server (semantic analysis)
+│   ├── benchmark/          # Benchmark suite
+│   └── train/              # ML training orchestration
+├── lab-ui/                 # React UI for fingerprint lab
+├── Makefile                # Build, test, run targets
+├── Dockerfile              # Container image
+└── .golangci.yml           # Linter configuration
 ```
+
+---
 
 ## Configuration
 
-Environment variables:
-- `BRWSLAB_SESSIONS_DIR` - Session storage location (default: `~/.brwslab/sessions`)
-- `BRWSLAB_LAB_URL` - Default lab server URL
-- `CHROME_PATH` / `CHROMIUM_PATH` - Browser executable path
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `OPENROUTER_API_KEY` | API key for LLM compression (semantic tools) | — |
+| `BRWSLAB_SESSIONS_DIR` | Session storage directory | `~/.brwslab/sessions` |
+| `BRWSLAB_LAB_URL` | Default lab server URL | — |
+| `CHROME_PATH` / `CHROMIUM_PATH` | Browser executable path | Auto-detected |
+
+### Stealth Configuration
+
+```go
+&stealth.Config{
+    EngineName: "native",        // or "chromium", "firefox", "webkit"
+    Headless:   true,
+
+    Stealth: &stealth.StealthConfig{
+        Enabled:         true,
+        RemoveWebDriver: true,   // Remove navigator.webdriver
+        CanvasNoise:     true,   // Add canvas fingerprint noise
+        WebGLSpoof:      true,   // Spoof WebGL renderer info
+        ClientHints:     true,   // Spoof client hints
+        FakeScreen:      true,   // Fake screen dimensions
+        FakeTimezone:    true,   // Fake timezone
+        RandomUserAgent: true,   // Rotate user agents
+    },
+
+    Behavior: &stealth.BehaviorConfig{
+        HumanizeMouse: true,     // Bezier curve mouse movements
+        RandomDelays:  true,     // Human-like timing jitter
+    },
+
+    Challenge: &stealth.ChallengeConfig{
+        AutoDetect: true,        // Detect CF challenges in responses
+        AutoSolve:  true,        // Auto-solve PoW + fingerprint challenges
+    },
+}
+```
+
+---
 
 ## Development
 
-```bash
-# Run tests
-go test ./...
+### Build
 
-# Build
+```bash
+# Build all binaries
 make build
 
-# Run lab server locally
-go run ./cmd/labd
+# Build specific binary
+go build -o build/stealth ./cmd/stealth
 
-# Test fetch
-go run ./cmd/brwslab fetch https://example.com --engine=native
+# Run the fingerprint lab with UI
+make run
 ```
+
+### Test
+
+```bash
+# Run all tests
+go test ./...
+
+# With race detector
+go test -race -count=1 -timeout 120s ./...
+
+# Specific package
+go test ./brws/stealth/ -v
+go test ./brws/adversarial/ -v
+go test ./brws/semantic/ -v
+
+# Short mode (skip slow tests)
+go test -short ./...
+```
+
+### Lint
+
+```bash
+# Install golangci-lint
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+
+# Run linter
+golangci-lint run ./...
+
+# Or via make
+make lint
+```
+
+### Benchmarks
+
+```bash
+make bench           # Run all benchmarks
+make bench-cpu       # With CPU profiling
+make bench-mem       # With memory profiling
+```
+
+---
 
 ## License
 
-MIT - See LICENSE file for details.
+MIT
 
 ## Acknowledgments
 
-- Inspired by [curl-impersonate](https://github.com/lwthiker/curl-impersonate)
-- TLS fingerprinting research by [lwt hiker](https://lwthiker.com/)
-- [JA3/JA4](https://github.com/salesforce/ja3) fingerprinting from Salesforce
-- [HTTP/2 fingerprinting](https://www.blackhat.com/docs/eu-17/materials/eu-17-Shuster-Passive-Fingerprinting-Of-HTTP2-Clients-wp.pdf) research by Akamai
+- [curl-impersonate](https://github.com/lwthiker/curl-impersonate) — TLS fingerprint impersonation
+- [uTLS](https://github.com/refraction-networking/utls) — Go TLS fingerprint spoofing
+- [JA3/JA4](https://github.com/salesforce/ja3) — TLS fingerprinting from Salesforce
+- [chromedp](https://github.com/chromedp/chromedp) — Chrome DevTools Protocol for Go
+- [playwright-go](https://github.com/playwright-community/playwright-go) — Playwright for Go
+- [mcp-go](https://github.com/mark3labs/mcp-go) — Model Context Protocol for Go

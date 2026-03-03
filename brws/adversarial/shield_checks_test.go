@@ -1173,3 +1173,199 @@ func TestIsBareHexHash(t *testing.T) {
 		})
 	}
 }
+
+// --- P11: Chrome API Surface Tests ---
+
+func TestP11_MissingChromeApp(t *testing.T) {
+	sd := NewStealthDetector()
+
+	navJSON := `{"webdriver":false,"webdriverString":"function () { [native code] }","platform":"Win32","vendor":"Google Inc.","userAgent":"Mozilla/5.0 Chrome/134.0.0.0","appVersion":"5.0 Chrome/134.0.0.0","hardwareConcurrency":8,"deviceMemory":16,"cookieEnabled":true,"pdfViewerEnabled":true,"connection":{"rtt":50,"downlink":8.5,"effectiveType":"4g"},"languages":["en-US","en"],"screen_color_depth":24,"screen_inner_width":1903,"screen_outer_width":1920,"productSub":"20030107","maxTouchPoints":0,"chrome":{},"timezone":"America/New_York"}`
+
+	req, _ := http.NewRequest("GET", "http://test/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/134.0.0.0")
+	req.Header.Set(constants.HeaderNavigatorData, navJSON)
+
+	result := sd.analyzeNavigatorData(req)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind == "missing_chrome_app" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'missing_chrome_app' indicator, got: %v", result.Indicators)
+	}
+}
+
+func TestP11_ChromeAppIncomplete(t *testing.T) {
+	sd := NewStealthDetector()
+
+	// chrome.app present but missing isInstalled
+	navJSON := `{"webdriver":false,"webdriverString":"function () { [native code] }","platform":"Win32","vendor":"Google Inc.","userAgent":"Mozilla/5.0 Chrome/134.0.0.0","appVersion":"5.0 Chrome/134.0.0.0","hardwareConcurrency":8,"deviceMemory":16,"cookieEnabled":true,"pdfViewerEnabled":true,"connection":{"rtt":50,"downlink":8.5,"effectiveType":"4g"},"languages":["en-US","en"],"screen_color_depth":24,"screen_inner_width":1903,"screen_outer_width":1920,"productSub":"20030107","maxTouchPoints":0,"chrome":{},"chrome_app":{},"timezone":"America/New_York"}`
+
+	req, _ := http.NewRequest("GET", "http://test/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/134.0.0.0")
+	req.Header.Set(constants.HeaderNavigatorData, navJSON)
+
+	result := sd.analyzeNavigatorData(req)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	checks := map[string]bool{
+		"chrome_app_missing_isInstalled":  false,
+		"chrome_app_missing_InstallState": false,
+		"chrome_app_missing_RunningState": false,
+	}
+	for _, ind := range result.Indicators {
+		if _, ok := checks[ind]; ok {
+			checks[ind] = true
+		}
+	}
+	for check, found := range checks {
+		if !found {
+			t.Errorf("expected '%s' indicator", check)
+		}
+	}
+}
+
+func TestP11_MissingChromeCsi(t *testing.T) {
+	sd := NewStealthDetector()
+
+	navJSON := `{"webdriver":false,"webdriverString":"function () { [native code] }","platform":"Win32","vendor":"Google Inc.","userAgent":"Mozilla/5.0 Chrome/134.0.0.0","appVersion":"5.0 Chrome/134.0.0.0","hardwareConcurrency":8,"deviceMemory":16,"cookieEnabled":true,"pdfViewerEnabled":true,"connection":{"rtt":50,"downlink":8.5,"effectiveType":"4g"},"languages":["en-US","en"],"screen_color_depth":24,"screen_inner_width":1903,"screen_outer_width":1920,"productSub":"20030107","maxTouchPoints":0,"chrome":{},"chrome_app":{"isInstalled":false,"InstallState":{},"RunningState":{}},"timezone":"America/New_York"}`
+
+	req, _ := http.NewRequest("GET", "http://test/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/134.0.0.0")
+	req.Header.Set(constants.HeaderNavigatorData, navJSON)
+
+	result := sd.analyzeNavigatorData(req)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind == "missing_chrome_csi" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'missing_chrome_csi' indicator, got: %v", result.Indicators)
+	}
+}
+
+func TestP11_MissingPerformanceMemory(t *testing.T) {
+	sd := NewStealthDetector()
+
+	navJSON := `{"webdriver":false,"webdriverString":"function () { [native code] }","platform":"Win32","vendor":"Google Inc.","userAgent":"Mozilla/5.0 Chrome/134.0.0.0","appVersion":"5.0 Chrome/134.0.0.0","hardwareConcurrency":8,"deviceMemory":16,"cookieEnabled":true,"pdfViewerEnabled":true,"connection":{"rtt":50,"downlink":8.5,"effectiveType":"4g"},"languages":["en-US","en"],"screen_color_depth":24,"screen_inner_width":1903,"screen_outer_width":1920,"productSub":"20030107","maxTouchPoints":0,"chrome":{},"chrome_app":{"isInstalled":false,"InstallState":{},"RunningState":{}},"chrome_csi":{"pageT":2000},"timezone":"America/New_York"}`
+
+	req, _ := http.NewRequest("GET", "http://test/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/134.0.0.0")
+	req.Header.Set(constants.HeaderNavigatorData, navJSON)
+
+	result := sd.analyzeNavigatorData(req)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind == "missing_performance_memory" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'missing_performance_memory' indicator, got: %v", result.Indicators)
+	}
+}
+
+func TestP11_PerformanceMemoryInvalid(t *testing.T) {
+	sd := NewStealthDetector()
+
+	// usedJSHeapSize > totalJSHeapSize = impossible
+	navJSON := `{"webdriver":false,"webdriverString":"function () { [native code] }","platform":"Win32","vendor":"Google Inc.","userAgent":"Mozilla/5.0 Chrome/134.0.0.0","appVersion":"5.0 Chrome/134.0.0.0","hardwareConcurrency":8,"deviceMemory":16,"cookieEnabled":true,"pdfViewerEnabled":true,"connection":{"rtt":50,"downlink":8.5,"effectiveType":"4g"},"languages":["en-US","en"],"screen_color_depth":24,"screen_inner_width":1903,"screen_outer_width":1920,"productSub":"20030107","maxTouchPoints":0,"chrome":{},"chrome_app":{"isInstalled":false,"InstallState":{},"RunningState":{}},"chrome_csi":{"pageT":2000},"performance_memory":{"jsHeapSizeLimit":4294705152,"totalJSHeapSize":35000000,"usedJSHeapSize":99000000},"timezone":"America/New_York"}`
+
+	req, _ := http.NewRequest("GET", "http://test/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/134.0.0.0")
+	req.Header.Set(constants.HeaderNavigatorData, navJSON)
+
+	result := sd.analyzeNavigatorData(req)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	found := false
+	for _, ind := range result.Indicators {
+		if ind == "performance_memory_used_exceeds_total" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'performance_memory_used_exceeds_total' indicator, got: %v", result.Indicators)
+	}
+}
+
+func TestP11_ValidChromeAPIs(t *testing.T) {
+	sd := NewStealthDetector()
+
+	// All P11 Chrome APIs present and valid
+	navJSON := `{"webdriver":false,"webdriverString":"function () { [native code] }","platform":"Win32","vendor":"Google Inc.","userAgent":"Mozilla/5.0 Chrome/134.0.0.0","appVersion":"5.0 Chrome/134.0.0.0","hardwareConcurrency":8,"deviceMemory":16,"cookieEnabled":true,"pdfViewerEnabled":true,"connection":{"rtt":50,"downlink":8.5,"effectiveType":"4g"},"languages":["en-US","en"],"screen_color_depth":24,"screen_inner_width":1903,"screen_outer_width":1920,"productSub":"20030107","maxTouchPoints":0,"chrome":{},"chrome_app":{"isInstalled":false,"InstallState":{"DISABLED":"disabled"},"RunningState":{"RUNNING":"running"}},"chrome_csi":{"pageT":2000,"startE":1709500000000},"performance_memory":{"jsHeapSizeLimit":4294705152,"totalJSHeapSize":35000000,"usedJSHeapSize":20000000},"timezone":"America/New_York"}`
+
+	req, _ := http.NewRequest("GET", "http://test/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/134.0.0.0")
+	req.Header.Set(constants.HeaderNavigatorData, navJSON)
+
+	result := sd.analyzeNavigatorData(req)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	p11Checks := []string{
+		"missing_chrome_app", "chrome_app_missing_isInstalled",
+		"missing_chrome_csi", "missing_performance_memory",
+		"performance_memory_used_exceeds_total", "performance_memory_total_exceeds_limit",
+	}
+	for _, check := range p11Checks {
+		for _, ind := range result.Indicators {
+			if ind == check {
+				t.Errorf("valid Chrome APIs should not trigger '%s'", check)
+			}
+		}
+	}
+}
+
+func TestP11_FirefoxNoChromAPIs(t *testing.T) {
+	sd := NewStealthDetector()
+
+	// Firefox UA should NOT trigger Chrome-specific P11 checks
+	navJSON := `{"webdriver":false,"webdriverString":"function () { [native code] }","platform":"Win32","vendor":"","userAgent":"Mozilla/5.0 Firefox/128.0","appVersion":"5.0 Firefox/128.0","hardwareConcurrency":8,"deviceMemory":16,"cookieEnabled":true,"pdfViewerEnabled":false,"connection":{"rtt":50,"downlink":8.5,"effectiveType":"4g"},"languages":["en-US","en"],"screen_color_depth":24,"screen_inner_width":1903,"screen_outer_width":1920,"productSub":"20100101","maxTouchPoints":0,"timezone":"America/New_York"}`
+
+	req, _ := http.NewRequest("GET", "http://test/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 Firefox/128.0")
+	req.Header.Set(constants.HeaderNavigatorData, navJSON)
+
+	result := sd.analyzeNavigatorData(req)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+
+	chromeChecks := []string{
+		"missing_chrome_runtime", "missing_chrome_app", "missing_chrome_csi",
+		"missing_performance_memory",
+	}
+	for _, check := range chromeChecks {
+		for _, ind := range result.Indicators {
+			if ind == check {
+				t.Errorf("Firefox should not trigger Chrome-specific check '%s'", check)
+			}
+		}
+	}
+}

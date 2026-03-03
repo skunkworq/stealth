@@ -1,10 +1,9 @@
 module github.com/stealth/brwslab
 
-go 1.24.0
-
-toolchain go1.24.3
+go 1.26.0
 
 require (
+	github.com/andybalholm/brotli v1.0.6
 	github.com/chromedp/cdproto v0.0.0-20250803210736-d308e07a266d
 	github.com/chromedp/chromedp v0.14.2
 	github.com/google/uuid v1.6.0
@@ -28,7 +27,6 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.0.6 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect

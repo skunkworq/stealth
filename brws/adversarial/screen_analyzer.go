@@ -17,6 +17,10 @@ type ScreenData struct {
 	OuterHeight int     `json:"outer_height"`
 	InnerWidth  int     `json:"inner_width"`
 	InnerHeight int     `json:"inner_height"`
+
+	// P11: Screen orientation API
+	OrientationType  string `json:"orientation_type,omitempty"`
+	OrientationAngle int    `json:"orientation_angle,omitempty"`
 }
 
 // ScreenAnalyzer validates screen geometry for headless/bot detection.
@@ -135,6 +139,50 @@ func (sa *ScreenAnalyzer) Analyze(data *ScreenData) *VectorResult {
 			})
 			result.Score += weight
 		}
+	}
+
+	// Check 6: P11 — Missing screen orientation. Real browsers always expose
+	// screen.orientation.type ("landscape-primary"|"portrait-primary") and angle (0|90|180|270).
+	// Missing or invalid type signals headless/synthetic.
+	validOrientations := map[string]bool{
+		"landscape-primary":   true,
+		"landscape-secondary": true,
+		"portrait-primary":    true,
+		"portrait-secondary":  true,
+	}
+	if data.OrientationType == "" {
+		weight := 0.15
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "missing_screen_orientation",
+			Message: "screen.orientation.type is missing — real browsers always expose it",
+			Weight:  weight,
+			Field:   "orientation_type",
+			Value:   "empty",
+		})
+		result.Score += weight
+	} else if !validOrientations[data.OrientationType] {
+		weight := 0.20
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "invalid_screen_orientation",
+			Message: fmt.Sprintf("screen.orientation.type '%s' is not valid", data.OrientationType),
+			Weight:  weight,
+			Field:   "orientation_type",
+			Value:   data.OrientationType,
+		})
+		result.Score += weight
+	}
+
+	// Check 7: P11 — Orientation/geometry mismatch. Desktop landscape should have width > height.
+	if data.OrientationType == "landscape-primary" && data.Width > 0 && data.Height > 0 && data.Width < data.Height {
+		weight := 0.25
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "orientation_geometry_mismatch",
+			Message: fmt.Sprintf("landscape-primary but width(%d) < height(%d)", data.Width, data.Height),
+			Weight:  weight,
+			Field:   "orientation_type",
+			Value:   fmt.Sprintf("%s with %dx%d", data.OrientationType, data.Width, data.Height),
+		})
+		result.Score += weight
 	}
 
 	result.Score = math.Min(1.0, result.Score)

@@ -1,5 +1,5 @@
 # Browser Fingerprint Lab Makefile
-.PHONY: all build clean test test-go test-frontend typecheck run run-lab run-lab-https certs help install kill-ports lab-ui ml-datagen ml-generate ml-export ml-stats train train-run train-benchmark train-discover
+.PHONY: all build clean test ci test-go test-frontend typecheck run run-lab run-lab-https certs help install kill-ports lab-ui ml-datagen ml-generate ml-export ml-stats train train-run train-benchmark train-discover
 
 # Variables
 BINARY_DIR := build
@@ -380,6 +380,25 @@ proxy-test: $(LABD_BINARY) certs ## Quick test of the MITM proxy
 	fi; \
 	kill $$LABD_PID 2>/dev/null || true; \
 	rm -f /tmp/labd_proxy_test.log
+
+ci: ## Run CI checks: build + lint + test (no frontend)
+	@echo "--- Build ---"
+	go build ./...
+	@echo ""
+	@echo "--- Lint ---"
+	@if command -v golangci-lint >/dev/null 2>&1; then \
+		golangci-lint run --timeout 5m ./...; \
+	else \
+		echo "Warning: golangci-lint not found, skipping"; \
+	fi
+	@echo ""
+	@echo "--- Tests ---"
+	go test -count=1 -timeout 180s ./...
+	@echo ""
+	@echo "--- Race Detector ---"
+	go test -race -count=1 -timeout 180s -short ./...
+	@echo ""
+	@echo "CI checks passed"
 
 test: ## Run full validation: lint + build + tests (Go + Frontend)
 	@echo "=========================================="

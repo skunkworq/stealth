@@ -1043,13 +1043,69 @@ func (sd *StealthDetector) analyzeNavigatorData(req *http.Request) *DetectionVec
 		vec.Score += 0.3
 	}
 
-	// Check chrome.runtime (only flag for Chrome UAs — Firefox doesn't have chrome.runtime)
+	// Check chrome object (only for Chrome UAs — Firefox doesn't have chrome.*)
 	reqUA := req.Header.Get("User-Agent")
 	isChromeNav := strings.Contains(strings.ToLower(reqUA), "chrome")
 	if isChromeNav {
 		if _, ok := navData["chrome"]; !ok {
 			indicators = append(indicators, "missing_chrome_runtime")
 			vec.Score += 0.2
+		}
+
+		// P11: chrome.app API shape — real Chrome always has chrome.app with
+		// isInstalled (bool), InstallState, RunningState. Missing or empty = bot.
+		if chromeApp, ok := navData["chrome_app"].(map[string]interface{}); ok {
+			if _, hasInstalled := chromeApp["isInstalled"]; !hasInstalled {
+				indicators = append(indicators, "chrome_app_missing_isInstalled")
+				vec.Score += 0.15
+			}
+			if _, hasInstallState := chromeApp["InstallState"]; !hasInstallState {
+				indicators = append(indicators, "chrome_app_missing_InstallState")
+				vec.Score += 0.10
+			}
+			if _, hasRunningState := chromeApp["RunningState"]; !hasRunningState {
+				indicators = append(indicators, "chrome_app_missing_RunningState")
+				vec.Score += 0.10
+			}
+		} else {
+			// chrome.app entirely missing — strong signal for headless/automated
+			indicators = append(indicators, "missing_chrome_app")
+			vec.Score += 0.25
+		}
+
+		// P11: chrome.csi — real Chrome exposes chrome.csi() returning timing data.
+		// Missing = headless or poorly spoofed.
+		if _, hasCsi := navData["chrome_csi"]; !hasCsi {
+			indicators = append(indicators, "missing_chrome_csi")
+			vec.Score += 0.15
+		}
+
+		// P11: performance.memory — Chrome-only API exposing JS heap statistics.
+		// Real Chrome always has jsHeapSizeLimit, totalJSHeapSize, usedJSHeapSize.
+		if perfMem, ok := navData["performance_memory"].(map[string]interface{}); ok {
+			if _, hasLimit := perfMem["jsHeapSizeLimit"]; !hasLimit {
+				indicators = append(indicators, "performance_memory_missing_limit")
+				vec.Score += 0.10
+			}
+			if _, hasTotal := perfMem["totalJSHeapSize"]; !hasTotal {
+				indicators = append(indicators, "performance_memory_missing_total")
+				vec.Score += 0.10
+			}
+			// Sanity check: usedJSHeapSize <= totalJSHeapSize <= jsHeapSizeLimit
+			used, _ := perfMem["usedJSHeapSize"].(float64)
+			total, _ := perfMem["totalJSHeapSize"].(float64)
+			limit, _ := perfMem["jsHeapSizeLimit"].(float64)
+			if used > 0 && total > 0 && used > total {
+				indicators = append(indicators, "performance_memory_used_exceeds_total")
+				vec.Score += 0.20
+			}
+			if total > 0 && limit > 0 && total > limit {
+				indicators = append(indicators, "performance_memory_total_exceeds_limit")
+				vec.Score += 0.20
+			}
+		} else {
+			indicators = append(indicators, "missing_performance_memory")
+			vec.Score += 0.15
 		}
 	}
 

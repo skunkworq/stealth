@@ -475,3 +475,196 @@ func TestGenerateRequest_SetsTargetURL(t *testing.T) {
 		t.Error("GenerateRequest should set targetURL for timing referrers")
 	}
 }
+
+// --- P11: JS API Surface Completeness Tests ---
+
+func TestP11_ChromeNavigatorContainsChromeApp(t *testing.T) {
+	for _, profile := range DefaultProfiles() {
+		if profile.Browser != "chrome" {
+			continue
+		}
+		t.Run(profile.Name, func(t *testing.T) {
+			rg := NewRequestGenerator(&RequestGeneratorConfig{Profile: profile})
+			h := rg.GenerateHeaders()
+
+			navJSON := h.Get(constants.HeaderNavigatorData)
+			var navData map[string]interface{}
+			if err := json.Unmarshal([]byte(navJSON), &navData); err != nil {
+				t.Fatalf("failed to parse navigator data: %v", err)
+			}
+
+			// chrome.app must be present with correct shape
+			chromeApp, ok := navData["chrome_app"].(map[string]interface{})
+			if !ok {
+				t.Fatal("chrome_app missing from navigator data")
+			}
+			if _, hasInstalled := chromeApp["isInstalled"]; !hasInstalled {
+				t.Error("chrome_app missing isInstalled")
+			}
+			if _, hasIS := chromeApp["InstallState"]; !hasIS {
+				t.Error("chrome_app missing InstallState")
+			}
+			if _, hasRS := chromeApp["RunningState"]; !hasRS {
+				t.Error("chrome_app missing RunningState")
+			}
+		})
+	}
+}
+
+func TestP11_ChromeNavigatorContainsChromeCsi(t *testing.T) {
+	for _, profile := range DefaultProfiles() {
+		if profile.Browser != "chrome" {
+			continue
+		}
+		t.Run(profile.Name, func(t *testing.T) {
+			rg := NewRequestGenerator(&RequestGeneratorConfig{Profile: profile})
+			h := rg.GenerateHeaders()
+
+			navJSON := h.Get(constants.HeaderNavigatorData)
+			var navData map[string]interface{}
+			if err := json.Unmarshal([]byte(navJSON), &navData); err != nil {
+				t.Fatalf("failed to parse navigator data: %v", err)
+			}
+
+			csi, ok := navData["chrome_csi"].(map[string]interface{})
+			if !ok {
+				t.Fatal("chrome_csi missing from navigator data")
+			}
+			for _, key := range []string{"onloadT", "pageT", "startE", "tran"} {
+				if _, has := csi[key]; !has {
+					t.Errorf("chrome_csi missing %s", key)
+				}
+			}
+		})
+	}
+}
+
+func TestP11_ChromeNavigatorContainsPerformanceMemory(t *testing.T) {
+	for _, profile := range DefaultProfiles() {
+		if profile.Browser != "chrome" {
+			continue
+		}
+		t.Run(profile.Name, func(t *testing.T) {
+			rg := NewRequestGenerator(&RequestGeneratorConfig{Profile: profile})
+			h := rg.GenerateHeaders()
+
+			navJSON := h.Get(constants.HeaderNavigatorData)
+			var navData map[string]interface{}
+			if err := json.Unmarshal([]byte(navJSON), &navData); err != nil {
+				t.Fatalf("failed to parse navigator data: %v", err)
+			}
+
+			mem, ok := navData["performance_memory"].(map[string]interface{})
+			if !ok {
+				t.Fatal("performance_memory missing from navigator data")
+			}
+
+			limit, _ := mem["jsHeapSizeLimit"].(float64)
+			total, _ := mem["totalJSHeapSize"].(float64)
+			used, _ := mem["usedJSHeapSize"].(float64)
+
+			if limit <= 0 {
+				t.Error("jsHeapSizeLimit should be positive")
+			}
+			if total <= 0 || total > limit {
+				t.Errorf("totalJSHeapSize (%f) should be 0 < total <= limit (%f)", total, limit)
+			}
+			if used <= 0 || used > total {
+				t.Errorf("usedJSHeapSize (%f) should be 0 < used <= total (%f)", used, total)
+			}
+		})
+	}
+}
+
+func TestP11_FirefoxNavigatorNoChromeAPIs(t *testing.T) {
+	profile := FirefoxWindowsProfile()
+	rg := NewRequestGenerator(&RequestGeneratorConfig{Profile: profile})
+	h := rg.GenerateHeaders()
+
+	navJSON := h.Get(constants.HeaderNavigatorData)
+	var navData map[string]interface{}
+	if err := json.Unmarshal([]byte(navJSON), &navData); err != nil {
+		t.Fatalf("failed to parse navigator data: %v", err)
+	}
+
+	// Firefox should NOT have Chrome-specific APIs
+	chromeAPIs := []string{"chrome_app", "chrome_csi", "chrome_loadTimes", "performance_memory"}
+	for _, api := range chromeAPIs {
+		if _, has := navData[api]; has {
+			t.Errorf("Firefox should not have %s in navigator data", api)
+		}
+	}
+}
+
+func TestP11_ScreenContainsOrientation(t *testing.T) {
+	for _, profile := range DefaultProfiles() {
+		t.Run(profile.Name, func(t *testing.T) {
+			rg := NewRequestGenerator(&RequestGeneratorConfig{Profile: profile})
+			h := rg.GenerateHeaders()
+
+			screenJSON := h.Get(constants.HeaderScreenData)
+			var screenData map[string]interface{}
+			if err := json.Unmarshal([]byte(screenJSON), &screenData); err != nil {
+				t.Fatalf("failed to parse screen data: %v", err)
+			}
+
+			ot, hasType := screenData["orientation_type"].(string)
+			if !hasType {
+				t.Fatal("screen data missing orientation_type")
+			}
+			if ot != "landscape-primary" {
+				t.Errorf("desktop screen should be landscape-primary, got %s", ot)
+			}
+
+			angle, hasAngle := screenData["orientation_angle"].(float64)
+			if !hasAngle {
+				t.Fatal("screen data missing orientation_angle")
+			}
+			if angle != 0 {
+				t.Errorf("desktop landscape angle should be 0, got %f", angle)
+			}
+		})
+	}
+}
+
+func TestP11_PluginsContainMimeTypes(t *testing.T) {
+	for _, profile := range DefaultProfiles() {
+		if profile.Browser != "chrome" {
+			continue
+		}
+		t.Run(profile.Name, func(t *testing.T) {
+			rg := NewRequestGenerator(&RequestGeneratorConfig{Profile: profile})
+			h := rg.GenerateHeaders()
+
+			pluginJSON := h.Get(constants.HeaderPluginData)
+			var pluginData struct {
+				Plugins []struct {
+					Name      string   `json:"name"`
+					MimeTypes []string `json:"mimeTypes"`
+				} `json:"plugins"`
+			}
+			if err := json.Unmarshal([]byte(pluginJSON), &pluginData); err != nil {
+				t.Fatalf("failed to parse plugin data: %v", err)
+			}
+
+			for _, p := range pluginData.Plugins {
+				if !strings.Contains(strings.ToLower(p.Name), "pdf") {
+					continue
+				}
+				if len(p.MimeTypes) == 0 {
+					t.Errorf("PDF plugin '%s' should have MIME types", p.Name)
+				}
+				hasPDF := false
+				for _, mt := range p.MimeTypes {
+					if mt == "application/pdf" {
+						hasPDF = true
+						break
+					}
+				}
+				if !hasPDF {
+					t.Errorf("PDF plugin '%s' should include application/pdf MIME type", p.Name)
+				}
+			}
+		})
+	}
+}

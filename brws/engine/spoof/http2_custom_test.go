@@ -154,16 +154,16 @@ func TestEncodeHeaders_ChromeOrder(t *testing.T) {
 
 	headers := map[string]string{
 		"user-agent":                "Mozilla/5.0 Chrome/120",
-		"accept":                   "text/html",
-		"accept-encoding":          "gzip, br",
-		"accept-language":          "en-US",
-		"sec-ch-ua":                `"Chrome";v="120"`,
-		"sec-ch-ua-mobile":         "?0",
-		"sec-ch-ua-platform":       `"macOS"`,
-		"sec-fetch-dest":           "document",
-		"sec-fetch-mode":           "navigate",
-		"sec-fetch-site":           "none",
-		"sec-fetch-user":           "?1",
+		"accept":                    "text/html",
+		"accept-encoding":           "gzip, br",
+		"accept-language":           "en-US",
+		"sec-ch-ua":                 `"Chrome";v="120"`,
+		"sec-ch-ua-mobile":          "?0",
+		"sec-ch-ua-platform":        `"macOS"`,
+		"sec-fetch-dest":            "document",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-site":            "none",
+		"sec-fetch-user":            "?1",
 		"upgrade-insecure-requests": "1",
 	}
 
@@ -183,13 +183,13 @@ func TestEncodeHeaders_FirefoxOrder(t *testing.T) {
 
 	headers := map[string]string{
 		"user-agent":                "Mozilla/5.0 Firefox/120",
-		"accept":                   "text/html",
-		"accept-encoding":          "gzip, br",
-		"accept-language":          "en-US",
-		"sec-fetch-dest":           "document",
-		"sec-fetch-mode":           "navigate",
-		"sec-fetch-site":           "none",
-		"sec-fetch-user":           "?1",
+		"accept":                    "text/html",
+		"accept-encoding":           "gzip, br",
+		"accept-language":           "en-US",
+		"sec-fetch-dest":            "document",
+		"sec-fetch-mode":            "navigate",
+		"sec-fetch-site":            "none",
+		"sec-fetch-user":            "?1",
 		"upgrade-insecure-requests": "1",
 	}
 
@@ -222,4 +222,107 @@ func TestChrome_vs_Firefox_SettingsDiffer(t *testing.T) {
 	t.Logf("Chrome: %d settings, %d window | Firefox: %d settings, %d window",
 		len(chrome.Settings), chrome.InitialStreamWindowSize,
 		len(firefox.Settings), firefox.InitialStreamWindowSize)
+}
+
+func TestEncodeHeaders_WithQueryParams(t *testing.T) {
+	ct := ChromeHTTP2Transport()
+
+	headers := map[string]string{
+		"user-agent":      "Mozilla/5.0 Chrome/120",
+		"accept":          "text/html",
+		"accept-encoding": "gzip, br",
+	}
+
+	// Test with query parameters
+	block, err := ct.encodeHeaders("GET", "example.com", "https", "/search?q=test&page=1", headers)
+	if err != nil {
+		t.Fatalf("encodeHeaders with query failed: %v", err)
+	}
+	if len(block) == 0 {
+		t.Error("encoded header block is empty")
+	}
+}
+
+func TestEncodeHeaders_WithCookie(t *testing.T) {
+	ct := ChromeHTTP2Transport()
+
+	headers := map[string]string{
+		"user-agent": "Mozilla/5.0 Chrome/120",
+		"accept":     "text/html",
+		"cookie":     "session=abc123; preferences=dark",
+	}
+
+	block, err := ct.encodeHeaders("GET", "example.com", "https", "/", headers)
+	if err != nil {
+		t.Fatalf("encodeHeaders with cookie failed: %v", err)
+	}
+	if len(block) == 0 {
+		t.Error("encoded header block with cookie is empty")
+	}
+}
+
+func TestEncodeHeaders_POSTWithBody(t *testing.T) {
+	ct := ChromeHTTP2Transport()
+
+	headers := map[string]string{
+		"user-agent":     "Mozilla/5.0 Chrome/120",
+		"content-type":   "application/json",
+		"accept":         "application/json",
+		"content-length": "13",
+	}
+
+	block, err := ct.encodeHeaders("POST", "example.com", "https", "/api/data", headers)
+	if err != nil {
+		t.Fatalf("encodeHeaders POST failed: %v", err)
+	}
+	if len(block) == 0 {
+		t.Error("encoded header block for POST is empty")
+	}
+}
+
+func TestEncodeHeaders_UTF8Characters(t *testing.T) {
+	ct := ChromeHTTP2Transport()
+
+	headers := map[string]string{
+		"user-agent":      "Mozilla/5.0 Chrome/120",
+		"accept-language": "en-US,zh-CN;q=0.9,日本語",
+		"accept":          "text/html,application/json",
+	}
+
+	// Test with Unicode characters
+	block, err := ct.encodeHeaders("GET", "example.com", "https", "/日本語", headers)
+	if err != nil {
+		t.Fatalf("encodeHeaders with UTF-8 failed: %v", err)
+	}
+	if len(block) == 0 {
+		t.Error("encoded header block with UTF-8 is empty")
+	}
+}
+
+func TestEncodeHeaders_EmptyHeaders(t *testing.T) {
+	ct := ChromeHTTP2Transport()
+
+	// Test with empty headers map
+	block, err := ct.encodeHeaders("GET", "example.com", "https", "/", nil)
+	if err != nil {
+		t.Fatalf("encodeHeaders with nil headers failed: %v", err)
+	}
+	// Should still encode pseudo-headers
+	if len(block) == 0 {
+		t.Error("encoded header block is empty even with pseudo-headers")
+	}
+}
+
+func TestEncodeHeaders_EmptyMap(t *testing.T) {
+	ct := ChromeHTTP2Transport()
+
+	// Test with empty map
+	block, err := ct.encodeHeaders("GET", "example.com", "https", "/", map[string]string{})
+	if err != nil {
+		t.Fatalf("encodeHeaders with empty map failed: %v", err)
+	}
+	// Should still encode pseudo-headers
+	if len(block) == 0 {
+		t.Error("encoded header block is empty even with pseudo-headers")
+	}
 }

@@ -11,14 +11,14 @@ import (
 // EventData represents behavioral event data suitable for the X-Behavioral-Data header.
 // This format is consumed by the shield's BehavioralAnalyzer for bot detection.
 type EventData struct {
-	MouseTimestamps  []int64                  `json:"mouseTimestamps"`
-	TypingTimestamps []int64                  `json:"typingTimestamps"`
-	MousePositions   []map[string]float64     `json:"mousePositions"`
-	MouseVelocities  []float64                `json:"mouseVelocities"`
-	ScrollTimestamps []int64                  `json:"scrollTimestamps"`
-	ScrollDeltas     []float64                `json:"scrollDeltas"`
-	ClickTimestamps  []int64                  `json:"clickTimestamps,omitempty"`
-	ClickPositions   []map[string]float64     `json:"clickPositions,omitempty"`
+	MouseTimestamps  []int64              `json:"mouseTimestamps"`
+	TypingTimestamps []int64              `json:"typingTimestamps"`
+	MousePositions   []map[string]float64 `json:"mousePositions"`
+	MouseVelocities  []float64            `json:"mouseVelocities"`
+	ScrollTimestamps []int64              `json:"scrollTimestamps"`
+	ScrollDeltas     []float64            `json:"scrollDeltas"`
+	ClickTimestamps  []int64              `json:"clickTimestamps,omitempty"`
+	ClickPositions   []map[string]float64 `json:"clickPositions,omitempty"`
 
 	// Phase 10: Keystroke hold times (ms) — duration of keydown→keyup per keystroke
 	KeystrokeHoldTimes []float64 `json:"keystrokeHoldTimes,omitempty"`
@@ -36,10 +36,10 @@ type GeneratorConfig struct {
 	MicroTremorRatio float64 // Fraction of movements with micro-tremors (default: 0.2)
 
 	// Typing
-	TypingEventsMin  int     // Minimum typing events (default: 6)
-	TypingEventsMax  int     // Maximum typing events (default: 15)
-	TypingSpeedMin   float64 // Min inter-key interval ms (default: 50)
-	TypingSpeedMax   float64 // Max inter-key interval ms (default: 250)
+	TypingEventsMin int     // Minimum typing events (default: 6)
+	TypingEventsMax int     // Maximum typing events (default: 15)
+	TypingSpeedMin  float64 // Min inter-key interval ms (default: 50)
+	TypingSpeedMax  float64 // Max inter-key interval ms (default: 250)
 
 	// General
 	SessionDurationMs int64 // Total session duration in ms (default: 3000)
@@ -176,6 +176,14 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 
 	var prevX, prevY float64
 	var ts int64
+
+	// Handle edge case: zero events
+	if numEvents == 0 {
+		data.MouseTimestamps = []int64{}
+		data.MousePositions = []map[string]float64{}
+		data.MouseVelocities = []float64{}
+		return
+	}
 
 	// Pre-decide which events are micro-tremors vs major moves.
 	majorCount := 0
@@ -337,27 +345,28 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 		prevX, prevY = x, y
 	}
 
-	// Post-process velocities with a weighted moving average to create
-	// smooth temporal structure. The inline smoothing alone is insufficient
+	// Post-process velocities with a 5-point Gaussian-weighted moving average
+	// to create smooth temporal structure. Inline smoothing alone is insufficient
 	// because micro-tremor ↔ major-move alternation creates jagged velocities.
-	// A 5-point Gaussian-weighted average produces lag-2 ∈ [0.15, 0.60]
-	// and lag-3 ∈ [0.05, 0.40] that match human motor control patterns.
+	// Two passes: first creates lag-1/2 structure, second reinforces lag-3.
 	if len(velocities) > 5 {
-		smoothed := make([]float64, len(velocities))
 		weights := [5]float64{0.06, 0.24, 0.40, 0.24, 0.06}
-		for i := range velocities {
-			var wSum, vSum float64
-			for j := -2; j <= 2; j++ {
-				idx := i + j
-				if idx >= 0 && idx < len(velocities) {
-					w := weights[j+2]
-					vSum += velocities[idx] * w
-					wSum += w
+		for pass := 0; pass < 2; pass++ {
+			smoothed := make([]float64, len(velocities))
+			for i := range velocities {
+				var wSum, vSum float64
+				for j := -2; j <= 2; j++ {
+					idx := i + j
+					if idx >= 0 && idx < len(velocities) {
+						w := weights[j+2]
+						vSum += velocities[idx] * w
+						wSum += w
+					}
 				}
+				smoothed[i] = math.Round(vSum/wSum*10) / 10
 			}
-			smoothed[i] = math.Round(vSum/wSum*10) / 10
+			velocities = smoothed
 		}
-		velocities = smoothed
 	}
 
 	data.MousePositions = positions
@@ -537,13 +546,15 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 			currentDir = -1.0
 			dirRun = 0
 		}
-		// When changing direction, scale down the delta to simulate deceleration
-		// before reversal (defeats Check 31: no abrupt direction changes at full speed).
-		delta := deltas[i]
-		if i > 0 && (directions[i-1] > 0) != (currentDir > 0) {
-			delta *= 0.3 + g.rng.Float64()*0.3 // 30-60% of original delta
+		// When changing direction, reduce the raw scroll delta to simulate
+		// deceleration before reversal (defeats Check 31). The shield checks
+		// ScrollDeltas[i] at direction-change points, so we must reduce
+		// the actual delta value, not just the directional product.
+		if i > 0 && len(directions) > 0 && (directions[i-1] > 0) != (currentDir > 0) {
+			deltas[i] *= 0.3 + g.rng.Float64()*0.3 // 30-60% of original
+			deltas[i] = math.Round(deltas[i]*10) / 10
 		}
-		directions = append(directions, currentDir*delta)
+		directions = append(directions, currentDir*deltas[i])
 		dirRun++
 	}
 
@@ -607,9 +618,11 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 			// a=300ms base, b=200ms slope, W=40px target width
 			fittsID := math.Log2(dist/40.0 + 1)
 			movementTime := 300.0 + 200.0*fittsID
-			// Add 25-50% noise to produce moderate Fitts correlation (0.3-0.95)
-			// rather than perfect correlation (> 0.95) which also triggers detection.
+			// Both multiplicative (±25%) and additive (±200ms) noise to produce
+			// moderate Fitts correlation (0.3-0.95). Pure multiplicative noise
+			// preserves the ranking and can still yield r > 0.95 with few points.
 			noise := 0.75 + g.rng.Float64()*0.50
+			movementTime += (g.rng.Float64()*400 - 200) // ±200ms additive jitter
 			movementTime *= noise
 			clickTs = clickTimestamps[ci-1] + int64(movementTime)
 		}

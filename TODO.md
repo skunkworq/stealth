@@ -223,72 +223,83 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
 
 ---
 
-## Phase 10 — Advanced Behavioral Vectors (Tier 2)
+## Phase 10 — Advanced Behavioral Vectors (Tier 2) ✅
 
-### P10.1 Keystroke Hold Time + Digraph Timing
-- [ ] Shield: `behavioral_analyzer.go` — Add check #25: keystroke hold time (keydown→keyup) CV
-- [ ] Shield: Add check #26: digraph timing analysis (common pairs: "th", "er", "in", "an")
-- [ ] Sword: `captcha_solver.go` — Model hold time as function of character (vowels shorter, consonant clusters longer)
-- [ ] Sword: Add digraph-specific interval adjustments
+### P10.1 Keystroke Hold Time + Digraph Timing ✅
+- [x] Shield: `behavioral_analyzer.go` — Check #25: keystroke hold time CV (< 0.25 = uniform = bot)
+- [x] Shield: Check #26: digraph timing anomaly — inter-key interval ratio CV (< 0.20 = no digraph effect)
+- [x] Sword: `generator.go` — Multi-modal hold times: taps (60-120ms), space/mod (100-200ms), long hold (250-450ms)
+- [x] Tests: 4 shield tests (uniform/natural hold times, uniform/natural digraph timing)
 
-### P10.2 Scroll Direction + Momentum
-- [ ] Shield: Add check #27: `scroll_direction_entropy` — all same direction = suspicious
-- [ ] Shield: Add check #28: `scroll_reversal_presence` — real users scroll up sometimes
-- [ ] Sword: `generator.go` — Mix upward scrolls (negative deltas) at ~20% frequency
-- [ ] Sword: Model scroll momentum (successive scrolls in same direction accelerate then decelerate)
+### P10.2 Scroll Direction + Momentum ✅
+- [x] Shield: Check #30: `scroll_direction_monotonic` — all same direction with >5 events
+- [x] Shield: Check #30: `scroll_direction_alternating` — perfect up-down alternation >85%
+- [x] Shield: Check #31: `scroll_direction_change_abrupt` — all direction changes at high velocity
+- [x] Sword: `generator.go` — Mixed up-scrolls (~20%), forced up-scroll with >5 events, reduced delta at direction changes
+- [x] Tests: 4 shield tests (monotonic, alternating, natural, abrupt direction change), 1 sword direction test
 
-### P10.3 Mouse Velocity Autocorrelation at Higher Lags
-- [ ] Shield: Extend check #20 to compute lag-2, lag-3 autocorrelation
-- [ ] Real human motor control: r(lag-1) ≈ 0.3-0.5, r(lag-2) ≈ 0.15-0.30, r(lag-3) ≈ 0.05-0.15
-- [ ] Sword: Add temporal smoothing to mouse velocity generation to match real autocorrelation structure
+### P10.3 Mouse Velocity Autocorrelation at Higher Lags ✅
+- [x] Shield: Check #27: lag-2 autocorrelation anomaly (expect 0.15-0.60)
+- [x] Shield: Check #28: lag-3 autocorrelation anomaly (expect 0.05-0.40)
+- [x] Shield: `lagNAutocorrelation()` generalized method for arbitrary lag
+- [x] Sword: Temporal velocity smoothing (55%/25%/13%/7% weights) + dual-pass 5-point Gaussian post-filter
+- [x] Tests: 2 shield tests (random vs smooth velocity), 1 sword test (P10 evasion suite)
 
-### P10.4 Fitts' Law Compliance
-- [ ] Shield: Strengthen check #23 — validate full Fitts' law: movement_time ∝ log2(distance/target_width + 1)
-- [ ] Sword: Model deceleration profiles that match Fitts' law prediction for target size
-
----
-
-## Phase 11 — JS API Surface Completeness (Tier 2)
-
-### P11.1 chrome.app / chrome.csi / chrome.runtime Shape
-- [ ] Shield: Check `chrome.app` exists with `isInstalled`, `getIsInstalled`, `getDetails` methods
-- [ ] Shield: Check `chrome.csi` exists and returns plausible timing data
-- [ ] Shield: Check `chrome.runtime` shape: `connect`, `sendMessage`, `id` properties
-- [ ] Sword: Inject complete chrome.* API stubs via CDP stealth scripts
-
-### P11.2 Plugin MIME Types
-- [ ] Shield: Validate `navigator.plugins[i].mimeTypes` array has correct entries for each plugin
-- [ ] Shield: Chrome PDF Viewer should have `application/pdf` MIME type
-- [ ] Sword: Include MIME type arrays in plugin injection
-
-### P11.3 Screen.orientation API
-- [ ] Shield: Check `screen.orientation.type` matches viewport (portrait-primary vs landscape-primary)
-- [ ] Shield: Check `screen.orientation.angle` is 0 for landscape, 90 for portrait
-- [ ] Sword: Inject `screen.orientation` matching claimed viewport dimensions
-
-### P11.4 Performance.memory API (Chrome-only)
-- [ ] Shield: Check `performance.memory` exists for Chrome UA with plausible values
-- [ ] Shield: `jsHeapSizeLimit` should be > `totalJSHeapSize` > `usedJSHeapSize`
-- [ ] Sword: Inject plausible memory values (limit: 4GB, total: 50-200MB, used: 20-100MB)
+### P10.4 Fitts' Law Compliance ✅
+- [x] Shield: Check #29: `fitts_law_violation` — Pearson r of ID vs movement time (expect 0.3-0.95, needs ≥3 pairs)
+- [x] Shield: `pearsonCorrelation()` method for Fitts' law correlation
+- [x] Sword: `generator.go` — Fitts' law-based click timing: MT = (300 + 200*log2(D/W+1)) * noise + jitter
+- [x] Tests: 1 shield test (distance-independent timing), included in P10 evasion suite
 
 ---
 
-## Phase 12 — Cloudflare Shield Hardening (Tier 2)
+## Phase 11 — JS API Surface Completeness (Tier 2) ✅
 
-### P12.1 Challenge Page JavaScript Complexity
-- [ ] Add realistic challenge page JS that actually executes PoW in the browser
-- [ ] Include `turnstile/managed.js` script that collects fingerprints client-side
-- [ ] Challenge page should make XHR callbacks during solve (mimics real CF flow)
+### P11.1 chrome.app / chrome.csi / chrome.runtime Shape ✅
+- [x] Shield: Check `chrome.app` exists with `isInstalled`, `InstallState`, `RunningState` (stealth_detector.go)
+- [x] Shield: Check `chrome.csi` exists (stealth_detector.go)
+- [x] Shield: Check `chrome.runtime` shape (existing check, enhanced with P11 additions)
+- [x] Sword: Inject chrome.app, chrome.csi, chrome.loadTimes stubs in generateNavigator() (request_generator.go)
 
-### P12.2 Token Bucket Rate Limiting
-- [ ] Shield: per-IP token bucket rate limiter on challenge endpoints
-- [ ] Rapid challenge init → solve → init cycles should trigger escalation
-- [ ] Add `X-Ratelimit-*` headers matching real CF pattern
+### P11.2 Plugin MIME Types ✅
+- [x] Shield: Validate `navigator.plugins[i].mimeTypes` array has correct entries (plugin_analyzer.go check 5)
+- [x] Shield: Chrome PDF Viewer should have `application/pdf` MIME type
+- [x] Sword: Include MIME type arrays in plugin generation (request_generator.go, profiles.go)
 
-### P12.3 cf_clearance Cookie Structure
-- [ ] Match real CF cookie format: `sessionID-timestamp-1.0.1-hash`
-- [ ] Include `__cf_bm` validation: cookie must be present on solve requests
-- [ ] Bind `__cf_bm` to session — solve request without matching `__cf_bm` = reject
+### P11.3 Screen.orientation API ✅
+- [x] Shield: Check `screen.orientation.type` is valid orientation string (screen_analyzer.go checks 6-7)
+- [x] Shield: Check orientation/geometry mismatch (landscape-primary but width < height)
+- [x] Sword: Inject `screen.orientation` as landscape-primary angle 0 for desktops (request_generator.go)
+
+### P11.4 Performance.memory API (Chrome-only) ✅
+- [x] Shield: Check `performance.memory` exists for Chrome UA (stealth_detector.go)
+- [x] Shield: Validate `usedJSHeapSize` <= `totalJSHeapSize` <= `jsHeapSizeLimit`
+- [x] Sword: Inject plausible memory values (limit: ~4GB, total: 20-80MB, used: 30-80% of total)
+
+---
+
+## Phase 12 — Cloudflare Shield Hardening (Tier 2) ✅
+
+### P12.1 Challenge Page JavaScript Complexity ✅
+- [x] Enhanced challenge page HTML with realistic CSS, meta tags (`noindex,nofollow`), spinner
+- [x] Inline fingerprint collection JS (navigator, screen, WebGL, timezone, hardwareConcurrency)
+- [x] XHR callback to `/cdn-cgi/challenge-platform/h/g/cv/result/{rayID}` during solve
+- [x] `HandleChallengeCallback` endpoint accepts fingerprint/timing reports
+- [x] `HandleManagedJS` serves stub `managed.js` script referencing `_cf_chl_opt`
+
+### P12.2 Token Bucket Rate Limiting ✅
+- [x] `TokenBucket` per-IP rate limiter (`rate_limiter.go`) — configurable capacity + refill rate
+- [x] `RateLimitMiddleware` wraps solve handlers, returns 429 with CF-style headers
+- [x] `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `Retry-After` headers on all responses
+- [x] `MountRoutes()` convenience method: rate-limits solve endpoints, registers XHR callbacks
+- [x] Per-IP isolation — independent buckets per client IP (X-Forwarded-For aware)
+
+### P12.3 cf_clearance Cookie Structure ✅
+- [x] Realistic format: `{32hex_token}-{unix_timestamp}-1.0.1-{base64url_hmac}`
+- [x] `__cf_bm` cookie validation on all solve handlers (JS, Managed, Turnstile)
+- [x] Init endpoint sets `__cf_bm` cookie — solver's cookie jar forwards it on solve
+- [x] Wrong/missing `__cf_bm` → 403 rejection with `Cf-Mitigated: challenge` header
+- [x] `ValidateClearanceCookie` verifies format + expiry + session lookup
 
 ---
 
