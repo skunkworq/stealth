@@ -133,6 +133,93 @@ func TestRequestFSM_FullFlow(t *testing.T) {
 	}
 }
 
+func TestFSM_ResetState(t *testing.T) {
+	fsm := NewRequestFSM()
+	ctx := context.Background()
+
+	// Drive FSM to detecting state
+	_ = fsm.Transition(ctx, RequestEvents.Start)
+	_ = fsm.Transition(ctx, RequestEvents.Prepared)
+	_ = fsm.Transition(ctx, RequestEvents.Navigate)
+	_ = fsm.Transition(ctx, RequestEvents.ChallengeDetected)
+
+	if fsm.GetState() != RequestStates.Detecting {
+		t.Fatalf("expected detecting, got %q", fsm.GetState())
+	}
+
+	// Reset to idle
+	fsm.ResetState(RequestStates.Idle)
+	if fsm.GetState() != RequestStates.Idle {
+		t.Fatalf("expected idle after reset, got %q", fsm.GetState())
+	}
+
+	// Verify transition from idle works again
+	err := fsm.Transition(ctx, RequestEvents.Start)
+	if err != nil {
+		t.Fatalf("transition after reset failed: %v", err)
+	}
+	if fsm.GetState() != RequestStates.Initializing {
+		t.Errorf("expected initializing, got %q", fsm.GetState())
+	}
+}
+
+func TestFSM_ResetState_PreservesStats(t *testing.T) {
+	fsm := NewRequestFSM()
+	ctx := context.Background()
+
+	// Perform some transitions
+	_ = fsm.Transition(ctx, RequestEvents.Start)
+	_ = fsm.Transition(ctx, RequestEvents.Prepared)
+
+	statsBefore := fsm.GetStats()
+	if statsBefore.TransitionCount != 2 {
+		t.Fatalf("expected 2 transitions before reset, got %d", statsBefore.TransitionCount)
+	}
+
+	// Reset should not zero stats
+	fsm.ResetState(RequestStates.Idle)
+
+	statsAfter := fsm.GetStats()
+	if statsAfter.TransitionCount != 2 {
+		t.Errorf("expected stats preserved (2 transitions), got %d", statsAfter.TransitionCount)
+	}
+}
+
+func TestFSM_ResetState_SequentialNavigations(t *testing.T) {
+	fsm := NewRequestFSM()
+	ctx := context.Background()
+
+	// Simulate 5 sequential page navigations (as in a multi-page crawl)
+	for i := 0; i < 5; i++ {
+		fsm.ResetState(RequestStates.Idle)
+
+		transitions := []Event{
+			RequestEvents.Start,
+			RequestEvents.Prepared,
+			RequestEvents.Navigate,
+			RequestEvents.ChallengeDetected,
+			RequestEvents.ChallengeSolved,
+			RequestEvents.Extract,
+			RequestEvents.Complete,
+		}
+		for _, event := range transitions {
+			if err := fsm.Transition(ctx, event); err != nil {
+				t.Fatalf("iteration %d: transition %q failed: %v", i, event, err)
+			}
+		}
+
+		if fsm.GetState() != RequestStates.Complete {
+			t.Fatalf("iteration %d: expected complete, got %q", i, fsm.GetState())
+		}
+	}
+
+	stats := fsm.GetStats()
+	// 5 iterations * 7 transitions = 35
+	if stats.TransitionCount != 35 {
+		t.Errorf("expected 35 total transitions, got %d", stats.TransitionCount)
+	}
+}
+
 func TestRequestFSM_RetryFlow(t *testing.T) {
 	fsm := NewRequestFSM()
 	ctx := context.Background()

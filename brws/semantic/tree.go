@@ -38,6 +38,12 @@ type SemanticTree struct {
 	StructuralHash       string         `json:"structural_hash"`
 	CreatedAt            time.Time      `json:"created_at"`
 	DynamicSlotsFilledAt time.Time      `json:"dynamic_slots_filled_at"`
+
+	Meta   *PageMeta    `json:"meta,omitempty"`
+	Social *SocialLinks `json:"social,omitempty"`
+	Links  []Link       `json:"links,omitempty"`
+	Colors []ColorInfo  `json:"colors,omitempty"`
+	Fonts  []FontInfo   `json:"fonts,omitempty"`
 }
 
 func (n *SemanticNode) Find(id string) *SemanticNode {

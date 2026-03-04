@@ -78,6 +78,14 @@ func (f *FSM) GetState() State {
 	return f.currentState
 }
 
+// ResetState resets the FSM to the given state without running hooks or transition functions.
+// Stats are preserved across resets (they accumulate for the session).
+func (f *FSM) ResetState(state State) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.currentState = state
+}
+
 // Transition performs a state transition.
 func (f *FSM) Transition(ctx context.Context, event Event) error {
 	f.mu.Lock()

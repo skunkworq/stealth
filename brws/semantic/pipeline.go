@@ -109,10 +109,23 @@ func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *
 	}
 	stats.llmSemaphore = make(chan struct{}, maxConcurrent)
 
-	cleanHTML, doc, title, err := cleanAndParseHTML(htmlStr)
+	// Phase 1: Parse into AST (does not mutate).
+	doc, err := html.Parse(strings.NewReader(htmlStr))
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, NewParseError(err.Error())
 	}
+	title := findTitleInDoc(doc)
+
+	// Phase 2: Extract from original doc (head still present).
+	pageMeta := ExtractPageMeta(doc, url)
+	pageMeta.Title = title
+	social := ExtractSocialLinks(doc)
+	headLinks := ExtractLinks(doc, url)
+	headColors := ExtractColors(doc)
+	headFonts := ExtractFonts(doc)
+
+	// Phase 3: Clean the doc (MUTATES — strips head/styles/scripts).
+	cleanHTML := cleanHTMLNode(doc)
 	cleanBytes := len(cleanHTML)
 
 	structuralHash := computeStructuralHash(doc)
@@ -159,6 +172,11 @@ func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *
 		StructuralHash:       structuralHash,
 		CreatedAt:            time.Now(),
 		DynamicSlotsFilledAt: time.Now(),
+		Meta:                 &pageMeta,
+		Social:               &social,
+		Links:                headLinks,
+		Colors:               headColors,
+		Fonts:                headFonts,
 	}
 
 	runStats := &CompressionStats{

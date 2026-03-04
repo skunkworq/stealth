@@ -6,9 +6,13 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
+	"golang.org/x/net/html"
+
 	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/semantic"
 	"github.com/skunkworq/stealth/brws/behavior"
 	"github.com/skunkworq/stealth/brws/challenge"
 	"github.com/skunkworq/stealth/brws/engine"
@@ -245,6 +249,7 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 	c.logger.Info("navigating", "url", url)
 
 	_ = c.hooks.Execute(ctx, instrumentation.HookNames.OnRequestStart)
+	c.fsm.ResetState(instrumentation.RequestStates.Idle)
 	_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.Start)
 
 	var resp *engine.Response
@@ -329,6 +334,18 @@ type Response struct {
 	Body     []byte
 	FinalURL string
 	Trace    engine.Trace
+	Tree     *semantic.SemanticTree
+
+	// Lazy-parsing fields for extraction methods.
+	parseOnce sync.Once
+	doc       *html.Node
+	bodyStr   string
+}
+
+// AttachSemanticTree associates a pre-built semantic tree with this response,
+// enabling extraction methods to delegate to the tree instead of regex.
+func (r *Response) AttachSemanticTree(tree *semantic.SemanticTree) {
+	r.Tree = tree
 }
 
 // Mouse moves the mouse to the specified coordinates.
