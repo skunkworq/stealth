@@ -662,6 +662,220 @@ func (r *Response) Fonts() []FontInfo {
 	return result
 }
 
+// ImagesWithContext extracts images from the rendered DOM along with their
+// surrounding context (ancestor class names, IDs, parent href, section headings).
+// This enables downstream consumers to classify images (e.g. customer logo vs brand
+// logo) based on their position in the page structure — something regex-based
+// extraction on raw HTML cannot reliably do for JS-rendered pages.
+func (r *Response) ImagesWithContext() []ImageWithContext {
+	r.ensureParsed()
+	if r.doc == nil {
+		return nil
+	}
+
+	seen := make(map[string]bool)
+	var results []ImageWithContext
+
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "img" {
+			img := extractImageNodeContext(n, r.FinalURL)
+			if img.URL == "" {
+				return
+			}
+			normalized := normalizeURL(img.URL)
+			if !seen[normalized] {
+				seen[normalized] = true
+				results = append(results, img)
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(r.doc)
+
+	return results
+}
+
+// extractImageNodeContext collects context for a single <img> node by examining
+// its own attributes and walking up the ancestor chain.
+func extractImageNodeContext(imgNode *html.Node, baseURL string) ImageWithContext {
+	img := ImageWithContext{}
+
+	// Collect <img> own attributes.
+	for _, a := range imgNode.Attr {
+		switch a.Key {
+		case "src":
+			img.URL = strings.TrimSpace(a.Val)
+		case "alt":
+			img.Alt = strings.TrimSpace(a.Val)
+		case "class":
+			img.Classes = strings.TrimSpace(a.Val)
+		case "id":
+			img.ID = strings.TrimSpace(a.Val)
+		}
+	}
+
+	if img.URL == "" {
+		return img
+	}
+
+	// Resolve relative URL.
+	if baseURL != "" {
+		img.URL = resolveURL(baseURL, img.URL)
+	}
+
+	// Walk up ancestors (max 8 levels) collecting context.
+	var parentClasses, parentIDs []string
+	node := imgNode.Parent
+	for depth := 0; node != nil && depth < 8; depth++ {
+		if node.Type != html.ElementNode {
+			node = node.Parent
+			continue
+		}
+
+		cls := attrVal(node, "class")
+		id := attrVal(node, "id")
+		dataAttrs := collectDataAttrs(node)
+
+		if cls != "" {
+			parentClasses = append(parentClasses, cls)
+		}
+		if id != "" {
+			parentIDs = append(parentIDs, id)
+		}
+
+		// Capture href from closest <a> ancestor.
+		if node.Data == "a" && img.ParentHref == "" {
+			img.ParentHref = attrVal(node, "href")
+		}
+
+		// Capture nearest heading text from sibling heading elements.
+		if img.NearestHeading == "" {
+			img.NearestHeading = findSiblingHeading(node)
+		}
+
+		// Check data attributes for section classification hints.
+		for _, dv := range dataAttrs {
+			parentClasses = append(parentClasses, dv)
+		}
+
+		node = node.Parent
+	}
+
+	img.ParentClasses = strings.Join(parentClasses, " ")
+	img.ParentIDs = strings.Join(parentIDs, " ")
+
+	// Classify the image based on aggregated context.
+	img.SectionTag = classifyImageSection(img)
+
+	return img
+}
+
+// classifyImageSection determines whether an image is inside a customer/partner
+// showcase section based on aggregated DOM context signals.
+func classifyImageSection(img ImageWithContext) string {
+	// Combine all context into a single string for keyword matching.
+	context := strings.ToLower(strings.Join([]string{
+		img.Classes, img.ID,
+		img.ParentClasses, img.ParentIDs,
+		img.ParentHref, img.NearestHeading,
+		img.Alt,
+	}, " "))
+
+	// Customer/partner section signals (ordered by specificity).
+	customerPatterns := []struct {
+		keyword string
+		tag     string
+	}{
+		{"customer", "customer-logos"},
+		{"client", "customer-logos"},
+		{"trusted", "customer-logos"},
+		{"social-proof", "customer-logos"},
+		{"socialproof", "customer-logos"},
+		{"social_proof", "customer-logos"},
+		{"partner", "partner-logos"},
+		{"integration", "partner-logos"},
+		{"showcase", "customer-logos"},
+		{"logo-wall", "customer-logos"},
+		{"logowall", "customer-logos"},
+		{"logo_wall", "customer-logos"},
+		{"logo-grid", "customer-logos"},
+		{"logogrid", "customer-logos"},
+		{"logo-bar", "customer-logos"},
+		{"logo-strip", "customer-logos"},
+		{"logo-carousel", "customer-logos"},
+		{"case-stud", "customer-logos"},
+		{"casestud", "customer-logos"},
+		{"/customers/", "customer-logos"},
+		{"/partners/", "partner-logos"},
+		{"/clients/", "customer-logos"},
+		{"/case-stud", "customer-logos"},
+	}
+
+	for _, p := range customerPatterns {
+		if strings.Contains(context, p.keyword) {
+			return p.tag
+		}
+	}
+
+	return ""
+}
+
+// attrVal returns the value of the named attribute on an HTML element node.
+func attrVal(n *html.Node, key string) string {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return strings.TrimSpace(a.Val)
+		}
+	}
+	return ""
+}
+
+// collectDataAttrs returns values of data-* attributes that might contain
+// section classification hints.
+func collectDataAttrs(n *html.Node) []string {
+	var vals []string
+	for _, a := range n.Attr {
+		if strings.HasPrefix(a.Key, "data-") && a.Val != "" {
+			vals = append(vals, a.Val)
+		}
+	}
+	return vals
+}
+
+// findSiblingHeading scans the immediate children of a node for heading
+// elements (h1–h6) and returns the text content of the first one found.
+func findSiblingHeading(parent *html.Node) string {
+	for c := parent.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			switch c.Data {
+			case "h1", "h2", "h3", "h4", "h5", "h6":
+				text := collectText(c)
+				if text != "" {
+					return text
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// collectText extracts visible text content from an HTML node subtree.
+func collectText(n *html.Node) string {
+	if n.Type == html.TextNode {
+		return strings.TrimSpace(n.Data)
+	}
+	var parts []string
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		if t := collectText(c); t != "" {
+			parts = append(parts, t)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // --- Internal helpers ---
 
 func parseKeywords(keywords string) []string {

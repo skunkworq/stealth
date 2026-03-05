@@ -419,6 +419,149 @@ func TestResponse_Meta_DelegatesToTree(t *testing.T) {
 	}
 }
 
+func TestResponse_ImagesWithContext_CustomerSection(t *testing.T) {
+	html := `<!DOCTYPE html><html><body>
+	<header>
+		<a href="/"><img src="/logo.svg" alt="Acme Logo" class="brand-logo" id="site-logo"></a>
+	</header>
+	<section class="customer-logos">
+		<h2>Trusted by leading companies</h2>
+		<div class="logo-grid">
+			<a href="/customers/figma"><img src="https://cdn.acme.com/logos/figma.svg" alt="Figma"></a>
+			<a href="/customers/notion"><img src="https://cdn.acme.com/logos/notion.png" alt="Notion"></a>
+		</div>
+	</section>
+	<section class="partners_showcase__abc123">
+		<h3>Our Partners</h3>
+		<img src="/images/partner-aws.png" alt="AWS">
+	</section>
+	</body></html>`
+
+	r := &Response{Body: []byte(html), FinalURL: "https://acme.com"}
+	imgs := r.ImagesWithContext()
+
+	if len(imgs) != 4 {
+		t.Fatalf("expected 4 images, got %d", len(imgs))
+	}
+
+	// Find images by alt text.
+	byAlt := map[string]ImageWithContext{}
+	for _, img := range imgs {
+		byAlt[img.Alt] = img
+	}
+
+	// Brand logo — no section tag.
+	logo := byAlt["Acme Logo"]
+	if logo.SectionTag != "" {
+		t.Errorf("brand logo should have empty section tag, got %q", logo.SectionTag)
+	}
+	if logo.Classes != "brand-logo" {
+		t.Errorf("brand logo classes: got %q", logo.Classes)
+	}
+	if logo.ID != "site-logo" {
+		t.Errorf("brand logo id: got %q", logo.ID)
+	}
+
+	// Customer logos — should be classified.
+	figma := byAlt["Figma"]
+	if figma.SectionTag != "customer-logos" {
+		t.Errorf("Figma section tag: got %q", figma.SectionTag)
+	}
+	if figma.ParentHref != "/customers/figma" {
+		t.Errorf("Figma parent href: got %q", figma.ParentHref)
+	}
+	if figma.NearestHeading == "" {
+		t.Error("Figma should have a nearest heading")
+	}
+
+	notion := byAlt["Notion"]
+	if notion.SectionTag != "customer-logos" {
+		t.Errorf("Notion section tag: got %q", notion.SectionTag)
+	}
+
+	// Partner logo — should be classified (CSS Modules class prefix).
+	aws := byAlt["AWS"]
+	if aws.SectionTag != "partner-logos" {
+		t.Errorf("AWS section tag: got %q, want 'partner-logos'", aws.SectionTag)
+	}
+}
+
+func TestResponse_ImagesWithContext_CSSModules(t *testing.T) {
+	// Test CSS Modules mangled class names (e.g. Linear uses socialProof_container__xyz).
+	html := `<!DOCTYPE html><html><body>
+	<div class="socialProof_container__abc123">
+		<div class="socialProof_grid__def456">
+			<img src="/img1.png" alt="Customer1">
+			<img src="/img2.png" alt="Customer2">
+		</div>
+	</div>
+	</body></html>`
+
+	r := &Response{Body: []byte(html), FinalURL: "https://example.com"}
+	imgs := r.ImagesWithContext()
+
+	if len(imgs) != 2 {
+		t.Fatalf("expected 2 images, got %d", len(imgs))
+	}
+	for _, img := range imgs {
+		if img.SectionTag != "customer-logos" {
+			t.Errorf("img %q: expected 'customer-logos', got %q", img.Alt, img.SectionTag)
+		}
+	}
+}
+
+func TestResponse_ImagesWithContext_DataAttributes(t *testing.T) {
+	html := `<!DOCTYPE html><html><body>
+	<div data-analytics-name="SocialProofSection">
+		<img src="/proof1.png" alt="Proof1">
+	</div>
+	<div data-testid="customer-logos-grid">
+		<img src="/proof2.png" alt="Proof2">
+	</div>
+	</body></html>`
+
+	r := &Response{Body: []byte(html), FinalURL: "https://example.com"}
+	imgs := r.ImagesWithContext()
+
+	if len(imgs) != 2 {
+		t.Fatalf("expected 2 images, got %d", len(imgs))
+	}
+	for _, img := range imgs {
+		if img.SectionTag != "customer-logos" {
+			t.Errorf("img %q: expected 'customer-logos', got %q", img.Alt, img.SectionTag)
+		}
+	}
+}
+
+func TestResponse_ImagesWithContext_EmptyBody(t *testing.T) {
+	r := &Response{Body: nil}
+	imgs := r.ImagesWithContext()
+	if imgs != nil {
+		t.Errorf("expected nil for empty body, got %v", imgs)
+	}
+}
+
+func TestResponse_ImagesWithContext_NoCustomerSection(t *testing.T) {
+	html := `<!DOCTYPE html><html><body>
+	<main>
+		<img src="/hero.jpg" alt="Hero">
+		<img src="/product.png" alt="Product">
+	</main>
+	</body></html>`
+
+	r := &Response{Body: []byte(html), FinalURL: "https://example.com"}
+	imgs := r.ImagesWithContext()
+
+	if len(imgs) != 2 {
+		t.Fatalf("expected 2 images, got %d", len(imgs))
+	}
+	for _, img := range imgs {
+		if img.SectionTag != "" {
+			t.Errorf("img %q: expected empty section tag, got %q", img.Alt, img.SectionTag)
+		}
+	}
+}
+
 func TestResponse_Meta_FallsBackWhenNoTree(t *testing.T) {
 	// No tree attached — should fall back to regex extraction.
 	r := &Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}

@@ -46,3 +46,20 @@ type FontInfo struct {
 	Variants []string `json:"variants,omitempty"`
 	Source   string   `json:"source,omitempty"` // "google-fonts" or "css"
 }
+
+// ImageWithContext represents an image found on a page with its surrounding
+// DOM context. The ancestor context is collected by walking up the DOM tree
+// from the <img> element, capturing class names, IDs, data attributes, and
+// heading text that help classify the image's role (e.g. customer logo,
+// brand logo, partner badge).
+type ImageWithContext struct {
+	URL            string `json:"url"`
+	Alt            string `json:"alt,omitempty"`
+	Classes        string `json:"classes,omitempty"`         // class attr on the <img> itself
+	ID             string `json:"id,omitempty"`              // id attr on the <img> itself
+	ParentClasses  string `json:"parent_classes,omitempty"`  // aggregated class names from ancestor elements
+	ParentIDs      string `json:"parent_ids,omitempty"`      // aggregated IDs from ancestor elements
+	ParentHref     string `json:"parent_href,omitempty"`     // href of closest <a> ancestor
+	NearestHeading string `json:"nearest_heading,omitempty"` // text of nearest heading sibling in section
+	SectionTag     string `json:"section_tag,omitempty"`     // classified tag: "customer-logos", "partner-logos", etc.
+}

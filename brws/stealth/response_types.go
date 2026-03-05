@@ -8,3 +8,4 @@ type SocialLinks = semantic.SocialLinks
 type Link = semantic.Link
 type ColorInfo = semantic.ColorInfo
 type FontInfo = semantic.FontInfo
+type ImageWithContext = semantic.ImageWithContext
