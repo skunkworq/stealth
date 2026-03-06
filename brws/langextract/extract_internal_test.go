@@ -76,4 +76,3 @@ func TestExtractionsOverlapAndFirstNonEmpty(t *testing.T) {
 		t.Fatalf("expected first non-empty value x, got %q", got)
 	}
 }
-

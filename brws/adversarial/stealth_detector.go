@@ -1,15 +1,12 @@
 package adversarial
 
 import (
-	"bytes"
-	"compress/zlib"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"regexp"
@@ -30,6 +27,11 @@ type StealthDetector struct {
 	config          *DetectorConfig
 	adaptiveScorer  *AdaptiveScorer
 	advancedDet     *AdvancedDetection
+	navAnalyzer     *NavigatorAnalyzer
+	isoAnalyzer     *IsomorphicAnalyzer
+	behavAnalyzer   *BehavioralAnalyzer
+	timingAnalyzer  *TimingAnalyzer
+	graphicsAnalyzer *GraphicsAnalyzer
 }
 
 // DetectorConfig holds configuration thresholds and feature toggles for the
@@ -299,6 +301,11 @@ func NewStealthDetector() *StealthDetector {
 		},
 		adaptiveScorer: NewAdaptiveScorer(nil),
 		advancedDet:    NewAdvancedDetection(),
+		navAnalyzer:    NewNavigatorAnalyzer(),
+		isoAnalyzer:    NewIsomorphicAnalyzer(),
+		behavAnalyzer:  NewBehavioralAnalyzer(nil),
+		timingAnalyzer: NewTimingAnalyzer(nil),
+		graphicsAnalyzer: NewGraphicsAnalyzer(),
 	}
 }
 
@@ -618,33 +625,7 @@ func advancedChecksToVector(checks []AdvancedCheckResult, name, category string,
 
 // analyzeWebGLData performs deep WebGL analysis using the WebGLAnalyzer.
 func (sd *StealthDetector) analyzeWebGLData(req *http.Request) *DetectionVector {
-	webglHeader := req.Header.Get(constants.HeaderWebGLData)
-	if webglHeader == "" {
-		return nil
-	}
-
-	var data WebGLData
-	if err := json.Unmarshal([]byte(webglHeader), &data); err != nil {
-		return nil
-	}
-
-	analyzer := NewWebGLAnalyzer()
-	result := analyzer.Analyze(&data)
-
-	indicators := make([]string, 0, len(result.Indicators))
-	for _, ind := range result.Indicators {
-		indicators = append(indicators, ind.Check)
-	}
-
-	return &DetectionVector{
-		Name:        "WebGL Deep Analysis",
-		Category:    string(VectorWebGL),
-		Score:       result.Score,
-		Weight:      constants.WeightWebGL,
-		Detected:    result.Detected,
-		Description: "Deep WebGL renderer and platform consistency analysis",
-		Indicators:  indicators,
-	}
+	return sd.graphicsAnalyzer.AnalyzeWebGL(req)
 }
 
 // analyzeIPClassification checks client IP for datacenter/VPN classification.
@@ -1002,509 +983,15 @@ func (sd *StealthDetector) checkClientHintsConsistency(info *HTTPFingerprintInfo
 }
 
 func (sd *StealthDetector) analyzeNavigatorData(req *http.Request) *DetectionVector {
-	// Check for navigator data that might be passed as custom headers
-	// In real implementation, this would come from injected JS
-	navHeader := req.Header.Get(constants.HeaderNavigatorData)
-	if navHeader == "" {
-		return nil
-	}
-
-	vec := &DetectionVector{
-		Name:        "Navigator Properties",
-		Category:    "navigator",
-		Weight:      0.2,
-		Description: "Analyzes navigator object properties for automation detection",
-	}
-
-	var navData map[string]interface{}
-	if err := json.Unmarshal([]byte(navHeader), &navData); err != nil {
-		return nil
-	}
-
-	log.Printf("NAV_DATA JSON: %+v", navData)
-
-	indicators := make([]string, 0)
-
-	// Check webdriver (naive boolean leak)
-	if webdriver, ok := navData["webdriver"].(bool); ok && webdriver {
-		indicators = append(indicators, "webdriver=true")
-		vec.Score += 0.5
-	}
-
-	// Phase 10: Check stringification leak (Nodriver toString bypass failure)
-	if wdStr, ok := navData["webdriverString"].(string); ok {
-		if !strings.Contains(wdStr, "[native code]") {
-			indicators = append(indicators, "inconsistent_webdriver_stringification")
-			vec.Score += 0.6
-		}
-	} else {
-		// If they patched the object but forgot the toString proxy
-		indicators = append(indicators, "missing_webdriver_toString")
-		vec.Score += 0.3
-	}
-
-	// Check chrome object (only for Chrome UAs — Firefox doesn't have chrome.*)
-	reqUA := req.Header.Get("User-Agent")
-	isChromeNav := strings.Contains(strings.ToLower(reqUA), "chrome")
-	if isChromeNav {
-		if _, ok := navData["chrome"]; !ok {
-			indicators = append(indicators, "missing_chrome_runtime")
-			vec.Score += 0.2
-		}
-
-		// P11: chrome.app API shape — real Chrome always has chrome.app with
-		// isInstalled (bool), InstallState, RunningState. Missing or empty = bot.
-		if chromeApp, ok := navData["chrome_app"].(map[string]interface{}); ok {
-			if _, hasInstalled := chromeApp["isInstalled"]; !hasInstalled {
-				indicators = append(indicators, "chrome_app_missing_isInstalled")
-				vec.Score += 0.15
-			}
-			if _, hasInstallState := chromeApp["InstallState"]; !hasInstallState {
-				indicators = append(indicators, "chrome_app_missing_InstallState")
-				vec.Score += 0.10
-			}
-			if _, hasRunningState := chromeApp["RunningState"]; !hasRunningState {
-				indicators = append(indicators, "chrome_app_missing_RunningState")
-				vec.Score += 0.10
-			}
-		} else {
-			// chrome.app entirely missing — strong signal for headless/automated
-			indicators = append(indicators, "missing_chrome_app")
-			vec.Score += 0.25
-		}
-
-		// P11: chrome.csi — real Chrome exposes chrome.csi() returning timing data.
-		// Missing = headless or poorly spoofed.
-		if _, hasCsi := navData["chrome_csi"]; !hasCsi {
-			indicators = append(indicators, "missing_chrome_csi")
-			vec.Score += 0.15
-		}
-
-		// P11: performance.memory — Chrome-only API exposing JS heap statistics.
-		// Real Chrome always has jsHeapSizeLimit, totalJSHeapSize, usedJSHeapSize.
-		if perfMem, ok := navData["performance_memory"].(map[string]interface{}); ok {
-			if _, hasLimit := perfMem["jsHeapSizeLimit"]; !hasLimit {
-				indicators = append(indicators, "performance_memory_missing_limit")
-				vec.Score += 0.10
-			}
-			if _, hasTotal := perfMem["totalJSHeapSize"]; !hasTotal {
-				indicators = append(indicators, "performance_memory_missing_total")
-				vec.Score += 0.10
-			}
-			// Sanity check: usedJSHeapSize <= totalJSHeapSize <= jsHeapSizeLimit
-			used, _ := perfMem["usedJSHeapSize"].(float64)
-			total, _ := perfMem["totalJSHeapSize"].(float64)
-			limit, _ := perfMem["jsHeapSizeLimit"].(float64)
-			if used > 0 && total > 0 && used > total {
-				indicators = append(indicators, "performance_memory_used_exceeds_total")
-				vec.Score += 0.20
-			}
-			if total > 0 && limit > 0 && total > limit {
-				indicators = append(indicators, "performance_memory_total_exceeds_limit")
-				vec.Score += 0.20
-			}
-		} else {
-			indicators = append(indicators, "missing_performance_memory")
-			vec.Score += 0.15
-		}
-	}
-
-	// Check for suspicious permissions
-	if perm, ok := navData["permissions"].(string); ok {
-		if strings.Contains(perm, "prompt") {
-			indicators = append(indicators, "unusual_permissions")
-			vec.Score += 0.1
-		}
-	}
-
-	// Check automation flags
-	automationFlags := []string{"__webdriver_script_fn__", "__selenium_unwrapped", "callSelenium"}
-	for _, flag := range automationFlags {
-		if _, ok := navData[flag]; ok {
-			indicators = append(indicators, fmt.Sprintf("automation_flag: %s", flag))
-			vec.Score += 0.6
-		}
-	}
-
-	// Check for missing navigator.languages — real browsers always populate this
-	// non-optional property. Its absence signals synthetic navigator data.
-	if _, hasLangs := navData["languages"]; !hasLangs {
-		indicators = append(indicators, "missing_navigator_languages")
-		vec.Score += 0.5
-	}
-
-	// Check for missing navigator.productSub — Chrome always reports "20030107",
-	// Firefox always reports "20100101". Its absence is a strong synthetic signal.
-	if _, hasProductSub := navData["productSub"]; !hasProductSub {
-		indicators = append(indicators, "missing_navigator_productSub")
-		vec.Score += 0.3
-	}
-
-	// Check for missing navigator.maxTouchPoints — real desktop browsers always
-	// report maxTouchPoints: 0. Its absence compounds with other missing fields.
-	if _, hasMaxTouch := navData["maxTouchPoints"]; !hasMaxTouch {
-		indicators = append(indicators, "missing_navigator_maxTouchPoints")
-		vec.Score += 0.2
-	}
-
-	// Check for missing/inconsistent navigator.appVersion. Real browsers always
-	// have appVersion = UA minus "Mozilla/" prefix. Missing = synthetic; inconsistent = spoofed.
-	ua, _ := navData["userAgent"].(string)
-	if appVer, hasAppVer := navData["appVersion"].(string); !hasAppVer {
-		indicators = append(indicators, "missing_navigator_appVersion")
-		vec.Score += 0.45
-		vec.CheckReports = append(vec.CheckReports, CheckReport{
-			Name:        "missing_app_version",
-			Fired:       true,
-			Weight:      0.45,
-			Score:       0.45,
-			Field:       "appVersion",
-			Actual:      "",
-			Expected:    "UA minus 'Mozilla/' prefix",
-			Severity:    "high",
-			Description: "navigator.appVersion is missing (real browsers always populate it)",
-		})
-	} else if ua != "" && strings.HasPrefix(ua, "Mozilla/") {
-		expectedAppVer := ua[len("Mozilla/"):]
-		if appVer != expectedAppVer {
-			indicators = append(indicators, "inconsistent_navigator_appVersion")
-			vec.Score += 0.40
-			vec.CheckReports = append(vec.CheckReports, CheckReport{
-				Name:        "inconsistent_app_version",
-				Fired:       true,
-				Weight:      0.40,
-				Score:       0.40,
-				Field:       "appVersion",
-				Actual:      appVer,
-				Expected:    expectedAppVer,
-				Severity:    "high",
-				Description: "navigator.appVersion does not match UA minus 'Mozilla/' prefix",
-			})
-		}
-	}
-
-	// Phase 16: Comprehensive Spoofing Checks
-	indicators = sd.analyzeNetworkInformation(navData, vec, indicators)
-	indicators = sd.analyzePluginsArray(navData, vec, indicators)
-	indicators = sd.analyzeScreenGeometry(navData, vec, indicators)
-	indicators = sd.analyzeVideoElement(navData, vec, indicators)
-	indicators = sd.analyzePermissionsAPI(navData, vec, indicators)
-	indicators = sd.analyzeTimezoneParity(navData, vec, indicators, req)
-
-	// Check for missing timezone. Real browsers always have
-	// Intl.DateTimeFormat().resolvedOptions().timeZone available (e.g., "America/New_York").
-	// Its absence in navigator data signals synthetic generation.
-	if _, hasTZ := navData["timezone"]; !hasTZ {
-		indicators = append(indicators, "missing_timezone")
-		vec.Score += 0.15
-	}
-
-	vec.Indicators = indicators
-	vec.Detected = vec.Score > 0.3
-
-	return vec
-}
-
-func (sd *StealthDetector) analyzeNetworkInformation(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
-	var rtt float64
-	var hasRTT bool
-
-	if conn, ok := navData["connection"].(map[string]interface{}); ok {
-		rtt, hasRTT = conn["rtt"].(float64)
-		downlink, _ := conn["downlink"].(float64)
-
-		if rtt == 50 && downlink == 10 {
-			indicators = append(indicators, "spoofed_network_api_detected")
-			vec.Score += 0.4
-		}
-
-		// Chrome's navigator.connection always includes effectiveType ("4g", "3g", etc.).
-		// Its absence signals synthetic connection data.
-		if _, hasEffType := conn["effectiveType"].(string); !hasEffType {
-			indicators = append(indicators, "missing_connection_effectiveType")
-			vec.Score += 0.30
-			vec.CheckReports = append(vec.CheckReports, CheckReport{
-				Name:        "missing_connection_effective_type",
-				Fired:       true,
-				Weight:      0.30,
-				Score:       0.30,
-				Field:       "effectiveType",
-				Actual:      "",
-				Expected:    "4g",
-				Severity:    "medium",
-				Description: "navigator.connection.effectiveType is missing (Chrome always includes it)",
-			})
-		}
-	} else if r, ok := navData["connection_rtt"].(float64); ok {
-		rtt = r
-		hasRTT = true
-		downlink, _ := navData["connection_downlink"].(float64)
-		if rtt == 50 && downlink == 10 {
-			indicators = append(indicators, "spoofed_network_api_detected")
-			vec.Score += 0.4
-		}
-	}
-
-	// Chrome quantizes NavigationTiming RTT to multiples of 25ms.
-	// Non-quantized values indicate synthetic generation.
-	if hasRTT && rtt > 0 && int(rtt)%25 != 0 {
-		indicators = append(indicators, fmt.Sprintf("non_quantized_rtt: %.0fms (not multiple of 25)", rtt))
-		vec.Score += 0.3
-	}
-
-	// RTT/Downlink anticorrelation check. Low RTT implies fast connection (high
-	// downlink), and high RTT implies slow connection (low downlink). Independently
-	// generated values often produce improbable combinations.
-	if hasRTT {
-		downlink := 0.0
-		hasDownlink := false
-		if conn, ok := navData["connection"].(map[string]interface{}); ok {
-			downlink, hasDownlink = conn["downlink"].(float64)
-		} else if dl, ok := navData["connection_downlink"].(float64); ok {
-			downlink = dl
-			hasDownlink = true
-		}
-		if hasDownlink {
-			if rtt <= 50 && downlink < 3.0 {
-				indicators = append(indicators, fmt.Sprintf("rtt_downlink_anticorrelated: rtt=%.0f downlink=%.1f (low RTT should have high downlink)", rtt, downlink))
-				vec.Score += 0.35
-			}
-			if rtt >= 150 && downlink > 8.0 {
-				indicators = append(indicators, fmt.Sprintf("rtt_downlink_anticorrelated: rtt=%.0f downlink=%.1f (high RTT should have low downlink)", rtt, downlink))
-				vec.Score += 0.35
-			}
-		}
-	}
-
-	return indicators
-}
-
-func (sd *StealthDetector) analyzePluginsArray(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
-	if plugins, ok := navData["plugins"].([]interface{}); ok {
-		if len(plugins) == 5 {
-			isIntArray := true
-			for _, p := range plugins {
-				if _, isNum := p.(float64); !isNum {
-					isIntArray = false
-					break
-				}
-			}
-			if isIntArray {
-				indicators = append(indicators, "spoofed_plugins_array_detected")
-				vec.Score += 0.5
-			}
-		}
-	} else if length, ok := navData["plugins_length"].(float64); ok {
-		if length == 5 && navData["plugins_is_array"] == true {
-			indicators = append(indicators, "spoofed_plugins_array_detected")
-			vec.Score += 0.5
-		}
-	}
-	return indicators
-}
-
-func (sd *StealthDetector) analyzeScreenGeometry(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
-	var colorDepth, innerWidth, outerWidth float64
-	if screen, ok := navData["screen"].(map[string]interface{}); ok {
-		colorDepth, _ = screen["colorDepth"].(float64)
-		innerWidth, _ = navData["innerWidth"].(float64)
-		outerWidth, _ = navData["outerWidth"].(float64)
-	} else if cd, ok := navData["screen_color_depth"].(float64); ok {
-		colorDepth = cd
-		innerWidth, _ = navData["screen_inner_width"].(float64)
-		outerWidth, _ = navData["screen_outer_width"].(float64)
-	}
-
-	if colorDepth == 24 {
-		if innerWidth > 0 && outerWidth > 0 && innerWidth == outerWidth {
-			indicators = append(indicators, "impossible_window_geometry_detected")
-			vec.Score += 0.4
-		}
-	}
-	return indicators
-}
-
-func (sd *StealthDetector) analyzeVideoElement(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
-	if video, ok := navData["video_can_play_mp4"].(string); ok {
-		if video == "probably" {
-			indicators = append(indicators, "spoofed_video_element_detected")
-			vec.Score += 0.3
-		}
-	}
-	return indicators
-}
-
-func (sd *StealthDetector) analyzeTimezoneParity(navData map[string]interface{}, vec *DetectionVector, indicators []string, _ *http.Request) []string {
-	if tz, ok := navData["timezone"].(string); ok {
-		if offset, ok := navData["timezone_offset"].(float64); ok {
-			if tz == "America/New_York" && offset != 300 {
-				indicators = append(indicators, "timezone_offset_mismatch")
-				vec.Score += 0.4
-			}
-		}
-	}
-	return indicators
-}
-
-func (sd *StealthDetector) analyzePermissionsAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
-	if perm, ok := navData["notifications_prompt"].(string); ok {
-		if perm == "default" && navData["permissions_is_proxy"] == true {
-			indicators = append(indicators, "spoofed_permissions_api_detected")
-			vec.Score += 0.6
-		}
-	}
-	return indicators
+	return sd.navAnalyzer.Analyze(req)
 }
 
 func (sd *StealthDetector) analyzeCanvasData(req *http.Request) *DetectionVector {
-	canvasHeader := req.Header.Get(constants.HeaderCanvasFingerprint)
-	if canvasHeader == "" {
-		if hasJSFingerprintHeaders(req) {
-			return &DetectionVector{
-				Name:        "Canvas/WebGL Fingerprint",
-				Category:    string(VectorCanvas),
-				Score:       0.35,
-				Weight:      constants.WeightCanvas,
-				Detected:    true,
-				Description: "Canvas fingerprint data missing (client has JS context but no canvas toDataURL output)",
-				Indicators:  []string{"missing_canvas_data"},
-			}
-		}
-		return nil
-	}
-
-	vec := &DetectionVector{
-		Name:        "Canvas/WebGL Fingerprint",
-		Category:    "canvas",
-		Weight:      constants.WeightTLS,
-		Description: "Analyzes canvas and WebGL fingerprints for randomization",
-	}
-
-	indicators := make([]string, 0)
-
-	// Check if canvas hash changes (randomization)
-	if strings.Contains(canvasHeader, "randomized") {
-		indicators = append(indicators, "canvas_randomization_detected")
-		vec.Score += 0.4
-	}
-
-	// Check for suspicious WebGL fingerprints
-	if strings.Contains(canvasHeader, "swiftshader") {
-		indicators = append(indicators, "software_renderer")
-		vec.Score += 0.2
-	}
-
-	// Check for masked WebGL
-	if strings.Contains(canvasHeader, "google") || strings.Contains(canvasHeader, "intel") {
-		// These are common real browser fingerprints - no action needed
-		_ = canvasHeader
-	} else if strings.Contains(canvasHeader, "unknown") {
-		indicators = append(indicators, "masked_webgl")
-		vec.Score += 0.3
-	}
-
-	// Check for bare hex hash format — real canvas fingerprints are data URLs,
-	// JSON with metadata, or have library prefixes. A bare 32-128 char hex string
-	// strongly suggests synthetic generation (e.g., fmt.Sprintf("%x", sha256hash)).
-	if isBareHexHash(canvasHeader) {
-		indicators = append(indicators, "synthetic_canvas_hash_format")
-		vec.Score += 0.5
-	}
-
-	// Check for too-short canvas data URL payload. Real canvas toDataURL() produces
-	// a PNG image of a rendered scene — typically 5KB-50KB (7000-70000 base64 chars).
-	// A payload under 200 base64 chars is impossible for a real rendered canvas.
-	if strings.HasPrefix(canvasHeader, "data:image/png;base64,") {
-		payload := canvasHeader[len("data:image/png;base64,"):]
-		if len(payload) < 200 {
-			indicators = append(indicators, fmt.Sprintf("canvas_payload_too_short: %d chars (min 200 expected)", len(payload)))
-			vec.Score += 0.5
-		}
-
-		// Check PNG magic header. Real toDataURL() produces an actual PNG whose
-		// first 8 bytes are \x89PNG\r\n\x1a\n. In base64, this always starts with "iVBOR".
-		// Random bytes produce random base64 prefixes — a strong synthetic signal.
-		if len(payload) >= 200 && !strings.HasPrefix(payload, "iVBOR") {
-			indicators = append(indicators, "canvas_png_magic_header_missing")
-			vec.Score += 0.55
-			vec.CheckReports = append(vec.CheckReports, CheckReport{
-				Name:     "canvas_png_magic_header",
-				Fired:    true,
-				Weight:   0.55,
-				Score:    0.55,
-				Field:    "canvas_base64_prefix",
-				Actual:   safePrefix(payload, 5),
-				Expected: "iVBOR",
-				Severity: "high",
-				Description: "Canvas data URL does not start with PNG magic bytes (iVBOR)",
-			})
-		}
-
-		// Check IDAT chunk structure. Real PNGs have: 8 sig + 25 IHDR = 33, then
-		// IDAT chunk at offset 33 (4 bytes length + 4 bytes "IDAT" type at offset 37).
-		// If the base64 decodes to valid PNG signature but lacks IDAT at byte 37-40,
-		// it's synthetic random bytes stuffed after a valid header.
-		if len(payload) >= 200 && strings.HasPrefix(payload, "iVBOR") {
-			if decoded, err := base64.StdEncoding.DecodeString(payload); err == nil && len(decoded) > 40 {
-				if string(decoded[37:41]) != "IDAT" {
-					indicators = append(indicators, "canvas_missing_idat_chunk")
-					vec.Score += 0.40
-				} else {
-					// IDAT exists — validate its data is valid zlib/DEFLATE.
-					// Real canvas toDataURL() produces DEFLATE-compressed image data.
-					// Synthetic generators stuff random bytes into IDAT, which won't
-					// decompress. This is a very strong signal of synthetic generation.
-					idatLen := int(decoded[33])<<24 | int(decoded[34])<<16 | int(decoded[35])<<8 | int(decoded[36])
-					if idatLen > 0 && len(decoded) >= 41+idatLen {
-						idatData := decoded[41 : 41+idatLen]
-						r, zlibErr := zlib.NewReader(bytes.NewReader(idatData))
-						if zlibErr != nil {
-							indicators = append(indicators, "canvas_idat_not_deflate")
-							vec.Score += 0.55
-						} else {
-							_, readErr := io.ReadAll(r)
-							_ = r.Close()
-							if readErr != nil {
-								indicators = append(indicators, "canvas_idat_corrupt_deflate")
-								vec.Score += 0.50
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-	vec.Indicators = indicators
-	vec.Detected = vec.Score > 0.3
-
-	return vec
+	return sd.graphicsAnalyzer.AnalyzeCanvas(req)
 }
 
-// safePrefix returns the first n characters of s, or s if shorter.
-func safePrefix(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n]
-}
-
-// isBareHexHash returns true if the string is a bare hexadecimal hash (32-128 chars
-// of only [0-9a-fA-F]). Real canvas fingerprints use data URLs, JSON, or library prefixes.
-func isBareHexHash(s string) bool {
-	if len(s) < 32 || len(s) > 128 {
-		return false
-	}
-	for _, c := range s {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return false
-		}
-	}
-	return true
-}
 
 func (sd *StealthDetector) analyzeTimingData(req *http.Request) *DetectionVector {
-	// Check for timing data passed via headers (from injected scripts)
 	timingHeader := req.Header.Get(constants.HeaderTimingData)
 	if timingHeader == "" {
 		if hasJSFingerprintHeaders(req) {
@@ -1521,77 +1008,26 @@ func (sd *StealthDetector) analyzeTimingData(req *http.Request) *DetectionVector
 		return nil
 	}
 
+	var timingData map[string]interface{}
+	if err := json.Unmarshal([]byte(timingHeader), &timingData); err != nil {
+		return nil
+	}
+
+	seq := NewRequestTimingSequenceFromMap(timingData)
+	result := sd.timingAnalyzer.Analyze(seq)
+
 	vec := &DetectionVector{
 		Name:        "Timing Anomalies",
 		Category:    "timing",
 		Weight:      constants.WeightTiming,
 		Description: "Analyzes timing patterns for automation detection",
+		Score:       result.Score,
+		Detected:    result.Detected,
 	}
 
-	indicators := make([]string, 0)
-
-	var timing map[string]interface{}
-	if err := json.Unmarshal([]byte(timingHeader), &timing); err != nil {
-		return nil
+	for _, ind := range result.Indicators {
+		vec.Indicators = append(vec.Indicators, ind.Check)
 	}
-
-	// Try deep analysis with TimingAnalyzer if entries are present
-	if entriesRaw, ok := timing["entries"].([]interface{}); ok && len(entriesRaw) >= 2 {
-		seq := &RequestTimingSequence{Entries: make([]RequestTimingEntry, 0, len(entriesRaw))}
-		for _, e := range entriesRaw {
-			if em, ok := e.(map[string]interface{}); ok {
-				entry := RequestTimingEntry{}
-				if ts, ok := em["timestamp_ms"].(float64); ok {
-					entry.Timestamp = int64(ts)
-				}
-				if url, ok := em["url"].(string); ok {
-					entry.URL = url
-				}
-				if ct, ok := em["content_type"].(string); ok {
-					entry.ContentType = ct
-				}
-				if ref, ok := em["referrer"].(string); ok {
-					entry.Referrer = ref
-				}
-				if dur, ok := em["duration_ms"].(float64); ok {
-					entry.Duration = int64(dur)
-				}
-				seq.Entries = append(seq.Entries, entry)
-			}
-		}
-
-		if len(seq.Entries) >= 2 {
-			analyzer := NewTimingAnalyzer(nil)
-			result := analyzer.Analyze(seq)
-			vec.Score = result.Score
-			for _, ind := range result.Indicators {
-				indicators = append(indicators, ind.Check)
-			}
-			vec.Indicators = indicators
-			vec.Detected = result.Detected
-			return vec
-		}
-	}
-
-	// Fallback: legacy TTFB check
-	if ttfb, ok := timing["ttfb"].(float64); ok && ttfb == 0 {
-		indicators = append(indicators, "zero_ttfb")
-		vec.Score += 0.4
-	}
-
-	// Check for perfect navigation timing
-	if navStart, ok := timing["navigationStart"].(float64); ok {
-		if loadEnd, ok := timing["loadEventEnd"].(float64); ok && loadEnd > 0 {
-			totalTime := loadEnd - navStart
-			if totalTime < 100 {
-				indicators = append(indicators, "too_fast_load")
-				vec.Score += 0.3
-			}
-		}
-	}
-
-	vec.Indicators = indicators
-	vec.Detected = vec.Score > 0.3
 
 	return vec
 }
@@ -1599,8 +1035,6 @@ func (sd *StealthDetector) analyzeTimingData(req *http.Request) *DetectionVector
 func (sd *StealthDetector) analyzeBehavioralData(req *http.Request) *DetectionVector {
 	behavHeader := req.Header.Get(constants.HeaderBehavioralData)
 	if behavHeader == "" {
-		// Only penalize if other JS-sourced fingerprint headers are present,
-		// proving the client has a JS context but omitted behavioral data.
 		if hasJSFingerprintHeaders(req) {
 			return &DetectionVector{
 				Name:        "Behavioral Patterns",
@@ -1615,338 +1049,33 @@ func (sd *StealthDetector) analyzeBehavioralData(req *http.Request) *DetectionVe
 		return nil
 	}
 
-	vec := &DetectionVector{
-		Name:        "Behavioral Patterns",
-		Category:    "behavioral",
-		Weight:      constants.WeightBehavioral,
-		Description: "Analyzes user interaction patterns for automation",
-	}
-
-	indicators := make([]string, 0)
-
 	var behav map[string]interface{}
 	if err := json.Unmarshal([]byte(behavHeader), &behav); err != nil {
 		return nil
 	}
 
-	// Try enhanced analysis with the BehavioralAnalyzer if detailed event data is available
-	enhanced := sd.tryEnhancedBehavioralAnalysis(behav)
-	if enhanced != nil {
-		for _, ind := range enhanced.Indicators {
-			indicators = append(indicators, ind.Check)
-		}
-		vec.Score = enhanced.Score
-	} else {
-		// Fallback: basic checks for legacy format
-		if mouseStdDev, ok := behav["mouseStdDev"].(float64); ok && mouseStdDev == 0 {
-			indicators = append(indicators, "zero_mouse_variance")
-			vec.Score += 0.4
-		}
-		if typingStdDev, ok := behav["typingStdDev"].(float64); ok && typingStdDev == 0 {
-			indicators = append(indicators, "zero_typing_variance")
-			vec.Score += 0.3
-		}
-		if eventTimingDev, ok := behav["eventTimingStdDev"].(float64); ok && eventTimingDev == 0 {
-			indicators = append(indicators, "perfect_event_pacing")
-			vec.Score += 0.4
-		}
-		if mouseEvents, ok := behav["mouseEvents"].(float64); ok && mouseEvents < 5 {
-			indicators = append(indicators, "too_few_mouse_events")
-			vec.Score += 0.2
-		}
-		if _, ok := behav["mousePathLength"].(float64); ok {
-			if straightness, ok := behav["mouseStraightness"].(float64); ok && straightness > 0.95 {
-				indicators = append(indicators, "linear_mouse_movement")
-				vec.Score += 0.3
-			}
-		}
-	}
-
-	if vec.Score > 1.0 {
-		vec.Score = 1.0
-	}
-
-	vec.Indicators = indicators
-	vec.Detected = vec.Score > 0.3
-
-	return vec
-}
-
-// tryEnhancedBehavioralAnalysis attempts to use the BehavioralAnalyzer with
-// detailed event data (timestamps, positions, velocities). Returns nil if
-// the data format doesn't include these enhanced fields.
-func (sd *StealthDetector) tryEnhancedBehavioralAnalysis(behav map[string]interface{}) *VectorResult {
-	events := &EnhancedBehavioralEvents{}
-	hasEnhanced := false
-
-	// Extract mouse timestamps
-	if ts, ok := behav["mouseTimestamps"].([]interface{}); ok && len(ts) > 0 {
-		for _, t := range ts {
-			if v, ok := t.(float64); ok {
-				events.MouseTimestamps = append(events.MouseTimestamps, int64(v))
-			}
-		}
-		hasEnhanced = true
-	}
-
-	// Extract typing timestamps
-	if ts, ok := behav["typingTimestamps"].([]interface{}); ok && len(ts) > 0 {
-		for _, t := range ts {
-			if v, ok := t.(float64); ok {
-				events.TypingTimestamps = append(events.TypingTimestamps, int64(v))
-			}
-		}
-		hasEnhanced = true
-	}
-
-	// Extract mouse positions
-	if pos, ok := behav["mousePositions"].([]interface{}); ok && len(pos) > 0 {
-		for _, p := range pos {
-			if pt, ok := p.(map[string]interface{}); ok {
-				x, _ := pt["x"].(float64)
-				y, _ := pt["y"].(float64)
-				events.MousePositions = append(events.MousePositions, Position{X: x, Y: y})
-			}
-		}
-		hasEnhanced = true
-	}
-
-	// Extract mouse velocities
-	if vel, ok := behav["mouseVelocities"].([]interface{}); ok && len(vel) > 0 {
-		for _, v := range vel {
-			if f, ok := v.(float64); ok {
-				events.MouseVelocities = append(events.MouseVelocities, f)
-			}
-		}
-		hasEnhanced = true
-	}
-
-	// Extract click timestamps
-	if ts, ok := behav["clickTimestamps"].([]interface{}); ok && len(ts) > 0 {
-		for _, t := range ts {
-			if v, ok := t.(float64); ok {
-				events.ClickTimestamps = append(events.ClickTimestamps, int64(v))
-			}
-		}
-		hasEnhanced = true
-	}
-
-	// Extract click positions
-	if pos, ok := behav["clickPositions"].([]interface{}); ok && len(pos) > 0 {
-		for _, p := range pos {
-			if pt, ok := p.(map[string]interface{}); ok {
-				x, _ := pt["x"].(float64)
-				y, _ := pt["y"].(float64)
-				events.ClickPositions = append(events.ClickPositions, Position{X: x, Y: y})
-			}
-		}
-		hasEnhanced = true
-	}
-
-	// Extract scroll deltas
-	if deltas, ok := behav["scrollDeltas"].([]interface{}); ok && len(deltas) > 0 {
-		for _, d := range deltas {
-			if v, ok := d.(float64); ok {
-				events.ScrollDeltas = append(events.ScrollDeltas, v)
-			}
-		}
-		hasEnhanced = true
-	}
-
-	// Extract scroll timestamps (needed for Check 13: sequential event ordering)
-	if ts, ok := behav["scrollTimestamps"].([]interface{}); ok && len(ts) > 0 {
-		for _, t := range ts {
-			if v, ok := t.(float64); ok {
-				events.ScrollTimestamps = append(events.ScrollTimestamps, int64(v))
-			}
-		}
-		hasEnhanced = true
-	}
-
-	if !hasEnhanced {
-		return nil
-	}
-
-	analyzer := NewBehavioralAnalyzer(nil)
-	return analyzer.Analyze(events)
-}
-
-func (sd *StealthDetector) analyzeIsomorphicAnomalies(req *http.Request, httpInfo *HTTPFingerprintInfo) *DetectionVector {
-	if httpInfo == nil {
-		return nil
-	}
+	events := NewEnhancedBehavioralEventsFromMap(behav)
+	result := sd.behavAnalyzer.Analyze(events)
 
 	vec := &DetectionVector{
-		Name:        "Isomorphic Cross-Validation",
-		Category:    "isomorphic",
-		Weight:      0.5, // High penalty for failing isomorphic parity
-		Description: "Cross-checks multiple layers (HTTP, Navigator, WebGL) for OS and execution environment parity",
+		Name:        "Behavioral Patterns",
+		Category:    "behavioral",
+		Weight:      constants.WeightBehavioral,
+		Description: "Analyzes user interaction patterns for automation",
+		Score:       result.Score,
+		Detected:    result.Detected,
 	}
 
-	indicators := make([]string, 0)
-
-	// Get Navigator Data
-	var navData map[string]interface{}
-	if navHeader := req.Header.Get(constants.HeaderNavigatorData); navHeader != "" {
-		_ = json.Unmarshal([]byte(navHeader), &navData)
+	for _, ind := range result.Indicators {
+		vec.Indicators = append(vec.Indicators, ind.Check)
 	}
-
-	// Get Canvas/WebGL Data
-	var canvasData map[string]interface{}
-	if canvasHeader := req.Header.Get(constants.HeaderCanvasFingerprint); canvasHeader != "" {
-		_ = json.Unmarshal([]byte(canvasHeader), &canvasData)
-	}
-
-	// Cross-check: Platform vs WebGL Renderer
-	httpPlatform := strings.ToLower(httpInfo.Platform)
-	if httpInfo.SecCHUAPlatform != "" {
-		httpPlatform = strings.ToLower(httpInfo.SecCHUAPlatform)
-	}
-
-	if canvasData != nil {
-		if unmaskedRenderer, ok := canvasData["unmaskedRenderer"].(string); ok {
-			renderer := strings.ToLower(unmaskedRenderer)
-
-			isMac := strings.Contains(httpPlatform, "mac") || strings.Contains(httpPlatform, "darwin")
-			isWindows := strings.Contains(httpPlatform, "win")
-
-			// Detect Windows GPU (Direct3D/D3D) on claimed macOS HTTP
-			if isMac && (strings.Contains(renderer, "direct3d") || strings.Contains(renderer, "d3d") || strings.Contains(renderer, "angle (nvidia")) {
-				if !strings.Contains(renderer, "apple") {
-					indicators = append(indicators, "platform_mismatch: macos_http_with_windows_gpu")
-					vec.Score += 0.9 // Extremely suspicious Frankenstein bot
-				}
-			}
-
-			// Detect Apple GPU on claimed Windows HTTP
-			if isWindows && (strings.Contains(renderer, "apple m") || strings.Contains(renderer, "apple gpu")) {
-				indicators = append(indicators, "platform_mismatch: windows_http_with_apple_gpu")
-				vec.Score += 0.9 // Extremely suspicious Frankenstein bot
-			}
-		}
-	}
-
-	// Cross-check: Navigator Platform vs HTTP Platform
-	if navData != nil {
-		if navPlatform, ok := navData["platform"].(string); ok {
-			navPlatLow := strings.ToLower(navPlatform)
-			isMacHTTP := strings.Contains(httpPlatform, "mac") || strings.Contains(httpPlatform, "darwin")
-			isWinHTTP := strings.Contains(httpPlatform, "win")
-
-			isMacNav := strings.Contains(navPlatLow, "mac")
-			isWinNav := strings.Contains(navPlatLow, "win")
-
-			if (isMacHTTP && !isMacNav) || (isWinHTTP && !isWinNav) {
-				indicators = append(indicators, "platform_mismatch: http_vs_navigator_platform")
-				vec.Score += 0.8
-			}
-		}
-
-		// Cross-check: Accept-Language HTTP Header vs navigator.languages
-		if langs, ok := navData["languages"].([]interface{}); ok {
-			if len(langs) > 0 {
-				primaryNavLang, _ := langs[0].(string)
-				httpLang := strings.ToLower(httpInfo.AcceptLanguage)
-				if primaryNavLang != "" {
-					primaryNavLang = strings.ToLower(strings.Split(primaryNavLang, "-")[0])
-					if httpLang != "" && !strings.Contains(httpLang, primaryNavLang) {
-						indicators = append(indicators, "locale_mismatch: http_accept_language_vs_navigator_languages")
-						vec.Score += 0.7
-					}
-				}
-			}
-		}
-
-		// Cross-check: Deep HTTP Parity (User-Agent vs Sec-Ch-Ua)
-		if navUA, ok := navData["userAgent"].(string); ok {
-			httpUA := strings.ToLower(httpInfo.UserAgent)
-			navUALower := strings.ToLower(navUA)
-
-			if httpUA != "" && httpUA != navUALower {
-				indicators = append(indicators, "user_agent_mismatch: http_ua_vs_navigator_ua")
-				vec.Score += 0.8
-			}
-
-			// If Sec-Ch-Ua says "Google Chrome" but UA says "Firefox"
-			secChUa := strings.ToLower(httpInfo.SecCHUA)
-			if secChUa != "" {
-				if strings.Contains(secChUa, "chrome") && !strings.Contains(httpUA, "chrome") {
-					indicators = append(indicators, "brand_mismatch: sec-ch-ua_chrome_vs_ua_non_chrome")
-					vec.Score += 0.9
-				}
-			}
-		}
-
-		// Cross-check: Sec-Ch-Ua version vs User-Agent Chrome version.
-		// Both should report the same Chrome major version. A mismatch indicates
-		// synthetic header generation. Firefox is exempt (no Sec-Ch-Ua).
-		if httpInfo.SecCHUA != "" {
-			secChUaVersionRe := regexp.MustCompile(`"Google Chrome";v="(\d+)"`)
-			uaVersionRe := regexp.MustCompile(`Chrome/(\d+)`)
-
-			secChMatch := secChUaVersionRe.FindStringSubmatch(httpInfo.SecCHUA)
-			uaMatch := uaVersionRe.FindStringSubmatch(httpInfo.UserAgent)
-
-			if len(secChMatch) > 1 && len(uaMatch) > 1 {
-				if secChMatch[1] != uaMatch[1] {
-					indicators = append(indicators, fmt.Sprintf("sec_ch_ua_version_mismatch: Sec-Ch-Ua=%s UA=%s", secChMatch[1], uaMatch[1]))
-					vec.Score += 0.40
-				}
-			}
-		}
-
-		// Cross-check: Screen dimensions (X-Screen-Data) vs Navigator screen properties
-		// Real browsers derive both from the same window object, so outer_width and
-		// screen_outer_width must match. Independent random generation produces mismatches.
-		if screenHeader := req.Header.Get(constants.HeaderScreenData); screenHeader != "" {
-			var screenData map[string]interface{}
-			if json.Unmarshal([]byte(screenHeader), &screenData) == nil {
-				if screenOuter, ok := screenData["outer_width"].(float64); ok {
-					if navOuter, ok := navData["screen_outer_width"].(float64); ok {
-						diff := screenOuter - navOuter
-						if diff < 0 {
-							diff = -diff
-						}
-						if diff > 5 {
-							indicators = append(indicators, fmt.Sprintf("screen_nav_outer_width_mismatch: screen=%d nav=%d", int(screenOuter), int(navOuter)))
-							vec.Score += 0.7
-						}
-					}
-				}
-				if screenInner, ok := screenData["inner_width"].(float64); ok {
-					if navInner, ok := navData["screen_inner_width"].(float64); ok {
-						diff := screenInner - navInner
-						if diff < 0 {
-							diff = -diff
-						}
-						if diff > 5 {
-							indicators = append(indicators, fmt.Sprintf("screen_nav_inner_width_mismatch: screen=%d nav=%d", int(screenInner), int(navInner)))
-							vec.Score += 0.5
-						}
-					}
-				}
-
-				// Cross-check: color_depth in X-Screen-Data vs screen_color_depth in X-Navigator-Data.
-				// Real browsers derive both from the same screen object, so they must match.
-				if screenColorDepth, ok := screenData["color_depth"].(float64); ok {
-					if navColorDepth, ok := navData["screen_color_depth"].(float64); ok {
-						if int(screenColorDepth) != int(navColorDepth) {
-							indicators = append(indicators, fmt.Sprintf("screen_nav_color_depth_mismatch: screen=%d nav=%d", int(screenColorDepth), int(navColorDepth)))
-							vec.Score += 0.65
-						}
-					}
-				}
-			}
-		}
-	}
-
-	vec.Indicators = indicators
-	if vec.Score > 1.0 {
-		vec.Score = 1.0
-	}
-	vec.Detected = vec.Score > 0.0
 
 	return vec
+}
+
+
+func (sd *StealthDetector) analyzeIsomorphicAnomalies(req *http.Request, httpInfo *HTTPFingerprintInfo) *DetectionVector {
+	return sd.isoAnalyzer.Analyze(req, httpInfo)
 }
 
 func (sd *StealthDetector) analyzeHardwareExecution(req *http.Request) *DetectionVector {

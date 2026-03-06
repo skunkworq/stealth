@@ -120,6 +120,12 @@ func TestTruncateString(t *testing.T) {
 func TestProviderHelperParsers(t *testing.T) {
 	t.Parallel()
 
+	if got := floatFrom(float64(3.25), 1.5); got != 3.25 {
+		t.Fatalf("expected float64 passthrough, got %v", got)
+	}
+	if got := floatFrom(float32(2.5), 1.5); got != 2.5 {
+		t.Fatalf("expected float32 conversion, got %v", got)
+	}
 	if got := floatFrom(3, 1.5); got != 3 {
 		t.Fatalf("expected int conversion to float64, got %v", got)
 	}
@@ -138,5 +144,42 @@ func TestProviderHelperParsers(t *testing.T) {
 	}
 	if got := formatFromKwargs(nil, FormatTypeJSON); got != FormatTypeJSON {
 		t.Fatalf("expected default when kwargs nil, got %q", got)
+	}
+}
+
+func TestOpenAISystemMessageFormats(t *testing.T) {
+	t.Parallel()
+
+	ext := &openAIExtractor{}
+	ext.SetFormatType(FormatTypeYAML)
+	if got := ext.systemMessage(); !strings.Contains(got, "YAML") {
+		t.Fatalf("expected yaml system message, got %q", got)
+	}
+	ext.SetFormatType(FormatTypeJSON)
+	if got := ext.systemMessage(); !strings.Contains(got, "JSON") {
+		t.Fatalf("expected json system message, got %q", got)
+	}
+}
+
+func TestMergeOpenAIReasoningMapVariants(t *testing.T) {
+	t.Parallel()
+
+	payload := map[string]any{
+		"reasoning": map[string]string{"existing": "yes"},
+	}
+	mergeOpenAIReasoning(payload, "minimal")
+	reasoning, ok := payload["reasoning"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected merged reasoning map, got %T", payload["reasoning"])
+	}
+	if reasoning["existing"] != "yes" || reasoning["effort"] != "minimal" {
+		t.Fatalf("unexpected merged reasoning map: %v", reasoning)
+	}
+
+	payload = map[string]any{"reasoning": "not-a-map"}
+	mergeOpenAIReasoning(payload, "low")
+	reasoning, ok = payload["reasoning"].(map[string]any)
+	if !ok || reasoning["effort"] != "low" {
+		t.Fatalf("expected effort-only reasoning map after unsupported existing type, got %v", payload["reasoning"])
 	}
 }

@@ -360,10 +360,11 @@ func parseJSONOrdered(raw string) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := dec.Token(); err != io.EOF {
+	if tok, err := dec.Token(); err != io.EOF {
 		if err != nil {
 			return nil, err
 		}
+		return nil, fmt.Errorf("unexpected trailing token %v", tok)
 	}
 	return value, nil
 }

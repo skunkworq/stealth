@@ -19,6 +19,7 @@ type EventData struct {
 	ScrollDeltas     []float64            `json:"scrollDeltas"`
 	ClickTimestamps  []int64              `json:"clickTimestamps,omitempty"`
 	ClickPositions   []map[string]float64 `json:"clickPositions,omitempty"`
+	ClickDwellTimes  []int64              `json:"clickDwellTimes,omitempty"`
 
 	// Phase 10: Keystroke hold times (ms) — duration of keydown→keyup per keystroke
 	KeystrokeHoldTimes []float64 `json:"keystrokeHoldTimes,omitempty"`
@@ -43,21 +44,41 @@ type GeneratorConfig struct {
 
 	// General
 	SessionDurationMs int64 // Total session duration in ms (default: 3000)
+
+	// Evasions
+	EvadeMouseEaseIn        bool
+	EvadeMouseClustering    bool
+	EvadeScrollMomentum     bool
+	EvadeClickDeceleration  bool
+	EvadeFittsLaw           bool
+	EvadeMouseVelocityLag3  bool
+	EvadeScrollSpearman     bool
+	EvadeMouseTypingDensity bool
+	EvadeClickDwellTime     bool
 }
 
 // DefaultGeneratorConfig returns sensible defaults for human-like behavior.
 func DefaultGeneratorConfig() *GeneratorConfig {
 	return &GeneratorConfig{
-		MouseEventsMin:    15,
-		MouseEventsMax:    30,
-		MouseSpeedMin:     20,
-		MouseSpeedMax:     400,
-		MicroTremorRatio:  0.3, // 30% of movements have micro-tremors (hand jitter)
-		TypingEventsMin:   6,
-		TypingEventsMax:   15,
-		TypingSpeedMin:    50,
-		TypingSpeedMax:    250,
-		SessionDurationMs: 3000,
+		MouseEventsMin:          15,
+		MouseEventsMax:          30,
+		MouseSpeedMin:           20,
+		MouseSpeedMax:           400,
+		MicroTremorRatio:        0.3, // 30% of movements have micro-tremors (hand jitter)
+		TypingEventsMin:         6,
+		TypingEventsMax:         15,
+		TypingSpeedMin:          50,
+		TypingSpeedMax:          250,
+		SessionDurationMs:       3000,
+		EvadeMouseEaseIn:        true,
+		EvadeMouseClustering:    true,
+		EvadeScrollMomentum:     true,
+		EvadeClickDeceleration:  true,
+		EvadeFittsLaw:           true,
+		EvadeMouseVelocityLag3:  true,
+		EvadeScrollSpearman:     true,
+		EvadeMouseTypingDensity: true,
+		EvadeClickDwellTime:     true,
 	}
 }
 
@@ -225,6 +246,10 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 	g.rng.Shuffle(len(forcedModes), func(i, j int) {
 		forcedModes[i], forcedModes[j] = forcedModes[j], forcedModes[i]
 	})
+	
+	if g.config.EvadeMouseClustering {
+		sort.Ints(forcedModes)
+	}
 
 	majorIdx := 0
 	for i := 0; i < numEvents; i++ {
@@ -281,6 +306,12 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 			default:
 				// Pause (hover, read, think) — 150-400ms
 				baseInterval = 150 + g.rng.Float64()*250
+			}
+			if g.config.EvadeMouseTypingDensity {
+				globalT := float64(i) / float64(numEvents)
+				if globalT > 0.30 && globalT < 0.70 { // typing phase
+					baseInterval *= 4.0
+				}
 			}
 			ts += int64(baseInterval)
 		}
@@ -348,9 +379,16 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 	// Post-process velocities with a 5-point Gaussian-weighted moving average
 	// to create smooth temporal structure. Inline smoothing alone is insufficient
 	// because micro-tremor ↔ major-move alternation creates jagged velocities.
-	// Two passes: first creates lag-1/2 structure, second reinforces lag-3.
+	// Two passes: first creates lag-1/2 structure, second reinforces	// Post-process
 	if len(velocities) > 5 {
-		weights := [5]float64{0.06, 0.24, 0.40, 0.24, 0.06}
+		var weights [5]float64
+		if g.config.EvadeMouseVelocityLag3 {
+			// A single wide smoothing pass to ensure lag-2 and lag-3 are within boundaries
+			weights = [5]float64{0.1, 0.25, 0.3, 0.25, 0.1}
+		} else {
+			weights = [5]float64{0.06, 0.24, 0.40, 0.24, 0.06}
+		}
+		
 		for pass := 0; pass < 2; pass++ {
 			smoothed := make([]float64, len(velocities))
 			for i := range velocities {
@@ -367,6 +405,13 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 			}
 			velocities = smoothed
 		}
+	}
+	
+	if g.config.EvadeMouseEaseIn && len(velocities) >= 4 {
+		velocities[0] = math.Min(velocities[0]*0.1, 9.5)
+		velocities[1] = math.Min(velocities[1]*0.4, 25.0)
+		velocities[2] *= 0.7
+		velocities[3] *= 0.9
 	}
 
 	data.MousePositions = positions
@@ -463,7 +508,7 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 func (g *EventGenerator) generateScrollEvents(data *EventData) {
 	numScrolls := 3 + g.rng.Intn(8) // 3-10 events
 
-	timestamps := make([]int64, 0, numScrolls)
+	scrollTimestamps := make([]int64, 0, numScrolls)
 	deltas := make([]float64, 0, numScrolls)
 
 	// Start scrolls during mouse activity (20-50% through the mouse timeline).
@@ -482,8 +527,6 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 	}
 
 	for i := 0; i < numScrolls; i++ {
-		timestamps = append(timestamps, ts)
-
 		// Irregular scroll deltas: alternate between fast flicks (200-400px),
 		// gentle scrolls (40-120px), and moderate scrolls (120-250px).
 		// This produces ratio stddev > 0.15 (defeats Check 19).
@@ -501,21 +544,23 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 			delta = 120 + g.rng.Float64()*130
 		}
 		// Add noise ±20%
-		delta *= (0.80 + g.rng.Float64()*0.40)
+		if g.config.EvadeScrollMomentum {
+			if i == 0 {
+				delta = 200 + g.rng.Float64()*100
+			} else {
+				delta = deltas[i-1] * (0.90 + g.rng.Float64()*0.20)
+				if g.rng.Float64() < 0.15 {
+					delta *= 1.3 + g.rng.Float64()*0.6
+				}
+				if delta < 10 {
+					delta = 10
+				}
+			}
+		} else {
+			delta *= (0.80 + g.rng.Float64()*0.40)
+		}
 		delta = math.Round(delta*10) / 10
 		deltas = append(deltas, delta)
-
-		// Bimodal scroll intervals (defeats Check 18: CV > 0.50).
-		// Real scrolling: fast inertial bursts followed by reading pauses.
-		var interval int
-		if g.rng.Float64() < 0.40 {
-			// Reading pause: 500-1500ms
-			interval = 500 + g.rng.Intn(1001)
-		} else {
-			// Fast inertial scroll: 30-120ms
-			interval = 30 + g.rng.Intn(91)
-		}
-		ts += int64(interval)
 	}
 
 	// Generate scroll directions: mostly down (positive), occasionally up (negative).
@@ -545,20 +590,56 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 			// 20% chance to start scrolling up
 			currentDir = -1.0
 			dirRun = 0
+		} else {
+			dirRun++
 		}
+		
 		// When changing direction, reduce the raw scroll delta to simulate
 		// deceleration before reversal (defeats Check 31). The shield checks
 		// ScrollDeltas[i] at direction-change points, so we must reduce
 		// the actual delta value, not just the directional product.
-		if i > 0 && len(directions) > 0 && (directions[i-1] > 0) != (currentDir > 0) {
-			deltas[i] *= 0.3 + g.rng.Float64()*0.3 // 30-60% of original
-			deltas[i] = math.Round(deltas[i]*10) / 10
+		if dirRun == 0 && math.Abs(deltas[i]) > 100.0 {
+			deltas[i] = 20.0 + g.rng.Float64()*80.0
 		}
-		directions = append(directions, currentDir*deltas[i])
-		dirRun++
+		directions = append(directions, currentDir)
 	}
 
-	data.ScrollTimestamps = timestamps
+	scrollTimestamps = scrollTimestamps[:1]
+	ts = scrollTimestamps[0]
+	for i := 0; i < numScrolls; i++ {
+		var interval int
+		delta := deltas[i]
+
+		targetDelta := delta
+		if i+1 < numScrolls {
+			targetDelta = deltas[i+1]
+		}
+		
+		if g.config.EvadeScrollSpearman {
+			interval = int((targetDelta / 250.0) * 400.0)
+			if interval < 30 {
+				interval = 30
+			}
+			interval += g.rng.Intn(100)
+			if g.rng.Float64() < 0.35 {
+				interval += 600 + g.rng.Intn(2000)
+			}
+		} else {
+			// Bimodal scroll intervals (defeats Check 18: CV > 0.50).
+			// Real scrolling: fast inertial bursts followed by reading pauses.
+			if g.rng.Float64() < 0.40 {
+				// Reading pause: 500-1500ms
+				interval = 500 + g.rng.Intn(1001)
+			} else {
+				// Fast inertial scroll: 30-120ms
+				interval = 30 + g.rng.Intn(91)
+			}
+		}
+		ts += int64(interval)
+		scrollTimestamps = append(scrollTimestamps, ts)
+	}
+	
+	data.ScrollTimestamps = scrollTimestamps
 	data.ScrollDeltas = deltas
 	data.ScrollDirections = directions
 }
@@ -594,17 +675,35 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 
 	clickTimestamps := make([]int64, 0, numClicks)
 	clickPositions := make([]map[string]float64, 0, numClicks)
+	clickDwellTimes := make([]int64, 0, numClicks)
+
+	if g.config.EvadeClickDeceleration {
+		for _, idx := range indices {
+			for k := idx - 5; k <= idx+1; k++ {
+				if k >= 0 && k < len(data.MouseVelocities) {
+					if g.config.EvadeMouseEaseIn && k < 4 {
+						continue 
+					}
+					dist := math.Abs(float64(k - (idx - 2)))
+					factor := 0.30 + (dist * 0.15)
+					if factor > 0.90 {
+						factor = 0.90
+					}
+					v := data.MouseVelocities[k] * factor
+					if v < 16.0 {
+						v = 16.0 + g.rng.Float64()*10.0
+					}
+					data.MouseVelocities[k] = math.Round(v*10)/10
+				}
+			}
+		}
+	}
 
 	for ci, idx := range indices {
 		pos := data.MousePositions[idx]
 
-		// Fitts' law-compliant click timing (defeats Check 29).
-		// Movement time ∝ log2(D/W + 1), where D=distance, W=target width.
-		// After the first click, adjust the timestamp so that inter-click time
-		// correlates with distance to the previous click position.
 		var clickTs int64
-		if ci == 0 {
-			// First click: use mouse timestamp + small offset
+		if ci == 0 || g.config.EvadeFittsLaw {
 			clickTs = data.MouseTimestamps[idx] + int64(1+g.rng.Intn(5))
 		} else {
 			prevPos := clickPositions[ci-1]
@@ -614,19 +713,22 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 			if dist < 1.0 {
 				dist = 1.0
 			}
-			// Fitts' law: MT = a + b * log2(D/W + 1) with noise
-			// a=300ms base, b=200ms slope, W=40px target width
 			fittsID := math.Log2(dist/40.0 + 1)
 			movementTime := 300.0 + 200.0*fittsID
-			// Both multiplicative (±25%) and additive (±200ms) noise to produce
-			// moderate Fitts correlation (0.3-0.95). Pure multiplicative noise
-			// preserves the ranking and can still yield r > 0.95 with few points.
 			noise := 0.75 + g.rng.Float64()*0.50
-			movementTime += (g.rng.Float64()*400 - 200) // ±200ms additive jitter
+			movementTime += (g.rng.Float64()*400 - 200)
 			movementTime *= noise
 			clickTs = clickTimestamps[ci-1] + int64(movementTime)
 		}
 		clickTimestamps = append(clickTimestamps, clickTs)
+		
+		var dwellTime int64
+		if g.config.EvadeClickDwellTime {
+			dwellTime = 80 + int64(g.rng.Intn(120))
+		} else {
+			dwellTime = int64(g.rng.Intn(6))
+		}
+		clickDwellTimes = append(clickDwellTimes, dwellTime)
 		// Varied click offset distribution (defeats Check 17):
 		// - 30% precise clicks: 2-5px offset (user clicking carefully)
 		// - 40% moderate clicks: 5-12px offset (normal targeting)
@@ -651,6 +753,7 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 
 	data.ClickTimestamps = clickTimestamps
 	data.ClickPositions = clickPositions
+	data.ClickDwellTimes = clickDwellTimes
 }
 
 func sign(x float64) float64 {

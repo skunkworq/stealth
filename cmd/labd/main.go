@@ -274,14 +274,14 @@ func generateCerts(certFile, keyFile string) error {
 	if err != nil {
 		return fmt.Errorf("creating cert file: %w", err)
 	}
-	_ = certOut.Close()
+	defer certOut.Close()
 	_ = pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: certDER})
 
 	keyOut, err := os.Create(safeKeyFile) //nolint:gosec // Path already sanitized above
 	if err != nil {
 		return fmt.Errorf("creating key file: %w", err)
 	}
-	_ = keyOut.Close()
+	defer keyOut.Close()
 	_ = pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(priv)})
 
 	return nil

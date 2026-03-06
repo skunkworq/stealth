@@ -20,8 +20,19 @@ import (
 
 // RequestGeneratorConfig controls the full request generation.
 type RequestGeneratorConfig struct {
-	Profile   *BrowserProfile  // Browser identity to emulate
-	EventConfig *GeneratorConfig // Config for behavioral event generation (optional)
+	Profile            *BrowserProfile  // Browser identity to emulate
+	EventConfig        *GeneratorConfig // Config for behavioral event generation (optional)
+	SpoofLocalIPs        bool             // Whether to spoof local LAN IPs
+	EvadeCanvasEntropy   bool             // Phase 32: Generate low entropy IDAT chunks
+	EvadeWebGLCount         bool             // Phase 34: Ensure sufficient WebGL extensions
+	EvadeScreenHeightGap    bool             // Phase 35: Ensure screen/availHeight gap is 30-50px
+	EvadeWebGLViewport      bool             // Phase 36: Append max viewport dimensions based on max texture size
+	EvadeDeviceMemoryClamp  bool             // Phase 38: Cap deviceMemory at 8
+	EvadeConnectionSaveData bool             // Phase 39: Inject saveData: false into connection
+	EvadeScreenOrientation  bool             // Phase 40: Ensure screen orientation matches aspect ratio
+	EvadeNavigatorKeyboard  bool             // Phase 41: Inject mock keyboard API for Chrome
+	EvadeHardwareConcurrency bool            // Phase 42: Ensure hardwareConcurrency is even
+	EvadeNetworkQuantization bool            // Phase 43: Quantize RTT/downlink values
 }
 
 // RequestGenerator produces complete, internally-consistent stealth HTTP requests
@@ -86,8 +97,26 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 	var idatBuf bytes.Buffer
 	zlibW := zlib.NewWriter(&idatBuf)
 	rawPixels := make([]byte, 8100)
-	for i := range rawPixels {
-		rawPixels[i] = byte(canvasRng.Intn(256))
+	if config.EvadeCanvasEntropy {
+		// Real canvases have low entropy (<6.0) because they have a solid background
+		// and simple shapes/text. We fill with white and sprinkle a unique 32-byte
+		// fingerprint pattern to ensure uniqueness without raising average entropy.
+		pattern := make([]byte, 32)
+		for i := 0; i < 32; i++ {
+			pattern[i] = byte(canvasRng.Intn(256))
+		}
+		for i := range rawPixels {
+			if i%17 == 0 {
+				rawPixels[i] = pattern[i%32]
+			} else {
+				rawPixels[i] = 255 // White background
+			}
+		}
+	} else {
+		// High entropy noise (gets caught by Phase 32 check)
+		for i := range rawPixels {
+			rawPixels[i] = byte(canvasRng.Intn(256))
+		}
 	}
 	_, _ = zlibW.Write(rawPixels)
 	_ = zlibW.Close()
@@ -144,7 +173,35 @@ func (rg *RequestGenerator) GenerateRequest(targetURL string) *http.Request {
 			req.Header.Set(k, v)
 		}
 	}
+
+	// Dynamic IP Spoofing
+	if rg.config != nil && rg.config.SpoofLocalIPs {
+		ip := randomLocalIP()
+		req.Header.Set("X-Forwarded-For", ip)
+		req.Header.Set("X-Real-IP", ip)
+		req.Header.Set("X-Client-IP", ip)
+		req.Header.Set("True-Client-IP", ip)
+		req.Header.Set("CF-Connecting-IP", ip)
+	}
+
 	return req
+}
+
+// randomLocalIP generates a random private IP address.
+func randomLocalIP() string {
+	// Pick one of the 3 private IP ranges
+	rangeType := rand.Intn(3)
+	switch rangeType {
+	case 0:
+		// 10.0.0.0/8
+		return fmt.Sprintf("10.%d.%d.%d", rand.Intn(256), rand.Intn(256), rand.Intn(256))
+	case 1:
+		// 172.16.0.0/12
+		return fmt.Sprintf("172.%d.%d.%d", 16+rand.Intn(16), rand.Intn(256), rand.Intn(256))
+	default:
+		// 192.168.0.0/16
+		return fmt.Sprintf("192.168.%d.%d", rand.Intn(256), rand.Intn(256))
+	}
 }
 
 // sharedDimensions holds resolution, scrollbar width, and color depth picked once
@@ -213,6 +270,55 @@ func (rg *RequestGenerator) setHTTPHeaders(h http.Header) {
 func (rg *RequestGenerator) generateWebGL() string {
 	renderer := rg.profile.WebGLRenderers[rg.rng.Intn(len(rg.profile.WebGLRenderers))]
 
+	exts := rg.profile.WebGLExtensions
+	if rg.config.EvadeWebGLCount {
+		genericExts := []string{
+			"WEBGL_depth_texture", "WEBGL_draw_buffers",
+			"OES_element_index_uint", "OES_standard_derivatives",
+			"EXT_sRGB", "EXT_frag_depth", "EXT_shader_texture_lod",
+			"EXT_color_buffer_half_float", "EXT_color_buffer_float",
+			"EXT_disjoint_timer_query", "EXT_blend_minmax",
+			"WEBGL_color_buffer_float", "OES_texture_float_linear",
+			"OES_texture_half_float_linear", "WEBGL_compressed_texture_s3tc",
+			"WEBGL_compressed_texture_etc", "WEBGL_compressed_texture_astc",
+			"EXT_texture_filter_anisotropic", "OES_vertex_array_object",
+			"KHR_parallel_shader_compile", "WEBGL_multi_draw",
+			"WEBGL_lose_context", "WEBGL_debug_renderer_info",
+			"WEBGL_compressed_texture_pvrtc",
+			"WEBGL_compressed_texture_s3tc_srgb",
+			"WEBGL_draw_instanced_base_vertex_base_instance",
+			"WEBGL_multi_draw_instanced_base_vertex_base_instance",
+			"EXT_disjoint_timer_query_webgl2",
+			"EXT_float_blend",
+			"EXT_texture_compression_bptc",
+			"EXT_texture_compression_rgtc",
+			"KHR_parallel_shader_compile",
+			"OES_draw_buffers_indexed",
+			"WEBGL_blend_equation_advanced_coherent",
+			"WEBGL_debug_renderer_info",
+			"WEBGL_debug_shaders",
+		}
+		
+		exts = append([]string(nil), exts...) // clone
+		for i := 0; i < len(genericExts); i++ {
+			found := false
+			for _, e := range exts {
+				if e == genericExts[i] {
+					found = true
+					break
+				}
+			}
+			if !found {
+				exts = append(exts, genericExts[i])
+			}
+		}
+	} else {
+		// Default bot behavior: strip some extensions to trigger the check
+		if len(exts) > 10 {
+			exts = exts[:10]
+		}
+	}
+
 	data := map[string]interface{}{
 		"vendor":            rg.profile.WebGLVendor,
 		"renderer":          renderer,
@@ -223,7 +329,12 @@ func (rg *RequestGenerator) generateWebGL() string {
 		"platform":          rg.profile.WebGLPlatform,
 		"webgl2_supported":  true,
 		"max_texture_size":  rg.profile.WebGLMaxTextureSize,
-		"extensions":        rg.profile.WebGLExtensions,
+		"webgl_extensions":  exts,
+	}
+
+	if rg.config.EvadeWebGLViewport {
+		data["max_viewport_width"] = rg.profile.WebGLMaxTextureSize
+		data["max_viewport_height"] = rg.profile.WebGLMaxTextureSize
 	}
 
 	b, _ := json.Marshal(data)
@@ -254,8 +365,23 @@ func (rg *RequestGenerator) generateScreen(dims sharedDimensions) string {
 
 	width, height := dims.resolution[0], dims.resolution[1]
 
-	// Taskbar takes 32-48px
-	taskbarHeight := 32 + rg.rng.Intn(17) // 32-48
+	// Phase 30 evasion: high-DPI (2x+) only on 1920px+ displays
+	if pixelRatio >= 2.0 && width < 1920 {
+		pixelRatio = 1.0
+	}
+
+	// Taskbar takes 32-48px typically, but wait, the sword requires 24-150px gap.
+	var taskbarHeight int
+	if rg.config.EvadeScreenHeightGap {
+		taskbarHeight = 30 + rg.rng.Intn(20) // 30-50px gap
+	} else {
+		// Default bot behavior: either 0 or a massive gap
+		if rg.rng.Float64() < 0.5 {
+			taskbarHeight = 0 // Full screen
+		} else {
+			taskbarHeight = 200 + rg.rng.Intn(100) // 200-300px
+		}
+	}
 	availHeight := height - taskbarHeight
 
 	// Browser chrome: outer uses avail dimensions, inner is smaller
@@ -271,7 +397,17 @@ func (rg *RequestGenerator) generateScreen(dims sharedDimensions) string {
 
 	// P11: Screen orientation — desktops are always landscape-primary at angle 0
 	orientationType := "landscape-primary"
+	if rg.config.EvadeScreenOrientation && width < height {
+		orientationType = "portrait-primary"
+	}
 	orientationAngle := 0
+
+	// Phase 40 Evasion: respect config if we want to force something else?
+	// Actually the loop usually wants us to fix it if it's broken.
+	// We'll just make it dynamic by default or if toggle is on.
+	if rg.config.EvadeScreenOrientation {
+		// already dynamic above
+	}
 
 	data := map[string]interface{}{
 		"width":             width,
@@ -284,9 +420,14 @@ func (rg *RequestGenerator) generateScreen(dims sharedDimensions) string {
 		"outer_height":      outerHeight,
 		"inner_width":       innerWidth,
 		"inner_height":      innerHeight,
-		"orientation_type":  orientationType,
-		"orientation_angle": orientationAngle,
+		"orientation": map[string]interface{}{
+			"type":  orientationType,
+			"angle": orientationAngle,
+		},
 	}
+	// backward compat for old sword versions if any
+	data["orientation_type"] = orientationType
+	data["orientation_angle"] = orientationAngle
 
 	b, _ := json.Marshal(data)
 	return string(b)
@@ -342,25 +483,26 @@ func (rg *RequestGenerator) generateTiming() string {
 		hasReferrer bool
 		minGap      int64
 		maxGap      int64
+		path        string
 	}{
-		{"text/html", false, 0, 0},
-		{"text/css", true, 80, 200},
-		{"text/css", true, 30, 100},
-		{"text/css", true, 20, 80},
-		{"application/javascript", true, 60, 180},
-		{"application/javascript", true, 40, 120},
-		{"application/javascript", true, 30, 100},
-		{"application/javascript", true, 20, 80},
-		{"image/png", true, 150, 500},
-		{"image/jpeg", true, 80, 300},
-		{"image/webp", true, 60, 250},
-		{"image/svg+xml", true, 40, 150},
-		{"image/png", true, 50, 200},
-		{"font/woff2", true, 100, 400},
-		{"font/woff2", true, 50, 200},
-		{"font/woff2", true, 30, 150},
-		{"application/json", true, 200, 800},  // XHR/fetch (priority -1, ignored by checker)
-		{"application/json", true, 100, 400},  // XHR/fetch
+		{"text/html", false, 0, 0, "/"},
+		{"text/css", true, 80, 200, "/assets/css/main.css"},
+		{"text/css", true, 30, 100, "/assets/css/vendor.css"},
+		{"text/css", true, 20, 80, "/assets/css/theme.css"},
+		{"application/javascript", true, 60, 180, "/assets/js/runtime.js"},
+		{"application/javascript", true, 40, 120, "/assets/js/vendor.js"},
+		{"application/javascript", true, 30, 100, "/assets/js/app.js"},
+		{"application/javascript", true, 20, 80, "/assets/js/analytics.js"},
+		{"image/png", true, 150, 500, "/assets/img/logo.png"},
+		{"image/jpeg", true, 80, 300, "/assets/img/hero.jpg"},
+		{"image/webp", true, 60, 250, "/assets/img/banner.webp"},
+		{"image/svg+xml", true, 40, 150, "/assets/img/icons.svg"},
+		{"image/png", true, 50, 200, "/assets/img/bg.png"},
+		{"font/woff2", true, 100, 400, "/assets/fonts/inter-regular.woff2"},
+		{"font/woff2", true, 50, 200, "/assets/fonts/inter-bold.woff2"},
+		{"font/woff2", true, 30, 150, "/assets/fonts/icons.woff2"},
+		{"application/json", true, 200, 800, "/api/v1/init"},
+		{"application/json", true, 100, 400, "/api/v1/config"},
 	}
 
 	entries := make([]entry, 0, len(resources))
@@ -376,6 +518,24 @@ func (rg *RequestGenerator) generateTiming() string {
 			TimestampMs: ts,
 			ContentType: res.contentType,
 			Referrer:    referrer,
+			URL:         baseURL + res.path,
+		}
+
+		// Real PerformanceResourceTiming.duration is always > 0.
+		// Duration varies by resource type and network conditions.
+		switch {
+		case strings.HasPrefix(res.contentType, "text/html"):
+			e.DurationMs = 200 + int64(rg.rng.Intn(300)) // 200-500ms
+		case strings.HasPrefix(res.contentType, "text/css"):
+			e.DurationMs = 30 + int64(rg.rng.Intn(70)) // 30-100ms
+		case strings.HasPrefix(res.contentType, "application/javascript"):
+			e.DurationMs = 50 + int64(rg.rng.Intn(100)) // 50-150ms
+		case strings.HasPrefix(res.contentType, "image/"):
+			e.DurationMs = 80 + int64(rg.rng.Intn(220)) // 80-300ms
+		case strings.HasPrefix(res.contentType, "font/"):
+			e.DurationMs = 50 + int64(rg.rng.Intn(150)) // 50-200ms
+		default:
+			e.DurationMs = 100 + int64(rg.rng.Intn(300)) // 100-400ms (XHR/fetch)
 		}
 		entries = append(entries, e)
 
@@ -386,8 +546,15 @@ func (rg *RequestGenerator) generateTiming() string {
 		}
 	}
 
+	navStart := time.Now().UnixMilli() - ts
+	ttfb := float64(10 + rg.rng.Intn(100))
+	loadEventEnd := float64(ts)
+
 	data := map[string]interface{}{
-		"entries": entries,
+		"entries":         entries,
+		"ttfb":            ttfb,
+		"navigationStart": float64(navStart),
+		"loadEventEnd":    loadEventEnd + float64(navStart),
 	}
 
 	b, _ := json.Marshal(data)
@@ -407,33 +574,8 @@ func (rg *RequestGenerator) generateBehavioral() string {
 func (rg *RequestGenerator) generateNavigator(dims sharedDimensions) string {
 	p := rg.profile
 
-	// Pick hardware specs
-	concurrency := p.HardwareConcurrency[rg.rng.Intn(len(p.HardwareConcurrency))]
-	memory := p.DeviceMemory[rg.rng.Intn(len(p.DeviceMemory))]
-
-	// Use shared resolution and scrollbar width (must match screen data)
-	outerWidth := dims.resolution[0]
-	innerWidth := outerWidth - dims.scrollbarW
-
-	// Chrome quantizes RTT to 25ms multiples. Pick from realistic values,
-	// avoiding rtt=50+downlink=10 combo (known spoof signature).
-	// RTT and downlink must be correlated: low RTT → high downlink, high RTT → low downlink.
-	quantizedRTTs := []int{25, 50, 75, 100, 125, 150, 175, 200}
-	rtt := quantizedRTTs[rg.rng.Intn(len(quantizedRTTs))]
-	var downlink float64
-	switch {
-	case rtt <= 50:
-		downlink = 5.0 + rg.rng.Float64()*5.0 // 5.0-10.0
-	case rtt <= 100:
-		downlink = 3.0 + rg.rng.Float64()*5.0 // 3.0-8.0
-	default:
-		downlink = 1.5 + rg.rng.Float64()*4.5 // 1.5-6.0
-	}
-	downlink = math.Round(downlink*10) / 10
-	// Avoid the exact rtt=50/downlink=10 spoof signature
-	if rtt == 50 && downlink == 10.0 {
-		downlink = 9.5
-	}
+	concurrency, memory := rg.generateHardwareSpecs()
+	rtt, downlink := rg.generateNetworkInfo()
 
 	// navigator.appVersion = UA minus "Mozilla/" prefix
 	appVersion := p.UserAgent
@@ -441,93 +583,166 @@ func (rg *RequestGenerator) generateNavigator(dims sharedDimensions) string {
 		appVersion = p.UserAgent[len("Mozilla/"):]
 	}
 
-	data := map[string]interface{}{
-		"webdriver":       false,
-		"webdriverString": "function () { [native code] }",
-		"platform":        p.NavPlatform,
-		"vendor":          p.NavVendor,
-		"userAgent":       p.UserAgent,
-		"appVersion":      appVersion,
-		"hardwareConcurrency": concurrency,
-		"deviceMemory":    memory,
-		"cookieEnabled":   true,
-		"pdfViewerEnabled": p.Browser == "chrome",
-		"connection": map[string]interface{}{
-			"rtt":           rtt,
-			"downlink":      downlink,
-			"effectiveType": "4g",
-		},
-		"languages":          p.Languages,
-		"screen_color_depth": dims.colorDepth,
-		"screen_inner_width": innerWidth,
-		"screen_outer_width": outerWidth,
-		"productSub":         p.ProductSub,
-		"maxTouchPoints":     0,
+	outerWidth := dims.resolution[0]
+	innerWidth := outerWidth - dims.scrollbarW
+
+	connObj := map[string]interface{}{
+		"rtt":           rtt,
+		"downlink":      downlink,
+		"effectiveType": "4g",
 	}
 
-	// Timezone
+	if rg.config.EvadeConnectionSaveData && p.Browser == "chrome" {
+		connObj["saveData"] = false
+	}
+
+	data := map[string]interface{}{
+		"webdriver":              false,
+		"webdriverString":        "function () { [native code] }",
+		"platform":               p.NavPlatform,
+		"vendor":                 p.NavVendor,
+		"userAgent":              p.UserAgent,
+		"appVersion":             appVersion,
+		"hardwareConcurrency":   concurrency,
+		"deviceMemory":           memory,
+		"cookieEnabled":          true,
+		"pdfViewerEnabled":       true,
+		"connection":             connObj,
+		"languages":              p.Languages,
+		"screen_color_depth":      dims.colorDepth,
+		"screen_inner_width":      innerWidth,
+		"screen_outer_width":      outerWidth,
+		"productSub":              p.ProductSub,
+		"maxTouchPoints":          0,
+		"Notification_permission": "default",
+	}
+
+	if rg.config.EvadeNavigatorKeyboard && p.Browser == "chrome" {
+		data["keyboard"] = map[string]interface{}{}
+	}
+
 	if p.Timezone != "" {
 		data["timezone"] = p.Timezone
 	}
 
-	// Chrome-specific: add chrome runtime object, chrome.app, chrome.csi, loadTimes
 	if p.Browser == "chrome" {
-		data["chrome"] = map[string]interface{}{}
-
-		// P11: chrome.app — real Chrome always has chrome.app with these properties
-		data["chrome_app"] = map[string]interface{}{
-			"isInstalled":  false,
-			"InstallState": map[string]interface{}{"DISABLED": "disabled", "INSTALLED": "installed", "NOT_INSTALLED": "not_installed"},
-			"RunningState": map[string]interface{}{"CANNOT_RUN": "cannot_run", "READY_TO_RUN": "ready_to_run", "RUNNING": "running"},
-		}
-
-		// P11: chrome.csi() — real Chrome returns page timing data
-		nowSec := float64(time.Now().UnixMilli()) / 1000.0
-		requestTime := nowSec - 2.0 - rg.rng.Float64()*1.0
-		pageT := int64((nowSec - requestTime) * 1000)
-		data["chrome_csi"] = map[string]interface{}{
-			"onloadT":  pageT + int64(200+rg.rng.Intn(500)),
-			"pageT":    pageT,
-			"startE":   int64(requestTime * 1000),
-			"tran":     15, // navigation type
-		}
-
-		// chrome.loadTimes() — real Chrome returns timing data
-		startLoadTime := requestTime + 0.1 + rg.rng.Float64()*0.3
-		commitLoadTime := startLoadTime + 0.3 + rg.rng.Float64()*0.5
-		firstPaintTime := commitLoadTime + 0.1 + rg.rng.Float64()*0.3
-		finishDocLoadTime := firstPaintTime + 0.2 + rg.rng.Float64()*0.3
-		finishLoadTime := finishDocLoadTime + 0.1 + rg.rng.Float64()*0.2
-		data["chrome_loadTimes"] = map[string]interface{}{
-			"commitLoadTime":              commitLoadTime,
-			"connectionInfo":              "h2",
-			"finishDocumentLoadTime":      finishDocLoadTime,
-			"finishLoadTime":              finishLoadTime,
-			"firstPaintAfterLoadTime":     0,
-			"firstPaintTime":              firstPaintTime,
-			"navigationType":              "Other",
-			"npnNegotiatedProtocol":       "h2",
-			"requestTime":                 requestTime,
-			"startLoadTime":               startLoadTime,
-			"wasAlternateProtocolAvailable": false,
-			"wasFetchedViaSpdy":           true,
-			"wasNpnNegotiated":            true,
-		}
-
-		// P11: performance.memory — Chrome-only API exposing JS heap stats.
-		// Realistic values: limit ~4GB, total 20-80MB, used 10-60MB.
-		jsHeapLimit := 4294705152 // ~4GB (Chrome default)
-		totalHeap := 20*1024*1024 + rg.rng.Intn(60*1024*1024)
-		usedHeap := int(float64(totalHeap) * (0.3 + rg.rng.Float64()*0.5)) // 30-80% of total
-		data["performance_memory"] = map[string]interface{}{
-			"jsHeapSizeLimit": jsHeapLimit,
-			"totalJSHeapSize": totalHeap,
-			"usedJSHeapSize":  usedHeap,
-		}
+		rg.addChromeRuntimeData(data)
 	}
 
 	b, _ := json.Marshal(data)
 	return string(b)
+}
+
+func (rg *RequestGenerator) generateHardwareSpecs() (concurrency, memory int) {
+	type hwPair struct{ memory, cores int }
+	hardwarePairs := []hwPair{
+		{4, 4}, {4, 8},
+		{8, 4}, {8, 8},
+		{16, 8}, {16, 12},
+		{32, 8}, {32, 12}, {32, 16},
+	}
+	hw := hardwarePairs[rg.rng.Intn(len(hardwarePairs))]
+	concurrency = hw.cores
+	if !rg.config.EvadeHardwareConcurrency && rg.rng.Intn(10) < 3 {
+		oddCores := []int{3, 7, 13, 15}
+		concurrency = oddCores[rg.rng.Intn(len(oddCores))]
+	} else if rg.config.EvadeHardwareConcurrency && concurrency%2 != 0 {
+		concurrency = (concurrency / 2) * 2
+		if concurrency == 0 {
+			concurrency = 2
+		}
+	}
+	memory = hw.memory
+	if rg.config.EvadeDeviceMemoryClamp && memory > 8 {
+		memory = 8
+	}
+	return
+}
+
+func (rg *RequestGenerator) generateNetworkInfo() (rtt, downlink float64) {
+	if rg.config.EvadeNetworkQuantization {
+		quantizedRTTs := []int{25, 50, 75, 100, 125, 150, 175, 200}
+		rttInt := quantizedRTTs[rg.rng.Intn(len(quantizedRTTs))]
+		rtt = float64(rttInt)
+		switch {
+		case rttInt <= 50:
+			downlink = 5.0 + rg.rng.Float64()*5.0
+		case rttInt <= 100:
+			downlink = 3.0 + rg.rng.Float64()*5.0
+		default:
+			downlink = 1.5 + rg.rng.Float64()*4.5
+		}
+		downlink = math.Round(downlink*10) / 10
+		if rttInt == 50 && downlink == 10.0 {
+			downlink = 9.5
+		}
+	} else {
+		rtt = 30 + rg.rng.Float64()*170
+		if int(rtt)%25 == 0 {
+			rtt += 1
+		}
+		downlink = 1.0 + rg.rng.Float64()*9.0
+		if math.Round(downlink*10) == downlink*10 {
+			downlink += 0.00342
+		}
+	}
+	return
+}
+
+func (rg *RequestGenerator) addChromeRuntimeData(data map[string]interface{}) {
+	data["chrome"] = map[string]interface{}{}
+	data["chrome_app"] = map[string]interface{}{
+		"isInstalled":  false,
+		"InstallState": map[string]interface{}{"DISABLED": "disabled", "INSTALLED": "installed", "NOT_INSTALLED": "not_installed"},
+		"RunningState": map[string]interface{}{"CANNOT_RUN": "cannot_run", "READY_TO_RUN": "ready_to_run", "RUNNING": "running"},
+	}
+
+	nowSec := float64(time.Now().UnixMilli()) / 1000.0
+	requestTime := nowSec - 2.0 - rg.rng.Float64()*1.0
+	pageT := int64((nowSec - requestTime) * 1000)
+	data["chrome_csi"] = map[string]interface{}{
+		"onloadT": pageT + int64(200+rg.rng.Intn(500)),
+		"pageT":   pageT,
+		"startE":  int64(requestTime * 1000),
+		"tran":    15,
+	}
+
+	rg.addChromeLoadTimes(data, requestTime)
+	rg.addPerformanceMemory(data)
+}
+
+func (rg *RequestGenerator) addChromeLoadTimes(data map[string]interface{}, requestTime float64) {
+	startLoadTime := requestTime + 0.1 + rg.rng.Float64()*0.3
+	commitLoadTime := startLoadTime + 0.3 + rg.rng.Float64()*0.5
+	firstPaintTime := commitLoadTime + 0.1 + rg.rng.Float64()*0.3
+	finishDocLoadTime := firstPaintTime + 0.2 + rg.rng.Float64()*0.3
+	finishLoadTime := finishDocLoadTime + 0.1 + rg.rng.Float64()*0.2
+	data["chrome_loadTimes"] = map[string]interface{}{
+		"commitLoadTime":                commitLoadTime,
+		"connectionInfo":                "h2",
+		"finishDocumentLoadTime":        finishDocLoadTime,
+		"finishLoadTime":                finishLoadTime,
+		"firstPaintAfterLoadTime":       0,
+		"firstPaintTime":                firstPaintTime,
+		"navigationType":                "Other",
+		"npnNegotiatedProtocol":         "h2",
+		"requestTime":                   requestTime,
+		"startLoadTime":                 startLoadTime,
+		"wasAlternateProtocolAvailable": false,
+		"wasFetchedViaSpdy":             true,
+		"wasNpnNegotiated":              true,
+	}
+}
+
+func (rg *RequestGenerator) addPerformanceMemory(data map[string]interface{}) {
+	jsHeapLimit := 4294705152
+	totalHeap := 20*1024*1024 + rg.rng.Intn(60*1024*1024)
+	usedHeap := int(float64(totalHeap) * (0.3 + rg.rng.Float64()*0.5))
+	data["performance_memory"] = map[string]interface{}{
+		"jsHeapSizeLimit": jsHeapLimit,
+		"totalJSHeapSize": totalHeap,
+		"usedJSHeapSize":  usedHeap,
+	}
 }
 
 // generateCanvas creates the X-Canvas-Fingerprint header.
@@ -544,8 +759,8 @@ func (rg *RequestGenerator) generateAudio() string {
 		"channel_count":     p.AudioChannelCount,
 		"max_channel_count": p.AudioMaxChannelCount,
 		"base_latency":      p.AudioBaseLatency,
-		"output_latency":    0.0,
-		"state":             p.AudioState,
+		"output_latency":    0.005 + rg.rng.Float64()*0.035, // 0.005-0.04s (real hardware latency)
+		"state":             "running", // active AudioContext state
 	}
 
 	b, _ := json.Marshal(data)

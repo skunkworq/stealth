@@ -19,7 +19,7 @@ type WebGLData struct {
 	MaxViewportWidth  int      `json:"max_viewport_width"`
 	MaxViewportHeight int      `json:"max_viewport_height"`
 	Platform          string   `json:"platform"`
-	Extensions        []string `json:"extensions"`
+	Extensions        []string `json:"webgl_extensions"`
 }
 
 // WebGLAnalyzer validates WebGL parameters for consistency and spoofing detection.
@@ -151,7 +151,22 @@ func (wa *WebGLAnalyzer) Analyze(data *WebGLData) *VectorResult {
 		result.Score += weight
 	}
 
-	// Check 7: GPU keywords in masked vendor field (was Check 6)
+	// Check 7: Missing MAX_VIEWPORT_DIMS (Phase 36)
+	// Real GPUs expose maximum viewport dimensions, which are always large (typically equal to MAX_TEXTURE_SIZE).
+	// A missing attribute (0) indicates synthetic generation.
+	if data.MaxViewportWidth == 0 || data.MaxViewportHeight == 0 {
+		weight := 0.30
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "missing_webgl_viewport_dims",
+			Message: "WebGL MAX_VIEWPORT_DIMS is missing (0)",
+			Weight:  weight,
+			Field:   "max_viewport_dims",
+			Value:   fmt.Sprintf("%dx%d", data.MaxViewportWidth, data.MaxViewportHeight),
+		})
+		result.Score += weight
+	}
+
+	// Check 8: GPU keywords in masked vendor field (was Check 6)
 	// Real Chrome's getParameter(gl.VENDOR) returns only "Google Inc." — GPU names
 	// only appear in UNMASKED_VENDOR_WEBGL. Presence of GPU keywords in the masked
 	// vendor is a strong signal of synthetic fingerprints.
@@ -169,27 +184,35 @@ func (wa *WebGLAnalyzer) Analyze(data *WebGLData) *VectorResult {
 
 	// Check 8: Missing or insufficient WebGL extensions
 	// Real browsers report 20-50+ WebGL extensions. A nil/empty list or fewer than
-	// 15 extensions strongly signals synthetic data or a headless environment.
+	// expected extensions strongly signals synthetic data or a headless environment.
 	if len(data.Extensions) == 0 {
 		weight := 0.40
 		result.Indicators = append(result.Indicators, VectorIndicator{
 			Check:   "missing_webgl_extensions",
-			Message: "No WebGL extensions reported (real browsers report 20-50+)",
+			Message: "No WebGL extensions reported (real browsers report 25-50+)",
 			Weight:  weight,
 			Field:   "extensions",
 			Value:   "0",
 		})
 		result.Score += weight
-	} else if len(data.Extensions) < 15 {
-		weight := 0.25
-		result.Indicators = append(result.Indicators, VectorIndicator{
-			Check:   "missing_webgl_extensions",
-			Message: fmt.Sprintf("Too few WebGL extensions: %d (real browsers report 20-50+)", len(data.Extensions)),
-			Weight:  weight,
-			Field:   "extensions",
-			Value:   fmt.Sprintf("%d", len(data.Extensions)),
-		})
-		result.Score += weight
+	} else {
+		// Minimum expected extensions based on platform.
+		// Chrome on Windows typically has >= 30. Mac/Linux >= 27.
+		minExpected := 27
+		if data.Platform == "Win32" {
+			minExpected = 30
+		}
+		if len(data.Extensions) < minExpected {
+			weight := 0.35
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "insufficient_webgl_extensions",
+				Message: fmt.Sprintf("Too few WebGL extensions for %s: %d (expected %d+)", data.Platform, len(data.Extensions), minExpected),
+				Weight:  weight,
+				Field:   "extensions",
+				Value:   fmt.Sprintf("%d", len(data.Extensions)),
+			})
+			result.Score += weight
+		}
 	}
 
 	result.Score = math.Min(1.0, result.Score)

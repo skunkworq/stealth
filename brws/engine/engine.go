@@ -144,6 +144,7 @@ type Options struct {
 	HTTP2   bool
 	HTTP3   bool
 	Timeout time.Duration
+	InsecureSkipVerify bool
 
 	// Stealth options
 	Stealth          bool        // Enable automatic header spoofing

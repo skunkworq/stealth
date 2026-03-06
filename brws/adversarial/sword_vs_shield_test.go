@@ -31,6 +31,13 @@ func TestSwordVsShield(t *testing.T) {
 				detection := detector.AnalyzeRequest(req, nil)
 
 				if detection.IsBot {
+					if i == 0 {
+						for _, vec := range detection.Vectors {
+							for _, ind := range vec.Indicators {
+								fmt.Println("  Caught:", ind)
+							}
+						}
+					}
 					detections++
 				}
 			}

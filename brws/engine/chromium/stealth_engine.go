@@ -229,9 +229,12 @@ func buildStealthAllocatorOptions(opts engine.Options) []chromedp.ExecAllocatorO
 		// Disable password store
 		chromedp.Flag("password-store", "basic"),
 
-		// Disable auto-update
 		chromedp.Flag("disable-update", true),
 		chromedp.Flag("disable-background-updates", true),
+	}
+
+	if opts.InsecureSkipVerify {
+		allocOpts = append(allocOpts, chromedp.Flag("ignore-certificate-errors", true))
 	}
 
 	return allocOpts
@@ -324,8 +327,25 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	}
 
 	// Apply precise isomorphic network headers
+	var extraHeaders map[string]interface{}
 	if s.fingerprint != nil {
-		extraHeaders := BuildNetworkHeaders(s.fingerprint)
+		extraHeaders = BuildNetworkHeaders(s.fingerprint)
+	}
+
+	// Apply Local IP spoofing if enabled
+	if s.config != nil && s.config.SpoofLocalIPs {
+		if extraHeaders == nil {
+			extraHeaders = make(map[string]interface{})
+		}
+		spoofedIP := RandomLocalIP()
+		extraHeaders["X-Forwarded-For"] = spoofedIP
+		extraHeaders["X-Real-IP"] = spoofedIP
+		extraHeaders["X-Client-IP"] = spoofedIP
+		extraHeaders["True-Client-IP"] = spoofedIP
+		extraHeaders["CF-Connecting-IP"] = spoofedIP
+	}
+
+	if extraHeaders != nil {
 		actions = append(actions, network.SetExtraHTTPHeaders(network.Headers(extraHeaders)))
 	}
 
@@ -378,8 +398,8 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	// Navigate
 	actions = append(actions, chromedp.Navigate(req.URL))
 
-	// Wait for body
-	actions = append(actions, chromedp.WaitReady("body"))
+	// Wait for body or pre (JSON endpoints)
+	actions = append(actions, chromedp.WaitReady("body, pre"))
 
 	// Wait for JS to settle
 	if s.stealthOpts.RandomDelays {
@@ -387,8 +407,9 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	}
 
 	// Execute script if requested
+	var scriptResult interface{}
 	if req.ScriptToExecute != "" {
-		actions = append(actions, chromedp.Evaluate(req.ScriptToExecute, nil))
+		actions = append(actions, chromedp.Evaluate(req.ScriptToExecute, &scriptResult))
 	}
 
 	// Get page content
@@ -451,6 +472,12 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	_ = s.hooks.Execute(ctx, instrumentation.HookNames.OnRequestEnd)
 
 	s.logger.Info("request completed", "url", req.URL, "duration_ms", total.Milliseconds(), "body_size", len(body))
+
+	raw := map[string]interface{}{}
+	if scriptResult != nil {
+		raw["script_result"] = scriptResult
+	}
+	trace.Raw = raw
 
 	return &engine.Response{
 		Status:   200,

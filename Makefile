@@ -449,17 +449,73 @@ test-go: ## Run Go tests only
 test-frontend: ## Run frontend tests only
 	@cd lab-ui && npm test -- --run
 
+# golangci-lint configuration
+GOLANGCI_LINT_VERSION := v2.10.1
+GOLANGCI_LINT := $(shell which golangci-lint 2>/dev/null || echo ./bin/golangci-lint)
+
+.PHONY: lint lint-fix lint-ci fmt imports vet install-lint
+
 lint: ## Run all linters (Go + Frontend)
-	@echo "--- Go Lint (non-blocking) ---"
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run ./... || echo "⚠ Go lint issues found (non-blocking)"; \
-	else \
-		echo "Warning: golangci-lint not found, skipping"; \
+	@echo "=========================================="
+	@echo "  Running Go Linters"
+	@echo "=========================================="
+	@echo ""
+	@if [ ! -f "$(GOLANGCI_LINT)" ] && ! command -v golangci-lint >/dev/null 2>&1; then \
+		echo "golangci-lint not found. Installing..."; \
+		$(MAKE) install-lint; \
 	fi
-	@echo "--- Frontend ESLint ---"
+	@echo "Running golangci-lint..."
+	$(GOLANGCI_LINT) run ./...
+	@echo ""
+	@echo "=========================================="
+	@echo "  Running Frontend Linters"
+	@echo "=========================================="
+	@echo ""
 	@cd lab-ui && npx eslint src/ --max-warnings 50
-	@echo "--- TypeScript Typecheck ---"
 	@cd lab-ui && npx tsc --noEmit
+
+lint-fix: ## Run linters and fix issues where possible
+	@echo "Running golangci-lint with auto-fix..."
+	@if [ ! -f "$(GOLANGCI_LINT)" ] && ! command -v golangci-lint >/dev/null 2>&1; then \
+		$(MAKE) install-lint; \
+	fi
+	$(GOLANGCI_LINT) run --fix ./...
+	@echo "Formatting Go code..."
+	$(GOLANGCI_LINT) fmt ./...
+
+lint-ci: ## Run linters for CI (stricter, no fixes)
+	@echo "=========================================="
+	@echo "  CI Lint Checks"
+	@echo "=========================================="
+	@if [ ! -f "$(GOLANGCI_LINT)" ] && ! command -v golangci-lint >/dev/null 2>&1; then \
+		$(MAKE) install-lint; \
+	fi
+	$(GOLANGCI_LINT) run --timeout=10m ./...
+
+install-lint: ## Install golangci-lint to ./bin/
+	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."
+	@./scripts/install-golangci-lint.sh $(GOLANGCI_LINT_VERSION)
+
+fmt: ## Format Go source code
+	@echo "Formatting Go code..."
+	@if [ -f "$(GOLANGCI_LINT)" ] || command -v golangci-lint >/dev/null 2>&1; then \
+		$(GOLANGCI_LINT) fmt ./...; \
+	else \
+		go fmt ./...; \
+	fi
+
+imports: ## Fix Go imports
+	@echo "Fixing Go imports..."
+	@if [ -f "$(GOLANGCI_LINT)" ] || command -v golangci-lint >/dev/null 2>&1; then \
+		$(GOLANGCI_LINT) run --fix --disable-all --enable=gci,goimports ./...; \
+	else \
+		echo "golangci-lint not found. Run 'make install-lint' first."; \
+		exit 1; \
+	fi
+
+vet: ## Run go vet
+	@echo "Running go vet..."
+	go vet ./...
 
 typecheck: ## Run TypeScript type checking
 	@cd lab-ui && npx tsc --noEmit

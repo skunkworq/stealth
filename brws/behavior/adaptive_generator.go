@@ -162,6 +162,13 @@ func (ag *AdaptiveRequestGenerator) registerMutations() {
 	ag.mutations["rtt_downlink_anticorrelated"] = mutateCorrelateRTTDownlink
 	ag.mutations["missing_scroll_events"] = mutateAddScrollEvents
 	ag.mutations["sec_ch_ua_version_mismatch"] = mutateFixVersionMismatch
+	ag.mutations["mouse_interval_no_clustering"] = mutateAddMouseClustering
+	ag.mutations["scroll_delta_no_momentum"] = mutateAddScrollMomentum
+	ag.mutations["no_click_deceleration"] = mutateAddClickDeceleration
+	ag.mutations["fitts_law_violation"] = mutateEvadeFittsLaw
+	ag.mutations["mouse_velocity_lag3_anomaly"] = mutateEvadeMouseVelocityLag3
+	ag.mutations["scroll_delta_interval_independence"] = mutateEvadeScrollSpearman
+	ag.mutations["mouse_density_during_typing"] = mutateEvadeMouseTypingDensity
 
 	// Round 2 checks (legacy indicators)
 	ag.mutations["synthetic_canvas_hash_format"] = mutateCanvasDataURL
@@ -174,6 +181,82 @@ func (ag *AdaptiveRequestGenerator) registerMutations() {
 	ag.mutations["spoofed_network_api_detected"] = mutateFixNetworkAPI
 	ag.mutations["missing_chrome_runtime"] = mutateAddChromeRuntime
 	ag.mutations["missing_webdriver_toString"] = mutateAddWebdriverString
+
+	// IP Based Checks
+	ag.mutations["ip_datacenter"] = mutateSpoofLocalIP
+	ag.mutations["ip_botnet"] = mutateSpoofLocalIP
+	ag.mutations["ip_known_proxy"] = mutateSpoofLocalIP
+
+	// Phase 20/21: PDF viewer and hardware coherence
+	ag.mutations["pdfViewerEnabled_false_modern_browser"] = mutateFixPdfViewer
+	ag.mutations["pdf_viewer_disabled"] = mutateFixPdfViewer
+	ag.mutations["hardware_coherence_improbable"] = mutateFixHardwareCoherence
+	ag.mutations["hardware_coherence_high_ram_low_cores"] = mutateFixHardwareCoherence
+	ag.mutations["hardware_coherence_low_ram_high_cores"] = mutateFixHardwareCoherence
+
+	// Phase 22/23: Timing duration and vendor consistency
+	ag.mutations["timing_all_zero_duration"] = mutateFixTimingDuration
+	ag.mutations["vendor_browser_mismatch"] = mutateFixVendorConsistency
+
+	// Phase 24/25: LoadTimes ordering and audio output latency
+	ag.mutations["chrome_loadtimes_ordering_violation"] = mutateFixLoadTimesOrdering
+	ag.mutations["chrome_loadtimes_ordering"] = mutateFixLoadTimesOrdering
+	ag.mutations["chrome_loadtimes_implausible_duration"] = mutateFixLoadTimesOrdering
+	ag.mutations["missing_chrome_loadTimes"] = mutateFixLoadTimesOrdering
+	ag.mutations["audio_zero_output_latency"] = mutateFixAudioOutputLatency
+
+	// Phase 26/27: CSI/LoadTimes cross-check and timing URLs
+	ag.mutations["csi_loadtimes_timing_mismatch"] = mutateFixCSILoadTimes
+	ag.mutations["timing_all_entries_missing_url"] = mutateFixTimingURLs
+
+	// Phase 28/29: Browser mode detection and evasion
+	ag.mutations["network_effectivetype_rtt_mismatch"] = mutateFixNetworkCoherence
+	ag.mutations["network_effectivetype_downlink_mismatch"] = mutateFixNetworkCoherence
+	ag.mutations["missing_notification_permission"] = mutateFixNotificationPermission
+
+	// Phase 30/31: DPR/resolution plausibility and font/nav platform
+	ag.mutations["screen_dpr_resolution_improbable"] = mutateFixDPRResolution
+	ag.mutations["font_nav_platform_mismatch"] = mutateFixFontPlatform
+
+	// Phase 32: Canvas IDAT Entropy Threshold
+	ag.mutations["canvas_idat_high_entropy"] = mutateFixCanvasEntropy
+	
+	// Phase 33: Click Dwell Time
+	ag.mutations["missing_click_dwell_time"] = mutateEvadeClickDwellTime
+	ag.mutations["instant_click_dwell"] = mutateEvadeClickDwellTime
+	
+	// Phase 34: WebGL Extension Count
+	ag.mutations["insufficient_webgl_extensions"] = mutateFixWebGLCount
+	ag.mutations["missing_webgl_extensions"] = mutateFixWebGLCount
+	
+	// Phase 35: Screen Taskbar Gap
+	ag.mutations["no_taskbar_gap"] = mutateFixScreenHeightGap
+	ag.mutations["suspicious_taskbar_gap"] = mutateFixScreenHeightGap
+
+	// Phase 36: WebGL Viewport
+	ag.mutations["missing_webgl_viewport_dims"] = mutateFixWebGLViewport
+
+	// Phase 37: Mouse Ease-In
+	ag.mutations["mouse_abrupt_start"] = mutateFixMouseEaseIn
+
+	// Phase 38: Improbable Device Memory Limit
+	ag.mutations["improbable_device_memory"] = mutateFixDeviceMemoryClamp
+
+	// Phase 39: Missing Connection SaveData
+	ag.mutations["missing_connection_saveData"] = mutateFixConnectionSaveData
+
+	// Phase 40: Screen Orientation Mismatch
+	ag.mutations["screen_orientation_mismatch"] = mutateFixScreenOrientation
+
+	// Phase 41: Missing Navigator Keyboard
+	ag.mutations["missing_navigator_keyboard"] = mutateFixNavigatorKeyboard
+
+	// Phase 42: Improbable Hardware Concurrency
+	ag.mutations["improbable_hardware_concurrency"] = mutateFixHardwareConcurrency
+
+	// Phase 43: Non-Quantized Network Quality
+	ag.mutations["non_quantized_network_rtt"] = mutateFixNetworkQuantization
+	ag.mutations["non_quantized_network_downlink"] = mutateFixNetworkQuantization
 }
 
 // rebuild reconstructs the base generator from the current config.
@@ -289,12 +372,197 @@ func mutateCorrelateRTTDownlink(ag *AdaptiveRequestGenerator) {
 	ag.rebuild()
 }
 
+func mutateFixPdfViewer(ag *AdaptiveRequestGenerator) {
+	// generateNavigator now always sets pdfViewerEnabled=true; rebuild
+	ag.rebuild()
+}
+
+func mutateFixHardwareCoherence(ag *AdaptiveRequestGenerator) {
+	// generateNavigator now uses correlated hardware pairs; rebuild
+	ag.rebuild()
+}
+
+func mutateFixTimingDuration(ag *AdaptiveRequestGenerator) {
+	// generateTiming now populates realistic duration_ms per resource type; rebuild
+	ag.rebuild()
+}
+
+func mutateFixVendorConsistency(ag *AdaptiveRequestGenerator) {
+	// generateNavigator vendors already match browser profiles; rebuild
+	ag.rebuild()
+}
+
+func mutateFixLoadTimesOrdering(ag *AdaptiveRequestGenerator) {
+	// generateNavigator already produces correctly ordered chrome.loadTimes; rebuild
+	ag.rebuild()
+}
+
+func mutateFixAudioOutputLatency(ag *AdaptiveRequestGenerator) {
+	// generateAudio now produces non-zero output_latency; rebuild
+	ag.rebuild()
+}
+
+func mutateFixCSILoadTimes(ag *AdaptiveRequestGenerator) {
+	// generateNavigator derives csi.startE from loadTimes.requestTime; rebuild
+	ag.rebuild()
+}
+
+func mutateFixTimingURLs(ag *AdaptiveRequestGenerator) {
+	// generateTiming now includes resource URLs in all entries; rebuild
+	ag.rebuild()
+}
+
+func mutateFixNetworkCoherence(ag *AdaptiveRequestGenerator) {
+	// generateNavigator already limits RTT to 4g-compatible range; rebuild
+	ag.rebuild()
+}
+
+func mutateFixNotificationPermission(ag *AdaptiveRequestGenerator) {
+	// generateNavigator now includes Notification_permission="default"; rebuild
+	ag.rebuild()
+}
+
+func mutateFixDPRResolution(ag *AdaptiveRequestGenerator) {
+	// generateScreen now constrains DPR to 1.0 on <1920px displays; rebuild
+	ag.rebuild()
+}
+
+func mutateFixFontPlatform(ag *AdaptiveRequestGenerator) {
+	// Font platform is already consistent with navigator platform via profile; rebuild
+	ag.rebuild()
+}
+
 func mutateAddScrollEvents(ag *AdaptiveRequestGenerator) {
 	// EventGenerator.Generate() now produces scroll events; rebuild
 	ag.rebuild()
 }
 
 func mutateFixVersionMismatch(ag *AdaptiveRequestGenerator) {
+	ag.rebuild()
+}
+
+func mutateSpoofLocalIP(ag *AdaptiveRequestGenerator) {
+	ag.config.SpoofLocalIPs = true
+	ag.rebuild()
+}
+
+func mutateAddMouseClustering(ag *AdaptiveRequestGenerator) {
+	if ag.config.EventConfig == nil {
+		ag.config.EventConfig = DefaultGeneratorConfig()
+	}
+	ag.config.EventConfig.EvadeMouseClustering = true
+	ag.rebuild()
+}
+
+func mutateAddScrollMomentum(ag *AdaptiveRequestGenerator) {
+	if ag.config.EventConfig == nil {
+		ag.config.EventConfig = DefaultGeneratorConfig()
+	}
+	ag.config.EventConfig.EvadeScrollMomentum = true
+	ag.rebuild()
+}
+
+func mutateAddClickDeceleration(ag *AdaptiveRequestGenerator) {
+	if ag.config.EventConfig == nil {
+		ag.config.EventConfig = DefaultGeneratorConfig()
+	}
+	ag.config.EventConfig.EvadeClickDeceleration = true
+	ag.rebuild()
+}
+
+func mutateEvadeFittsLaw(ag *AdaptiveRequestGenerator) {
+	if ag.config.EventConfig == nil {
+		ag.config.EventConfig = DefaultGeneratorConfig()
+	}
+	ag.config.EventConfig.EvadeFittsLaw = true
+	ag.rebuild()
+}
+
+func mutateEvadeMouseVelocityLag3(ag *AdaptiveRequestGenerator) {
+	if ag.config.EventConfig == nil {
+		ag.config.EventConfig = DefaultGeneratorConfig()
+	}
+	ag.config.EventConfig.EvadeMouseVelocityLag3 = true
+	ag.rebuild()
+}
+
+func mutateEvadeScrollSpearman(ag *AdaptiveRequestGenerator) {
+	if ag.config.EventConfig == nil {
+		ag.config.EventConfig = DefaultGeneratorConfig()
+	}
+	ag.config.EventConfig.EvadeScrollSpearman = true
+	ag.rebuild()
+}
+
+func mutateFixCanvasEntropy(ag *AdaptiveRequestGenerator) {
+	// Rebuild and ensure canvas generation uses low entropy pixels.
+	// We'll update generateCanvas to natively produce low entropy, so nothing extra needed here.
+	ag.rebuild()
+}
+
+func mutateEvadeClickDwellTime(ag *AdaptiveRequestGenerator) {
+	ag.config.EventConfig.EvadeClickDwellTime = true
+	ag.rebuild()
+}
+
+func mutateFixWebGLCount(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWebGLCount = true
+	ag.rebuild()
+}
+
+func mutateFixScreenHeightGap(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeScreenHeightGap = true
+	ag.rebuild()
+}
+
+func mutateFixWebGLViewport(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWebGLViewport = true
+	ag.rebuild()
+}
+
+func mutateFixMouseEaseIn(ag *AdaptiveRequestGenerator) {
+	if ag.config.EventConfig == nil {
+		ag.config.EventConfig = DefaultGeneratorConfig()
+	}
+	ag.config.EventConfig.EvadeMouseEaseIn = true
+	ag.rebuild()
+}
+
+func mutateFixDeviceMemoryClamp(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeDeviceMemoryClamp = true
+	ag.rebuild()
+}
+
+func mutateFixConnectionSaveData(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeConnectionSaveData = true
+	ag.rebuild()
+}
+
+func mutateFixScreenOrientation(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeScreenOrientation = true
+	ag.rebuild()
+}
+
+func mutateFixNavigatorKeyboard(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeNavigatorKeyboard = true
+	ag.rebuild()
+}
+
+func mutateFixHardwareConcurrency(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeHardwareConcurrency = true
+	ag.rebuild()
+}
+
+func mutateFixNetworkQuantization(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeNetworkQuantization = true
+	ag.rebuild()
+}
+
+func mutateEvadeMouseTypingDensity(ag *AdaptiveRequestGenerator) {
+	if ag.config.EventConfig == nil {
+		ag.config.EventConfig = DefaultGeneratorConfig()
+	}
+	ag.config.EventConfig.EvadeMouseTypingDensity = true
 	ag.rebuild()
 }
 

@@ -414,13 +414,13 @@ func TestIntervalEntropy(t *testing.T) {
 	ba := NewBehavioralAnalyzer(nil)
 
 	// All identical timestamps → zero entropy
-	entropy := ba.calculateIntervalEntropy([]int64{100, 200, 300, 400})
+	entropy := ba.CalculateIntervalEntropy([]int64{100, 200, 300, 400})
 	if entropy != 0 {
 		t.Errorf("identical intervals should have zero entropy, got %.4f", entropy)
 	}
 
 	// Varied timestamps → positive entropy
-	entropy = ba.calculateIntervalEntropy([]int64{100, 150, 400, 420, 800, 850, 1200, 1800})
+	entropy = ba.CalculateIntervalEntropy([]int64{100, 150, 400, 420, 800, 850, 1200, 1800})
 	if entropy <= 0 {
 		t.Errorf("varied intervals should have positive entropy, got %.4f", entropy)
 	}

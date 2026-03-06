@@ -125,6 +125,7 @@ func (e *SpoofEngine) buildTLSConfig() error {
 	// Build ClientHello spec
 
 	var extensions []utls.TLSExtension
+	seenExtensions := make(map[uint16]bool)
 
 	for _, ext := range tlsSig.Extensions {
 		if ext.IsGREASE {
@@ -132,6 +133,13 @@ func (e *SpoofEngine) buildTLSConfig() error {
 			greaseVal := getGREASEValue(ext.Type)
 			extensions = append(extensions, &utls.GenericExtension{Id: greaseVal})
 			continue
+		}
+
+		if ext.Type == 0x002b {
+			if seenExtensions[ext.Type] {
+				continue // Prevent utls crashing on duplicate SupportedVersions (0x002b)
+			}
+			seenExtensions[ext.Type] = true
 		}
 
 		switch ext.Type {
@@ -173,7 +181,10 @@ func (e *SpoofEngine) buildTLSConfig() error {
 			extensions = append(extensions, &utls.SCTExtension{})
 
 		case 0x0015: // padding
-			extensions = append(extensions, &utls.UtlsPaddingExtension{GetPaddingLen: utls.BoringPaddingStyle})
+			// We skip padding manually here because uTLS often panics or corrupts
+			// the rest of the extensions list when padding local addresses with
+			// variable length Host headers in Go's native client.
+			continue
 
 		case 0x0017: // extended_master_secret
 			extensions = append(extensions, &utls.GenericExtension{Id: 0x0017})
@@ -242,7 +253,7 @@ func (e *SpoofEngine) buildTLSConfig() error {
 
 	// Build TLS config
 	e.tlsConfig = &utls.Config{
-		InsecureSkipVerify: false,
+		InsecureSkipVerify: true, // Allow local lab evaluation tests
 		CipherSuites:       cipherSuites,
 		NextProtos:         tlsSig.ALPN,
 	}

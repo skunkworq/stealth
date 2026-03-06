@@ -262,7 +262,7 @@ func (ct *CaptchaTracer) buildEnhancedEvents(trace *CaptchaTrace) *EnhancedBehav
 		case "mousemove":
 			enhanced.MouseTimestamps = append(enhanced.MouseTimestamps, ev.Timestamp)
 			enhanced.MousePositions = append(enhanced.MousePositions, Position{X: ev.X, Y: ev.Y})
-			enhanced.BehavioralEvents.MouseEvents++
+			enhanced.MouseEvents++
 
 			if !firstMouse && ev.Timestamp > prevTimestamp {
 				dx := ev.X - prevX
@@ -280,12 +280,12 @@ func (ct *CaptchaTracer) buildEnhancedEvents(trace *CaptchaTrace) *EnhancedBehav
 
 		case "keydown", "keypress":
 			enhanced.TypingTimestamps = append(enhanced.TypingTimestamps, ev.Timestamp)
-			enhanced.BehavioralEvents.TypingEvents++
+			enhanced.TypingEvents++
 
 		case "scroll", "wheel":
 			enhanced.ScrollTimestamps = append(enhanced.ScrollTimestamps, ev.Timestamp)
 			enhanced.ScrollDeltas = append(enhanced.ScrollDeltas, ev.Delta)
-			enhanced.BehavioralEvents.ScrollEvents++
+			enhanced.ScrollEvents++
 
 		case "click", "mousedown", "mouseup":
 			enhanced.ClickTimestamps = append(enhanced.ClickTimestamps, ev.Timestamp)

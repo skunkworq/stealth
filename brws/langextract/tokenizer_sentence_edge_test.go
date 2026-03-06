@@ -20,4 +20,3 @@ func TestSentenceBreakAfterNewlineBranching(t *testing.T) {
 		t.Fatalf("expected true for uppercase token after newline")
 	}
 }
-

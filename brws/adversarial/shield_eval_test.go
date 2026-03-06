@@ -736,13 +736,13 @@ func TestIntervalEntropySpectrum(t *testing.T) {
 	ba := NewBehavioralAnalyzer(nil)
 
 	// All identical
-	e0 := ba.calculateIntervalEntropy([]int64{0, 100, 200, 300, 400, 500})
+	e0 := ba.CalculateIntervalEntropy([]int64{0, 100, 200, 300, 400, 500})
 	// Slightly varied
-	e1 := ba.calculateIntervalEntropy([]int64{0, 95, 205, 310, 405, 495})
+	e1 := ba.CalculateIntervalEntropy([]int64{0, 95, 205, 310, 405, 495})
 	// Moderately varied (human-like)
-	e2 := ba.calculateIntervalEntropy([]int64{0, 80, 195, 340, 420, 510, 670, 780, 890, 1020})
+	e2 := ba.CalculateIntervalEntropy([]int64{0, 80, 195, 340, 420, 510, 670, 780, 890, 1020})
 	// Highly varied
-	e3 := ba.calculateIntervalEntropy([]int64{0, 20, 350, 360, 900, 910, 2000, 2005, 3500, 3600})
+	e3 := ba.CalculateIntervalEntropy([]int64{0, 20, 350, 360, 900, 910, 2000, 2005, 3500, 3600})
 
 	fmt.Printf("\nEntropy values (threshold: low<%.1f, high>%.1f):\n",
 		ba.config.MinIntervalEntropy, ba.config.MaxIntervalEntropy)

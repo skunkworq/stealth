@@ -64,14 +64,31 @@ func New(opts engine.Options) (engine.Engine, error) {
 	}
 
 	// Use uTLS for TLS fingerprint spoofing when StealthTLS is enabled
-	// NOTE: TLS spoofing is experimental - may have issues with some servers
 	if opts.StealthTLS {
-		// Use standard TLS for now - TLS spoofing needs more work
-		transport.TLSClientConfig = &tls.Config{
-			//nolint:gosec // InsecureSkipVerify required for stealth TLS testing
-			InsecureSkipVerify: true,
-			NextProtos:         []string{"h2", "http/1.1"},
-			MinVersion:         tls.VersionTLS12,
+		transport.DialTLSContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+			plainConn, err := (&net.Dialer{
+				Timeout:   constants.DefaultTimeout,
+				KeepAlive: constants.KeepAliveTimeout,
+			}).DialContext(ctx, network, addr)
+			if err != nil {
+				return nil, err
+			}
+
+			// Parse ServerName from address string
+			host, _, err := net.SplitHostPort(addr)
+			if err != nil {
+				host = addr
+			}
+
+			config := &utls.Config{ServerName: host, InsecureSkipVerify: true}
+			uconn := utls.UClient(plainConn, config, utls.HelloChrome_Auto)
+			
+			if err := uconn.HandshakeContext(ctx); err != nil {
+				plainConn.Close()
+				return nil, fmt.Errorf("StealthTLS uTLS Handshake failed: %w", err)
+			}
+			
+			return uconn, nil
 		}
 	} else {
 		transport.TLSClientConfig = tlsConfig

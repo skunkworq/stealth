@@ -113,17 +113,33 @@ func (sa *ScreenAnalyzer) Analyze(data *ScreenData) *VectorResult {
 		result.Score += weight
 	}
 
-	// Check 4: No taskbar (avail_height == height means no OS chrome)
-	if data.Height > 0 && data.AvailHeight > 0 && data.AvailHeight == data.Height {
-		weight := 0.25
-		result.Indicators = append(result.Indicators, VectorIndicator{
-			Check:   "no_taskbar",
-			Message: fmt.Sprintf("avail_height (%d) == height (%d) — no OS chrome/taskbar", data.AvailHeight, data.Height),
-			Weight:  weight,
-			Field:   "avail_height",
-			Value:   fmt.Sprintf("%d==%d", data.AvailHeight, data.Height),
-		})
-		result.Score += weight
+	// Check 4: Taskbar/OS Chrome gap (Phase 35)
+	// Real OS always has some chrome (taskbar, menu bar). Mac menu is ~25px,
+	// Windows taskbar is ~40px. A gap of 0 means full screen (rare for regular browsing)
+	// or headless browser. A gap > 150px is also improbable for standard desktops.
+	if data.Height > 0 && data.AvailHeight > 0 {
+		gap := data.Height - data.AvailHeight
+		if gap == 0 {
+			weight := 0.30
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "no_taskbar_gap",
+				Message: fmt.Sprintf("avail_height (%d) == height (%d) — no OS chrome/taskbar", data.AvailHeight, data.Height),
+				Weight:  weight,
+				Field:   "avail_height",
+				Value:   fmt.Sprintf("%d==%d", data.AvailHeight, data.Height),
+			})
+			result.Score += weight
+		} else if gap < 24 || gap > 150 {
+			weight := 0.25
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "suspicious_taskbar_gap",
+				Message: fmt.Sprintf("Improbable taskbar height gap: %dpx (expected 24-150px)", gap),
+				Weight:  weight,
+				Field:   "avail_height_gap",
+				Value:   fmt.Sprintf("%dpx", gap),
+			})
+			result.Score += weight
+		}
 	}
 
 	// Check 5: Non-standard resolution
@@ -176,7 +192,7 @@ func (sa *ScreenAnalyzer) Analyze(data *ScreenData) *VectorResult {
 	if data.OrientationType == "landscape-primary" && data.Width > 0 && data.Height > 0 && data.Width < data.Height {
 		weight := 0.25
 		result.Indicators = append(result.Indicators, VectorIndicator{
-			Check:   "orientation_geometry_mismatch",
+			Check:   "screen_orientation_mismatch",
 			Message: fmt.Sprintf("landscape-primary but width(%d) < height(%d)", data.Width, data.Height),
 			Weight:  weight,
 			Field:   "orientation_type",

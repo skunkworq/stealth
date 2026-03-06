@@ -66,6 +66,9 @@ type StealthConfig struct {
 	VideoSync       bool
 	PermissionsSync bool
 	TimezoneSync    bool
+
+	// Spoof local LAN IPs in HTTP headers
+	SpoofLocalIPs bool
 }
 
 // DefaultStealthConfig returns a default stealth configuration
@@ -75,7 +78,7 @@ func DefaultStealthConfig() *StealthConfig {
 		HardwareConcurrency: 8,
 		Platform:            "Win32",
 		WebGLVendor:         randomGPUVendor(),
-		WebGLRenderer:       randomGPURenderer(),
+		WebGLRenderer:       randomGPURenderer("Win32"),
 		CanvasNoise:         true,
 		CanvasNoiseStrength: 0.5,
 		WebRTC:              DefaultWebRTCConfig(),
@@ -87,6 +90,24 @@ func DefaultStealthConfig() *StealthConfig {
 		Timezone:        "America/New_York",
 		ScreenWidth:     1920,
 		ScreenHeight:    1080,
+		SpoofLocalIPs:   false,
+	}
+}
+
+// RandomLocalIP generates a random local LAN IP address.
+func RandomLocalIP() string {
+	// Pick one of the 3 private IP ranges
+	rangeType := rand.Intn(3)
+	switch rangeType {
+	case 0:
+		// 10.0.0.0/8
+		return fmt.Sprintf("10.%d.%d.%d", rand.Intn(256), rand.Intn(256), rand.Intn(256))
+	case 1:
+		// 172.16.0.0/12
+		return fmt.Sprintf("172.%d.%d.%d", 16+rand.Intn(16), rand.Intn(256), rand.Intn(256))
+	default:
+		// 192.168.0.0/16
+		return fmt.Sprintf("192.168.%d.%d", rand.Intn(256), rand.Intn(256))
 	}
 }
 
@@ -366,10 +387,27 @@ func GenerateStealthScript(config *StealthConfig) string {
         createBuffer: () => ({}),
     };
     
-    // 11. Enhanced Canvas Fingerprint Randomization
-    const rand = (min = 0, max = 1) => Math.random() * (max - min) + min;
+    // 11. Enhanced Canvas Fingerprint Randomization (Deterministic per-session)
+    // Avoid Math.random() directly which triggers "randomized_canvas" detection
+    // Instead use a simple PRNG seeded by the session to ensure multiple 
+    // canvas renders produce identical (but spoofed) hashes.
+    const sessionSeed = %f;
+    let seed = sessionSeed;
+    const random = () => {
+        const x = Math.sin(seed++) * 10000;
+        return x - Math.floor(x);
+    };
+
+    const rand = (min = 0, max = 1) => random() * (max - min) + min;
     const noiseStrength = %f; // 0.0-1.0 configurable strength
     const pixelNoiseRate = 0.03 + (noiseStrength * 0.02); // 3-5%% of pixels
+
+    const staticTextDx = rand(-0.2, 0.2) * noiseStrength;
+    const staticTextDy = rand(-0.2, 0.2) * noiseStrength;
+    const staticDrawDx = rand(-0.3, 0.3) * noiseStrength;
+    const staticDrawDy = rand(-0.3, 0.3) * noiseStrength;
+    const staticGlobalAlpha = rand(0.98, 1.0);
+    const staticShadowBlur = rand(0, 0.5) * noiseStrength;
 
     const realCreateElement = document.createElement.bind(document);
     document.createElement = function(tagName) {
@@ -424,29 +462,27 @@ func GenerateStealthScript(config *StealthConfig) string {
 
                     // Patch fillText with translation noise + subtle letter spacing
                     ctx.fillText = function(text, x, y, ...rest) {
-                        const dx = rand(-0.2, 0.2) * noiseStrength;
-                        const dy = rand(-0.2, 0.2) * noiseStrength;
                         // Subtle letter spacing variance
                         if (text.length > 1) {
-                            ctx.letterSpacing = (rand(-0.1, 0.1) * noiseStrength) + 'px';
+                            ctx.letterSpacing = (0.05 * noiseStrength) + 'px';
                         }
-                        return origFillText(text, x + dx, y + dy, ...rest);
+                        return origFillText(text, x + staticTextDx, y + staticTextDy, ...rest);
                     };
 
                     // Patch strokeText similarly
                     if (origStrokeText) {
                         ctx.strokeText = function(text, x, y, ...rest) {
-                            const dx = rand(-0.2, 0.2) * noiseStrength;
-                            const dy = rand(-0.2, 0.2) * noiseStrength;
-                            return origStrokeText(text, x + dx, y + dy, ...rest);
+                            return origStrokeText(text, x + staticTextDx, y + staticTextDy, ...rest);
                         };
                     }
 
-                    // Patch getImageData to modify pixels (3-5%% across R/G/B, not alpha)
+                    // Patch getImageData to modify pixels deterministically based on coordinates
                     ctx.getImageData = function(sx, sy, sw, sh) {
                         const imageData = origGetImageData(sx, sy, sw, sh);
                         for (let i = 0; i < imageData.data.length; i += 4) {
-                            if (Math.random() < pixelNoiseRate) {
+                            // Deterministic pixel selection based on index and sessionSeed
+                            const pRand = ((Math.sin(i * sessionSeed) * 10000) %% 1 + 1) %% 1;
+                            if (pRand < pixelNoiseRate) {
                                 imageData.data[i] ^= 1;     // Red LSB
                                 imageData.data[i + 1] ^= 1; // Green LSB
                                 imageData.data[i + 2] ^= 1; // Blue LSB
@@ -459,15 +495,13 @@ func GenerateStealthScript(config *StealthConfig) string {
                     // Patch drawImage with slight shift
                     if (origDrawImage) {
                         ctx.drawImage = function(img, sx, sy, ...args) {
-                            const dx = rand(-0.3, 0.3) * noiseStrength;
-                            const dy = rand(-0.3, 0.3) * noiseStrength;
-                            return origDrawImage(img, sx + dx, sy + dy, ...args);
+                            return origDrawImage(img, sx + staticDrawDx, sy + staticDrawDy, ...args);
                         };
                     }
 
                     // Apply rendering property noise
-                    ctx.globalAlpha = rand(0.98, 1.0);
-                    ctx.shadowBlur = rand(0, 0.5) * noiseStrength;
+                    ctx.globalAlpha = staticGlobalAlpha;
+                    ctx.shadowBlur = staticShadowBlur;
 
                     return ctx;
                 }
@@ -702,6 +736,7 @@ func GenerateStealthScript(config *StealthConfig) string {
 		chromeVersion,
 		config.WebGLVendor,
 		config.WebGLRenderer,
+		rand.Float64()*10000.0,    // Canvas session seed
 		canvasNoiseStrength,       // canvas noise strength
 		screenHeight, screenWidth) // headless patches (outerHeight, outerWidth)
 
@@ -966,9 +1001,15 @@ func randomGPUVendor() string {
 	return vendors[rand.Intn(len(vendors))]
 }
 
-func randomGPURenderer() string {
-	renderers := []string{
+func randomGPURenderer(platform string) string {
+	macRenderers := []string{
+		"Apple M2",
+		"Apple M3",
+		"Apple M4",
 		"Intel(R) Iris(R) Xe Graphics",
+	}
+
+	pcRenderers := []string{
 		"Intel(R) UHD Graphics 770",
 		"Intel(R) Arc(TM) A770",
 		"NVIDIA GeForce RTX 3060",
@@ -976,11 +1017,12 @@ func randomGPURenderer() string {
 		"NVIDIA GeForce RTX 4070",
 		"AMD Radeon RX 6700 XT",
 		"AMD Radeon RX 7600",
-		"Apple M2",
-		"Apple M3",
-		"Apple M4",
 	}
-	return renderers[rand.Intn(len(renderers))]
+
+	if platform == "MacIntel" {
+		return macRenderers[rand.Intn(len(macRenderers))]
+	}
+	return pcRenderers[rand.Intn(len(pcRenderers))]
 }
 
 // RandomFloat returns a random float between minVal and maxVal.

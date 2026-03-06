@@ -27,4 +27,3 @@ func TestSetAlignedIntervalsValidationAndOffsets(t *testing.T) {
 		t.Fatalf("expected alignment status to be set")
 	}
 }
-

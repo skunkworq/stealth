@@ -52,7 +52,52 @@ type RequestTimingEntry struct {
 
 // RequestTimingSequence represents a sequence of requests for analysis.
 type RequestTimingSequence struct {
-	Entries []RequestTimingEntry `json:"entries"`
+	Entries         []RequestTimingEntry `json:"entries"`
+	TTFB            float64              `json:"ttfb"`
+	NavigationStart float64              `json:"navigationStart"`
+	LoadEventEnd    float64              `json:"loadEventEnd"`
+}
+
+// NewRequestTimingSequenceFromMap populates RequestTimingSequence from a map.
+func NewRequestTimingSequenceFromMap(timing map[string]interface{}) *RequestTimingSequence {
+	seq := &RequestTimingSequence{}
+
+	if entriesRaw, ok := timing["entries"].([]interface{}); ok {
+		seq.Entries = make([]RequestTimingEntry, 0, len(entriesRaw))
+		for _, e := range entriesRaw {
+			if em, ok := e.(map[string]interface{}); ok {
+				entry := RequestTimingEntry{}
+				if ts, ok := em["timestamp_ms"].(float64); ok {
+					entry.Timestamp = int64(ts)
+				}
+				if url, ok := em["url"].(string); ok {
+					entry.URL = url
+				}
+				if ct, ok := em["content_type"].(string); ok {
+					entry.ContentType = ct
+				}
+				if ref, ok := em["referrer"].(string); ok {
+					entry.Referrer = ref
+				}
+				if dur, ok := em["duration_ms"].(float64); ok {
+					entry.Duration = int64(dur)
+				}
+				seq.Entries = append(seq.Entries, entry)
+			}
+		}
+	}
+
+	if v, ok := timing["ttfb"].(float64); ok {
+		seq.TTFB = v
+	}
+	if v, ok := timing["navigationStart"].(float64); ok {
+		seq.NavigationStart = v
+	}
+	if v, ok := timing["loadEventEnd"].(float64); ok {
+		seq.LoadEventEnd = v
+	}
+
+	return seq
 }
 
 // Analyze runs the full timing analysis suite.
@@ -65,7 +110,25 @@ func (ta *TimingAnalyzer) Analyze(seq *RequestTimingSequence) *VectorResult {
 		Indicators: make([]VectorIndicator, 0),
 	}
 
-	if seq == nil || len(seq.Entries) < 2 {
+	if seq == nil {
+		return result
+	}
+
+	// Legacy checks
+	if seq.TTFB == 0 {
+		result.Indicators = append(result.Indicators, VectorIndicator{Check: "zero_ttfb"})
+		result.Score += 0.4
+	}
+
+	if seq.NavigationStart > 0 && seq.LoadEventEnd > 0 {
+		totalTime := seq.LoadEventEnd - seq.NavigationStart
+		if totalTime < 100 {
+			result.Indicators = append(result.Indicators, VectorIndicator{Check: "too_fast_load"})
+			result.Score += 0.3
+		}
+	}
+
+	if len(seq.Entries) < 2 {
 		return result
 	}
 
