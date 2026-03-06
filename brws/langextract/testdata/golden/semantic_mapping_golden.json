@@ -1,0 +1,67 @@
+{
+  "cases": [
+    {
+      "name": "basic_mapping",
+      "raw": {
+        "document_id": "doc-1",
+        "text": "Alice met Bob.",
+        "document_count": 1,
+        "passes_performed": 1,
+        "model_id": "gpt-4o-mini",
+        "provider": "openai",
+        "metadata": {
+          "format_type": "json"
+        },
+        "extractions": [
+          {
+            "class": "person",
+            "text": "Alice",
+            "description": "human name",
+            "attributes": {
+              "role": "engineer"
+            },
+            "alignment": "match_exact",
+            "extraction_index": 1,
+            "group_index": 0,
+            "char_start": 0,
+            "char_end": 5,
+            "token_start": 0,
+            "token_end": 1
+          }
+        ]
+      },
+      "expected": {
+        "document_id": "doc-1",
+        "text": "Alice met Bob.",
+        "document_count": 1,
+        "passes_performed": 1,
+        "model_id": "gpt-4o-mini",
+        "provider": "openai",
+        "metadata": {
+          "format_type": "json"
+        },
+        "extractions": [
+          {
+            "class": "person",
+            "text": "Alice",
+            "description": "human name",
+            "attributes": {
+              "role": "engineer"
+            },
+            "alignment": "match_exact",
+            "extraction_index": 1,
+            "group_index": 0,
+            "document_id": "doc-1",
+            "span": {
+              "char_start": 0,
+              "char_end": 5,
+              "token_start": 0,
+              "token_end": 1
+            }
+          }
+        ]
+      }
+    }
+  ]
+}
+

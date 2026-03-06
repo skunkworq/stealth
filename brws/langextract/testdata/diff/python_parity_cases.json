@@ -1,0 +1,82 @@
+{
+  "parse_resolve_cases": [
+    {
+      "name": "json_indices_fenced",
+      "format_type": "json",
+      "use_wrapper": true,
+      "wrapper_key": "extractions",
+      "use_fences": true,
+      "strict_fences": false,
+      "allow_top_level_list": true,
+      "attribute_suffix": "_attributes",
+      "index_suffix": "_index",
+      "strict": false,
+      "input": "```json\n{\"extractions\":[{\"person\":\"Alice\",\"person_index\":2,\"role\":\"engineer\",\"role_index\":1}]}\n```"
+    },
+    {
+      "name": "think_list_fallback",
+      "format_type": "json",
+      "use_wrapper": true,
+      "wrapper_key": "extractions",
+      "use_fences": false,
+      "strict_fences": false,
+      "allow_top_level_list": true,
+      "attribute_suffix": "_attributes",
+      "index_suffix": "",
+      "strict": false,
+      "input": "<think>reasoning</think>[{\"person\":\"Bob\"},{\"person\":\"Carol\"}]"
+    },
+    {
+      "name": "same_index_preserves_key_order",
+      "format_type": "json",
+      "use_wrapper": true,
+      "wrapper_key": "extractions",
+      "use_fences": false,
+      "strict_fences": false,
+      "allow_top_level_list": true,
+      "attribute_suffix": "_attributes",
+      "index_suffix": "_index",
+      "strict": false,
+      "input": "{\"extractions\":[{\"medication\":\"Aspirin\",\"medication_index\":1,\"dosage\":\"325mg\",\"dosage_index\":1,\"form\":\"tablet\",\"form_index\":1}]}"
+    }
+  ],
+  "align_cases": [
+    {
+      "name": "exact_two",
+      "source_text": "Patient is prescribed Naprosyn and prednisone.",
+      "enable_fuzzy_alignment": true,
+      "fuzzy_alignment_threshold": 0.75,
+      "accept_match_lesser": true,
+      "extractions": [
+        {
+          "class": "medication",
+          "text": "Naprosyn"
+        },
+        {
+          "class": "medication",
+          "text": "prednisone"
+        }
+      ]
+    },
+    {
+      "name": "lesser_single",
+      "source_text": "Patient is prescribed Naprosyn and high glucose.",
+      "enable_fuzzy_alignment": true,
+      "fuzzy_alignment_threshold": 0.75,
+      "accept_match_lesser": true,
+      "extractions": [
+        {
+          "class": "condition",
+          "text": "high blood pressure"
+        }
+      ]
+    }
+  ],
+  "chunk_cases": [
+    {
+      "name": "sentence_chunks",
+      "text": "Roses are red. Violets are blue. Flowers are nice.",
+      "max_char_buffer": 30
+    }
+  ]
+}

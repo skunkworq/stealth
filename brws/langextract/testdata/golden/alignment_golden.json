@@ -1,0 +1,96 @@
+{
+  "cases": [
+    {
+      "name": "exact_two",
+      "source_text": "Patient is prescribed Naprosyn and prednisone.",
+      "options": {
+        "enable_fuzzy_alignment": true,
+        "fuzzy_alignment_threshold": 0.75,
+        "accept_match_lesser": true
+      },
+      "extractions": [
+        {
+          "class": "medication",
+          "text": "Naprosyn"
+        },
+        {
+          "class": "medication",
+          "text": "prednisone"
+        }
+      ],
+      "expected": [
+        {
+          "class": "medication",
+          "text": "Naprosyn",
+          "alignment": "match_exact",
+          "token_start": 3,
+          "token_end": 4,
+          "char_start": 22,
+          "char_end": 30
+        },
+        {
+          "class": "medication",
+          "text": "prednisone",
+          "alignment": "match_exact",
+          "token_start": 5,
+          "token_end": 6,
+          "char_start": 35,
+          "char_end": 45
+        }
+      ]
+    },
+    {
+      "name": "lesser_single",
+      "source_text": "Patient is prescribed Naprosyn and high glucose.",
+      "options": {
+        "enable_fuzzy_alignment": true,
+        "fuzzy_alignment_threshold": 0.75,
+        "accept_match_lesser": true
+      },
+      "extractions": [
+        {
+          "class": "condition",
+          "text": "high blood pressure"
+        }
+      ],
+      "expected": [
+        {
+          "class": "condition",
+          "text": "high blood pressure",
+          "alignment": "match_lesser",
+          "token_start": 5,
+          "token_end": 6,
+          "char_start": 35,
+          "char_end": 39
+        }
+      ]
+    },
+    {
+      "name": "fuzzy_single",
+      "source_text": "Patient has severe cardiac issues today.",
+      "options": {
+        "enable_fuzzy_alignment": true,
+        "fuzzy_alignment_threshold": 0.5,
+        "accept_match_lesser": false
+      },
+      "extractions": [
+        {
+          "class": "condition",
+          "text": "heart issues"
+        }
+      ],
+      "expected": [
+        {
+          "class": "condition",
+          "text": "heart issues",
+          "alignment": "match_fuzzy",
+          "token_start": 0,
+          "token_end": 5,
+          "char_start": 0,
+          "char_end": 33
+        }
+      ]
+    }
+  ]
+}
+

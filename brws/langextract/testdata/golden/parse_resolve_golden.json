@@ -1,0 +1,192 @@
+{
+  "cases": [
+    {
+      "name": "json_indices_fenced",
+      "handler": {
+        "format_type": "json",
+        "use_wrapper": true,
+        "wrapper_key": "extractions",
+        "use_fences": true,
+        "strict_fences": false,
+        "allow_top_level_list": true,
+        "attribute_suffix": "_attributes"
+      },
+      "resolver": {
+        "index_suffix": "_index",
+        "strict": false
+      },
+      "input": "```json\n{\"extractions\":[{\"person\":\"Alice\",\"person_index\":2,\"role\":\"engineer\",\"role_index\":1}]}\n```",
+      "expected": [
+        {
+          "class": "role",
+          "text": "engineer",
+          "index": 1,
+          "group": 0
+        },
+        {
+          "class": "person",
+          "text": "Alice",
+          "index": 2,
+          "group": 0
+        }
+      ]
+    },
+    {
+      "name": "think_list_fallback",
+      "handler": {
+        "format_type": "json",
+        "use_wrapper": true,
+        "wrapper_key": "extractions",
+        "use_fences": false,
+        "strict_fences": false,
+        "allow_top_level_list": true,
+        "attribute_suffix": "_attributes"
+      },
+      "resolver": {
+        "index_suffix": "",
+        "strict": false
+      },
+      "input": "<think>reasoning</think>[{\"person\":\"Bob\"},{\"person\":\"Carol\"}]",
+      "expected": [
+        {
+          "class": "person",
+          "text": "Bob",
+          "index": 1,
+          "group": 0
+        },
+        {
+          "class": "person",
+          "text": "Carol",
+          "index": 2,
+          "group": 1
+        }
+      ]
+    },
+    {
+      "name": "yaml_attributes_fenced",
+      "handler": {
+        "format_type": "yaml",
+        "use_wrapper": true,
+        "wrapper_key": "extractions",
+        "use_fences": true,
+        "strict_fences": false,
+        "allow_top_level_list": true,
+        "attribute_suffix": "_attributes"
+      },
+      "resolver": {
+        "index_suffix": "",
+        "strict": false
+      },
+      "input": "```yaml\nextractions:\n  - person: Carol\n    person_attributes:\n      title: manager\n```",
+      "expected": [
+        {
+          "class": "person",
+          "text": "Carol",
+          "index": 1,
+          "group": 0,
+          "attributes": {
+            "title": "manager"
+          }
+        }
+      ]
+    },
+    {
+      "name": "strict_fence_missing_error",
+      "handler": {
+        "format_type": "json",
+        "use_wrapper": true,
+        "wrapper_key": "extractions",
+        "use_fences": true,
+        "strict_fences": true,
+        "allow_top_level_list": true,
+        "attribute_suffix": "_attributes"
+      },
+      "resolver": {
+        "index_suffix": "",
+        "strict": false
+      },
+      "input": "{\"extractions\":[{\"person\":\"Alice\"}]}",
+      "expect_error_contains": "fence markers"
+    },
+    {
+      "name": "strict_wrapper_required_error",
+      "handler": {
+        "format_type": "json",
+        "use_wrapper": true,
+        "wrapper_key": "extractions",
+        "use_fences": false,
+        "strict_fences": false,
+        "allow_top_level_list": true,
+        "attribute_suffix": "_attributes"
+      },
+      "resolver": {
+        "index_suffix": "",
+        "strict": true
+      },
+      "input": "[{\"person\":\"Alice\"}]",
+      "expect_error_contains": "must be a mapping"
+    },
+    {
+      "name": "no_wrapper_dict_fallback",
+      "handler": {
+        "format_type": "json",
+        "use_wrapper": false,
+        "wrapper_key": "",
+        "use_fences": false,
+        "strict_fences": false,
+        "allow_top_level_list": true,
+        "attribute_suffix": "_attributes"
+      },
+      "resolver": {
+        "index_suffix": "",
+        "strict": false
+      },
+      "input": "{\"person\":\"Zed\"}",
+      "expected": [
+        {
+          "class": "person",
+          "text": "Zed",
+          "index": 1,
+          "group": 0
+        }
+      ]
+    },
+    {
+      "name": "same_index_preserves_key_order",
+      "handler": {
+        "format_type": "json",
+        "use_wrapper": true,
+        "wrapper_key": "extractions",
+        "use_fences": false,
+        "strict_fences": false,
+        "allow_top_level_list": true,
+        "attribute_suffix": "_attributes"
+      },
+      "resolver": {
+        "index_suffix": "_index",
+        "strict": false
+      },
+      "input": "{\"extractions\":[{\"medication\":\"Aspirin\",\"medication_index\":1,\"dosage\":\"325mg\",\"dosage_index\":1,\"form\":\"tablet\",\"form_index\":1}]}",
+      "expected": [
+        {
+          "class": "medication",
+          "text": "Aspirin",
+          "index": 1,
+          "group": 0
+        },
+        {
+          "class": "dosage",
+          "text": "325mg",
+          "index": 1,
+          "group": 0
+        },
+        {
+          "class": "form",
+          "text": "tablet",
+          "index": 1,
+          "group": 0
+        }
+      ]
+    }
+  ]
+}
