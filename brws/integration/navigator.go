@@ -61,7 +61,7 @@ func NewSemanticNavigator(client *stealth.Client, pipe *pipeline.Pipeline, opts 
 	return n
 }
 
-func (n *SemanticNavigator) NavigateWithIntent(ctx context.Context, url string, intent string) (*NavigationResult, error) {
+func (n *SemanticNavigator) NavigateWithIntent(ctx context.Context, url, intent string) (*NavigationResult, error) {
 	start := time.Now()
 	result := &NavigationResult{
 		URL:          url,
@@ -159,7 +159,7 @@ func (n *SemanticNavigator) GetTree(url string) *semantic.SemanticTree {
 	return nil
 }
 
-func (n *SemanticNavigator) ExtractAndNavigate(ctx context.Context, url string, targetSelector string) (*NavigationResult, error) {
+func (n *SemanticNavigator) ExtractAndNavigate(ctx context.Context, url, targetSelector string) (*NavigationResult, error) {
 	navResult, err := n.NavigateWithIntent(ctx, url, "")
 	if err != nil {
 		return navResult, err

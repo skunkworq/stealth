@@ -83,14 +83,14 @@ func DefaultStealthConfig() *StealthConfig {
 		CanvasNoiseStrength: 0.5,
 		WebRTC:              DefaultWebRTCConfig(),
 		HumanizeMouse:       true,
-		MinDelay:        100 * time.Millisecond,
-		MaxDelay:        500 * time.Millisecond,
-		ChromeVersion:   "134.0.6998.88",
-		PlatformVersion: "10.0.0",
-		Timezone:        "America/New_York",
-		ScreenWidth:     1920,
-		ScreenHeight:    1080,
-		SpoofLocalIPs:   false,
+		MinDelay:            100 * time.Millisecond,
+		MaxDelay:            500 * time.Millisecond,
+		ChromeVersion:       "134.0.6998.88",
+		PlatformVersion:     "10.0.0",
+		Timezone:            "America/New_York",
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		SpoofLocalIPs:       false,
 	}
 }
 
@@ -154,7 +154,7 @@ func GenerateStealthScript(config *StealthConfig) string {
 	if deviceMemory == 0 {
 		deviceMemory = 8
 	}
-	
+
 	concurrency := config.HardwareConcurrency
 	if concurrency == 0 {
 		concurrency = 8
@@ -723,8 +723,8 @@ func GenerateStealthScript(config *StealthConfig) string {
 		screenWidth, screenHeight-40, // minus taskbar
 		screenWidth-80, screenHeight-80, // inner window
 		screenWidth, screenHeight, // outer
-		devicePixelRatio,    // devicePixelRatio
-		screenY, screenY,    // screenY, screenTop (slight offset for realism)
+		devicePixelRatio, // devicePixelRatio
+		screenY, screenY, // screenY, screenTop (slight offset for realism)
 		timezone,
 		getTimezoneOffset(timezone),
 		timezone,
@@ -1034,7 +1034,6 @@ func RandomFloat(minVal, maxVal float64) float64 {
 func bezier(p0, p1, p2, t float64) float64 {
 	return (1-t)*(1-t)*p0 + 2*(1-t)*t*p1 + t*t*p2
 }
-
 
 // Note: rand.Seed is deprecated since Go 1.20.
 // The global random generator is automatically seeded.

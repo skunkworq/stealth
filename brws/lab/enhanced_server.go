@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/net/websocket"
+
 	"github.com/skunkworq/stealth/brws/adversarial"
 	"github.com/skunkworq/stealth/brws/constants"
 	"github.com/skunkworq/stealth/brws/engine/spoof"
@@ -26,7 +28,6 @@ import (
 	"github.com/skunkworq/stealth/brws/sniffer"
 	"github.com/skunkworq/stealth/brws/tlsparser"
 	"github.com/skunkworq/stealth/brws/types"
-	"golang.org/x/net/websocket"
 )
 
 //go:embed static/*
@@ -39,6 +40,7 @@ type EnhancedServer struct {
 	logger          *slog.Logger
 	httpServer      *http.Server
 	httpServerPlain *http.Server
+	serverMu        sync.RWMutex
 
 	// Proxy for intercepting traffic
 	proxy       *proxy.Proxy
@@ -130,47 +132,40 @@ func (s *EnhancedServer) Start() error {
 	}()
 
 	errCh := make(chan error, 2)
+	httpAddr := fmt.Sprintf("%s:%d", s.config.BindAddr, s.config.HTTPPort)
+	httpServerPlain := &http.Server{
+		Addr:         httpAddr,
+		Handler:      mux,
+		ReadTimeout:  constants.DefaultReadTimeout,
+		WriteTimeout: constants.DefaultWriteTimeout,
+	}
+	s.serverMu.Lock()
+	s.httpServerPlain = httpServerPlain
+	s.serverMu.Unlock()
 
 	// Start HTTP server (redirects to HTTPS or serves capture)
-	go func() {
-		addr := fmt.Sprintf("%s:%d", s.config.BindAddr, s.config.HTTPPort)
-		s.logger.Info("Starting HTTP capture server", "addr", addr)
-
-		server := &http.Server{
-			Addr:         addr,
-			Handler:      mux,
-			ReadTimeout:  constants.DefaultReadTimeout,
-			WriteTimeout: constants.DefaultWriteTimeout,
-		}
-		s.httpServerPlain = server
-
+	go func(server *http.Server) {
+		s.logger.Info("Starting HTTP capture server", "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			errCh <- fmt.Errorf("HTTP server error: %w", err)
 		}
-	}()
+	}(httpServerPlain)
 
 	// Start HTTPS server with TLS and raw capture
-	go func() {
-		if s.config.TLSCert == "" || s.config.TLSKey == "" {
-			s.logger.Warn("TLS certificate not configured, HTTPS server disabled")
-			return
-		}
-
-		addr := fmt.Sprintf("%s:%d", s.config.BindAddr, s.config.HTTPSPort)
-		s.logger.Info("Starting HTTPS capture server", "addr", addr)
-
+	if s.config.TLSCert == "" || s.config.TLSKey == "" {
+		s.logger.Warn("TLS certificate not configured, HTTPS server disabled")
+	} else {
+		httpsAddr := fmt.Sprintf("%s:%d", s.config.BindAddr, s.config.HTTPSPort)
 		// Load certificates
 		cert, err := tls.LoadX509KeyPair(s.config.TLSCert, s.config.TLSKey)
 		if err != nil {
-			errCh <- fmt.Errorf("failed to load TLS certificates: %w", err)
-			return
+			return fmt.Errorf("failed to load TLS certificates: %w", err)
 		}
 
 		// Create base listener
-		listener, err := net.Listen("tcp", addr)
+		listener, err := net.Listen("tcp", httpsAddr)
 		if err != nil {
-			errCh <- fmt.Errorf("failed to listen on HTTPS: %w", err)
-			return
+			return fmt.Errorf("failed to listen on HTTPS: %w", err)
 		}
 
 		// Wrap with capturing listener
@@ -194,21 +189,26 @@ func (s *EnhancedServer) Start() error {
 			GetConfigForClient: s.captureClientHello,
 		}
 
-		server := &http.Server{
+		httpsServer := &http.Server{
 			Handler:      mux,
 			TLSConfig:    tlsConfig,
 			ReadTimeout:  constants.DefaultReadTimeout,
 			WriteTimeout: constants.DefaultWriteTimeout,
 		}
-		s.httpServer = server
+		s.serverMu.Lock()
+		s.httpServer = httpsServer
+		s.serverMu.Unlock()
 
 		// Wrap listener with TLS using our config
 		tlsListener := tls.NewListener(capturingListener, tlsConfig)
 
-		if err := server.Serve(tlsListener); err != nil && err != http.ErrServerClosed {
-			errCh <- fmt.Errorf("HTTPS server error: %w", err)
-		}
-	}()
+		go func(server *http.Server, listener net.Listener, addr string) {
+			s.logger.Info("Starting HTTPS capture server", "addr", addr)
+			if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
+				errCh <- fmt.Errorf("HTTPS server error: %w", err)
+			}
+		}(httpsServer, tlsListener, httpsAddr)
+	}
 
 	// Start MITM proxy for intercepting traffic
 	go func() {
@@ -635,9 +635,9 @@ func (s *EnhancedServer) handleTestSignature(w http.ResponseWriter, r *http.Requ
 			if traceData, err := json.MarshalIndent(mlTrace, "", "  "); err == nil {
 				homeDir, _ := os.UserHomeDir()
 				traceDir := filepath.Join(homeDir, ".stealth", "traces")
-				_ = os.MkdirAll(traceDir, 0750)
+				_ = os.MkdirAll(traceDir, 0o750)
 				traceFile := filepath.Join(traceDir, fmt.Sprintf("trace_%s_%d.json", typesFp.ID, time.Now().UnixNano()))
-				_ = os.WriteFile(traceFile, traceData, 0600)
+				_ = os.WriteFile(traceFile, traceData, 0o600)
 				s.logger.Info("Saved ML Evasion Trace", "file", traceFile)
 			}
 		}
@@ -822,12 +822,17 @@ func (s *EnhancedServer) handleModernUI(w http.ResponseWriter, r *http.Request) 
 
 // Stop gracefully shuts down the server
 func (s *EnhancedServer) Stop(ctx context.Context) error {
+	s.serverMu.RLock()
+	httpServer := s.httpServer
+	httpServerPlain := s.httpServerPlain
+	s.serverMu.RUnlock()
+
 	var err1, err2 error
-	if s.httpServer != nil {
-		err1 = s.httpServer.Shutdown(ctx)
+	if httpServer != nil {
+		err1 = httpServer.Shutdown(ctx)
 	}
-	if s.httpServerPlain != nil {
-		err2 = s.httpServerPlain.Shutdown(ctx)
+	if httpServerPlain != nil {
+		err2 = httpServerPlain.Shutdown(ctx)
 	}
 	if err1 != nil {
 		return err1

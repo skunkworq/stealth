@@ -205,12 +205,12 @@ func (cc *CloudflareChallenger) CreateManagedChallenge(sessionID string, detecti
 }
 
 // CreateTurnstileChallenge creates a Turnstile widget challenge with light PoW + behavioral.
-func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteKey string) *CloudflareChallengeSession {
+func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID, siteKey string) *CloudflareChallengeSession {
 	return cc.CreateTurnstileChallengeWithRisk(sessionID, siteKey, 0.30)
 }
 
 // CreateTurnstileChallengeWithRisk creates a Turnstile widget challenge configured for a risk tier.
-func (cc *CloudflareChallenger) CreateTurnstileChallengeWithRisk(sessionID string, siteKey string, detectionScore float64) *CloudflareChallengeSession {
+func (cc *CloudflareChallenger) CreateTurnstileChallengeWithRisk(sessionID, siteKey string, detectionScore float64) *CloudflareChallengeSession {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
@@ -1557,14 +1557,13 @@ func evaluateTurnstileInteraction(session *CloudflareChallengeSession, events []
 		if requiredApproachSettleMs <= 0 {
 			requiredApproachSettleMs = 90
 		}
-		precisionApproachFailed =
-			proof == nil ||
-				proof.ApproachHoverMs < requiredApproachHoverMs ||
-				proof.ApproachMoveCount < requiredApproachMoves ||
-				proof.ApproachSettleMs < requiredApproachSettleMs ||
-				summary.ApproachHoverMs < requiredApproachHoverMs ||
-				summary.ApproachMoveCount < requiredApproachMoves ||
-				summary.ApproachSettleMs < requiredApproachSettleMs
+		precisionApproachFailed = proof == nil ||
+			proof.ApproachHoverMs < requiredApproachHoverMs ||
+			proof.ApproachMoveCount < requiredApproachMoves ||
+			proof.ApproachSettleMs < requiredApproachSettleMs ||
+			summary.ApproachHoverMs < requiredApproachHoverMs ||
+			summary.ApproachMoveCount < requiredApproachMoves ||
+			summary.ApproachSettleMs < requiredApproachSettleMs
 
 		addPenalty(proof == nil || !proof.Completed, 0.18)
 		addPenalty(proof == nil || proof.ApproachHoverMs < requiredApproachHoverMs, 0.10)

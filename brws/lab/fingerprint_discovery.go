@@ -27,12 +27,12 @@ type DiscoveryConfig struct {
 
 // DiscoveryResult holds the result of a single fingerprint capture.
 type DiscoveryResult struct {
-	Profile     BrowserProfile `json:"profile"`
-	TargetURL   string         `json:"target_url"`
-	CaptureID   string         `json:"capture_id"`
-	Timestamp   time.Time      `json:"timestamp"`
-	OutputFile  string         `json:"output_file"`
-	Error       string         `json:"error,omitempty"`
+	Profile    BrowserProfile `json:"profile"`
+	TargetURL  string         `json:"target_url"`
+	CaptureID  string         `json:"capture_id"`
+	Timestamp  time.Time      `json:"timestamp"`
+	OutputFile string         `json:"output_file"`
+	Error      string         `json:"error,omitempty"`
 }
 
 // DefaultDiscoveryConfig returns a default discovery configuration.

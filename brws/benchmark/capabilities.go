@@ -11,36 +11,36 @@ import (
 
 // CapabilityResult represents the result of a single capability test
 type CapabilityResult struct {
-	EngineName   string          `json:"engine_name"`
-	Capability   CapabilityTest  `json:"capability"`
-	Supported    bool            `json:"supported"`
-	Declared     bool            `json:"declared"`
-	TestPassed   bool            `json:"test_passed"`
-	TestDuration time.Duration   `json:"test_duration"`
-	Error        string          `json:"error,omitempty"`
-	Details      map[string]any  `json:"details,omitempty"`
+	EngineName   string         `json:"engine_name"`
+	Capability   CapabilityTest `json:"capability"`
+	Supported    bool           `json:"supported"`
+	Declared     bool           `json:"declared"`
+	TestPassed   bool           `json:"test_passed"`
+	TestDuration time.Duration  `json:"test_duration"`
+	Error        string         `json:"error,omitempty"`
+	Details      map[string]any `json:"details,omitempty"`
 }
 
 // CapabilityReport aggregates all capability tests
 type CapabilityReport struct {
-	Timestamp time.Time           `json:"timestamp"`
-	Results   []CapabilityResult  `json:"results"`
-	Summary   CapabilitySummary   `json:"summary"`
+	Timestamp time.Time          `json:"timestamp"`
+	Results   []CapabilityResult `json:"results"`
+	Summary   CapabilitySummary  `json:"summary"`
 }
 
 // CapabilitySummary provides aggregated capability statistics
 type CapabilitySummary struct {
-	TotalTests     int                       `json:"total_tests"`
-	PassedTests    int                       `json:"passed_tests"`
-	FailedTests    int                       `json:"failed_tests"`
-	ByEngine       map[string]EngineCapStats `json:"by_engine"`
-	ByCapability   map[string]CapStats       `json:"by_capability"`
+	TotalTests   int                       `json:"total_tests"`
+	PassedTests  int                       `json:"passed_tests"`
+	FailedTests  int                       `json:"failed_tests"`
+	ByEngine     map[string]EngineCapStats `json:"by_engine"`
+	ByCapability map[string]CapStats       `json:"by_capability"`
 }
 
 // EngineCapStats stats per engine
 type EngineCapStats struct {
-	TotalTests  int `json:"total_tests"`
-	PassedTests int `json:"passed_tests"`
+	TotalTests  int     `json:"total_tests"`
+	PassedTests int     `json:"passed_tests"`
 	MatchRate   float64 `json:"match_rate"` // How well declared matches actual
 }
 
@@ -197,7 +197,6 @@ func (ce *CapabilityEvaluator) testJavaScript(
 		Timeout:           ce.timeout,
 		ScriptToExecute:   "navigator.userAgent",
 	})
-
 	if err != nil {
 		return false, details, err
 	}
@@ -222,7 +221,6 @@ func (ce *CapabilityEvaluator) testHTTP2(
 		URL:     "https://www.google.com",
 		Timeout: ce.timeout,
 	})
-
 	if err != nil {
 		return false, details, err
 	}
@@ -246,7 +244,6 @@ func (ce *CapabilityEvaluator) testHTTP3(
 		URL:     "https://cloudflare-quic.com",
 		Timeout: ce.timeout,
 	})
-
 	if err != nil {
 		return false, details, err
 	}
@@ -274,7 +271,6 @@ func (ce *CapabilityEvaluator) testWebSocket(
 		WaitForNavigation: true,
 		Timeout:           ce.timeout,
 	})
-
 	if err != nil {
 		return false, details, err
 	}
@@ -324,7 +320,6 @@ func (ce *CapabilityEvaluator) testNetLog(
 		URL:     "https://www.google.com",
 		Timeout: ce.timeout,
 	})
-
 	if err != nil {
 		return false, details, err
 	}
@@ -361,9 +356,9 @@ func isCapabilityDeclared(cap CapabilityTest, caps engine.Capabilities) bool {
 // generateSummary creates summary statistics
 func (ce *CapabilityEvaluator) generateSummary(results []CapabilityResult) CapabilitySummary {
 	summary := CapabilitySummary{
-		TotalTests:     len(results),
-		ByEngine:       make(map[string]EngineCapStats),
-		ByCapability:   make(map[string]CapStats),
+		TotalTests:   len(results),
+		ByEngine:     make(map[string]EngineCapStats),
+		ByCapability: make(map[string]CapStats),
 	}
 
 	for _, r := range results {

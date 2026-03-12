@@ -353,7 +353,6 @@ func randVector(dim int) []float32 {
 }
 
 func main() {
-
 	sizes := []int{1000, 10000, 50000}
 	dim := 384
 	queries := 100

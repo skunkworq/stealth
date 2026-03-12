@@ -38,7 +38,7 @@ func (l *RawCaptureListener) Accept() (net.Conn, error) {
 type rawCaptureConn struct {
 	net.Conn
 
-	onClientHello func(*ClientHello, []byte)
+	onClientHello     func(*ClientHello, []byte)
 	mu                sync.Mutex
 	buffer            []byte
 	parsed            bool
@@ -408,7 +408,7 @@ type HTTP2FrameCapture struct {
 	reader io.Reader
 	writer io.Writer
 
-	OnFrame func(frameType uint8, flags uint8, streamID uint32, payload []byte)
+	OnFrame func(frameType, flags uint8, streamID uint32, payload []byte)
 
 	readBuf  bytes.Buffer
 	writeBuf bytes.Buffer

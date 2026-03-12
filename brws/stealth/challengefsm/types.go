@@ -50,12 +50,12 @@ type SolveResult struct {
 
 // SolveAttemptMetrics records timing and attempt data for a single solve.
 type SolveAttemptMetrics struct {
-	Provider    string
-	StartTime   time.Time
-	Duration    time.Duration
-	Attempts    int
-	FinalState  string
-	Success     bool
+	Provider   string
+	StartTime  time.Time
+	Duration   time.Duration
+	Attempts   int
+	FinalState string
+	Success    bool
 }
 
 // SolverConfig holds configuration shared across solvers.

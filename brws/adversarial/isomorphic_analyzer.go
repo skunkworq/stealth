@@ -116,7 +116,7 @@ func (ia *IsomorphicAnalyzer) checkPlatformGPU(canvasData map[string]interface{}
 	return indicators
 }
 
-func (ia *IsomorphicAnalyzer) checkGPUCoreCoherence(webglData map[string]interface{}, navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (ia *IsomorphicAnalyzer) checkGPUCoreCoherence(webglData, navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if webglData == nil || navData == nil {
 		return indicators
 	}

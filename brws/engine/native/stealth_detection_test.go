@@ -23,7 +23,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 	t.Run("Standard Go Client Detection", func(_ *testing.T) {
 		client := &http.Client{}
 		resp, _ := client.Get(server.URL + "/headers")
-			_ = resp
+		_ = resp
 		if resp != nil {
 			defer func() { _ = resp.Body.Close() }()
 		}
@@ -31,7 +31,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 		lastReq := server.GetLastRequest()
 		if lastReq != nil {
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
-				_ = mockReq
+			_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -53,12 +53,12 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 	// Test 2: Native with Chrome stealth (incomplete - missing TLS)
 	t.Run("Native Stealth Chrome Detection", func(_ *testing.T) {
 		eng, _ := New(engine.Options{
-				Timeout:     30 * time.Second,
-				Stealth:     true,
-				ProfileName: "chrome-120-macos",
-			})
-			_ = eng
+			Timeout:     30 * time.Second,
+			Stealth:     true,
+			ProfileName: "chrome-120-macos",
 		})
+		_ = eng
+	})
 
 	t.Run("Native Stealth Firefox Detection", func(_ *testing.T) {
 		eng, _ := New(engine.Options{
@@ -80,7 +80,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 		lastReq := server.GetLastRequest()
 		if lastReq != nil {
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
-				_ = mockReq
+			_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -110,12 +110,12 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 	// Test 3: Native with Firefox (incomplete - missing Chrome headers)
 	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
 		eng, _ := New(engine.Options{
-				Timeout:     30 * time.Second,
-				Stealth:     true,
-				ProfileName: "chrome-120-macos",
-			})
-			_ = eng
+			Timeout:     30 * time.Second,
+			Stealth:     true,
+			ProfileName: "chrome-120-macos",
 		})
+		_ = eng
+	})
 
 	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
 		eng, _ := New(engine.Options{
@@ -137,7 +137,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 		lastReq := server.GetLastRequest()
 		if lastReq != nil {
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
-				_ = mockReq
+			_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -215,7 +215,7 @@ func TestStealthDetection(t *testing.T) {
 
 	// Create a mock http.Request to analyze
 	mockReq, _ := http.NewRequest("GET", server.URL, nil)
-				_ = mockReq
+	_ = mockReq
 	for k, v := range lastReq.Headers {
 		mockReq.Header.Set(k, v)
 	}
@@ -327,7 +327,7 @@ func TestProfileFingerprintDetection(t *testing.T) {
 			// Analyze with detector
 			detector := adversarial.NewStealthDetector()
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
-				_ = mockReq
+			_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -355,7 +355,7 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 	t.Run("Standard Go Client", func(t *testing.T) {
 		client := &http.Client{}
 		resp, _ := client.Get(server.URL + "/headers")
-			_ = resp
+		_ = resp
 		if resp != nil {
 			defer func() { _ = resp.Body.Close() }()
 		}
@@ -372,12 +372,12 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 	// Test 2: Native with stealth
 	t.Run("Native Stealth", func(t *testing.T) {
 		eng, _ := New(engine.Options{
-				Timeout:     30 * time.Second,
-				Stealth:     true,
-				ProfileName: "chrome-120-macos",
-			})
-			_ = eng
+			Timeout:     30 * time.Second,
+			Stealth:     true,
+			ProfileName: "chrome-120-macos",
 		})
+		_ = eng
+	})
 
 	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
 		eng, _ := New(engine.Options{
@@ -406,7 +406,7 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 			// Analyze
 			detector := adversarial.NewStealthDetector()
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
-				_ = mockReq
+			_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
@@ -420,12 +420,12 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 	// Test 3: Native with Firefox profile
 	t.Run("Native Stealth Firefox", func(t *testing.T) {
 		eng, _ := New(engine.Options{
-				Timeout:     30 * time.Second,
-				Stealth:     true,
-				ProfileName: "chrome-120-macos",
-			})
-			_ = eng
+			Timeout:     30 * time.Second,
+			Stealth:     true,
+			ProfileName: "chrome-120-macos",
 		})
+		_ = eng
+	})
 
 	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
 		eng, _ := New(engine.Options{

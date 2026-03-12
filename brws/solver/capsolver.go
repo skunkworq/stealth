@@ -269,7 +269,7 @@ func (c *CapSolver) GetBalance(ctx context.Context) (float64, error) {
 }
 
 type SolverConfig struct {
-	Provider   string
+	Provider string
 	//nolint:gosec // APIKey field name required for API compatibility
 	APIKey     string
 	AutoSolve  bool

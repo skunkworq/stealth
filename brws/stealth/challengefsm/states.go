@@ -31,15 +31,15 @@ var ChallengeStates = struct {
 
 // ChallengeEvents defines the generic events shared by all challenge solvers.
 var ChallengeEvents = struct {
-	Detect     instrumentation.Event
-	Init       instrumentation.Event
-	Solve      instrumentation.Event
-	Submit     instrumentation.Event
-	Verify     instrumentation.Event
-	Retry      instrumentation.Event
-	Escalate   instrumentation.Event
-	Success    instrumentation.Event
-	Fail       instrumentation.Event
+	Detect   instrumentation.Event
+	Init     instrumentation.Event
+	Solve    instrumentation.Event
+	Submit   instrumentation.Event
+	Verify   instrumentation.Event
+	Retry    instrumentation.Event
+	Escalate instrumentation.Event
+	Success  instrumentation.Event
+	Fail     instrumentation.Event
 }{
 	Detect:   "ch_detect",
 	Init:     "ch_init",
@@ -54,10 +54,10 @@ var ChallengeEvents = struct {
 
 // CloudflareSubStates defines sub-states inside the Solving state for Cloudflare.
 var CloudflareSubStates = struct {
-	SolvingPoW          instrumentation.State
-	GeneratingFP        instrumentation.State
-	GeneratingBehavior  instrumentation.State
-	WaitingHumanDelay   instrumentation.State
+	SolvingPoW         instrumentation.State
+	GeneratingFP       instrumentation.State
+	GeneratingBehavior instrumentation.State
+	WaitingHumanDelay  instrumentation.State
 }{
 	SolvingPoW:         "cf_solving_pow",
 	GeneratingFP:       "cf_generating_fp",
@@ -67,10 +67,10 @@ var CloudflareSubStates = struct {
 
 // CloudflareSubEvents defines events for Cloudflare sub-state transitions.
 var CloudflareSubEvents = struct {
-	PoWSolved        instrumentation.Event
-	FPGenerated      instrumentation.Event
+	PoWSolved         instrumentation.Event
+	FPGenerated       instrumentation.Event
 	BehaviorGenerated instrumentation.Event
-	DelayComplete    instrumentation.Event
+	DelayComplete     instrumentation.Event
 }{
 	PoWSolved:         "cf_pow_solved",
 	FPGenerated:       "cf_fp_generated",
@@ -80,10 +80,10 @@ var CloudflareSubEvents = struct {
 
 // DataDomeSubStates defines sub-states inside the Solving state for DataDome.
 var DataDomeSubStates = struct {
-	SolvingSlider      instrumentation.State
-	GeneratingSignals  instrumentation.State
+	SolvingSlider       instrumentation.State
+	GeneratingSignals   instrumentation.State
 	SolvingInnerCaptcha instrumentation.State
-	SettingCookie      instrumentation.State
+	SettingCookie       instrumentation.State
 }{
 	SolvingSlider:       "dd_solving_slider",
 	GeneratingSignals:   "dd_generating_signals",
@@ -100,8 +100,8 @@ var DataDomeSubEvents = struct {
 }{
 	SliderSolved:     "dd_slider_solved",
 	SignalsGenerated: "dd_signals_generated",
-	InnerSolved:     "dd_inner_solved",
-	CookieSet:       "dd_cookie_set",
+	InnerSolved:      "dd_inner_solved",
+	CookieSet:        "dd_cookie_set",
 }
 
 // NewChallengeFSM creates a base FSM with generic challenge states and transitions.
@@ -209,7 +209,7 @@ func NewCloudflareFSM() *instrumentation.FSM {
 		Name:  "SolvingPoW",
 		TransitionMap: map[instrumentation.Event]instrumentation.State{
 			CloudflareSubEvents.PoWSolved: CloudflareSubStates.GeneratingFP,
-			ChallengeEvents.Fail:         ChallengeStates.Failed,
+			ChallengeEvents.Fail:          ChallengeStates.Failed,
 		},
 	})
 
@@ -263,7 +263,7 @@ func NewDataDomeFSM() *instrumentation.FSM {
 		Name:  "GeneratingSignals",
 		TransitionMap: map[instrumentation.Event]instrumentation.State{
 			DataDomeSubEvents.SignalsGenerated: ChallengeStates.Submitting,
-			ChallengeEvents.Fail:              ChallengeStates.Failed,
+			ChallengeEvents.Fail:               ChallengeStates.Failed,
 		},
 	})
 

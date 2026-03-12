@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+
 	"github.com/skunkworq/stealth/brws/ml/datagen"
 )
 
@@ -256,11 +257,11 @@ func randomStealthConfig(webrtcModes []string) datagen.StealthConfigSnapshot {
 
 func buildEpisode(sessionID, engineName string, config datagen.StealthConfigSnapshot, resp *evaluateResponse, labURL string) *datagen.TrainingEpisode {
 	ep := &datagen.TrainingEpisode{
-		EpisodeID:  uuid.New().String(),
-		Timestamp:  time.Now(),
-		SessionID:  sessionID,
-		TargetURL:  labURL + "/api/ml/evaluate",
-		EngineName: engineName,
+		EpisodeID:     uuid.New().String(),
+		Timestamp:     time.Now(),
+		SessionID:     sessionID,
+		TargetURL:     labURL + "/api/ml/evaluate",
+		EngineName:    engineName,
 		StealthConfig: config,
 		Detection: datagen.DetectionSnapshot{
 			WebdriverExposed:    resp.Anomalies.WebdriverExposed,

@@ -13,6 +13,7 @@ import (
 )
 
 // BenchmarkRunner provides a configurable benchmark execution environment.
+//
 //nolint:revive // Type name stuttering is intentional for clarity
 type BenchmarkRunner struct {
 	Name          string
@@ -24,6 +25,7 @@ type BenchmarkRunner struct {
 }
 
 // BenchmarkResult captures metrics from a single benchmark run.
+//
 //nolint:revive // Type name stuttering is intentional for clarity
 type BenchmarkResult struct {
 	Name         string
@@ -111,16 +113,16 @@ func (r *BenchmarkRunner) Run(b *testing.B, fn func()) {
 
 // Statistics returns statistical analysis of benchmark results
 type Statistics struct {
-	Count     int
-	Min       time.Duration
-	Max       time.Duration
-	Mean      time.Duration
-	Median    time.Duration
-	P95       time.Duration
-	P99       time.Duration
-	StdDev    time.Duration
-	TotalMem  uint64
-	AvgMem    uint64
+	Count    int
+	Min      time.Duration
+	Max      time.Duration
+	Mean     time.Duration
+	Median   time.Duration
+	P95      time.Duration
+	P99      time.Duration
+	StdDev   time.Duration
+	TotalMem uint64
+	AvgMem   uint64
 }
 
 // Analyze computes statistics from benchmark results

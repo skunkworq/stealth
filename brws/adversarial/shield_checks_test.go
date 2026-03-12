@@ -1385,6 +1385,7 @@ func TestP11_FirefoxNoChromAPIs(t *testing.T) {
 		}
 	}
 }
+
 func TestMediaQueryHover(t *testing.T) {
 	detector := NewStealthDetector()
 
@@ -1435,7 +1436,7 @@ func TestMediaQueryHover(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "http://test/", nil)
 			req.Header.Set("User-Agent", tt.ua)
-			
+
 			navJSON, _ := json.Marshal(tt.navData)
 			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
 
@@ -1477,7 +1478,7 @@ func TestGPUCoreCoherence(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "http://test/", nil)
 			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
-			
+
 			navData := map[string]interface{}{
 				"hardwareConcurrency": float64(tt.cores),
 			}
@@ -1491,7 +1492,7 @@ func TestGPUCoreCoherence(t *testing.T) {
 			req.Header.Set(constants.HeaderWebGLData, string(webglBytes))
 
 			detection := sd.AnalyzeRequest(req, nil)
-			
+
 			found := false
 			for _, vec := range detection.Vectors {
 				if vec.Category == "isomorphic" {
@@ -1570,7 +1571,7 @@ func TestPhase51Gaps(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "https://example.com/", nil)
 			req.Header.Set("User-Agent", tt.ua)
-			
+
 			navJSON, _ := json.Marshal(tt.navData)
 			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
 
@@ -1597,6 +1598,7 @@ func TestPhase51Gaps(t *testing.T) {
 		})
 	}
 }
+
 func TestPhase52Gaps(t *testing.T) {
 	detector := NewStealthDetector()
 	detector.config.EnableNavigatorCheck = true
@@ -1619,7 +1621,7 @@ func TestPhase52Gaps(t *testing.T) {
 			name: "Permissions Query Mismatch",
 			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 			navData: map[string]interface{}{
-				"Notification_permission":        "default",
+				"Notification_permission":         "default",
 				"permissions_notifications_state": "denied",
 			},
 			wantDetect: "permissions_query_mismatch",
@@ -1629,7 +1631,7 @@ func TestPhase52Gaps(t *testing.T) {
 			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
 			navData: map[string]interface{}{
 				"gpu_present":                     true,
-				"Notification_permission":        "default",
+				"Notification_permission":         "default",
 				"permissions_notifications_state": "default",
 			},
 			wantDetect: "",
@@ -1640,7 +1642,7 @@ func TestPhase52Gaps(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "https://example.com/", nil)
 			req.Header.Set("User-Agent", tt.ua)
-			
+
 			navJSON, _ := json.Marshal(tt.navData)
 			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
 
@@ -1672,6 +1674,7 @@ func TestPhase52Gaps(t *testing.T) {
 		})
 	}
 }
+
 func TestPhase53Gaps(t *testing.T) {
 	detector := NewStealthDetector()
 	detector.config.EnableNavigatorCheck = true
@@ -1732,12 +1735,12 @@ func TestPhase53Gaps(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "https://example.com/", nil)
-			
+
 			if tt.audioData != nil {
 				audioJSON, _ := json.Marshal(tt.audioData)
 				req.Header.Set(constants.HeaderAudioData, string(audioJSON))
 			}
-			
+
 			if tt.navData != nil {
 				navJSON, _ := json.Marshal(tt.navData)
 				req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
@@ -1759,9 +1762,9 @@ func TestPhase53Gaps(t *testing.T) {
 			if tt.wantDetect == "" {
 				if len(detection.Indicators) > 0 {
 					for _, ind := range detection.Indicators {
-						if strings.Contains(ind.Name, "audio_zero_base_latency") || 
-						   strings.Contains(ind.Name, "missing_audio_base_latency") ||
-						   strings.Contains(ind.Name, "screen_orientation_mismatch") {
+						if strings.Contains(ind.Name, "audio_zero_base_latency") ||
+							strings.Contains(ind.Name, "missing_audio_base_latency") ||
+							strings.Contains(ind.Name, "screen_orientation_mismatch") {
 							t.Errorf("unexpected check fired: %s", ind.Name)
 						}
 					}
@@ -1804,7 +1807,7 @@ func TestPhase54Gaps(t *testing.T) {
 			wantDetect: "low_storage_quota",
 		},
 		{
-			name: "Missing Storage Quota",
+			name:    "Missing Storage Quota",
 			navData: map[string]interface{}{
 				// storage_quota missing
 			},
@@ -1828,7 +1831,7 @@ func TestPhase54Gaps(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "https://example.com/", nil)
-			
+
 			if tt.navData != nil {
 				navJSON, _ := json.Marshal(tt.navData)
 				req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
@@ -1850,9 +1853,9 @@ func TestPhase54Gaps(t *testing.T) {
 			if tt.wantDetect == "" {
 				if len(detection.Indicators) > 0 {
 					for _, ind := range detection.Indicators {
-						if strings.Contains(ind.Name, "suspicious_battery_status") || 
-						   strings.Contains(ind.Name, "low_storage_quota") ||
-						   strings.Contains(ind.Name, "missing_storage_quota") {
+						if strings.Contains(ind.Name, "suspicious_battery_status") ||
+							strings.Contains(ind.Name, "low_storage_quota") ||
+							strings.Contains(ind.Name, "missing_storage_quota") {
 							t.Errorf("unexpected check fired: %s", ind.Name)
 						}
 					}
@@ -1929,7 +1932,7 @@ func TestPhase55Gaps(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "https://example.com/", nil)
-			
+
 			navJSON, _ := json.Marshal(tt.navData)
 			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
 
@@ -1947,9 +1950,9 @@ func TestPhase55Gaps(t *testing.T) {
 			if tt.wantDetect == "" {
 				if len(detection.Indicators) > 0 {
 					for _, ind := range detection.Indicators {
-						if strings.Contains(ind.Name, "empty_media_devices") || 
-						   strings.Contains(ind.Name, "suspicious_media_device_id") ||
-						   strings.Contains(ind.Name, "non_standard_media_device_id_format") {
+						if strings.Contains(ind.Name, "empty_media_devices") ||
+							strings.Contains(ind.Name, "suspicious_media_device_id") ||
+							strings.Contains(ind.Name, "non_standard_media_device_id_format") {
 							t.Errorf("unexpected check fired: %s", ind.Name)
 						}
 					}
@@ -2021,7 +2024,7 @@ func TestPhase56Gaps(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			req, _ := http.NewRequest("GET", "https://example.com/", nil)
 			req.Header.Set("User-Agent", tt.ua)
-			
+
 			navJSON, _ := json.Marshal(tt.navData)
 			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
 
@@ -2039,9 +2042,9 @@ func TestPhase56Gaps(t *testing.T) {
 			if tt.wantDetect == "" {
 				if len(detection.Indicators) > 0 {
 					for _, ind := range detection.Indicators {
-						if strings.Contains(ind.Name, "missing_webrtc") || 
-						   strings.Contains(ind.Name, "empty_ice_candidates") ||
-						   strings.Contains(ind.Name, "suspicious_ice_format") {
+						if strings.Contains(ind.Name, "missing_webrtc") ||
+							strings.Contains(ind.Name, "empty_ice_candidates") ||
+							strings.Contains(ind.Name, "suspicious_ice_format") {
 							t.Errorf("unexpected check fired: %s", ind.Name)
 						}
 					}
@@ -2068,13 +2071,13 @@ func TestPhase57Gaps(t *testing.T) {
 		idatData := idatBuf.Bytes()
 
 		png := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
-		
+
 		// IHDR: 13 bytes data + 4 bytes "IHDR"
 		png = append(png, 0x00, 0x00, 0x00, 0x0D) // IHDR length
 		png = append(png, 0x49, 0x48, 0x44, 0x52)
 		png = append(png, 0x00, 0x00, 0x01, 0x2C, 0x00, 0x00, 0x00, 0xC8, 0x08, 0x06, 0x00, 0x00, 0x00)
 		png = append(png, 0x00, 0x00, 0x00, 0x00) // CRC dummy
-		
+
 		// IDAT: len(idatData) data + 4 bytes "IDAT"
 		size := uint32(len(idatData))
 		png = append(png, byte(size>>24), byte(size>>16), byte(size>>8), byte(size))
@@ -2162,8 +2165,8 @@ func TestPhase57Gaps(t *testing.T) {
 			if tt.wantDetect == "" {
 				if len(detection.Indicators) > 0 {
 					for _, ind := range detection.Indicators {
-						if strings.Contains(ind.Name, "canvas_idat_high_entropy") || 
-						   strings.Contains(ind.Name, "canvas_spatial_inconsistency") {
+						if strings.Contains(ind.Name, "canvas_idat_high_entropy") ||
+							strings.Contains(ind.Name, "canvas_spatial_inconsistency") {
 							t.Errorf("unexpected check fired: %s", ind.Name)
 						}
 					}

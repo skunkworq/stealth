@@ -22,13 +22,13 @@ func TestPhase55AdaptiveLoop(t *testing.T) {
 	var mediaFound bool
 	for i := 0; i < 100; i++ {
 		hReq := ag.GenerateRequest("https://example.com/")
-		
+
 		detection := detector.AnalyzeRequest(hReq, nil)
 		foundThisRound := false
 		for _, vec := range detection.Vectors {
 			for _, ind := range vec.Indicators {
-				if strings.Contains(ind, "empty_media_devices") || 
-				   strings.Contains(ind, "suspicious_media_device_id") {
+				if strings.Contains(ind, "empty_media_devices") ||
+					strings.Contains(ind, "suspicious_media_device_id") {
 					mediaFound = true
 					foundThisRound = true
 				}
@@ -48,12 +48,12 @@ func TestPhase55AdaptiveLoop(t *testing.T) {
 
 	// 3. Final Verification: Generate and Verify Evasion
 	hReq2 := ag.GenerateRequest("https://example.com/")
-	
+
 	// Check Navigator Data
 	navJSON := hReq2.Header.Get(constants.HeaderNavigatorData)
 	var navData map[string]interface{}
 	json.Unmarshal([]byte(navJSON), &navData)
-	
+
 	devices, ok := navData["media_devices"].([]interface{})
 	if !ok || len(devices) == 0 {
 		t.Errorf("Round 2 still has empty or missing media devices after mutation")
@@ -62,9 +62,9 @@ func TestPhase55AdaptiveLoop(t *testing.T) {
 	// 4. Final verification via Detector
 	detection2 := detector.AnalyzeRequest(hReq2, nil)
 	for _, ind := range detection2.Indicators {
-		if strings.Contains(ind.Name, "empty_media_devices") || 
-		   strings.Contains(ind.Name, "suspicious_media_device_id") ||
-		   strings.Contains(ind.Name, "non_standard_media_device_id_format") {
+		if strings.Contains(ind.Name, "empty_media_devices") ||
+			strings.Contains(ind.Name, "suspicious_media_device_id") ||
+			strings.Contains(ind.Name, "non_standard_media_device_id_format") {
 			t.Errorf("Round 2 still flagged with indicator: %s", ind.Name)
 		}
 	}

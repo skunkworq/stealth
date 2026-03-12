@@ -20,7 +20,7 @@ func TestPhase61Integration(t *testing.T) {
 
 	// 2. Round 1: Verification of AudioWorklet and maxChannelCount
 	hReq := ag.GenerateRequest("https://example.com/")
-	
+
 	// Check Navigator Data for audio_worklet_available
 	navJSON := hReq.Header.Get(constants.HeaderNavigatorData)
 	var navData map[string]interface{}
@@ -48,7 +48,7 @@ func TestPhase61Integration(t *testing.T) {
 	detection := detector.AnalyzeRequest(hReq, nil)
 	for _, ind := range detection.Indicators {
 		if strings.Contains(ind.Name, "missing_audio_worklet") ||
-		   strings.Contains(ind.Name, "audio_max_channel_count_anomaly") {
+			strings.Contains(ind.Name, "audio_max_channel_count_anomaly") {
 			t.Errorf("Shield flagged with Phase 61 gap: %s", ind.Name)
 		}
 	}
@@ -65,13 +65,13 @@ func TestPhase61Integration(t *testing.T) {
 			},
 		},
 	})
-	
+
 	ag.ApplyFeedback(report)
-	
+
 	// Re-verify after feedback
 	hReq2 := ag.GenerateRequest("https://example.com/")
 	detection2 := detector.AnalyzeRequest(hReq2, nil)
-	
+
 	for _, ind := range detection2.Indicators {
 		if strings.Contains(ind.Name, "missing_audio_worklet") {
 			t.Errorf("Shield still flagged with missing audio worklet after feedback: %s", ind.Name)

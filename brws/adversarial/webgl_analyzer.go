@@ -9,20 +9,20 @@ import (
 
 // WebGLData holds WebGL fingerprinting data for analysis.
 type WebGLData struct {
-	Vendor            string   `json:"vendor"`
-	Renderer          string   `json:"renderer"`
-	UnmaskedVendor    string   `json:"unmasked_vendor"`
-	UnmaskedRenderer  string   `json:"unmasked_renderer"`
-	Version           string   `json:"version"`
-	ShadingVersion    string   `json:"shading_version"`
-	WebGL2Supported   bool     `json:"webgl2_supported"`
-	MaxTextureSize    int      `json:"max_texture_size"`
-	MaxViewportWidth  int      `json:"max_viewport_width"`
-	MaxViewportHeight int      `json:"max_viewport_height"`
-	Platform          string                            `json:"platform"`
-	Extensions        []string                          `json:"webgl_extensions"`
+	Vendor            string                           `json:"vendor"`
+	Renderer          string                           `json:"renderer"`
+	UnmaskedVendor    string                           `json:"unmasked_vendor"`
+	UnmaskedRenderer  string                           `json:"unmasked_renderer"`
+	Version           string                           `json:"version"`
+	ShadingVersion    string                           `json:"shading_version"`
+	WebGL2Supported   bool                             `json:"webgl2_supported"`
+	MaxTextureSize    int                              `json:"max_texture_size"`
+	MaxViewportWidth  int                              `json:"max_viewport_width"`
+	MaxViewportHeight int                              `json:"max_viewport_height"`
+	Platform          string                           `json:"platform"`
+	Extensions        []string                         `json:"webgl_extensions"`
 	ShaderPrecision   map[string]ShaderPrecisionFormat `json:"shader_precision"`
-	ContextAttributes map[string]interface{}            `json:"context_attributes"`
+	ContextAttributes map[string]interface{}           `json:"context_attributes"`
 }
 
 // ShaderPrecisionFormat matches the WebGLShaderPrecisionFormat interface.
@@ -378,7 +378,7 @@ func (wa *WebGLAnalyzer) detectGPUKeywordsInMaskedVendor(vendor string) float64 
 		"Apple",
 		"Intel Inc.",
 		"Intel",
-		"Brian Paul",   // Mesa software
+		"Brian Paul", // Mesa software
 		"Mesa",
 	}
 	for _, clean := range cleanVendors {
@@ -463,6 +463,7 @@ func (wa *WebGLAnalyzer) validateWebGLParameters(data *WebGLData) float64 {
 
 	return 0
 }
+
 func (wa *WebGLAnalyzer) checkDraftExtensions(extensions []string) float64 {
 	if len(extensions) == 0 {
 		return 0
@@ -495,6 +496,7 @@ func (wa *WebGLAnalyzer) checkDraftExtensions(extensions []string) float64 {
 
 	return 0
 }
+
 func (wa *WebGLAnalyzer) validateShaderPrecision(data *WebGLData) float64 {
 	if data.ShaderPrecision == nil || len(data.ShaderPrecision) == 0 {
 		// If missing entirely, could be an old telemetry format or a simplified spoofer
@@ -531,7 +533,7 @@ func (wa *WebGLAnalyzer) validateShaderPrecision(data *WebGLData) float64 {
 		vals = append(vals, fmt.Sprintf("%s:%d,%d,%d", k, v.RangeMin, v.RangeMax, v.Precision))
 	}
 	sort.Strings(vals)
-	
+
 	// If it's a very short list (fewer than 6 - Low/Med/High for Vert/Frag), it's likely synthetic.
 	if len(data.ShaderPrecision) < 6 {
 		return 1.0
@@ -574,8 +576,8 @@ func (wa *WebGLAnalyzer) checkWebGLContextAttributes(data *WebGLData) float64 {
 	// desynchronized is a modern performance attribute, missing or false is okay but
 	// if it exists and is true on a very old reported renderer, it's a mismatch.
 	if desync, ok := attrs["desynchronized"].(bool); ok && desync {
-		if strings.Contains(strings.ToLower(data.Renderer), "gtx 6") || 
-		   strings.Contains(strings.ToLower(data.Renderer), "radeon hd") {
+		if strings.Contains(strings.ToLower(data.Renderer), "gtx 6") ||
+			strings.Contains(strings.ToLower(data.Renderer), "radeon hd") {
 			score += 0.5
 		}
 	}

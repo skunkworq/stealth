@@ -138,12 +138,12 @@ type Constructor func(opts Options) (Engine, error)
 // Options for creating an engine.
 type Options struct {
 	// General options
-	Proxy   string
-	DNS     string
-	IPv6    bool
-	HTTP2   bool
-	HTTP3   bool
-	Timeout time.Duration
+	Proxy              string
+	DNS                string
+	IPv6               bool
+	HTTP2              bool
+	HTTP3              bool
+	Timeout            time.Duration
 	InsecureSkipVerify bool
 
 	// Stealth options

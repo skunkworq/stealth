@@ -1,0 +1,315 @@
+# golangci-lint v2.10+ Configuration
+# https://golangci-lint.run/usage/configuration/
+
+version: "2"
+
+run:
+  timeout: 10m
+  concurrency: 4
+  issues-exit-code: 1
+  tests: true
+  build-tags:
+    - integration
+  skip-dirs:
+    - "docs/"
+    - ".venv/"
+    - "node_modules/"
+    - "lab-ui/"
+  skip-files:
+    - '.*_test\.go'
+    - 'mock_.*\.go'
+    - 'generated.*\.go'
+
+output:
+  formats:
+    text:
+      path: stdout
+      colors: true
+      print-issued-lines: true
+      print-linter-name: true
+
+linters:
+  default: none
+  
+  enable:
+    # Core linters
+    - errcheck       # Unchecked errors
+    - govet          # Go vet analysis
+    - ineffassign    # Ineffective assignments
+    - staticcheck    # Static analysis
+    - unused         # Unused code
+    
+    # Code quality
+    - cyclop         # Cyclomatic complexity
+    - dupl           # Code duplication
+    - funlen         # Function length
+    - gocognit       # Cognitive complexity
+    - gocyclo        # Cyclomatic complexity
+    - maintidx       # Maintainability index
+    - nestif         # Nested if statements
+    
+    # Style and formatting
+    - nlreturn       # Newline before return
+    - wsl_v5         # Whitespace (v5)
+    
+    # Best practices
+    - containedctx   # Context in structs
+    - contextcheck   # Context propagation
+    - errchkjson     # JSON error checking
+    - errorlint      # Error wrapping
+    - exhaustive     # Exhaustive switch
+    - exhaustruct    # Exhaustive struct init
+    - forcetypeassert # Type assertions
+    - gochecknoglobals # Global variables
+    - goconst        # Constants for repeated strings
+    - gocritic       # Opinionated checks
+    - godot          # Punctuation in comments
+    - gosec          # Security issues
+    - ireturn        # Return interfaces
+    - loggercheck    # Logging key-value pairs
+    - mirror         # Incorrect mirror usage
+    - musttag        # Struct tags
+    - noctx          # HTTP requests without context
+    - nolintlint     # nolint directives
+    - perfsprint     # Performance sprint variants
+    - prealloc       # Preallocation hints
+    - predeclared    # Predeclared identifiers
+    - promlinter     # Prometheus metrics
+    - reassign       # Reassigning variables
+    - revive         # Fast configurable linter
+    - rowserrcheck   # SQL rows error check
+    - sloglint       # slog usage
+    - sqlclosecheck  # SQL close check
+    - usetesting     # Testing best practices (replaces tenv)
+    - testableexamples # Runnable examples
+    - testifylint    # Testify usage
+    - thelper        # Test helpers
+    - tparallel      # Parallel tests
+    - unconvert      # Unnecessary conversions
+    - unparam        # Unused parameters
+    - usestdlibvars  # Standard library variables
+    - wastedassign   # Wasted assignments
+    - whitespace     # Trailing whitespace
+
+  settings:
+    # Complexity settings
+    cyclop:
+      max-complexity: 15
+      package-average: 10
+      skip-tests: true
+    
+    gocognit:
+      min-complexity: 20
+    
+    gocyclo:
+      min-complexity: 15
+    
+    funlen:
+      lines: 80
+      statements: 50
+      ignore-comments: true
+    
+    nestif:
+      min-complexity: 5
+    
+    maintidx:
+      under: 20
+    
+    # Duplication
+    dupl:
+      threshold: 100
+    
+    # Cognitive complexity
+    gocritic:
+      enable-all: true
+      disabled-checks:
+        - whyNoLint
+      settings:
+        captLocal:
+          paramsOnly: true
+        elseif:
+          skipBalanced: true
+        rangeValCopy:
+          sizeThreshold: 128
+    
+    # Error handling
+    errorlint:
+      errorf: true
+      errorf-multi: true
+      asserts: true
+      comparison: true
+      allowed-errors:
+        - err: "io.EOF"
+          fun: "example.com/pkg.Read"
+    
+    # Security
+    gosec:
+      severity: medium
+      confidence: medium
+      excludes:
+        - G104  # Audit errors not checked
+        - G307  # Deferring a method which returns an error
+    
+    # Style
+    revive:
+      severity: warning
+      confidence: 0.8
+      enable-all-rules: false
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+        - name: if-return
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: struct-tag
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unnecessary-stmt
+        - name: unused-parameter
+        - name: unused-receiver
+        - name: var-declaration
+        - name: var-naming
+    
+    # Comments
+    godot:
+      scope: declarations
+      capital: true
+      period: true
+    
+    # Global variables
+    gochecknoglobals:
+      allow-composites: true
+    
+    # Constants
+    goconst:
+      min-len: 3
+      min-occurrences: 3
+    
+    # Interface returns
+    ireturn:
+      allow:
+        - anon
+        - error
+        - empty
+        - stdlib
+        - generic
+    
+    # Struct initialization
+    exhaustruct:
+      include:
+        - '.*\.Config$'
+        - '.*\.Options$'
+    
+    # nolint comments
+    nolintlint:
+      allow-unused: false
+      allow-no-explanation:
+        - errcheck
+        - misspell
+      require-explanation: true
+      require-specific: true
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Exclude shadow checking in test files
+      - linters:
+          - govet
+        text: "shadow"
+        path: _test\.go
+      
+      # Exclude some linters from test files
+      - linters:
+          - cyclop
+          - dupl
+          - errcheck
+          - exhaustruct
+          - funlen
+          - gocognit
+          - gocyclo
+          - gosec
+          - maintidx
+        path: _test\.go
+      
+      # Exclude known linter issues
+      - linters:
+          - staticcheck
+        text: "SA9003:"
+      
+      # Exclude shadow checking in generated files
+      - linters:
+          - govet
+        text: "shadow"
+        path: generated.*\.go
+      
+      # Exclude function length in migration files
+      - linters:
+          - funlen
+        path: "brws/.*/migrations/.*"
+      
+      # Exclude complexity in main packages
+      - linters:
+          - cyclop
+          - gocyclo
+          - gocognit
+        path: "cmd/.*"
+      
+      # Exclude unused parameters in interface implementations
+      - linters:
+          - unparam
+          - unused
+        text: '\S+ always receives'
+      
+      # Known issues with specific patterns
+      - linters:
+          - gosec
+        text: "G(104|307)"
+      
+      # Exclude linter issues in doc.go files
+      - linters:
+          - lll
+        path: 'doc\.go'
+
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/skunkworq/stealth)
+      custom-order: true
+    
+    gofumpt:
+      extra-rules: true
+  
+  exclusions:
+    generated: lax
+    paths:
+      - "docs/"
+      - ".venv/"
+      - "node_modules/"
+      - "lab-ui/"

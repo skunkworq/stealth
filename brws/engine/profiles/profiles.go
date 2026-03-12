@@ -1,4 +1,5 @@
 // Package profiles provides configurable browser fingerprint profiles
+//
 //nolint:gosec // G404: math/rand used intentionally for non-cryptographic profile selection/mutation
 package profiles
 

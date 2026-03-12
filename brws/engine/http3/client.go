@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/quic-go/quic-go"
+
 	"github.com/skunkworq/stealth/brws/constants"
 )
 

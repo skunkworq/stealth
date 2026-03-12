@@ -453,7 +453,7 @@ test-frontend: ## Run frontend tests only
 GOLANGCI_LINT_VERSION := v2.10.1
 GOLANGCI_LINT := $(shell which golangci-lint 2>/dev/null || echo ./bin/golangci-lint)
 
-.PHONY: lint lint-fix lint-ci fmt imports vet install-lint
+.PHONY: lint lint-fix lint-ci lint-strict fmt imports vet install-lint
 
 lint: ## Run all linters (Go + Frontend)
 	@echo "=========================================="
@@ -491,6 +491,15 @@ lint-ci: ## Run linters for CI (stricter, no fixes)
 		$(MAKE) install-lint; \
 	fi
 	$(GOLANGCI_LINT) run --timeout=10m ./...
+
+lint-strict: ## Run the preserved strict Go lint profile
+	@echo "=========================================="
+	@echo "  Strict Go Lint Checks"
+	@echo "=========================================="
+	@if [ ! -f "$(GOLANGCI_LINT)" ] && ! command -v golangci-lint >/dev/null 2>&1; then \
+		$(MAKE) install-lint; \
+	fi
+	$(GOLANGCI_LINT) run --config .golangci.strict.yml --timeout=10m ./...
 
 install-lint: ## Install golangci-lint to ./bin/
 	@echo "Installing golangci-lint $(GOLANGCI_LINT_VERSION)..."

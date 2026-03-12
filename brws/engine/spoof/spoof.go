@@ -10,6 +10,7 @@ import (
 	"time"
 
 	utls "github.com/refraction-networking/utls"
+
 	"github.com/skunkworq/stealth/brws/constants"
 )
 

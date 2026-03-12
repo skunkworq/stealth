@@ -13,20 +13,20 @@ import (
 
 // Config holds configuration for creating an HTTP client.
 type Config struct {
-	Timeout         time.Duration
-	KeepAlive       time.Duration
-	MaxIdleConns    int
-	IdleConnTimeout time.Duration
+	Timeout           time.Duration
+	KeepAlive         time.Duration
+	MaxIdleConns      int
+	IdleConnTimeout   time.Duration
 	DisableKeepAlives bool
 }
 
 // DefaultConfig returns the default HTTP client configuration.
 func DefaultConfig() *Config {
 	return &Config{
-		Timeout:         constants.DefaultTimeout,
-		KeepAlive:       constants.KeepAliveTimeout,
-		MaxIdleConns:    100,
-		IdleConnTimeout: 90 * time.Second,
+		Timeout:           constants.DefaultTimeout,
+		KeepAlive:         constants.KeepAliveTimeout,
+		MaxIdleConns:      100,
+		IdleConnTimeout:   90 * time.Second,
 		DisableKeepAlives: false,
 	}
 }
@@ -34,10 +34,10 @@ func DefaultConfig() *Config {
 // ShortTimeoutConfig returns a configuration with shorter timeouts.
 func ShortTimeoutConfig() *Config {
 	return &Config{
-		Timeout:         constants.ShortTimeout,
-		KeepAlive:       constants.KeepAliveTimeout,
-		MaxIdleConns:    100,
-		IdleConnTimeout: 90 * time.Second,
+		Timeout:           constants.ShortTimeout,
+		KeepAlive:         constants.KeepAliveTimeout,
+		MaxIdleConns:      100,
+		IdleConnTimeout:   90 * time.Second,
 		DisableKeepAlives: false,
 	}
 }

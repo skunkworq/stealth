@@ -23,7 +23,7 @@ func TestPhase50AdaptiveLoop(t *testing.T) {
 	var mismatchFound bool
 	for i := 0; i < 50; i++ {
 		hReq := ag.GenerateRequest("https://example.com/")
-		
+
 		detection := detector.AnalyzeRequest(hReq, nil)
 		foundThisRound := false
 		for _, vec := range detection.Vectors {
@@ -31,7 +31,7 @@ func TestPhase50AdaptiveLoop(t *testing.T) {
 				if strings.HasPrefix(ind, "hardware_core_mismatch") {
 					mismatchFound = true
 					foundThisRound = true
-					ag.ApplyFeedback(detection.ToDetectionReport()) 
+					ag.ApplyFeedback(detection.ToDetectionReport())
 					break
 				}
 			}

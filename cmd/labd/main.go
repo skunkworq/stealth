@@ -61,7 +61,7 @@ func main() {
 			cacheDir = "/tmp"
 		}
 		certDir := filepath.Join(cacheDir, "labd")
-		_ = os.MkdirAll(certDir, 0750)
+		_ = os.MkdirAll(certDir, 0o750)
 
 		certFile = filepath.Join(certDir, "labd.crt")
 		keyFile = filepath.Join(certDir, "labd.key")

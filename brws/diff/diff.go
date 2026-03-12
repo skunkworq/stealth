@@ -367,7 +367,6 @@ func (c *Comparison) FormatPretty() string {
 	}
 	sort.Strings(headerNames)
 
-
 	for _, name := range headerNames {
 		hd := c.HeaderDiffs[name]
 		if hd.Same {
@@ -469,7 +468,6 @@ func NewHeaderSet(h http.Header) *HeaderSet {
 
 	return hs
 }
-
 
 // Diff returns differences between two header sets.
 func (hs *HeaderSet) Diff(other *HeaderSet) map[string][2][]string {

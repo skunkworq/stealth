@@ -29,6 +29,7 @@ void free_string(char* s);
 extern void goPacketCallback(PacketEventC* event);
 */
 import "C"
+
 import (
 	"fmt"
 	"time"

@@ -305,7 +305,6 @@ func TestTLSAnalyzerSummary(t *testing.T) {
 
 func TestParseClientHello(t *testing.T) {
 	ch, err := ParseClientHello([]byte{}, 0x0303)
-
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -321,7 +320,6 @@ func TestParseClientHello(t *testing.T) {
 
 func TestParseServerHello(t *testing.T) {
 	sh, err := ParseServerHello([]byte{})
-
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}

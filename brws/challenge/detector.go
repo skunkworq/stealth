@@ -7,6 +7,7 @@ import (
 )
 
 // ChallengeType represents the type of challenge detected.
+//
 //nolint:revive // Type name stuttering is intentional for clarity
 type ChallengeType string
 
@@ -20,9 +21,9 @@ const (
 	ChallengeHCaptcha ChallengeType = "hcaptcha"
 
 	// ChallengeCloudflare represents Cloudflare challenge type
-	ChallengeCloudflare   ChallengeType = "cloudflare"
+	ChallengeCloudflare ChallengeType = "cloudflare"
 	// ChallengeTurnstile represents Turnstile challenge type
-	ChallengeTurnstile    ChallengeType = "turnstile"
+	ChallengeTurnstile ChallengeType = "turnstile"
 	// ChallengeChallengeBot represents bot challenge type.
 	ChallengeChallengeBot ChallengeType = "challenge-bot"
 

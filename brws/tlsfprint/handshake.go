@@ -1,4 +1,5 @@
 // Package tlsfprint provides TLS fingerprinting capabilities.
+//
 //nolint:gosec // G505: crypto/sha1 used intentionally for TLS fingerprinting
 package tlsfprint
 
@@ -506,7 +507,7 @@ func DetectTLSVersionFingerprint(clientHello *ClientHelloInfo) string {
 	return strings.Join(versionsStr, ", ")
 }
 
-func CalculateJA3FromParsed(version string, ciphers []uint16, exts []uint16, groups []uint16, sigs []uint16, alpn []string) string {
+func CalculateJA3FromParsed(version string, ciphers, exts, groups, sigs []uint16, alpn []string) string {
 	var parts []string
 
 	parts = append(parts, version)

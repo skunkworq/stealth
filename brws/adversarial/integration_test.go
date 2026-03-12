@@ -30,14 +30,13 @@ func TestStealthClient_AgainstAdversarialServer(t *testing.T) {
 			URL:    server.URL,
 			Method: "GET",
 			ExtraHeaders: map[string]string{
-				"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-				"Accept-Language": "en-US,en;q=0.5",
-				"Sec-Ch-Ua":       `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
-				"Sec-Ch-Ua-Mobile": "?0",
+				"Accept":             "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+				"Accept-Language":    "en-US,en;q=0.5",
+				"Sec-Ch-Ua":          `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
+				"Sec-Ch-Ua-Mobile":   "?0",
 				"Sec-Ch-Ua-Platform": `"macOS"`,
 			},
 		})
-
 		if err != nil {
 			t.Fatal(err)
 		}

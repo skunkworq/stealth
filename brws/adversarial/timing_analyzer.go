@@ -8,8 +8,8 @@ import (
 
 // TimingAnalyzerConfig configures timing analysis thresholds.
 type TimingAnalyzerConfig struct {
-	MaxFixedIntervalCV float64 // CV below this = fixed intervals (bot)
-	MinRequestGapMs    float64 // Gaps below this = too fast
+	MaxFixedIntervalCV float64  // CV below this = fixed intervals (bot)
+	MinRequestGapMs    float64  // Gaps below this = too fast
 	ExpectedOrder      []string // Expected resource loading order
 }
 
@@ -43,14 +43,14 @@ func NewTimingAnalyzer(config *TimingAnalyzerConfig) *TimingAnalyzer {
 
 // RequestTimingEntry represents timing data for a single request.
 type RequestTimingEntry struct {
-	Timestamp       int64   `json:"timestamp_ms"`
-	URL             string  `json:"url"`
-	ContentType     string  `json:"content_type"`
-	Referrer        string  `json:"referrer"`
-	Duration        int64   `json:"duration_ms"`
-	TransferSize    int64   `json:"transfer_size"`
-	EncodedBodySize int64   `json:"encoded_body_size"`
-	Protocol        string  `json:"next_hop_protocol"`
+	Timestamp       int64  `json:"timestamp_ms"`
+	URL             string `json:"url"`
+	ContentType     string `json:"content_type"`
+	Referrer        string `json:"referrer"`
+	Duration        int64  `json:"duration_ms"`
+	TransferSize    int64  `json:"transfer_size"`
+	EncodedBodySize int64  `json:"encoded_body_size"`
+	Protocol        string `json:"next_hop_protocol"`
 }
 
 // PaintTimingEntry represents a performance paint entry.
@@ -567,7 +567,7 @@ func (ta *TimingAnalyzer) checkPaintTiming(seq *RequestTimingSequence) float64 {
 		score += 0.3
 	}
 
-	// Correlation with resources: FCP usually happens after the first 
+	// Correlation with resources: FCP usually happens after the first
 	// stylesheet or font finishes loading.
 	firstVisualResourceEnd := 0.0
 	for _, e := range seq.Entries {
@@ -586,7 +586,7 @@ func (ta *TimingAnalyzer) checkPaintTiming(seq *RequestTimingSequence) float64 {
 		if firstVisualResourceEnd > 1e11 && seq.NavigationStart > 1e11 {
 			firstVisualResourceEnd -= seq.NavigationStart
 		}
-		
+
 		if fcp < firstVisualResourceEnd*0.5 {
 			score += 0.4
 		}

@@ -192,7 +192,7 @@ func (o *TLSObserver) ExportJSON(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0600)
+	return os.WriteFile(path, data, 0o600)
 }
 
 func (o *TLSObserver) ExportCSV(path string) error {
@@ -386,10 +386,10 @@ func (d *MLTrainingData) ExportJSON(path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0600)
+	return os.WriteFile(path, data, 0o600)
 }
 
-func (d *MLTrainingData) ExportArff(path string, relationName string) error {
+func (d *MLTrainingData) ExportArff(path, relationName string) error {
 	file, err := os.Create(path) //nolint:gosec // Path is controlled by caller
 	if err != nil {
 		return err
@@ -600,7 +600,7 @@ func (t *TimingAnalyzer) GetStats() *TimingStats {
 	}
 
 	var sum time.Duration
-	var minVal, maxVal = t.observations[0], t.observations[0]
+	minVal, maxVal := t.observations[0], t.observations[0]
 	sorted := make([]time.Duration, len(t.observations))
 	copy(sorted, t.observations)
 

@@ -53,8 +53,13 @@ func NewAdaptiveRequestGenerator(config *RequestGeneratorConfig) *AdaptiveReques
 		config.Profile = profiles[rand.Intn(len(profiles))]
 	}
 
+	seed := config.Seed
+	if seed == 0 {
+		seed = time.Now().UnixNano()
+	}
+
 	//nolint:gosec
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(seed + 2))
 
 	ag := &AdaptiveRequestGenerator{
 		base:      NewRequestGenerator(config),
@@ -228,15 +233,15 @@ func (ag *AdaptiveRequestGenerator) registerMutations() {
 
 	// Phase 32: Canvas IDAT Entropy Threshold
 	ag.mutations["canvas_idat_high_entropy"] = mutateFixCanvasEntropy
-	
+
 	// Phase 33: Click Dwell Time
 	ag.mutations["missing_click_dwell_time"] = mutateEvadeClickDwellTime
 	ag.mutations["instant_click_dwell"] = mutateEvadeClickDwellTime
-	
+
 	// Phase 34: WebGL Extension Count
 	ag.mutations["insufficient_webgl_extensions"] = mutateFixWebGLCount
 	ag.mutations["missing_webgl_extensions"] = mutateFixWebGLCount
-	
+
 	// Phase 35: Screen Taskbar Gap
 	ag.mutations["no_taskbar_gap"] = mutateFixScreenHeightGap
 	ag.mutations["suspicious_taskbar_gap"] = mutateFixScreenHeightGap
@@ -277,7 +282,7 @@ func (ag *AdaptiveRequestGenerator) registerMutations() {
 
 	// Phase 48: Language Consistency
 	ag.mutations["language_mismatch"] = mutateFixLanguageConsistency
-	
+
 	// Phase 49: Media Query Hover
 	ag.mutations["none_media_query_hover"] = mutateFixMediaQueryHover
 	ag.mutations["missing_media_query_hover"] = mutateFixMediaQueryHover
@@ -322,7 +327,7 @@ func (ag *AdaptiveRequestGenerator) registerMutations() {
 	ag.mutations["missing_navigator_scheduling"] = mutateFixModernNavigator
 	ag.mutations["missing_navigator_locks"] = mutateFixModernNavigator
 	ag.mutations["intl_timezone_mismatch"] = mutateFixModernNavigator
-	
+
 	// Phase 60: Memory & Stack Hardening
 	ag.mutations["performance_memory_limit_too_low_for_ram"] = mutateFixMemoryAndStack
 	ag.mutations["automation_leak_detected"] = mutateFixMemoryAndStack
@@ -1067,15 +1072,15 @@ func (bg *BrokenRequestGenerator) GenerateRequest(targetURL string) *http.Reques
 	dims := [2]int{1920, 1080}
 	scrollW := 17
 	nav := map[string]interface{}{
-		"webdriver":            false,
-		"webdriverString":      "function () { [native code] }",
-		"platform":             p.NavPlatform,
-		"vendor":               p.NavVendor,
-		"userAgent":            p.UserAgent,
-		"hardwareConcurrency":  8,
-		"deviceMemory":         16,
-		"cookieEnabled":        true,
-		"pdfViewerEnabled":     p.Browser == "chrome",
+		"webdriver":           false,
+		"webdriverString":     "function () { [native code] }",
+		"platform":            p.NavPlatform,
+		"vendor":              p.NavVendor,
+		"userAgent":           p.UserAgent,
+		"hardwareConcurrency": 8,
+		"deviceMemory":        16,
+		"cookieEnabled":       true,
+		"pdfViewerEnabled":    p.Browser == "chrome",
 		"connection": map[string]interface{}{
 			"rtt":      25,
 			"downlink": 1.5,
@@ -1084,8 +1089,8 @@ func (bg *BrokenRequestGenerator) GenerateRequest(targetURL string) *http.Reques
 		},
 		// appVersion intentionally omitted
 		"languages":          p.Languages,
-		"language":               "fr-FR", // BROKEN: mismatch with languages[0] (which is en-US)
-		"intl_locale":            "fr-FR",
+		"language":           "fr-FR", // BROKEN: mismatch with languages[0] (which is en-US)
+		"intl_locale":        "fr-FR",
 		"screen_color_depth": 24,
 		"screen_inner_width": dims[0] - scrollW,
 		"screen_outer_width": dims[0],
@@ -1188,8 +1193,13 @@ func NewAdaptiveFromBroken(profile *BrowserProfile) *AdaptiveRequestGenerator {
 
 	config := &RequestGeneratorConfig{Profile: &brokenProfile}
 
+	seed := config.Seed
+	if seed == 0 {
+		seed = time.Now().UnixNano()
+	}
+
 	//nolint:gosec
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(seed + 2))
 
 	ag := &AdaptiveRequestGenerator{
 		config:    config,
@@ -1279,5 +1289,7 @@ func mutateFixUADataDeep(ag *AdaptiveRequestGenerator) {
 }
 
 // unusedImportGuard prevents "imported and not used" errors.
-var _ = math.Min
-var _ = strings.HasPrefix
+var (
+	_ = math.Min
+	_ = strings.HasPrefix
+)

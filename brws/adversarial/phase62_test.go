@@ -20,7 +20,7 @@ func TestPhase62Integration(t *testing.T) {
 
 	// 2. Round 1: Verification of OffscreenCanvas and WebGL draft extensions
 	hReq := ag.GenerateRequest("https://example.com/")
-	
+
 	// Check Navigator Data for offscreen_canvas_available
 	navJSON := hReq.Header.Get(constants.HeaderNavigatorData)
 	var navData map[string]interface{}
@@ -35,7 +35,7 @@ func TestPhase62Integration(t *testing.T) {
 	config.EvadeWebGLCount = true
 	ag = behavior.NewAdaptiveRequestGenerator(config)
 	hReq = ag.GenerateRequest("https://example.com/")
-	
+
 	webglJSON := hReq.Header.Get(constants.HeaderWebGLData)
 	var webglData map[string]interface{}
 	json.Unmarshal([]byte(webglJSON), &webglData)
@@ -44,7 +44,7 @@ func TestPhase62Integration(t *testing.T) {
 	if !ok {
 		t.Fatalf("webgl_extensions missing")
 	}
-	
+
 	foundTimer := false
 	for _, e := range exts {
 		if e.(string) == "EXT_disjoint_timer_query_webgl2" {
@@ -60,7 +60,7 @@ func TestPhase62Integration(t *testing.T) {
 	detection := detector.AnalyzeRequest(hReq, nil)
 	for _, ind := range detection.Indicators {
 		if strings.Contains(ind.Name, "missing_offscreen_canvas") ||
-		   strings.Contains(ind.Name, "missing_webgl_draft_extensions") {
+			strings.Contains(ind.Name, "missing_webgl_draft_extensions") {
 			t.Errorf("Shield flagged with Phase 62 gap: %s", ind.Name)
 		}
 	}
@@ -70,7 +70,7 @@ func TestPhase62Integration(t *testing.T) {
 	config.EvadeWebGLCount = false
 	ag = behavior.NewAdaptiveRequestGenerator(config)
 	hReq = ag.GenerateRequest("https://example.com/")
-	
+
 	// Simulate a detection of missing offscreen canvas
 	report := detector.AnalyzeRequest(hReq, nil).ToDetectionReport()
 	report.Vectors = append(report.Vectors, adversarial.VectorReport{
@@ -82,13 +82,13 @@ func TestPhase62Integration(t *testing.T) {
 			},
 		},
 	})
-	
+
 	ag.ApplyFeedback(report)
-	
+
 	// Re-verify after feedback
 	hReq2 := ag.GenerateRequest("https://example.com/")
 	detection2 := detector.AnalyzeRequest(hReq2, nil)
-	
+
 	for _, ind := range detection2.Indicators {
 		if strings.Contains(ind.Name, "missing_offscreen_canvas") {
 			t.Errorf("Shield still flagged with missing offscreen canvas after feedback: %s", ind.Name)

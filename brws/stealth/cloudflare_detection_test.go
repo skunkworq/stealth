@@ -257,19 +257,19 @@ func TestCloudflareDetection_CompareAll(t *testing.T) {
 
 // detectionResult captures what happened when we probed a target.
 type detectionResult struct {
-	Target      string
-	Config      string
-	StatusCode  int
-	Protocol    string
-	IsCF        bool   // Response came from Cloudflare
-	Challenged  bool   // CF presented a challenge (JS/managed/turnstile)
-	Blocked     bool   // CF hard-blocked (403 with no challenge)
+	Target        string
+	Config        string
+	StatusCode    int
+	Protocol      string
+	IsCF          bool // Response came from Cloudflare
+	Challenged    bool // CF presented a challenge (JS/managed/turnstile)
+	Blocked       bool // CF hard-blocked (403 with no challenge)
 	ChallengeType string
-	RayID       string
-	Error       string
-	Headers     http.Header
-	BodySize    int
-	TimingMs    int64
+	RayID         string
+	Error         string
+	Headers       http.Header
+	BodySize      int
+	TimingMs      int64
 }
 
 // probeWithHTTPClient probes a target using a raw http.Client.

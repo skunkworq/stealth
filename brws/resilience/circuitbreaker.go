@@ -41,11 +41,11 @@ type CircuitBreaker struct {
 	name string
 
 	// Config
-	failureThreshold       int
-	successThreshold       int
-	timeout                time.Duration
-	requestTimeout         time.Duration
-	maxHalfOpenRequests    int // Max concurrent requests in half-open state (default: 1)
+	failureThreshold    int
+	successThreshold    int
+	timeout             time.Duration
+	requestTimeout      time.Duration
+	maxHalfOpenRequests int // Max concurrent requests in half-open state (default: 1)
 
 	// State
 	state            State
@@ -64,11 +64,11 @@ type CircuitBreaker struct {
 // CircuitBreakerConfig configures the circuit breaker
 type CircuitBreakerConfig struct {
 	Name                string
-	FailureThreshold    int           // Number of failures before opening
-	SuccessThreshold    int           // Number of successes in half-open to close
-	Timeout             time.Duration // Duration to wait before trying half-open
-	RequestTimeout      time.Duration // Timeout for individual requests
-	MaxHalfOpenRequests int           // Max concurrent requests in half-open (default: 1)
+	FailureThreshold    int                // Number of failures before opening
+	SuccessThreshold    int                // Number of successes in half-open to close
+	Timeout             time.Duration      // Duration to wait before trying half-open
+	RequestTimeout      time.Duration      // Timeout for individual requests
+	MaxHalfOpenRequests int                // Max concurrent requests in half-open (default: 1)
 	OnStateChange       StateChangeHandler // Called on state transitions
 }
 
@@ -100,11 +100,11 @@ func NewCircuitBreaker(config *CircuitBreakerConfig) *CircuitBreaker {
 		state:               StateClosed,
 		stateChanged:        time.Now(),
 	}
-	
+
 	if cb.maxHalfOpenRequests <= 0 {
 		cb.maxHalfOpenRequests = 1
 	}
-	
+
 	return cb
 }
 
@@ -113,7 +113,7 @@ func (cb *CircuitBreaker) Execute(fn func() error) error {
 	if err := cb.canExecute(); err != nil {
 		return err
 	}
-	
+
 	// Ensure half-open slot is released even on panic
 	defer cb.releaseHalfOpenSlot()
 
@@ -222,7 +222,7 @@ func (cb *CircuitBreaker) transitionTo(newState State) {
 	if oldState == newState {
 		return
 	}
-	
+
 	cb.state = newState
 	cb.stateChanged = time.Now()
 
@@ -238,7 +238,7 @@ func (cb *CircuitBreaker) transitionTo(newState State) {
 		cb.failures = 0
 		cb.successes = 0
 	}
-	
+
 	// Call state change hook outside of lock to avoid deadlock
 	if cb.onStateChange != nil {
 		cb.onStateChange(oldState, newState)

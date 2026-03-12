@@ -76,7 +76,7 @@ func compressChunksParallel(ctx context.Context, chunks []DomChunk, url string, 
 }
 
 // compressChunkRecursive recursively compresses a chunk and its children.
-func compressChunkRecursive(ctx context.Context, chunk DomChunk, url string, idPrefix string, index int, config *PipelineConfig, stats *pipelineStats) (*SemanticNode, error) {
+func compressChunkRecursive(ctx context.Context, chunk DomChunk, url, idPrefix string, index int, config *PipelineConfig, stats *pipelineStats) (*SemanticNode, error) {
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()

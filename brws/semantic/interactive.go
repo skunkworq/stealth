@@ -28,13 +28,13 @@ func extractInteractiveElements(htmlStr string) []InteractiveElement {
 			if len(match) >= 2 {
 				elementHTML := htmlStr[match[0]:match[1]]
 				attrs := parseAttributes(elementHTML)
-				
+
 				element := InteractiveElement{
 					Tag:        p.tag,
 					Attrs:      attrs,
 					ActionType: p.action,
 				}
-				
+
 				// Build selector
 				if id, ok := attrs["id"]; ok && id != "" {
 					element.Selector = "#" + id
@@ -46,7 +46,7 @@ func extractInteractiveElements(htmlStr string) []InteractiveElement {
 				} else {
 					element.Selector = p.tag
 				}
-				
+
 				elements = append(elements, element)
 			}
 		}
@@ -111,16 +111,16 @@ func buildActionFromInteractive(el InteractiveElement, desc string) Action {
 // parseAttributes parses HTML attributes from a tag string.
 func parseAttributes(tagStr string) map[string]string {
 	attrs := make(map[string]string)
-	
+
 	// Match attribute="value" or attribute='value' patterns
 	pattern := regexp.MustCompile(`(\w+)=["']([^"']*)["']`)
 	matches := pattern.FindAllStringSubmatch(tagStr, -1)
-	
+
 	for _, match := range matches {
 		if len(match) >= 3 {
 			attrs[match[1]] = match[2]
 		}
 	}
-	
+
 	return attrs
 }

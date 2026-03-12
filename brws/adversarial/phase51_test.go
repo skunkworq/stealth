@@ -15,7 +15,7 @@ func TestPhase51AdaptiveLoop(t *testing.T) {
 	prof := behavior.ChromeWindowsProfile()
 	if len(prof.Plugins) > 0 {
 		// Induce a failure by using a non-standard filename
-		prof.Plugins[0].Filename = "spoofed-viewer.dll" 
+		prof.Plugins[0].Filename = "spoofed-viewer.dll"
 	}
 	config := &behavior.RequestGeneratorConfig{
 		Profile: prof,
@@ -27,7 +27,7 @@ func TestPhase51AdaptiveLoop(t *testing.T) {
 	var pointerFound, pluginFound bool
 	for i := 0; i < 100; i++ {
 		hReq := ag.GenerateRequest("https://example.com/")
-		
+
 		detection := detector.AnalyzeRequest(hReq, nil)
 		foundThisRound := false
 		for _, vec := range detection.Vectors {
@@ -65,7 +65,7 @@ func TestPhase51AdaptiveLoop(t *testing.T) {
 	navJSON := headers2.Get(constants.HeaderNavigatorData)
 	var navData map[string]interface{}
 	json.Unmarshal([]byte(navJSON), &navData)
-	
+
 	pointer := navData["media_query_pointer"].(string)
 	if pointer != "fine" {
 		t.Errorf("Round 2 still has %s pointer after mutation", pointer)

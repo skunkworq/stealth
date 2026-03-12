@@ -33,12 +33,12 @@ type RetryableFuncCtx func(ctx context.Context) error
 
 // Config configures retry behavior
 type Config struct {
-	MaxAttempts       int
-	InitialBackoff    time.Duration
-	MaxBackoff        time.Duration
-	BackoffMultiplier float64
-	Jitter            float64 // 0.0 to 1.0, adds randomness to backoff
-	RetryableErrors   []error // Specific errors to retry on; empty = retry all
+	MaxAttempts        int
+	InitialBackoff     time.Duration
+	MaxBackoff         time.Duration
+	BackoffMultiplier  float64
+	Jitter             float64 // 0.0 to 1.0, adds randomness to backoff
+	RetryableErrors    []error // Specific errors to retry on; empty = retry all
 	NonRetryableErrors []error // Errors that should not be retried
 }
 
@@ -176,19 +176,19 @@ func calculateBackoff(base time.Duration, jitter float64) time.Duration {
 	}
 
 	jitterAmount := float64(base) * jitter
-	
+
 	retryRandMu.Lock()
 	r := getRetryRand()
 	jitterValue := (r.Float64()*2 - 1) * jitterAmount // Random between -jitter and +jitter
 	retryRandMu.Unlock()
-	
+
 	result := float64(base) + jitterValue
-	
+
 	// Ensure result is non-negative and within reasonable bounds
 	if result < 0 {
 		result = 0
 	}
-	
+
 	return time.Duration(result)
 }
 

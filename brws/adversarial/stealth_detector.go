@@ -21,40 +21,40 @@ import (
 // by examining TLS fingerprints, HTTP headers, navigator properties, canvas fingerprints,
 // timing patterns, and behavioral biometrics.
 type StealthDetector struct {
-	mu              sync.RWMutex
-	detections      []StealthDetection
-	baselines       map[string]*StealthBaseline
-	config          *DetectorConfig
-	adaptiveScorer  *AdaptiveScorer
-	advancedDet     *AdvancedDetection
-	navAnalyzer     *NavigatorAnalyzer
-	isoAnalyzer     *IsomorphicAnalyzer
-	behavAnalyzer   *BehavioralAnalyzer
-	timingAnalyzer  *TimingAnalyzer
+	mu               sync.RWMutex
+	detections       []StealthDetection
+	baselines        map[string]*StealthBaseline
+	config           *DetectorConfig
+	adaptiveScorer   *AdaptiveScorer
+	advancedDet      *AdvancedDetection
+	navAnalyzer      *NavigatorAnalyzer
+	isoAnalyzer      *IsomorphicAnalyzer
+	behavAnalyzer    *BehavioralAnalyzer
+	timingAnalyzer   *TimingAnalyzer
 	graphicsAnalyzer *GraphicsAnalyzer
 }
 
 // DetectorConfig holds configuration thresholds and feature toggles for the
 // stealth detection engine.
 type DetectorConfig struct {
-	ThresholdBot           float64 `json:"threshold_bot"`
-	ThresholdSuspicious    float64 `json:"threshold_suspicious"`
-	EnableTLSAnalysis      bool    `json:"enable_tls_analysis"`
-	EnableNavigatorCheck   bool    `json:"enable_navigator_check"`
-	EnableTimingCheck      bool    `json:"enable_timing_check"`
-	EnableCanvasCheck      bool    `json:"enable_canvas_check"`
-	EnableBehavioralCheck  bool    `json:"enable_behavioral_check"`
-	EnableWebGLCheck       bool    `json:"enable_webgl_check"`
-	EnableIPCheck          bool    `json:"enable_ip_check"`
-	EnableAutomationCheck  bool    `json:"enable_automation_check"`
-	EnableHeadlessCheck    bool    `json:"enable_headless_check"`
-	EnableWebRTCCheck      bool    `json:"enable_webrtc_check"`
-	EnableHTTP2Check       bool    `json:"enable_http2_check"`
-	EnableFontCheck        bool    `json:"enable_font_check"`
-	EnableScreenCheck      bool    `json:"enable_screen_check"`
-	EnablePluginCheck      bool    `json:"enable_plugin_check"`
-	EnableAudioCheck       bool    `json:"enable_audio_check"`
-	EnableAdaptiveScoring  bool    `json:"enable_adaptive_scoring"`
+	ThresholdBot          float64 `json:"threshold_bot"`
+	ThresholdSuspicious   float64 `json:"threshold_suspicious"`
+	EnableTLSAnalysis     bool    `json:"enable_tls_analysis"`
+	EnableNavigatorCheck  bool    `json:"enable_navigator_check"`
+	EnableTimingCheck     bool    `json:"enable_timing_check"`
+	EnableCanvasCheck     bool    `json:"enable_canvas_check"`
+	EnableBehavioralCheck bool    `json:"enable_behavioral_check"`
+	EnableWebGLCheck      bool    `json:"enable_webgl_check"`
+	EnableIPCheck         bool    `json:"enable_ip_check"`
+	EnableAutomationCheck bool    `json:"enable_automation_check"`
+	EnableHeadlessCheck   bool    `json:"enable_headless_check"`
+	EnableWebRTCCheck     bool    `json:"enable_webrtc_check"`
+	EnableHTTP2Check      bool    `json:"enable_http2_check"`
+	EnableFontCheck       bool    `json:"enable_font_check"`
+	EnableScreenCheck     bool    `json:"enable_screen_check"`
+	EnablePluginCheck     bool    `json:"enable_plugin_check"`
+	EnableAudioCheck      bool    `json:"enable_audio_check"`
+	EnableAdaptiveScoring bool    `json:"enable_adaptive_scoring"`
 }
 
 // StealthDetection represents a complete detection result for a single request,
@@ -133,30 +133,30 @@ type TLSFingerprintInfo struct {
 // HTTPFingerprintInfo contains HTTP header analysis data for browser fingerprinting
 // including User-Agent parsing and Client Hints validation.
 type HTTPFingerprintInfo struct {
-	UserAgent             string   `json:"user_agent"`
-	Platform              string   `json:"platform"`
-	BrowserVersion        string   `json:"browser_version"`
-	Accept                string   `json:"accept"`
-	AcceptLanguage        string   `json:"accept_language"`
-	AcceptEncoding        string   `json:"accept_encoding"`
-	HeaderOrder           []string `json:"header_order"`
-	HeaderCount           int      `json:"header_count"`
-	SecCHUA               string   `json:"sec_ch_ua"`
-	SecCHUAMobile         string   `json:"sec_ch_ua_mobile"`
-	SecCHUAPlatform       string   `json:"sec_ch_ua_platform"`
-	SecCHUAFullVersion    string   `json:"sec_ch_ua_full_version"`
-	SecCHUAFullVersionList string  `json:"sec_ch_ua_full_version_list"`
-	SecCHUAArch           string   `json:"sec_ch_ua_arch"`
-	SecCHUABitness        string   `json:"sec_ch_ua_bitness"`
-	SecCHUAModel          string   `json:"sec_ch_ua_model"`
-	SecFetchDest          string   `json:"sec_fetch_dest"`
-	SecFetchMode          string   `json:"sec_fetch_mode"`
-	SecFetchSite          string   `json:"sec_fetch_site"`
-	SecFetchUser          string   `json:"sec_fetch_user"`
-	UpgradeInsecure       string   `json:"upgrade_insecure_requests"`
-	ClientHintsConsistent bool     `json:"client_hints_consistent"`
-	MissingHeaders        []string `json:"missing_headers"`
-	SuspiciousHeaders     []string `json:"suspicious_headers"`
+	UserAgent              string   `json:"user_agent"`
+	Platform               string   `json:"platform"`
+	BrowserVersion         string   `json:"browser_version"`
+	Accept                 string   `json:"accept"`
+	AcceptLanguage         string   `json:"accept_language"`
+	AcceptEncoding         string   `json:"accept_encoding"`
+	HeaderOrder            []string `json:"header_order"`
+	HeaderCount            int      `json:"header_count"`
+	SecCHUA                string   `json:"sec_ch_ua"`
+	SecCHUAMobile          string   `json:"sec_ch_ua_mobile"`
+	SecCHUAPlatform        string   `json:"sec_ch_ua_platform"`
+	SecCHUAFullVersion     string   `json:"sec_ch_ua_full_version"`
+	SecCHUAFullVersionList string   `json:"sec_ch_ua_full_version_list"`
+	SecCHUAArch            string   `json:"sec_ch_ua_arch"`
+	SecCHUABitness         string   `json:"sec_ch_ua_bitness"`
+	SecCHUAModel           string   `json:"sec_ch_ua_model"`
+	SecFetchDest           string   `json:"sec_fetch_dest"`
+	SecFetchMode           string   `json:"sec_fetch_mode"`
+	SecFetchSite           string   `json:"sec_fetch_site"`
+	SecFetchUser           string   `json:"sec_fetch_user"`
+	UpgradeInsecure        string   `json:"upgrade_insecure_requests"`
+	ClientHintsConsistent  bool     `json:"client_hints_consistent"`
+	MissingHeaders         []string `json:"missing_headers"`
+	SuspiciousHeaders      []string `json:"suspicious_headers"`
 }
 
 // NavigatorCheckInfo contains JavaScript navigator object properties used
@@ -300,12 +300,12 @@ func NewStealthDetector() *StealthDetector {
 			EnableAudioCheck:      true,
 			EnableAdaptiveScoring: true,
 		},
-		adaptiveScorer: NewAdaptiveScorer(nil),
-		advancedDet:    NewAdvancedDetection(),
-		navAnalyzer:    NewNavigatorAnalyzer(),
-		isoAnalyzer:    NewIsomorphicAnalyzer(),
-		behavAnalyzer:  NewBehavioralAnalyzer(nil),
-		timingAnalyzer: NewTimingAnalyzer(nil),
+		adaptiveScorer:   NewAdaptiveScorer(nil),
+		advancedDet:      NewAdvancedDetection(),
+		navAnalyzer:      NewNavigatorAnalyzer(),
+		isoAnalyzer:      NewIsomorphicAnalyzer(),
+		behavAnalyzer:    NewBehavioralAnalyzer(nil),
+		timingAnalyzer:   NewTimingAnalyzer(nil),
 		graphicsAnalyzer: NewGraphicsAnalyzer(),
 	}
 }
@@ -357,20 +357,20 @@ func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.Connec
 	if detection.TLSFingerprint != nil && httpInfo != nil {
 		ua := strings.ToLower(httpInfo.UserAgent)
 		isBrowser := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
-		
+
 		// If UA claims to be a browser but TLS lacks GREASE, it's a strong indicator of Go/spoofing
 		if isBrowser && !detection.TLSFingerprint.HasGREASE {
 			detection.TLSFingerprint.Anomalies = append(detection.TLSFingerprint.Anomalies, "tls_go_fingerprint: browser_ua_with_go_tls")
-			
+
 			// Update the TLS vector score and indicators
 			for i, v := range detection.Vectors {
 				if v.Category == "tls" {
 					detection.Vectors[i].Score = 0.50
 					detection.Vectors[i].Detected = true
 					detection.Vectors[i].Indicators = detection.TLSFingerprint.Anomalies
-					
+
 					// Re-calculate totals
-					totalScore += 0.50 * v.Weight - v.Score * v.Weight
+					totalScore += 0.50*v.Weight - v.Score*v.Weight
 					vectorResults[VectorTLS].Score = 0.50
 					vectorResults[VectorTLS].Detected = true
 				}
@@ -903,7 +903,7 @@ func (sd *StealthDetector) analyzeTLSFingerprint(tlsConn *tls.ConnectionState) *
 
 	// Check for GREASE - standard Go crypto/tls DOES NOT use GREASE
 	// Modern browsers (Chrome, Firefox, Safari) ALL use GREASE.
-	
+
 	// Check cipher suite for GREASE (0x0a0a, 0x1a1a, etc.)
 	if (tlsConn.CipherSuite & 0x0f0f) == 0x0a0a {
 		info.HasGREASE = true
@@ -911,7 +911,7 @@ func (sd *StealthDetector) analyzeTLSFingerprint(tlsConn *tls.ConnectionState) *
 
 	// We can't strictly flag here because we don't have the UA.
 	// We will perform the cross-check in AnalyzeRequest.
-	
+
 	return info
 }
 
@@ -922,27 +922,27 @@ func (sd *StealthDetector) analyzeHTTPHeaders(req *http.Request) *HTTPFingerprin
 		// bot indicators
 	}
 	info := &HTTPFingerprintInfo{
-		UserAgent:          ua,
-		Accept:             accept,
-		AcceptLanguage:     req.Header.Get("Accept-Language"),
-		AcceptEncoding:     req.Header.Get("Accept-Encoding"),
-		SecCHUA:            req.Header.Get("Sec-Ch-Ua"),
-		SecCHUAMobile:      req.Header.Get("Sec-Ch-Ua-Mobile"),
-		SecCHUAPlatform:    req.Header.Get("Sec-Ch-Ua-Platform"),
+		UserAgent:              ua,
+		Accept:                 accept,
+		AcceptLanguage:         req.Header.Get("Accept-Language"),
+		AcceptEncoding:         req.Header.Get("Accept-Encoding"),
+		SecCHUA:                req.Header.Get("Sec-Ch-Ua"),
+		SecCHUAMobile:          req.Header.Get("Sec-Ch-Ua-Mobile"),
+		SecCHUAPlatform:        req.Header.Get("Sec-Ch-Ua-Platform"),
 		SecCHUAFullVersion:     req.Header.Get("Sec-Ch-Ua-Full-Version"),
 		SecCHUAFullVersionList: req.Header.Get("Sec-Ch-Ua-Full-Version-List"),
 		SecCHUAArch:            req.Header.Get("Sec-Ch-Ua-Arch"),
-		SecCHUABitness:     req.Header.Get("Sec-Ch-Ua-Bitness"),
-		SecCHUAModel:       req.Header.Get("Sec-Ch-Ua-Model"),
-		SecFetchDest:       req.Header.Get("Sec-Fetch-Dest"),
-		SecFetchMode:       req.Header.Get("Sec-Fetch-Mode"),
-		SecFetchSite:       req.Header.Get("Sec-Fetch-Site"),
-		SecFetchUser:       req.Header.Get("Sec-Fetch-User"),
-		UpgradeInsecure:    req.Header.Get("Upgrade-Insecure-Requests"),
-		HeaderCount:        len(req.Header),
-		HeaderOrder:        make([]string, 0),
-		MissingHeaders:     make([]string, 0),
-		SuspiciousHeaders:  make([]string, 0),
+		SecCHUABitness:         req.Header.Get("Sec-Ch-Ua-Bitness"),
+		SecCHUAModel:           req.Header.Get("Sec-Ch-Ua-Model"),
+		SecFetchDest:           req.Header.Get("Sec-Fetch-Dest"),
+		SecFetchMode:           req.Header.Get("Sec-Fetch-Mode"),
+		SecFetchSite:           req.Header.Get("Sec-Fetch-Site"),
+		SecFetchUser:           req.Header.Get("Sec-Fetch-User"),
+		UpgradeInsecure:        req.Header.Get("Upgrade-Insecure-Requests"),
+		HeaderCount:            len(req.Header),
+		HeaderOrder:            make([]string, 0),
+		MissingHeaders:         make([]string, 0),
+		SuspiciousHeaders:      make([]string, 0),
 	}
 
 	// If a simulated header order is provided (used for testing/evasion simulation), use it.
@@ -1064,7 +1064,6 @@ func (sd *StealthDetector) analyzeCanvasData(req *http.Request) *DetectionVector
 	return sd.graphicsAnalyzer.AnalyzeCanvas(req)
 }
 
-
 func (sd *StealthDetector) analyzeTimingData(req *http.Request) *DetectionVector {
 	timingHeader := req.Header.Get(constants.HeaderTimingData)
 	if timingHeader == "" {
@@ -1146,7 +1145,6 @@ func (sd *StealthDetector) analyzeBehavioralData(req *http.Request) *DetectionVe
 
 	return vec
 }
-
 
 func (sd *StealthDetector) analyzeIsomorphicAnomalies(req *http.Request, httpInfo *HTTPFingerprintInfo) *DetectionVector {
 	return sd.isoAnalyzer.Analyze(req, httpInfo)
@@ -1283,11 +1281,11 @@ func extractBrowserVersion(ua string) string {
 // Pure HTTP clients (like curl-impersonate) that send zero X-* headers won't
 // trigger these penalties.
 // analyzeFingerprintCoverage uses graduated scoring based on JS fingerprint header coverage.
-// - 0 headers with Client Hints → 0.50 (HTTP impersonation, e.g., curl-impersonate)
-// - 1-5 headers → 0.30 * (1 - ratio) (partial: cherry-picked headers)
-// - 6-9 headers → 0.00 (normal partial coverage)
-// - All 10 headers → 0.10 (suspiciously complete — real pages rarely collect all 10
-//   on first load; WebRTC needs permission, Audio needs AudioContext)
+//   - 0 headers with Client Hints → 0.50 (HTTP impersonation, e.g., curl-impersonate)
+//   - 1-5 headers → 0.30 * (1 - ratio) (partial: cherry-picked headers)
+//   - 6-9 headers → 0.00 (normal partial coverage)
+//   - All 10 headers → 0.10 (suspiciously complete — real pages rarely collect all 10
+//     on first load; WebRTC needs permission, Audio needs AudioContext)
 func (sd *StealthDetector) analyzeFingerprintCoverage(req *http.Request) *DetectionVector {
 	secChUa := req.Header.Get("Sec-Ch-Ua")
 	if secChUa == "" {
@@ -1556,10 +1554,10 @@ func NewAdvancedStealthServer() *AdvancedStealthServer {
 		RecaptchaWidget:      widget,
 		CloudflareChallenger: cfChallenger,
 		CaptchaMode:          "recaptcha_v2",
-		captchaSecret:   secret,
-		solvedTokens:    make(map[string]time.Time),
-		v3Assessments:   make([]*V3AssessmentRecord, 0, 100),
-		v3MaxRecords:    100,
+		captchaSecret:        secret,
+		solvedTokens:         make(map[string]time.Time),
+		v3Assessments:        make([]*V3AssessmentRecord, 0, 100),
+		v3MaxRecords:         100,
 	}
 
 	// Bridge reCAPTCHA v2 tokens into the server's solvedTokens so that

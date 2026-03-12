@@ -27,8 +27,8 @@ var (
 
 // Links & images
 var (
-	reAnchor  = regexp.MustCompile(`(?is)<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>`)
-	reImgSrc  = regexp.MustCompile(`(?i)<img[^>]*src=["']([^"']+)["']`)
+	reAnchor   = regexp.MustCompile(`(?is)<a[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>`)
+	reImgSrc   = regexp.MustCompile(`(?i)<img[^>]*src=["']([^"']+)["']`)
 	reNofollow = regexp.MustCompile(`(?i)rel=["'][^"']*nofollow[^"']*["']`)
 )
 

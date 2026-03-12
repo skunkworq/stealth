@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
 	"github.com/skunkworq/stealth/brws/config"
 	"github.com/skunkworq/stealth/brws/engine"
 	_ "github.com/skunkworq/stealth/brws/engine/chromium"
@@ -214,7 +215,7 @@ func outputPretty(resp *engine.Response) error {
 	_, _ = fmt.Fprintln(os.Stdout, "Body:")
 	bodyStr := string(resp.Body)
 	if len(bodyStr) > 2000 {
-		_, _ = fmt.Fprintln(os.Stdout, bodyStr[:2000] + "...")
+		_, _ = fmt.Fprintln(os.Stdout, bodyStr[:2000]+"...")
 	} else {
 		_, _ = fmt.Fprintln(os.Stdout, bodyStr)
 	}
@@ -696,6 +697,7 @@ func getSessionsDir() string {
 	}
 	return home + "/.brwslab/sessions"
 }
+
 func replCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "repl",

@@ -72,7 +72,7 @@ func TestDetailedDetectionTrace(t *testing.T) {
 
 			// Create http.Request for detection
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
-				_ = mockReq
+			_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}

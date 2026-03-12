@@ -99,7 +99,7 @@ func main() {
 
 	trees := semSpider.GetAllSemanticTrees()
 	data, _ := json.MarshalIndent(trees, "", "  ")
-	if err := os.WriteFile(outputFile, data, 0644); err != nil {
+	if err := os.WriteFile(outputFile, data, 0o644); err != nil {
 		log.Printf("Error writing output: %v", err)
 	} else {
 		fmt.Printf("Results saved to: %s\n", outputFile)

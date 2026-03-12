@@ -22,7 +22,7 @@ func TestPhase52AdaptiveLoop(t *testing.T) {
 	var webgpuFound, permissionsFound bool
 	for i := 0; i < 100; i++ {
 		hReq := ag.GenerateRequest("https://example.com/")
-		
+
 		detection := detector.AnalyzeRequest(hReq, nil)
 		foundThisRound := false
 		for _, vec := range detection.Vectors {
@@ -56,7 +56,7 @@ func TestPhase52AdaptiveLoop(t *testing.T) {
 	navJSON := headers2.Get(constants.HeaderNavigatorData)
 	var navData map[string]interface{}
 	json.Unmarshal([]byte(navJSON), &navData)
-	
+
 	gpu := navData["gpu_present"].(bool)
 	if !gpu {
 		t.Errorf("Round 2 still missing WebGPU after mutation")

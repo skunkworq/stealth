@@ -132,7 +132,7 @@ func (h *HNSWIndex) Search(query []float32, k int) []SearchResult {
 	return results
 }
 
-func (h *HNSWIndex) searchLayer(query []float32, eps []*hnswNode, ef int, layer int) []*hnswNode {
+func (h *HNSWIndex) searchLayer(query []float32, eps []*hnswNode, ef, layer int) []*hnswNode {
 	visited := make(map[string]bool)
 	for _, ep := range eps {
 		visited[ep.id] = true

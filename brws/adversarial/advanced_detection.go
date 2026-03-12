@@ -21,7 +21,6 @@ var (
 		"t13d",
 	}
 
-	
 	datacenterIPPatterns = []*regexp.Regexp{
 		regexp.MustCompile(`^3\.`),
 		regexp.MustCompile(`^34\.`),
@@ -467,7 +466,6 @@ func (ad *AdvancedDetection) validateFullVersion(version string) bool {
 
 	return true
 }
-
 
 // AnalyzeIP analyzes the client IP for datacenter or VPN classification
 func (ad *AdvancedDetection) AnalyzeIP(clientIP string) []AdvancedCheckResult {

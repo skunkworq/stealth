@@ -294,8 +294,8 @@ func (cs *CaptchaShield) CreateChallenge(sessionID string, detection *DetectionR
 	case "cloudflare_managed":
 		challenge.CaptchaID = challenge.ID
 		challenge.Challenge = map[string]interface{}{
-			"challenge_type":      "cloudflare_managed",
-			"description":         "Cloudflare managed challenge (PoW + fingerprint + behavioral)",
+			"challenge_type":       "cloudflare_managed",
+			"description":          "Cloudflare managed challenge (PoW + fingerprint + behavioral)",
 			"requires_fingerprint": true,
 			"requires_behavioral":  true,
 		}
@@ -462,7 +462,6 @@ func (cs *CaptchaShield) ValidateChallenge(challengeID, solution string) (bool, 
 
 	return valid, challenge.Metrics
 }
-
 
 // GetChallenge retrieves a challenge by its ID.
 func (cs *CaptchaShield) GetChallenge(challengeID string) (*CaptchaChallenge, bool) {

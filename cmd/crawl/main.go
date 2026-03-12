@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/skunkworq/stealth/brws/pipeline"
 	"github.com/skunkworq/stealth/brws/semantic"
 	"github.com/skunkworq/stealth/brws/telemetry"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
 )
 
 func main() {

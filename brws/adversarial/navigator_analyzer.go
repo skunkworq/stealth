@@ -795,6 +795,7 @@ func (na *NavigatorAnalyzer) checkMediaQueryHover(navData map[string]interface{}
 	}
 	return indicators
 }
+
 func (na *NavigatorAnalyzer) checkWebGPUSupport(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	isModernChrome := strings.Contains(strings.ToLower(reqUA), "chrome")
 	// WebGPU (navigator.gpu) was added in Chrome 113.
@@ -1088,6 +1089,7 @@ func (na *NavigatorAnalyzer) checkStoragePersistence(navData map[string]interfac
 	_ = persisted // currently only checking presence
 	return indicators
 }
+
 func (na *NavigatorAnalyzer) checkStorageQuotaCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	quota, hasQuota := navData["storage_quota"].(float64)
 	deviceMem, hasMem := navData["deviceMemory"].(float64)
@@ -1528,6 +1530,7 @@ func (na *NavigatorAnalyzer) checkAudioWorklet(navData map[string]interface{}, v
 	}
 	return indicators
 }
+
 func (na *NavigatorAnalyzer) checkNavigatorVibrate(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if _, ok := navData["vibrate"]; !ok {
 		name := "missing_navigator_vibrate"
@@ -1567,6 +1570,7 @@ func (na *NavigatorAnalyzer) checkNavigatorConnectivity(navData map[string]inter
 	}
 	return indicators
 }
+
 func (na *NavigatorAnalyzer) checkNavigatorHardwareAPIs(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// Bluetooth and USB are part of the standard Chromium navigator object.
 	apis := []string{"bluetooth", "usb"}
@@ -1696,6 +1700,7 @@ func (na *NavigatorAnalyzer) checkNavigatorModernAPIs(navData map[string]interfa
 	}
 	return indicators
 }
+
 func (na *NavigatorAnalyzer) checkNavigatorMediaAPIs(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// mediaCapabilities (Chrome 66+) and mediaSession (Chrome 73+) are standard modern browser APIs.
 	apis := []string{"mediaCapabilities", "mediaSession"}
@@ -1719,6 +1724,7 @@ func (na *NavigatorAnalyzer) checkNavigatorMediaAPIs(navData map[string]interfac
 	}
 	return indicators
 }
+
 func (na *NavigatorAnalyzer) checkNavigatorWorkers(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// serviceWorker and SharedWorker are standard modern browser APIs.
 	// serviceWorker is usually available on secure contexts (which we assume here).
@@ -1743,6 +1749,7 @@ func (na *NavigatorAnalyzer) checkNavigatorWorkers(navData map[string]interface{
 	}
 	return indicators
 }
+
 func (na *NavigatorAnalyzer) checkNavigatorPrototype(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// Phase 80: Navigator Prototype chain.
 	if stubbed, ok := navData["navigator_prototype_stubbed"].(bool); ok && stubbed {

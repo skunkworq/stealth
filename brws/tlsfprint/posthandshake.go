@@ -364,7 +364,7 @@ func (a *HandshakeAnalyzer) GetStats() *HandshakeAnalyzerStats {
 	stats.EarlyDataUsageRate = float64(totalEarlyData) / float64(len(a.handshakes))
 	stats.SessionResumptionRate = float64(resumedCount) / float64(len(a.handshakes))
 
-	var minDuration, maxDuration = a.handshakes[0].HandshakeDuration, a.handshakes[0].HandshakeDuration
+	minDuration, maxDuration := a.handshakes[0].HandshakeDuration, a.handshakes[0].HandshakeDuration
 	for _, h := range a.handshakes {
 		if h.HandshakeDuration < minDuration {
 			minDuration = h.HandshakeDuration

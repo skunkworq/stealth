@@ -170,7 +170,7 @@ Options:
 	}
 
 	if *output != "" {
-		err = os.WriteFile(*output, outputData, 0644)
+		err = os.WriteFile(*output, outputData, 0o644)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
 			os.Exit(1)

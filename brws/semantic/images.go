@@ -36,7 +36,7 @@ func extractImagesFromDoc(doc *html.Node, pageURL string) []ImageRef {
 // extractImagesFromElement extracts images from an element.
 func extractImagesFromElement(n *html.Node, pageURL string) []ImageRef {
 	var images []ImageRef
-	
+
 	var extract func(node *html.Node)
 	extract = func(node *html.Node) {
 		if node.Type == html.ElementNode && node.Data == "img" {
@@ -50,14 +50,14 @@ func extractImagesFromElement(n *html.Node, pageURL string) []ImageRef {
 		}
 	}
 	extract(n)
-	
+
 	return images
 }
 
 // extractImageFromNode extracts image data from an img node.
 func extractImageFromNode(n *html.Node, pageURL string) ImageRef {
 	img := ImageRef{}
-	
+
 	for _, attr := range n.Attr {
 		switch attr.Key {
 		case "src":
@@ -67,7 +67,7 @@ func extractImageFromNode(n *html.Node, pageURL string) ImageRef {
 			img.Alt = attr.Val
 		}
 	}
-	
+
 	return img
 }
 
@@ -76,12 +76,12 @@ func resolveURL(href, base string) string {
 	if href == "" {
 		return ""
 	}
-	
+
 	// Already absolute
 	if strings.HasPrefix(href, "http://") || strings.HasPrefix(href, "https://") || strings.HasPrefix(href, "data:") {
 		return href
 	}
-	
+
 	// Protocol-relative
 	if strings.HasPrefix(href, "//") {
 		if strings.HasPrefix(base, "https://") {
@@ -89,19 +89,19 @@ func resolveURL(href, base string) string {
 		}
 		return "http:" + href
 	}
-	
+
 	// Parse base URL
 	baseURL, err := url.Parse(base)
 	if err != nil {
 		return href
 	}
-	
+
 	// Resolve relative URL
 	refURL, err := url.Parse(href)
 	if err != nil {
 		return href
 	}
-	
+
 	resolved := baseURL.ResolveReference(refURL)
 	return resolved.String()
 }
@@ -115,16 +115,16 @@ func attachImagesToNodes(nodes []SemanticNode, images []ImageRef) {
 // extractCSSImages extracts image URLs from CSS background properties.
 func extractCSSImages(css string) []string {
 	var urls []string
-	
+
 	// Match url(...) patterns
 	pattern := regexp.MustCompile(`url\(["']?([^"')]+)["']?\)`)
 	matches := pattern.FindAllStringSubmatch(css, -1)
-	
+
 	for _, match := range matches {
 		if len(match) >= 2 {
 			urls = append(urls, match[1])
 		}
 	}
-	
+
 	return urls
 }

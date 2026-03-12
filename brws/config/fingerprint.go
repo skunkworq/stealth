@@ -218,7 +218,7 @@ func (c *FingerprintConfig) Save(filename string) error {
 	if err != nil {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
-	return os.WriteFile(filename, data, 0600)
+	return os.WriteFile(filename, data, 0o600)
 }
 
 // GetPreset returns a built-in preset
@@ -279,7 +279,8 @@ var (
 				{Name: "padding"},
 			},
 			SupportedGroups: []NamedGroup{
-				{IsGREASE: true}, {Value: 0x001d, Name: "x25519"},
+				{IsGREASE: true},
+				{Value: 0x001d, Name: "x25519"},
 				{Value: 0x0017, Name: "secp256r1"},
 			},
 			ALPN:            []string{"h2", "http/1.1"},

@@ -38,10 +38,10 @@ type TLSInfo struct {
 
 // HTTP2Info contains HTTP/2 fingerprint information
 type HTTP2Info struct {
-	Settings      map[string]int `json:"settings"`
-	WindowSize    int            `json:"window_size"`
+	Settings       map[string]int  `json:"settings"`
+	WindowSize     int             `json:"window_size"`
 	HeaderPriority *HeaderPriority `json:"header_priority,omitempty"`
-	PseudoOrder   []string       `json:"pseudo_order,omitempty"`
+	PseudoOrder    []string        `json:"pseudo_order,omitempty"`
 }
 
 // HeaderPriority represents HTTP/2 priority information
@@ -53,13 +53,13 @@ type HeaderPriority struct {
 
 // ConsistencyReport contains fingerprint consistency analysis
 type ConsistencyReport struct {
-	Timestamp    time.Time                     `json:"timestamp"`
-	EngineName   string                        `json:"engine_name"`
-	TargetURL    string                        `json:"target_url"`
-	Iterations   int                           `json:"iterations"`
-	Results      []FingerprintResult           `json:"results"`
-	Consistency  ConsistencyAnalysis           `json:"consistency"`
-	Variance     VarianceReport                `json:"variance"`
+	Timestamp   time.Time           `json:"timestamp"`
+	EngineName  string              `json:"engine_name"`
+	TargetURL   string              `json:"target_url"`
+	Iterations  int                 `json:"iterations"`
+	Results     []FingerprintResult `json:"results"`
+	Consistency ConsistencyAnalysis `json:"consistency"`
+	Variance    VarianceReport      `json:"variance"`
 }
 
 // ConsistencyAnalysis analyzes fingerprint consistency
@@ -73,11 +73,11 @@ type ConsistencyAnalysis struct {
 
 // VarianceReport reports on fingerprint variance
 type VarianceReport struct {
-	ProtocolVariance    bool                `json:"protocol_variance"`
-	UserAgentVariance   bool                `json:"user_agent_variance"`
-	HeaderVariance      map[string]int      `json:"header_variance"`
-	TLSVariance         bool                `json:"tls_variance"`
-	HTTP2Variance       bool                `json:"http2_variance"`
+	ProtocolVariance  bool           `json:"protocol_variance"`
+	UserAgentVariance bool           `json:"user_agent_variance"`
+	HeaderVariance    map[string]int `json:"header_variance"`
+	TLSVariance       bool           `json:"tls_variance"`
+	HTTP2Variance     bool           `json:"http2_variance"`
 }
 
 // FingerprintBenchmark tests fingerprint consistency across requests
@@ -169,7 +169,6 @@ func (fb *FingerprintBenchmark) captureFingerprint(
 		WaitForNavigation: eng.Capabilities().JavaScript,
 		Timeout:           fb.timeout,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -347,10 +346,10 @@ func (mb *MultiEngineFingerprintBenchmark) Run(ctx context.Context) (map[string]
 // CompareEngines compares fingerprints across engines
 func CompareEngines(reports map[string]*ConsistencyReport) *EngineComparison {
 	comparison := &EngineComparison{
-		Timestamp:      time.Now(),
-		EngineReports:  reports,
-		Similarities:   make(map[string][]string),
-		Differences:    make(map[string][]string),
+		Timestamp:     time.Now(),
+		EngineReports: reports,
+		Similarities:  make(map[string][]string),
+		Differences:   make(map[string][]string),
 	}
 
 	// Collect all protocols used
@@ -385,8 +384,8 @@ func CompareEngines(reports map[string]*ConsistencyReport) *EngineComparison {
 
 // EngineComparison compares multiple engines
 type EngineComparison struct {
-	Timestamp      time.Time                     `json:"timestamp"`
-	EngineReports  map[string]*ConsistencyReport `json:"engine_reports"`
-	Similarities   map[string][]string           `json:"similarities"`
-	Differences    map[string][]string           `json:"differences"`
+	Timestamp     time.Time                     `json:"timestamp"`
+	EngineReports map[string]*ConsistencyReport `json:"engine_reports"`
+	Similarities  map[string][]string           `json:"similarities"`
+	Differences   map[string][]string           `json:"differences"`
 }

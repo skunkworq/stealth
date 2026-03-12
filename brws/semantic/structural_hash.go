@@ -119,5 +119,3 @@ func fields(s string) []string {
 	}
 	return result
 }
-
-

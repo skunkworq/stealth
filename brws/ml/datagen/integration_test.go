@@ -31,9 +31,9 @@ func TestEndToEndPipeline(t *testing.T) {
 	// Phase 1: Ingest diverse episodes
 	engines := []string{"chromium-stealth", "firefox-stealth", "native-go"}
 	outcomes := []struct {
-		code    int
-		success bool
-		blocked bool
+		code       int
+		success    bool
+		blocked    bool
 		challenged bool
 	}{
 		{200, true, false, false},
@@ -340,7 +340,7 @@ func TestEndToEndPipeline(t *testing.T) {
 		// Manifest
 		manifest, _ := c.ExportManifest(EpisodeFilters{Limit: 100})
 		manifestData, _ := json.MarshalIndent(manifest, "", "  ")
-		os.WriteFile(manifestPath, manifestData, 0644)
+		os.WriteFile(manifestPath, manifestData, 0o644)
 
 		manifestInfo, _ := os.Stat(manifestPath)
 		if manifestInfo.Size() == 0 {

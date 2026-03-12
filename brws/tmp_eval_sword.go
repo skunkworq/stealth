@@ -10,12 +10,12 @@ import (
 func main() {
 	profile := behavior.ChromeWindowsProfile()
 	detector := adversarial.NewStealthDetector()
-	
+
 	// Create adaptive generator
 	gen := behavior.NewAdaptiveRequestGenerator(&behavior.RequestGeneratorConfig{
 		Profile: profile,
 	})
-	
+
 	rounds := 5
 	for i := 1; i <= rounds; i++ {
 		fmt.Printf("\n--- Round %d ---\n", i)
@@ -32,7 +32,7 @@ func main() {
 		// Convert to Report for feedback loop
 		report := detection.ToDetectionReport()
 		gen.ApplyFeedback(report)
-		
+
 		if !detection.IsBot {
 			fmt.Println("Evaded successfully!")
 			break

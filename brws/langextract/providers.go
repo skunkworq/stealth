@@ -195,6 +195,7 @@ func (b *baseExtractor) FormatType() FormatType { return b.formatType }
 func (b *baseExtractor) SetFormatType(ft FormatType) {
 	b.formatType = ft
 }
+
 func (b *baseExtractor) SetSchema(schema any) {
 	b.schema = schema
 }
@@ -574,7 +575,7 @@ func truncateString(value string, max int) string {
 	return value[:max-3] + "..."
 }
 
-func applyOpenAIOptions(payload map[string]any, options map[string]any) {
+func applyOpenAIOptions(payload, options map[string]any) {
 	if len(options) == 0 {
 		return
 	}
@@ -637,7 +638,7 @@ func mergeOpenAIReasoning(payload map[string]any, effort any) {
 	payload["reasoning"] = reasoning
 }
 
-func applyGeminiOptions(generationConfig map[string]any, options map[string]any) {
+func applyGeminiOptions(generationConfig, options map[string]any) {
 	if len(options) == 0 {
 		return
 	}
@@ -671,7 +672,7 @@ func applyGeminiOptions(generationConfig map[string]any, options map[string]any)
 	}
 }
 
-func applyOllamaOptions(optionsBlock map[string]any, options map[string]any) {
+func applyOllamaOptions(optionsBlock, options map[string]any) {
 	if len(options) == 0 {
 		return
 	}

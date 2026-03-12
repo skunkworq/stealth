@@ -52,8 +52,8 @@ func TestDo(t *testing.T) {
 	defer func() { _ = eng.Close() }()
 
 	req := &engine.Request{
-		Method:  "GET",
-		URL:     server.URL + "/test",
+		Method: "GET",
+		URL:    server.URL + "/test",
 		Headers: map[string][]string{
 			"Accept": {"application/json"},
 		},
@@ -111,8 +111,8 @@ func TestDoWithTimeout(t *testing.T) {
 
 func TestFlattenHeaders(t *testing.T) {
 	input := map[string][]string{
-		"Accept":     {"application/json"},
-		"X-Multi":    {"value1", "value2"},
+		"Accept":  {"application/json"},
+		"X-Multi": {"value1", "value2"},
 	}
 
 	result := flattenHeaders(input)

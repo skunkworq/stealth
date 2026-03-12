@@ -37,6 +37,7 @@ TLSFingerprint* connect_and_fingerprint(const char* host, int port);
 void free_tls_fingerprint(TLSFingerprint* fp);
 */
 import "C"
+
 import (
 	"fmt"
 	"unsafe"

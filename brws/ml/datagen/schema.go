@@ -101,7 +101,7 @@ func ToFeatureVector(ep *TrainingEpisode) []float64 {
 	if ep.Behavioral != nil {
 		vec[14] = clamp(ep.Behavioral.MouseVelocity/2000.0, 0, 1) // Normalize to [0,1]
 		vec[15] = clamp(ep.Behavioral.TypingSpeed/500.0, 0, 1)    // Normalize to [0,1]
-		vec[16] = ep.Behavioral.Straightness                       // Already [0,1]
+		vec[16] = ep.Behavioral.Straightness                      // Already [0,1]
 	}
 	if ep.Captcha != nil && ep.Captcha.SolveTimeMs > 0 {
 		vec[17] = clamp(float64(ep.Captcha.SolveTimeMs)/30000.0, 0, 1) // Normalize to [0,1] (30s max)

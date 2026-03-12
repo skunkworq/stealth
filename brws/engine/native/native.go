@@ -22,10 +22,11 @@ import (
 	"github.com/andybalholm/brotli"
 	"github.com/google/uuid"
 	utls "github.com/refraction-networking/utls"
+	"golang.org/x/net/http2"
+
 	"github.com/skunkworq/stealth/brws/constants"
 	"github.com/skunkworq/stealth/brws/engine"
 	"github.com/skunkworq/stealth/brws/engine/profiles"
-	"golang.org/x/net/http2"
 )
 
 func init() {
@@ -82,12 +83,12 @@ func New(opts engine.Options) (engine.Engine, error) {
 
 			config := &utls.Config{ServerName: host, InsecureSkipVerify: true}
 			uconn := utls.UClient(plainConn, config, utls.HelloChrome_Auto)
-			
+
 			if err := uconn.HandshakeContext(ctx); err != nil {
 				plainConn.Close()
 				return nil, fmt.Errorf("StealthTLS uTLS Handshake failed: %w", err)
 			}
-			
+
 			return uconn, nil
 		}
 	} else {
@@ -375,10 +376,10 @@ func chromeH2Profile() h2Profile {
 // firefoxH2Profile returns HTTP/2 settings matching Firefox 120.
 func firefoxH2Profile() h2Profile {
 	return h2Profile{
-		maxHeaderListSize:         0,       // Firefox: not sent
-		maxDecoderHeaderTableSize: 131072,  // Firefox: 131072
-		maxReadFrameSize:          16384,   // Firefox: 16384
-		initialWindowSize:         131072,  // Firefox: 128KB
+		maxHeaderListSize:         0,        // Firefox: not sent
+		maxDecoderHeaderTableSize: 131072,   // Firefox: 131072
+		maxReadFrameSize:          16384,    // Firefox: 16384
+		initialWindowSize:         131072,   // Firefox: 128KB
 		connWindowSize:            12517377, // Firefox: ~12MB
 	}
 }

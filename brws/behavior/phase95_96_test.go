@@ -26,7 +26,7 @@ func TestPhases95_96Integration(t *testing.T) {
 
 	// Round 1: Trigger detections
 	req1 := ag.GenerateRequest("https://example.com")
-	
+
 	detector := adversarial.NewStealthDetector()
 	det1 := detector.AnalyzeRequest(req1, nil)
 	report1 := det1.ToDetectionReport()
@@ -68,7 +68,7 @@ func TestPhases95_96Integration(t *testing.T) {
 	fired2 := report2.FiredCheckNames()
 	t.Logf("Round 2 fired: %v", fired2)
 	t.Logf("Sec-CH-UA-Full-Version-List: %s", req2.Header.Get("Sec-CH-UA-Full-Version-List"))
-	
+
 	navDataRaw := req2.Header.Get("X-Navigator-Data")
 	t.Logf("X-Navigator-Data: %s", navDataRaw)
 

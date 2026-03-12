@@ -14,10 +14,10 @@ import (
 type BehavioralTracker struct {
 	mu sync.Mutex
 
-	startTime   time.Time
-	lastMouseX  float64
-	lastMouseY  float64
-	hasLastPos  bool
+	startTime  time.Time
+	lastMouseX float64
+	lastMouseY float64
+	hasLastPos bool
 
 	mouseTimestamps  []int64
 	typingTimestamps []int64

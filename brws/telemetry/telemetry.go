@@ -131,13 +131,13 @@ func (t *Telemetry) RecordHistogram(ctx context.Context, name string, value floa
 	histogram.Record(ctx, value, metric.WithAttributes(attrs...))
 }
 
-func (t *Telemetry) NewCounter(name string, description string) (metric.Float64Counter, error) {
+func (t *Telemetry) NewCounter(name, description string) (metric.Float64Counter, error) {
 	return t.Meter.Float64Counter(name,
 		metric.WithDescription(description),
 	)
 }
 
-func (t *Telemetry) NewHistogram(name string, description string, buckets []float64) (metric.Float64Histogram, error) {
+func (t *Telemetry) NewHistogram(name, description string, buckets []float64) (metric.Float64Histogram, error) {
 	return t.Meter.Float64Histogram(name,
 		metric.WithDescription(description),
 		metric.WithExplicitBucketBoundaries(buckets...),

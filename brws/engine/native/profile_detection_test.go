@@ -41,7 +41,7 @@ func TestTLSSpoofingWithRealTLS(t *testing.T) {
 		var tlsInfo testserver.TLSInfo
 		_ = json.NewDecoder(resp.Body).Decode(&tlsInfo)
 
-			_ = tlsInfo
+		_ = tlsInfo
 
 		fmt.Printf("\n=== Standard Go TLS ===\n")
 		fmt.Printf("TLS Version: %s\n", tlsInfo.Version)
@@ -173,7 +173,7 @@ func TestProfilesAgainstDetection(t *testing.T) {
 
 			// Run detection
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
-				_ = mockReq
+			_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}

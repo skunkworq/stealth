@@ -63,7 +63,7 @@ func NewOptimizer(learningRate, momentum, weightDecay float64) *Optimizer {
 }
 
 // Update updates weights and biases using computed gradients.
-func (o *Optimizer) Update(weights [][]float64, gradients [][]float64, biases []float64, biasGradients []float64) {
+func (o *Optimizer) Update(weights, gradients [][]float64, biases, biasGradients []float64) {
 	for i := range weights {
 		for j := range weights[i] {
 			grad := gradients[i][j]

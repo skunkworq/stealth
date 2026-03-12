@@ -6,10 +6,12 @@ import (
 )
 
 // Re-export types from tlsparser for backwards compatibility
-type ClientHello = tlsparser.ClientHello
-type Extension = tlsparser.Extension
-type GREASEValue = tlsparser.GREASEValue
-type TLSRecord = tlsparser.TLSRecord
+type (
+	ClientHello = tlsparser.ClientHello
+	Extension   = tlsparser.Extension
+	GREASEValue = tlsparser.GREASEValue
+	TLSRecord   = tlsparser.TLSRecord
+)
 
 // ParseClientHello parses raw ClientHello bytes
 func ParseClientHello(data []byte) (*ClientHello, error) {

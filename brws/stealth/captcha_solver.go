@@ -428,8 +428,8 @@ func (cs *CaptchaSolver) logNormalDuration(meanMs, stddevMs float64) float64 {
 
 	// Convert normal parameters to log-normal parameters
 	variance := stddevMs * stddevMs
-	mu := math.Log(meanMs*meanMs/math.Sqrt(variance+meanMs*meanMs)) //nolint:mnd
-	sigma := math.Sqrt(math.Log(1 + variance/(meanMs*meanMs)))      //nolint:mnd
+	mu := math.Log(meanMs * meanMs / math.Sqrt(variance+meanMs*meanMs)) //nolint:mnd
+	sigma := math.Sqrt(math.Log(1 + variance/(meanMs*meanMs)))          //nolint:mnd
 
 	result := math.Exp(mu + sigma*normal)
 	// Clamp to reasonable range
@@ -614,7 +614,7 @@ func (cs *CaptchaSolver) SolveReCaptchaV2(baseURL string) (*ReCaptchaV2Result, e
 // ReCaptchaV3Result holds the result of a reCAPTCHA v3 invisible assessment.
 type ReCaptchaV3Result struct {
 	Success     bool    `json:"success"`
-	Score       float64 `json:"score"`        // 0.0 (bot) – 1.0 (human)
+	Score       float64 `json:"score"` // 0.0 (bot) – 1.0 (human)
 	Action      string  `json:"action"`
 	ChallengeTS string  `json:"challenge_ts"`
 	Hostname    string  `json:"hostname"`

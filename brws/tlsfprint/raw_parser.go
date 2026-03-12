@@ -452,7 +452,7 @@ func (t *ConnectionStateTracker) GetConnection(connID string) *ConnectionState {
 	return t.states[connID]
 }
 
-func (t *ConnectionStateTracker) UpdateTLS(connID string, version uint16, cipher uint16) {
+func (t *ConnectionStateTracker) UpdateTLS(connID string, version, cipher uint16) {
 	if state, ok := t.states[connID]; ok {
 		state.TLSVersion = version
 		state.CipherSuite = cipher

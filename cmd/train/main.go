@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
+
 	"github.com/skunkworq/stealth/brws/ml"
 	"github.com/skunkworq/stealth/brws/ml/datagen"
 )
@@ -59,12 +60,12 @@ Examples:
 
 func runCmd() *cobra.Command {
 	var (
-		labURL           string
-		episodes         int
-		benchmarkEps     int
-		dbPath           string
-		modelDir         string
-		startLab         bool
+		labURL       string
+		episodes     int
+		benchmarkEps int
+		dbPath       string
+		modelDir     string
+		startLab     bool
 	)
 
 	cmd := &cobra.Command{
@@ -494,9 +495,9 @@ func runPythonTraining(ctx context.Context, labURL string, episodes int, modelDi
 
 func benchmarkCmd() *cobra.Command {
 	var (
-		labURL       string
-		episodes     int
-		weightsPath  string
+		labURL      string
+		episodes    int
+		weightsPath string
 	)
 
 	cmd := &cobra.Command{

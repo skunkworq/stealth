@@ -179,8 +179,10 @@ func handleToolsList(req MCPRequest) MCPResponse {
 	}
 }
 
-var lastTree *semantic.SemanticTree
-var lastURL string
+var (
+	lastTree *semantic.SemanticTree
+	lastURL  string
+)
 
 func handleToolsCall(req MCPRequest) MCPResponse {
 	var params struct {

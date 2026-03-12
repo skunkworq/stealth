@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"golang.org/x/net/websocket"
+
 	"github.com/skunkworq/stealth/brws/adversarial"
 	"github.com/skunkworq/stealth/brws/behavior"
-	"golang.org/x/net/websocket"
 )
 
 // ProfileResult contains per-profile shield evaluation results.

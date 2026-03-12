@@ -13,6 +13,7 @@ import (
 // 1. We need reproducible randomness for testing browser automation
 // 2. Performance is more important than cryptographic security for UI simulation
 // 3. The randomness is used for visual timing effects, not security purposes
+//
 //nolint:gosec // G404: math/rand is intentional for non-cryptographic use
 var behaviorRand = rand.New(rand.NewSource(time.Now().UnixNano()))
 

@@ -43,7 +43,7 @@ func TestAdaptiveScorer_AllClear(t *testing.T) {
 	scorer := NewAdaptiveScorer(nil)
 
 	results := map[VectorCategory]*VectorResult{
-		VectorTLS: {Category: VectorTLS, Detected: false, Score: 0.0},
+		VectorTLS:  {Category: VectorTLS, Detected: false, Score: 0.0},
 		VectorHTTP: {Category: VectorHTTP, Detected: false, Score: 0.05},
 	}
 

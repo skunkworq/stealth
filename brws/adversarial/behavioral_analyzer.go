@@ -36,7 +36,7 @@ func (ba *BehavioralAnalyzer) Analyze(events *EnhancedBehavioralEvents) *VectorR
 	hasTypingData := len(events.TypingTimestamps) >= 2 || len(events.KeystrokeHoldTimes) >= 3
 	hasScrollData := len(events.ScrollTimestamps) >= 3 || len(events.ScrollDirections) >= 3
 	hasClickData := len(events.ClickTimestamps) >= 2 && len(events.ClickPositions) >= 2
-	
+
 	// If no raw events but summary stats are present, use fallback analysis
 	if !hasMouseData && !hasTypingData && !hasScrollData && !hasClickData {
 		return ba.analyzeFallback(events, result)
@@ -64,7 +64,7 @@ func (ba *BehavioralAnalyzer) checkMouseEvents(events *EnhancedBehavioralEvents,
 	hasTimestamps := len(events.MouseTimestamps) >= 3
 	hasPositions := len(events.MousePositions) >= 3
 	hasVelocities := len(events.MouseVelocities) > 0
-	
+
 	if !hasTimestamps && !hasPositions && !hasVelocities {
 		return
 	}
@@ -149,7 +149,7 @@ func (ba *BehavioralAnalyzer) checkMouseEvents(events *EnhancedBehavioralEvents,
 func (ba *BehavioralAnalyzer) checkTypingEvents(events *EnhancedBehavioralEvents, result *VectorResult) {
 	hasTimestamps := len(events.TypingTimestamps) >= 2
 	hasHoldTimes := len(events.KeystrokeHoldTimes) >= 3
-	
+
 	if !hasTimestamps && !hasHoldTimes {
 		return
 	}
@@ -247,7 +247,7 @@ func (ba *BehavioralAnalyzer) checkKeystrokeHoldTimes(holdTimes []float64, resul
 func (ba *BehavioralAnalyzer) checkScrollEvents(events *EnhancedBehavioralEvents, result *VectorResult) {
 	hasTimestamps := len(events.ScrollTimestamps) >= 3
 	hasDirections := len(events.ScrollDirections) >= 3
-	
+
 	if !hasTimestamps && !hasDirections {
 		return
 	}
@@ -275,7 +275,7 @@ func (ba *BehavioralAnalyzer) checkScrollEvents(events *EnhancedBehavioralEvents
 }
 
 // checkScrollDirectionPatterns checks for suspicious scroll direction patterns.
-func (ba *BehavioralAnalyzer) checkScrollDirectionPatterns(directions []float64, deltas []float64, result *VectorResult) {
+func (ba *BehavioralAnalyzer) checkScrollDirectionPatterns(directions, deltas []float64, result *VectorResult) {
 	if len(directions) < 3 {
 		return
 	}

@@ -344,30 +344,30 @@ type CertificateChain struct {
 
 // SaveToDirectory saves the certificate chain to PEM files
 func (c *CertificateChain) SaveToDirectory(dir string) error {
-	if err := os.MkdirAll(dir, 0750); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return err
 	}
 
 	// Save root CA
 	if c.Root != nil {
-		if err := os.WriteFile(dir+"/root-ca.pem", []byte(c.Root.CertPEM), 0600); err != nil {
+		if err := os.WriteFile(dir+"/root-ca.pem", []byte(c.Root.CertPEM), 0o600); err != nil {
 			return err
 		}
 	}
 
 	// Save intermediate
 	if c.Intermediate != nil {
-		if err := os.WriteFile(dir+"/intermediate.pem", []byte(c.Intermediate.CertPEM), 0600); err != nil {
+		if err := os.WriteFile(dir+"/intermediate.pem", []byte(c.Intermediate.CertPEM), 0o600); err != nil {
 			return err
 		}
 	}
 
 	// Save leaf (with key)
 	if c.Leaf != nil {
-		if err := os.WriteFile(dir+"/cert.pem", []byte(c.Leaf.CertPEM), 0600); err != nil {
+		if err := os.WriteFile(dir+"/cert.pem", []byte(c.Leaf.CertPEM), 0o600); err != nil {
 			return err
 		}
-		if err := os.WriteFile(dir+"/key.pem", []byte(c.Leaf.KeyPEM), 0600); err != nil {
+		if err := os.WriteFile(dir+"/key.pem", []byte(c.Leaf.KeyPEM), 0o600); err != nil {
 			return err
 		}
 		// Also save chain
@@ -376,7 +376,7 @@ func (c *CertificateChain) SaveToDirectory(dir string) error {
 			chain += c.Intermediate.CertPEM
 		}
 		chain += c.Root.CertPEM
-		if err := os.WriteFile(dir+"/chain.pem", []byte(chain), 0600); err != nil {
+		if err := os.WriteFile(dir+"/chain.pem", []byte(chain), 0o600); err != nil {
 			return err
 		}
 	}
@@ -480,6 +480,3 @@ func parseIPAddresses(ips []string) []net.IP {
 	}
 	return result
 }
-
-
-

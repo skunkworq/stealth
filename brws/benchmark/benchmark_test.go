@@ -83,7 +83,7 @@ func BenchmarkTLSFingerprintGeneration(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Simulate fingerprint generation
 		fp := map[string]interface{}{
-			"ja3":   "769,47-53-5-10-49161-49162-49171-49172-50-56-19-4,0-10-11,23-24-25,0",
+			"ja3":      "769,47-53-5-10-49161-49162-49171-49172-50-56-19-4,0-10-11,23-24-25,0",
 			"ja3_hash": "e7c1c1f9f4a9c7d4e5f6a7b8c9d0e1f2",
 		}
 		_ = fp
@@ -110,7 +110,7 @@ type mockEngine struct {
 	id int //nolint:unused
 }
 
-func (m *mockEngine) Name() string { return "mock" }
+func (m *mockEngine) Name() string                      { return "mock" }
 func (m *mockEngine) Capabilities() engine.Capabilities { return engine.Capabilities{} }
 func (m *mockEngine) Do(_ context.Context, _ *engine.Request) (*engine.Response, error) {
 	return &engine.Response{}, nil

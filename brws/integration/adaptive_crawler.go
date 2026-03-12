@@ -160,7 +160,7 @@ func (c *AdaptiveCrawler) Crawl(ctx context.Context, url string) (*CrawlResult, 
 	return result, nil
 }
 
-func (c *AdaptiveCrawler) CrawlWithIntent(ctx context.Context, url string, intent string) (*CrawlResult, error) {
+func (c *AdaptiveCrawler) CrawlWithIntent(ctx context.Context, url, intent string) (*CrawlResult, error) {
 	start := time.Now()
 	result := &CrawlResult{
 		URL:          url,

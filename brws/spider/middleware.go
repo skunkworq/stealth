@@ -19,9 +19,11 @@ type MiddlewareManager struct {
 	mu                  sync.RWMutex
 }
 
-type RequestMiddleware func(req *Request) (*Request, error)
-type ResponseMiddleware func(resp *Response) []*Request
-type ErrorMiddleware func(err error, resp *Response) []*Request
+type (
+	RequestMiddleware  func(req *Request) (*Request, error)
+	ResponseMiddleware func(resp *Response) []*Request
+	ErrorMiddleware    func(err error, resp *Response) []*Request
+)
 
 func NewMiddlewareManager() *MiddlewareManager {
 	return &MiddlewareManager{}

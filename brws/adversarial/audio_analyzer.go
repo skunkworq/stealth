@@ -7,16 +7,16 @@ import (
 
 // AudioData holds AudioContext fingerprinting data for analysis.
 type AudioData struct {
-	SampleRate      int     `json:"sample_rate"`
-	ChannelCount    int     `json:"channel_count"`
-	MaxChannelCount int     `json:"max_channel_count"`
-	BaseLatency     float64 `json:"base_latency"`
-	OutputLatency           float64 `json:"output_latency"`
-	State                   string  `json:"state"`
-	AudioWorkletAvailable   bool    `json:"audio_worklet_available"`
-	OfflineContextHash      string  `json:"offline_context_hash"`
-	CompressorAttack        float64 `json:"compressor_attack"`
-	CompressorRelease       float64 `json:"compressor_release"`
+	SampleRate            int     `json:"sample_rate"`
+	ChannelCount          int     `json:"channel_count"`
+	MaxChannelCount       int     `json:"max_channel_count"`
+	BaseLatency           float64 `json:"base_latency"`
+	OutputLatency         float64 `json:"output_latency"`
+	State                 string  `json:"state"`
+	AudioWorkletAvailable bool    `json:"audio_worklet_available"`
+	OfflineContextHash    string  `json:"offline_context_hash"`
+	CompressorAttack      float64 `json:"compressor_attack"`
+	CompressorRelease     float64 `json:"compressor_release"`
 }
 
 // AudioAnalyzer validates AudioContext parameters for consistency and spoofing detection.

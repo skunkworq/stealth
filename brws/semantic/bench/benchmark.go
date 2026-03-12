@@ -80,7 +80,7 @@ func (s *Suite) RunURL(ctx context.Context, url string) *Result {
 	return result
 }
 
-func (s *Suite) RunFile(ctx context.Context, path string, baseURL string) *Result {
+func (s *Suite) RunFile(ctx context.Context, path, baseURL string) *Result {
 	result := &Result{URL: path}
 
 	data, err := os.ReadFile(path)
@@ -222,7 +222,7 @@ func WriteReport(results []*Result, path string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 func nodeDepth(node semantic.SemanticNode, depth int) int {

@@ -1,4 +1,5 @@
 // Package proxy provides proxy rotation and management.
+//
 //nolint:gosec // G404: math/rand used intentionally for non-cryptographic proxy selection
 package proxy
 

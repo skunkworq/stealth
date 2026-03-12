@@ -147,12 +147,12 @@ func (t Type) MatchesPlatform(platform string) bool {
 
 // Info holds browser information extracted from a User-Agent string.
 type Info struct {
-	Type           Type
-	Version        string
-	Platform       string
-	Mobile         bool
-	Engine         string
-	EngineVersion  string
+	Type          Type
+	Version       string
+	Platform      string
+	Mobile        bool
+	Engine        string
+	EngineVersion string
 }
 
 // Parse parses a User-Agent string and returns detailed browser information.

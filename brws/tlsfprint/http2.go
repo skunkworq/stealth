@@ -230,7 +230,7 @@ func NewHTTP2Analyzer() *HTTP2Analyzer {
 	}
 }
 
-func (a *HTTP2Analyzer) Record(settings map[uint16]uint32, pseudoHeaders []string, windowSize uint32, frameSize uint32) HTTP2Observation {
+func (a *HTTP2Analyzer) Record(settings map[uint16]uint32, pseudoHeaders []string, windowSize, frameSize uint32) HTTP2Observation {
 	obs := HTTP2Observation{
 		Settings:        settings,
 		SettingsOrder:   []uint16{1, 3, 4, 5, 6, 7},

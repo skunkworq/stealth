@@ -77,7 +77,7 @@ type RetryPolicy struct {
 	BackoffMultiplier float64
 }
 
-func NewAgentOrchestrator(maxAgents int, maxConcurrent int) *AgentOrchestrator {
+func NewAgentOrchestrator(maxAgents, maxConcurrent int) *AgentOrchestrator {
 	agents := make([]*SemanticAgent, 0, maxAgents)
 	for i := 0; i < maxAgents; i++ {
 		agents = append(agents, newAgent(fmt.Sprintf("agent-%d", i)))

@@ -228,8 +228,10 @@ func (a *WebSocketAnalyzer) GetBrowserDistribution() map[string]int {
 	return dist
 }
 
-var wsVersionPattern = regexp.MustCompile(`^(7|8|13)$`)
-var wsKeyPattern = regexp.MustCompile(`^[A-Za-z0-9+/=]{22,24}$`)
+var (
+	wsVersionPattern = regexp.MustCompile(`^(7|8|13)$`)
+	wsKeyPattern     = regexp.MustCompile(`^[A-Za-z0-9+/=]{22,24}$`)
+)
 
 // ValidateWebSocketKey validates that a WebSocket key matches the expected format.
 // Returns true if the key is valid (22-24 base64 characters).

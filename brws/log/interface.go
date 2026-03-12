@@ -83,4 +83,5 @@ func ParseLevel(s string) Level {
 		return InfoLevel
 	}
 }
+
 // Test comment

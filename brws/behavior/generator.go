@@ -33,6 +33,8 @@ type EventData struct {
 
 // GeneratorConfig controls the behavioral data generation parameters.
 type GeneratorConfig struct {
+	Seed int64 // Optional deterministic seed for tests and reproducible generation
+
 	// Mouse movement
 	MouseEventsMin   int     // Minimum mouse events (default: 15)
 	MouseEventsMax   int     // Maximum mouse events (default: 30)
@@ -101,10 +103,16 @@ func NewEventGenerator(config *GeneratorConfig) *EventGenerator {
 	if config == nil {
 		config = DefaultGeneratorConfig()
 	}
+
+	seed := config.Seed
+	if seed == 0 {
+		seed = time.Now().UnixNano()
+	}
+
 	//nolint:gosec // G404: math/rand is intentional for non-cryptographic use
 	return &EventGenerator{
 		config: config,
-		rng:    rand.New(rand.NewSource(time.Now().UnixNano())),
+		rng:    rand.New(rand.NewSource(seed)),
 	}
 }
 
@@ -259,7 +267,7 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 	g.rng.Shuffle(len(forcedModes), func(i, j int) {
 		forcedModes[i], forcedModes[j] = forcedModes[j], forcedModes[i]
 	})
-	
+
 	if g.config.EvadeMouseClustering {
 		sort.Ints(forcedModes)
 	}
@@ -397,7 +405,7 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 		// Force a clean acceleration -> deceleration curve (single peak)
 		peakIdx := len(velocities) / 2
 		peakV := 25.0 + g.rng.Float64()*15.0 // 25-40px/tick peak
-		
+
 		for i := 0; i < len(velocities); i++ {
 			var progress float64
 			if i <= peakIdx {
@@ -407,12 +415,12 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 			}
 			// Use sine curve easing for perfectly smooth acceleration/deceleration
 			factor := math.Sin(progress * math.Pi / 2)
-			
+
 			// Add 10-20% random noise so it's not perfectly mathematical,
 			// but keeping the underlying macro-structure fully intact.
 			noise := 0.90 + g.rng.Float64()*0.20
 			velocities[i] = peakV * factor * noise
-			
+
 			// Minimum velocity to ensure movement
 			if velocities[i] < 2.0 {
 				velocities[i] = 2.0 + g.rng.Float64()
@@ -471,7 +479,7 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 			velocities = smoothed
 		}
 	}
-	
+
 	if g.config.EvadeMouseEaseIn && len(velocities) >= 4 {
 		velocities[0] = math.Min(velocities[0]*0.1, 9.5)
 		velocities[1] = math.Min(velocities[1]*0.4, 25.0)
@@ -658,7 +666,7 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 		} else {
 			dirRun++
 		}
-		
+
 		// When changing direction, reduce the raw scroll delta to simulate
 		// deceleration before reversal (defeats Check 31). The shield checks
 		// ScrollDeltas[i] at direction-change points, so we must reduce
@@ -669,8 +677,7 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 		directions = append(directions, currentDir)
 	}
 
-	scrollTimestamps = scrollTimestamps[:1]
-	ts = scrollTimestamps[0]
+	scrollTimestamps = append(scrollTimestamps, ts)
 	for i := 0; i < numScrolls; i++ {
 		var interval int
 		delta := deltas[i]
@@ -715,7 +722,7 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 		ts += int64(interval)
 		scrollTimestamps = append(scrollTimestamps, ts)
 	}
-	
+
 	data.ScrollTimestamps = scrollTimestamps
 	data.ScrollDeltas = deltas
 	data.ScrollDirections = directions
@@ -759,7 +766,7 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 			for k := idx - 5; k <= idx+1; k++ {
 				if k >= 0 && k < len(data.MouseVelocities) {
 					if g.config.EvadeMouseEaseIn && k < 4 {
-						continue 
+						continue
 					}
 					dist := math.Abs(float64(k - (idx - 2)))
 					factor := 0.30 + (dist * 0.15)
@@ -770,7 +777,7 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 					if v < 16.0 {
 						v = 16.0 + g.rng.Float64()*10.0
 					}
-					data.MouseVelocities[k] = math.Round(v*10)/10
+					data.MouseVelocities[k] = math.Round(v*10) / 10
 				}
 			}
 		}
@@ -809,7 +816,7 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 			clickTs = data.MouseTimestamps[idx] + int64(1+g.rng.Intn(5))
 		}
 		clickTimestamps = append(clickTimestamps, clickTs)
-		
+
 		var dwellTime int64
 		if g.config.EvadeClickDwellTime {
 			dwellTime = 80 + int64(g.rng.Intn(120))
@@ -880,7 +887,7 @@ func lagNAuto(values []float64, lag int) float64 {
 func (g *EventGenerator) generateErrorStack(data *EventData) {
 	appJS := []string{"main.js", "app.js", "index.js", "bundle.js"}
 	vendorJS := []string{"vendor.js", "react-dom.production.min.js", "lodash.min.js", "jquery.min.js"}
-	
+
 	app := appJS[g.rng.Intn(len(appJS))]
 	vendor := vendorJS[g.rng.Intn(len(vendorJS))]
 

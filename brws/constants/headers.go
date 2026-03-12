@@ -50,17 +50,17 @@ const (
 
 // Common HTTP headers used in detection.
 const (
-	HeaderUserAgent       = "User-Agent"
-	HeaderAccept          = "Accept"
-	HeaderAcceptLanguage  = "Accept-Language"
-	HeaderAcceptEncoding  = "Accept-Encoding"
-	HeaderContentType     = "Content-Type"
-	HeaderContentLength   = "Content-Length"
-	HeaderReferer         = "Referer"
-	HeaderConnection      = "Connection"
-	HeaderUpgrade         = "Upgrade"
-	HeaderXForwardedFor   = "X-Forwarded-For"
-	HeaderXRealIP         = "X-Real-Ip"
+	HeaderUserAgent      = "User-Agent"
+	HeaderAccept         = "Accept"
+	HeaderAcceptLanguage = "Accept-Language"
+	HeaderAcceptEncoding = "Accept-Encoding"
+	HeaderContentType    = "Content-Type"
+	HeaderContentLength  = "Content-Length"
+	HeaderReferer        = "Referer"
+	HeaderConnection     = "Connection"
+	HeaderUpgrade        = "Upgrade"
+	HeaderXForwardedFor  = "X-Forwarded-For"
+	HeaderXRealIP        = "X-Real-Ip"
 )
 
 // Detection result headers.

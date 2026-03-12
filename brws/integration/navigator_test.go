@@ -22,7 +22,6 @@ func TestSemanticNavigator_NavigateWithIntent(t *testing.T) {
 
 	ctx := context.Background()
 	result, err := navigator.NavigateWithIntent(ctx, "https://httpbin.org/html", "click")
-
 	if err != nil {
 		t.Fatalf("NavigateWithIntent failed: %v", err)
 	}

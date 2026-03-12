@@ -27,38 +27,38 @@ type ShieldProfile struct {
 
 // ShieldResult is the evaluation result for a single profile.
 type ShieldResult struct {
-	Profile       string             `json:"profile"`
-	Category      string             `json:"category"`
-	ShouldCatch   bool               `json:"should_catch"`
-	BotScore      float64            `json:"bot_score"`
-	IsBot         bool               `json:"is_bot"`
-	Correct       bool               `json:"correct"` // true if detection matches expectation
-	VectorScores  map[string]float64 `json:"vector_scores"`
-	Indicators    []string           `json:"indicators"`
+	Profile      string             `json:"profile"`
+	Category     string             `json:"category"`
+	ShouldCatch  bool               `json:"should_catch"`
+	BotScore     float64            `json:"bot_score"`
+	IsBot        bool               `json:"is_bot"`
+	Correct      bool               `json:"correct"` // true if detection matches expectation
+	VectorScores map[string]float64 `json:"vector_scores"`
+	Indicators   []string           `json:"indicators"`
 }
 
 // ShieldReport is the full evaluation report.
 type ShieldReport struct {
-	TotalProfiles   int             `json:"total_profiles"`
-	CorrectCount    int             `json:"correct_count"`
-	Accuracy        float64         `json:"accuracy"`
-	TruePositives   int             `json:"true_positives"`
-	FalseNegatives  int             `json:"false_negatives"`
-	TrueNegatives   int             `json:"true_negatives"`
-	FalsePositives  int             `json:"false_positives"`
-	Precision       float64         `json:"precision"`
-	Recall          float64         `json:"recall"`
-	F1Score         float64         `json:"f1_score"`
-	ByCategory      map[string]CategoryStats `json:"by_category"`
-	VectorCoverage  map[string]VectorStats   `json:"vector_coverage"`
-	Results         []ShieldResult  `json:"results"`
+	TotalProfiles  int                      `json:"total_profiles"`
+	CorrectCount   int                      `json:"correct_count"`
+	Accuracy       float64                  `json:"accuracy"`
+	TruePositives  int                      `json:"true_positives"`
+	FalseNegatives int                      `json:"false_negatives"`
+	TrueNegatives  int                      `json:"true_negatives"`
+	FalsePositives int                      `json:"false_positives"`
+	Precision      float64                  `json:"precision"`
+	Recall         float64                  `json:"recall"`
+	F1Score        float64                  `json:"f1_score"`
+	ByCategory     map[string]CategoryStats `json:"by_category"`
+	VectorCoverage map[string]VectorStats   `json:"vector_coverage"`
+	Results        []ShieldResult           `json:"results"`
 }
 
 // CategoryStats shows detection rates per category.
 type CategoryStats struct {
-	Total   int     `json:"total"`
-	Caught  int     `json:"caught"`
-	Rate    float64 `json:"rate"`
+	Total  int     `json:"total"`
+	Caught int     `json:"caught"`
+	Rate   float64 `json:"rate"`
 }
 
 // VectorStats shows how often each vector fires.

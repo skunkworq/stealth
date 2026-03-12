@@ -11,15 +11,15 @@ import (
 func TestPhase64Integration(t *testing.T) {
 	// 1. Setup detector and adaptive generator
 	detector := adversarial.NewStealthDetector()
-	
+
 	// Let's use the broken generator first
 	bg := behavior.NewBrokenRequestGenerator(nil)
 	req := bg.GenerateRequest("https://example.com")
-	
+
 	// 2. Initial detection (expect failure)
 	detection := detector.AnalyzeRequest(req, nil)
 	log.Printf("Round 1 Score: %.3f (Bot: %v)", detection.Score, detection.IsBot)
-	
+
 	found := false
 	for _, ind := range detection.Indicators {
 		if ind.Name == "screen_is_extended_missing" {
@@ -27,7 +27,7 @@ func TestPhase64Integration(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if !found {
 		t.Errorf("expected screen_is_extended_missing indicator, but it was not found")
 	}
@@ -36,7 +36,7 @@ func TestPhase64Integration(t *testing.T) {
 	ag := behavior.NewAdaptiveRequestGenerator(nil)
 	report := detection.ToDetectionReport()
 	ag.ApplyFeedback(report)
-	
+
 	// 4. Second generation (expect fix)
 	req2 := ag.GenerateRequest("https://example.com")
 	detection2 := detector.AnalyzeRequest(req2, nil)

@@ -22,7 +22,7 @@ func TestPhase60Integration(t *testing.T) {
 	// 2. Round 1: Verification of memory scaling and stack realism
 	hReq := ag.GenerateRequest("https://example.com/")
 	t.Logf("DEBUG: hReq headers: %v", hReq.Header)
-	
+
 	navJSON := hReq.Header.Get(constants.HeaderNavigatorData)
 	t.Logf("DEBUG: navJSON length: %d", len(navJSON))
 	var navData map[string]interface{}
@@ -36,7 +36,7 @@ func TestPhase60Integration(t *testing.T) {
 	}
 	limit := perfMem["jsHeapSizeLimit"].(float64)
 	deviceMem := navData["deviceMemory"].(float64)
-	
+
 	if deviceMem >= 8 && limit < 3.5e9 {
 		t.Errorf("performance_memory_limit too low for 8GB+ RAM: %.0f", limit)
 	}
@@ -45,7 +45,7 @@ func TestPhase60Integration(t *testing.T) {
 	bhJSON := hReq.Header.Get(constants.HeaderBehavioralData)
 	var bhData map[string]interface{}
 	json.Unmarshal([]byte(bhJSON), &bhData)
-	
+
 	stack, ok := bhData["errorStack"].(string)
 	if !ok || stack == "" {
 		t.Fatalf("errorStack missing or empty")
@@ -65,8 +65,8 @@ func TestPhase60Integration(t *testing.T) {
 	detection := detector.AnalyzeRequest(hReq, nil)
 	for _, ind := range detection.Indicators {
 		if strings.Contains(ind.Name, "performance_memory_limit_too_low_for_ram") ||
-		   strings.Contains(ind.Name, "error_stack_suspiciously_clean") ||
-		   strings.Contains(ind.Name, "error_stack_missing_async_context") {
+			strings.Contains(ind.Name, "error_stack_suspiciously_clean") ||
+			strings.Contains(ind.Name, "error_stack_missing_async_context") {
 			t.Errorf("Shield flagged with Phase 60 gap: %s", ind.Name)
 		}
 	}
@@ -83,13 +83,13 @@ func TestPhase60Integration(t *testing.T) {
 			},
 		},
 	})
-	
+
 	ag.ApplyFeedback(report)
-	
+
 	// Re-verify after feedback
 	hReq2 := ag.GenerateRequest("https://example.com/")
 	detection2 := detector.AnalyzeRequest(hReq2, nil)
-	
+
 	for _, ind := range detection2.Indicators {
 		if strings.Contains(ind.Name, "automation_leak_detected") {
 			t.Errorf("Shield still flagged with automation leak after feedback: %s", ind.Name)

@@ -42,6 +42,7 @@ type Config struct {
 }
 
 // PoolStats tracks pool statistics.
+//
 //nolint:revive // Type name stuttering is intentional for clarity
 type PoolStats struct {
 	Created  int64

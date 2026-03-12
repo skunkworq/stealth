@@ -1,4 +1,5 @@
 // Package tlsfprint provides TLS fingerprinting capabilities.
+//
 //nolint:gosec // G501: crypto/md5 used intentionally for JA3/JA4 fingerprinting
 package tlsfprint
 

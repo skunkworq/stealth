@@ -105,14 +105,14 @@ func (ga *GraphicsAnalyzer) AnalyzeCanvas(req *http.Request) *DetectionVector {
 			indicators = append(indicators, "canvas_png_magic_header_missing")
 			vec.Score += 0.55
 			vec.CheckReports = append(vec.CheckReports, CheckReport{
-				Name:     "canvas_png_magic_header",
-				Fired:    true,
-				Weight:   0.55,
-				Score:    0.55,
-				Field:    "canvas_base64_prefix",
-				Actual:   safePrefix(payload, 5),
-				Expected: "iVBOR",
-				Severity: "high",
+				Name:        "canvas_png_magic_header",
+				Fired:       true,
+				Weight:      0.55,
+				Score:       0.55,
+				Field:       "canvas_base64_prefix",
+				Actual:      safePrefix(payload, 5),
+				Expected:    "iVBOR",
+				Severity:    "high",
 				Description: "Canvas data URL does not start with PNG magic bytes (iVBOR)",
 			})
 		}

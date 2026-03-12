@@ -162,7 +162,7 @@ func TestPolicyLoaderLoadFromFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal weights: %v", err)
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
@@ -212,7 +212,7 @@ func TestPolicyLoaderLoadFromFile_BadDimensions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -232,7 +232,7 @@ func TestPolicyLoaderLoadFromFile_MissingFile(t *testing.T) {
 func TestPolicyLoaderLoadFromFile_InvalidJSON(t *testing.T) {
 	tmpDir := t.TempDir()
 	path := filepath.Join(tmpDir, "invalid.json")
-	if err := os.WriteFile(path, []byte("not json"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("not json"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 

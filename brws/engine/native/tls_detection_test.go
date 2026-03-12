@@ -38,7 +38,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 		var tlsInfo testserver.TLSInfo
 		_ = json.NewDecoder(resp.Body).Decode(&tlsInfo)
 
-			_ = tlsInfo
+		_ = tlsInfo
 
 		fmt.Printf("\n=== Standard Go TLS ===\n")
 		fmt.Printf("TLS Version: %s\n", tlsInfo.Version)
@@ -235,7 +235,7 @@ func TestCombinedSpoofingDetection(t *testing.T) {
 
 	mockReq, _ := http.NewRequest("GET", server.URL, nil)
 
-		_ = mockReq
+	_ = mockReq
 	mockReq.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 	mockReq.Header.Set("Sec-Ch-Ua", `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`)
 	mockReq.Header.Set("Sec-Ch-Ua-Platform", `"macOS"`)

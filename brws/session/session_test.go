@@ -8,7 +8,7 @@ import (
 
 func TestNewManager(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	mgr, err := NewManager(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
@@ -26,7 +26,7 @@ func TestNewManager(t *testing.T) {
 
 func TestCreateSession(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	mgr, err := NewManager(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
@@ -63,7 +63,7 @@ func TestCreateSession(t *testing.T) {
 
 func TestGetSession(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	mgr, err := NewManager(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
@@ -93,7 +93,7 @@ func TestGetSession(t *testing.T) {
 
 func TestListSessions(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	mgr, err := NewManager(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
@@ -115,7 +115,7 @@ func TestListSessions(t *testing.T) {
 
 func TestDeleteSession(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	mgr, err := NewManager(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)
@@ -148,7 +148,7 @@ func TestDeleteSession(t *testing.T) {
 
 func TestSessionCookieJar(t *testing.T) {
 	tmpDir := t.TempDir()
-	
+
 	mgr, err := NewManager(tmpDir)
 	if err != nil {
 		t.Fatalf("Failed to create manager: %v", err)

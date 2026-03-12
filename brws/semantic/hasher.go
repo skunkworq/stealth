@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func StructuralHash(tag string, classes []string, childrenHashes []string) string {
+func StructuralHash(tag string, classes, childrenHashes []string) string {
 	h := sha256.New()
 	h.Write([]byte(tag))
 	h.Write([]byte("|"))

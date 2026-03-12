@@ -462,8 +462,8 @@ func (ss *SegmentationSolver) rotateSegment(segment []float64, w, h int, angle f
 			// Reverse-map from destination to source
 			rx := float64(x) - cx
 			ry := float64(y) - cy
-			srcX := int(math.Round(rx*cosA-ry*sinA+cx))
-			srcY := int(math.Round(rx*sinA+ry*cosA+cy))
+			srcX := int(math.Round(rx*cosA - ry*sinA + cx))
+			srcY := int(math.Round(rx*sinA + ry*cosA + cy))
 
 			if srcX >= 0 && srcX < w && srcY >= 0 && srcY < h {
 				result[y*w+x] = segment[srcY*w+srcX]

@@ -11,6 +11,7 @@ import (
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
 	"github.com/skunkworq/stealth/brws/semantic"
 	"github.com/skunkworq/stealth/brws/semantic/index"
 )

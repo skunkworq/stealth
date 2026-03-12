@@ -15,12 +15,12 @@ func (s *EnhancedServer) handleV3Assessments(w http.ResponseWriter, _ *http.Requ
 
 // v3MetricsResponse contains aggregated metrics for v3 assessments.
 type v3MetricsResponse struct {
-	Total        int                `json:"total"`
-	AvgV3Score   float64            `json:"avg_v3_score"`
-	AvgDetection float64            `json:"avg_detection_score"`
-	AvgBehav     float64            `json:"avg_behavioral_score"`
-	PassRate     float64            `json:"pass_rate"`
-	ScoreBuckets map[string]int     `json:"score_buckets"`
+	Total        int                       `json:"total"`
+	AvgV3Score   float64                   `json:"avg_v3_score"`
+	AvgDetection float64                   `json:"avg_detection_score"`
+	AvgBehav     float64                   `json:"avg_behavioral_score"`
+	PassRate     float64                   `json:"pass_rate"`
+	ScoreBuckets map[string]int            `json:"score_buckets"`
 	ByAction     map[string]*actionMetrics `json:"by_action"`
 }
 

@@ -54,7 +54,7 @@ func NewZapLogger(config *ZapConfig) (Logger, error) {
 
 	output := os.Stderr
 	if config.OutputPath != "" && config.OutputPath != "stderr" {
-		f, err := os.OpenFile(config.OutputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		f, err := os.OpenFile(config.OutputPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
 			return nil, err
 		}

@@ -17,14 +17,14 @@ func TestMutatedShield(t *testing.T) {
 
 		// Naked generator
 		genConfig := &behavior.RequestGeneratorConfig{
-			Profile:              profile,
-			EvadeWebGLCount:      false,
-			EvadeScreenHeightGap: false,
-			EvadeWebGLViewport:   false,
-			EvadeDeviceMemoryClamp: false,
-			EvadeConnectionSaveData: false,
-			EvadeScreenOrientation: false,
-			EvadeNavigatorKeyboard: false,
+			Profile:                  profile,
+			EvadeWebGLCount:          false,
+			EvadeScreenHeightGap:     false,
+			EvadeWebGLViewport:       false,
+			EvadeDeviceMemoryClamp:   false,
+			EvadeConnectionSaveData:  false,
+			EvadeScreenOrientation:   false,
+			EvadeNavigatorKeyboard:   false,
 			EvadeHardwareConcurrency: false,
 			EvadeNetworkQuantization: false,
 		}
@@ -35,15 +35,15 @@ func TestMutatedShield(t *testing.T) {
 		fmt.Printf("Naked %s -> Score: %.3f\n", profile.Name, res.Score)
 		for _, v := range res.Vectors {
 			for _, ind := range v.Indicators {
-				if strings.HasPrefix(ind, "insufficient_webgl_extensions") || 
-				   strings.HasPrefix(ind, "suspicious_taskbar_gap") || 
-				   strings.HasPrefix(ind, "missing_webgl_viewport_dims") || 
-				   strings.HasPrefix(ind, "mouse_abrupt_start") || 
-				   strings.HasPrefix(ind, "improbable_device_memory") || 
-				   strings.HasPrefix(ind, "missing_navigator_keyboard") ||
-				   strings.HasPrefix(ind, "improbable_hardware_concurrency") ||
-				   strings.HasPrefix(ind, "non_quantized_network_rtt") ||
-				   strings.HasPrefix(ind, "non_quantized_network_downlink") {
+				if strings.HasPrefix(ind, "insufficient_webgl_extensions") ||
+					strings.HasPrefix(ind, "suspicious_taskbar_gap") ||
+					strings.HasPrefix(ind, "missing_webgl_viewport_dims") ||
+					strings.HasPrefix(ind, "mouse_abrupt_start") ||
+					strings.HasPrefix(ind, "improbable_device_memory") ||
+					strings.HasPrefix(ind, "missing_navigator_keyboard") ||
+					strings.HasPrefix(ind, "improbable_hardware_concurrency") ||
+					strings.HasPrefix(ind, "non_quantized_network_rtt") ||
+					strings.HasPrefix(ind, "non_quantized_network_downlink") {
 					fmt.Printf("  Caught: %s\n", ind)
 				}
 			}
@@ -51,19 +51,19 @@ func TestMutatedShield(t *testing.T) {
 
 		// Mutated generator
 		genConfigMutated := &behavior.RequestGeneratorConfig{
-			Profile:              profile,
-			EvadeWebGLCount:      true,
-			EvadeScreenHeightGap: true,
-			EvadeWebGLViewport:      true,
-			EvadeDeviceMemoryClamp:  true,
-			EvadeConnectionSaveData: true,
-			EvadeScreenOrientation:  true,
-			EvadeNavigatorKeyboard:  true,
+			Profile:                  profile,
+			EvadeWebGLCount:          true,
+			EvadeScreenHeightGap:     true,
+			EvadeWebGLViewport:       true,
+			EvadeDeviceMemoryClamp:   true,
+			EvadeConnectionSaveData:  true,
+			EvadeScreenOrientation:   true,
+			EvadeNavigatorKeyboard:   true,
 			EvadeHardwareConcurrency: true,
 			EvadeNetworkQuantization: true,
 			EvadeCanvasEntropy:       true,
 			EvadeDPRQuantization:     true,
-			EventConfig:             behavior.DefaultGeneratorConfig(),
+			EventConfig:              behavior.DefaultGeneratorConfig(),
 		}
 		genConfigMutated.EventConfig.EvadeMouseEaseIn = true
 		genConfigMutated.EventConfig.EvadeMouseClustering = true
@@ -86,12 +86,12 @@ func TestMutatedShield(t *testing.T) {
 				if resMutated.Score > 0.1 {
 					fmt.Printf("  Still Caught: %s\n", ind)
 				}
-				if strings.HasPrefix(ind, "insufficient_webgl_extensions") || 
-				   strings.HasPrefix(ind, "suspicious_taskbar_gap") || 
-				   strings.HasPrefix(ind, "missing_webgl_viewport_dims") || 
-				   strings.HasPrefix(ind, "mouse_abrupt_start") || 
-				   strings.HasPrefix(ind, "improbable_device_memory") || 
-				   strings.HasPrefix(ind, "missing_connection_saveData") {
+				if strings.HasPrefix(ind, "insufficient_webgl_extensions") ||
+					strings.HasPrefix(ind, "suspicious_taskbar_gap") ||
+					strings.HasPrefix(ind, "missing_webgl_viewport_dims") ||
+					strings.HasPrefix(ind, "mouse_abrupt_start") ||
+					strings.HasPrefix(ind, "improbable_device_memory") ||
+					strings.HasPrefix(ind, "missing_connection_saveData") {
 					caught = true
 				}
 			}

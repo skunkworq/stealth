@@ -20,19 +20,19 @@ type BehavioralCheckResult struct {
 
 // V3AssessmentRecord captures the full analysis data from a v3 assessment.
 type V3AssessmentRecord struct {
-	ID                   string                  `json:"id"`
-	Timestamp            time.Time               `json:"timestamp"`
-	Action               string                  `json:"action"`
-	V3Score              float64                 `json:"v3_score"`
-	DetectionScore       float64                 `json:"detection_score"`
-	BehavioralScore      float64                 `json:"behavioral_score"`
-	CombinedBotScore     float64                 `json:"combined_bot_score"`
-	EventCount           int                     `json:"event_count"`
-	Hostname             string                  `json:"hostname"`
-	Vectors              []DetectionVector       `json:"vectors"`
-	Indicators           []StealthIndicator      `json:"indicators"`
-	BehavioralChecks     []BehavioralCheckResult `json:"behavioral_checks"`
-	BehavioralEventBreakdown map[string]int      `json:"behavioral_event_breakdown"`
+	ID                       string                  `json:"id"`
+	Timestamp                time.Time               `json:"timestamp"`
+	Action                   string                  `json:"action"`
+	V3Score                  float64                 `json:"v3_score"`
+	DetectionScore           float64                 `json:"detection_score"`
+	BehavioralScore          float64                 `json:"behavioral_score"`
+	CombinedBotScore         float64                 `json:"combined_bot_score"`
+	EventCount               int                     `json:"event_count"`
+	Hostname                 string                  `json:"hostname"`
+	Vectors                  []DetectionVector       `json:"vectors"`
+	Indicators               []StealthIndicator      `json:"indicators"`
+	BehavioralChecks         []BehavioralCheckResult `json:"behavioral_checks"`
+	BehavioralEventBreakdown map[string]int          `json:"behavioral_event_breakdown"`
 }
 
 // ReCaptchaV3Response mirrors Google's reCAPTCHA v3 siteverify response.

@@ -400,7 +400,7 @@ func TestRealisticHeaders_ChallengePage(t *testing.T) {
 
 	checks := map[string]string{
 		"Server":          "cloudflare",
-		"Cf-Mitigated":   "challenge",
+		"Cf-Mitigated":    "challenge",
 		"X-Frame-Options": "SAMEORIGIN",
 	}
 	for header, expected := range checks {

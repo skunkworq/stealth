@@ -554,7 +554,7 @@ func (td *TracingDetector) PrintTrace(trace *DetectionTrace) {
 		_, _ = fmt.Fprintln(os.Stdout, "✅ ALLOWED")
 	}
 
-	_, _ = fmt.Fprintln(os.Stdout, "\n" + strings.Repeat("-", 60))
+	_, _ = fmt.Fprintln(os.Stdout, "\n"+strings.Repeat("-", 60))
 	_, _ = fmt.Fprintln(os.Stdout, "ALL CHECKS:")
 	_, _ = fmt.Fprintln(os.Stdout, strings.Repeat("-", 60))
 	for _, check := range trace.AllChecks {
@@ -571,7 +571,7 @@ func (td *TracingDetector) PrintTrace(trace *DetectionTrace) {
 	}
 
 	if len(trace.FailedChecks) > 0 {
-		_, _ = fmt.Fprintln(os.Stdout, "\n" + strings.Repeat("!", 60))
+		_, _ = fmt.Fprintln(os.Stdout, "\n"+strings.Repeat("!", 60))
 		_, _ = fmt.Fprintln(os.Stdout, "FAILED CHECKS (Detection Reasons):")
 		_, _ = fmt.Fprintln(os.Stdout, strings.Repeat("!", 60))
 		for i, check := range trace.FailedChecks {
@@ -581,13 +581,13 @@ func (td *TracingDetector) PrintTrace(trace *DetectionTrace) {
 		}
 	}
 
-	_, _ = fmt.Fprintln(os.Stdout, "\n" + strings.Repeat("=", 60))
+	_, _ = fmt.Fprintln(os.Stdout, "\n"+strings.Repeat("=", 60))
 	_, _ = fmt.Fprintln(os.Stdout, "RAW HEADERS:")
 	_, _ = fmt.Fprintln(os.Stdout, strings.Repeat("=", 60))
 	for k, v := range trace.RawHeaders {
 		_, _ = fmt.Fprintf(os.Stdout, "  %s: %s\n", k, v)
 	}
-	_, _ = fmt.Fprintln(os.Stdout, )
+	_, _ = fmt.Fprintln(os.Stdout)
 }
 
 func minInt(a, b int) int {

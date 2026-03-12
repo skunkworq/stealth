@@ -111,6 +111,7 @@ func (h candidateHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i]; h[i].index
 func (h *candidateHeap) Push(x interface{}) {
 	*h = append(*h, x.(UnfoldCandidate))
 }
+
 func (h *candidateHeap) Pop() interface{} {
 	old := *h
 	n := len(old)

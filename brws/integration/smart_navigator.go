@@ -172,14 +172,14 @@ func (s *SmartNavigator) ClickAlternative(ctx context.Context, alternatives []*s
 	return s.client.ClickSelector(ctx, alternatives[idx].Selector)
 }
 
-func (s *SmartNavigator) FindByText(ctx context.Context, url string, text string) (*IntentResult, error) {
+func (s *SmartNavigator) FindByText(ctx context.Context, url, text string) (*IntentResult, error) {
 	return s.NavigateByIntent(ctx, url, NavigationIntent{
 		Description: text,
 		Priority:    5,
 	})
 }
 
-func (s *SmartNavigator) FindButton(ctx context.Context, url string, description string) (*IntentResult, error) {
+func (s *SmartNavigator) FindButton(ctx context.Context, url, description string) (*IntentResult, error) {
 	return s.NavigateByIntent(ctx, url, NavigationIntent{
 		Description: description,
 		ActionType:  string(semantic.ActionClick),
@@ -187,7 +187,7 @@ func (s *SmartNavigator) FindButton(ctx context.Context, url string, description
 	})
 }
 
-func (s *SmartNavigator) FindLink(ctx context.Context, url string, linkText string) (*IntentResult, error) {
+func (s *SmartNavigator) FindLink(ctx context.Context, url, linkText string) (*IntentResult, error) {
 	return s.NavigateByIntent(ctx, url, NavigationIntent{
 		Description: linkText + " link",
 		ActionType:  string(semantic.ActionClick),
@@ -195,7 +195,7 @@ func (s *SmartNavigator) FindLink(ctx context.Context, url string, linkText stri
 	})
 }
 
-func (s *SmartNavigator) FindForm(ctx context.Context, url string, formType string) (*IntentResult, error) {
+func (s *SmartNavigator) FindForm(ctx context.Context, url, formType string) (*IntentResult, error) {
 	return s.NavigateByIntent(ctx, url, NavigationIntent{
 		Description: formType + " form",
 		ActionType:  string(semantic.ActionFill),

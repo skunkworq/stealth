@@ -30,13 +30,13 @@ type VectorReport struct {
 // DetectionReport is the full structured output of a shield analysis,
 // suitable for consumption by the sword's adaptive feedback loop.
 type DetectionReport struct {
-	RequestID    string         `json:"request_id"`
-	TotalScore   float64        `json:"total_score"`
-	IsBot        bool           `json:"is_bot"`
-	IsStealth    bool           `json:"is_stealth"`
-	Vectors      []VectorReport `json:"vectors"`
-	FiredChecks  int            `json:"fired_checks"`
-	TotalChecks  int            `json:"total_checks"`
+	RequestID   string         `json:"request_id"`
+	TotalScore  float64        `json:"total_score"`
+	IsBot       bool           `json:"is_bot"`
+	IsStealth   bool           `json:"is_stealth"`
+	Vectors     []VectorReport `json:"vectors"`
+	FiredChecks int            `json:"fired_checks"`
+	TotalChecks int            `json:"total_checks"`
 }
 
 // ToDetectionReport converts a StealthDetection into a structured DetectionReport

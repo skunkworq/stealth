@@ -16,32 +16,32 @@ import (
 // ReCaptchaWidget implements a reCAPTCHA v2-like server-side flow:
 // checkbox → behavioral check → challenge popup → solve → token.
 type ReCaptchaWidget struct {
-	shield         *CaptchaShield
-	generator      *captcha.Generator
-	analyzer       *BehavioralAnalyzer
-	sessions       map[string]*WidgetSession
-	siteKey        string
-	secretKey      string
-	hmacKey        []byte
-	onTokenIssued  func(token string, expiry time.Time)
-	mu             sync.RWMutex
+	shield        *CaptchaShield
+	generator     *captcha.Generator
+	analyzer      *BehavioralAnalyzer
+	sessions      map[string]*WidgetSession
+	siteKey       string
+	secretKey     string
+	hmacKey       []byte
+	onTokenIssued func(token string, expiry time.Time)
+	mu            sync.RWMutex
 }
 
 // WidgetSession tracks a single reCAPTCHA v2 interaction session.
 type WidgetSession struct {
-	ID              string    `json:"id"`
-	ChallengeID     string    `json:"challenge_id,omitempty"`
-	CheckboxClicked bool      `json:"checkbox_clicked"`
-	BehavioralScore float64   `json:"behavioral_score"`
-	NeedChallenge   bool      `json:"need_challenge"`
-	Token           string    `json:"token,omitempty"`
-	TokenExpiry     time.Time `json:"token_expiry,omitempty"`
-	TokenUsed       bool      `json:"-"`
-	RefreshCount    int       `json:"refresh_count"`
-	MaxRefreshes    int       `json:"max_refreshes"`
+	ID              string             `json:"id"`
+	ChallengeID     string             `json:"challenge_id,omitempty"`
+	CheckboxClicked bool               `json:"checkbox_clicked"`
+	BehavioralScore float64            `json:"behavioral_score"`
+	NeedChallenge   bool               `json:"need_challenge"`
+	Token           string             `json:"token,omitempty"`
+	TokenExpiry     time.Time          `json:"token_expiry,omitempty"`
+	TokenUsed       bool               `json:"-"`
+	RefreshCount    int                `json:"refresh_count"`
+	MaxRefreshes    int                `json:"max_refreshes"`
 	Difficulty      captcha.Difficulty `json:"-"`
-	Solution        string    `json:"-"`
-	CreatedAt       time.Time `json:"created_at"`
+	Solution        string             `json:"-"`
+	CreatedAt       time.Time          `json:"created_at"`
 }
 
 // NewReCaptchaWidget creates a new reCAPTCHA v2 widget backend.
@@ -138,9 +138,9 @@ func (w *ReCaptchaWidget) HandleCheckbox(rw http.ResponseWriter, r *http.Request
 
 		//nolint:errchkjson
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"passed":              true,
-			"token":               token,
-			"behavioral_score":    result.Score,
+			"passed":               true,
+			"token":                token,
+			"behavioral_score":     result.Score,
 			"behavioral_breakdown": cbBreakdown,
 		})
 		return
@@ -158,10 +158,10 @@ func (w *ReCaptchaWidget) HandleCheckbox(rw http.ResponseWriter, r *http.Request
 
 	//nolint:errchkjson
 	_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-		"passed":              false,
-		"behavioral_score":    result.Score,
+		"passed":               false,
+		"behavioral_score":     result.Score,
 		"behavioral_breakdown": cbBreakdown,
-		"challenge":           challengeData,
+		"challenge":            challengeData,
 	})
 }
 
@@ -212,9 +212,9 @@ func (w *ReCaptchaWidget) HandleVerify(rw http.ResponseWriter, r *http.Request) 
 
 		//nolint:errchkjson
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"success":             true,
-			"token":               token,
-			"behavioral_score":    behavResult.Score,
+			"success":              true,
+			"token":                token,
+			"behavioral_score":     behavResult.Score,
 			"behavioral_breakdown": behavBreakdown,
 		})
 		return
@@ -231,9 +231,9 @@ func (w *ReCaptchaWidget) HandleVerify(rw http.ResponseWriter, r *http.Request) 
 
 	//nolint:errchkjson
 	_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-		"success":             false,
-		"error_codes":         errorCodes,
-		"behavioral_score":    behavResult.Score,
+		"success":              false,
+		"error_codes":          errorCodes,
+		"behavioral_score":     behavResult.Score,
 		"behavioral_breakdown": behavBreakdown,
 	})
 }
@@ -267,7 +267,7 @@ func (w *ReCaptchaWidget) HandleRefresh(rw http.ResponseWriter, r *http.Request)
 		rw.WriteHeader(http.StatusTooManyRequests)
 		//nolint:errchkjson
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"error":              "max refreshes exceeded",
+			"error":               "max refreshes exceeded",
 			"refreshes_remaining": 0,
 		})
 		return
@@ -295,7 +295,7 @@ func (w *ReCaptchaWidget) HandleRefresh(rw http.ResponseWriter, r *http.Request)
 	rw.Header().Set("Content-Type", "application/json")
 	//nolint:errchkjson
 	_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-		"challenge":          challengeData,
+		"challenge":           challengeData,
 		"refreshes_remaining": remaining,
 	})
 }
@@ -323,8 +323,8 @@ func (w *ReCaptchaWidget) HandleSiteVerify(rw http.ResponseWriter, r *http.Reque
 	if req.Secret != w.secretKey {
 		//nolint:errchkjson
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"success":      false,
-			"error-codes":  []string{"invalid-input-secret"},
+			"success":     false,
+			"error-codes": []string{"invalid-input-secret"},
 		})
 		return
 	}
@@ -343,8 +343,8 @@ func (w *ReCaptchaWidget) HandleSiteVerify(rw http.ResponseWriter, r *http.Reque
 		w.mu.Unlock()
 		//nolint:errchkjson
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"success":      false,
-			"error-codes":  []string{"invalid-input-response"},
+			"success":     false,
+			"error-codes": []string{"invalid-input-response"},
 		})
 		return
 	}
@@ -354,8 +354,8 @@ func (w *ReCaptchaWidget) HandleSiteVerify(rw http.ResponseWriter, r *http.Reque
 		w.mu.Unlock()
 		//nolint:errchkjson
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"success":      false,
-			"error-codes":  []string{"timeout-or-duplicate"},
+			"success":     false,
+			"error-codes": []string{"timeout-or-duplicate"},
 		})
 		return
 	}
@@ -365,8 +365,8 @@ func (w *ReCaptchaWidget) HandleSiteVerify(rw http.ResponseWriter, r *http.Reque
 		w.mu.Unlock()
 		//nolint:errchkjson
 		_ = json.NewEncoder(rw).Encode(map[string]interface{}{
-			"success":      false,
-			"error-codes":  []string{"timeout-or-duplicate"},
+			"success":     false,
+			"error-codes": []string{"timeout-or-duplicate"},
 		})
 		return
 	}

@@ -187,7 +187,7 @@ func (s *EnhancedServer) handleMLEvaluate(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (s *EnhancedServer) respondMLError(w http.ResponseWriter, traceID string, errMsg string) {
+func (s *EnhancedServer) respondMLError(w http.ResponseWriter, traceID, errMsg string) {
 	resp := MLEvaluationResponse{
 		Success: false,
 		TraceID: traceID,

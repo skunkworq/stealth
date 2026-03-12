@@ -18,13 +18,12 @@ func TestSnifferIntegrationLifecycle(t *testing.T) {
 
 	server := NewEnhancedServer(config, nil)
 
-	// Keep track of any packets caught directly through the backend 
+	// Keep track of any packets caught directly through the backend
 	// (this tests the CGO bridge directly outside of WebSockets)
 	capturedCount := 0
 	err := sniffer.Start("any", func(pkt sniffer.Packet) {
 		capturedCount++
 	})
-
 	if err != nil {
 		t.Logf("Sniffer failed to start (expected without sudo): %v", err)
 		return

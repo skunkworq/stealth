@@ -24,6 +24,7 @@ import (
 type RequestGeneratorConfig struct {
 	Profile                    *BrowserProfile  // Browser identity to emulate
 	EventConfig                *GeneratorConfig // Config for behavioral event generation (optional)
+	Seed                       int64            // Optional deterministic seed for reproducible request generation
 	SpoofLocalIPs              bool             // Whether to spoof local LAN IPs
 	EvadeCanvasEntropy         bool             // Phase 32: Generate low entropy IDAT chunks
 	EvadeWebGLCount            bool             // Phase 34: Ensure sufficient WebGL extensions
@@ -111,8 +112,13 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 		config.Profile = profiles[rand.Intn(len(profiles))]
 	}
 
+	seed := config.Seed
+	if seed == 0 {
+		seed = time.Now().UnixNano()
+	}
+
 	//nolint:gosec
-	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng := rand.New(rand.NewSource(seed))
 
 	// Generate a stable canvas hash for this instance as a data URL.
 	// Real canvas toDataURL() produces a PNG of a rendered scene (5KB-50KB).
@@ -122,8 +128,8 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 	//   N bytes: IDAT chunk (4 len + 4 "IDAT" + data + 4 CRC)
 	//  12 bytes: IEND chunk (4 len + 4 "IEND" + 4 CRC)
 	// This ensures bytes 37-40 == "IDAT" to pass the IDAT structure check.
-	seed := fmt.Sprintf("canvas-%d-%s", rng.Int63(), config.Profile.Name)
-	hash := sha256.Sum256([]byte(seed))
+	canvasSeed := fmt.Sprintf("canvas-%d-%s", rng.Int63(), config.Profile.Name)
+	hash := sha256.Sum256([]byte(canvasSeed))
 	//nolint:gosec
 	canvasRng := rand.New(rand.NewSource(int64(hash[0])<<56 | int64(hash[1])<<48 | int64(hash[2])<<40 | int64(hash[3])<<32 | int64(hash[4])<<24 | int64(hash[5])<<16 | int64(hash[6])<<8 | int64(hash[7])))
 
@@ -225,6 +231,9 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 
 	if config.EventConfig == nil {
 		config.EventConfig = DefaultGeneratorConfig()
+	}
+	if config.EventConfig.Seed == 0 && config.Seed != 0 {
+		config.EventConfig.Seed = config.Seed + 1
 	}
 	config.EventConfig.BrowserEngine = config.Profile.Browser
 	config.EventConfig.EvadeErrorStackFormat = config.EvadeErrorStackFormat
@@ -493,7 +502,6 @@ func (rg *RequestGenerator) setHTTPHeaders(h http.Header) {
 // generateWebGL creates the X-WebGL-Data header JSON.
 // Picks a random renderer from the profile's options; unmasked == masked (no spoofing).
 func (rg *RequestGenerator) generateWebGL(renderer string) string {
-
 	exts := rg.profile.WebGLExtensions
 	if rg.config.EvadeWebGLCount {
 		genericExts := []string{
@@ -1414,10 +1422,15 @@ func (rg *RequestGenerator) addNavigatorMediaQueries(data map[string]interface{}
 func (rg *RequestGenerator) generateHardwareSpecsWithRenderer(renderer string) (concurrency, memory int) {
 	type hwPair struct{ memory, cores int }
 	hardwarePairs := []hwPair{
-		{4, 4}, {4, 8},
-		{8, 4}, {8, 8},
-		{16, 8}, {16, 12},
-		{32, 8}, {32, 12}, {32, 16},
+		{4, 4},
+		{4, 8},
+		{8, 4},
+		{8, 8},
+		{16, 8},
+		{16, 12},
+		{32, 8},
+		{32, 12},
+		{32, 16},
 	}
 
 	rLow := strings.ToLower(renderer)
@@ -1468,7 +1481,6 @@ func (rg *RequestGenerator) generateHardwareSpecsWithRenderer(renderer string) (
 
 	hw := hardwarePairs[rg.rng.Intn(len(hardwarePairs))]
 	concurrency = hw.cores
-	memory = hw.memory
 	if !rg.config.EvadeHardwareConcurrency && rg.rng.Intn(10) < 3 {
 		oddCores := []int{3, 7, 13, 15}
 		concurrency = oddCores[rg.rng.Intn(len(oddCores))]
@@ -1482,7 +1494,7 @@ func (rg *RequestGenerator) generateHardwareSpecsWithRenderer(renderer string) (
 	if rg.config.EvadeDeviceMemoryClamp && memory > 8 {
 		memory = 8
 	}
-	return
+	return concurrency, memory
 }
 
 func (rg *RequestGenerator) generateNetworkInfo() (rtt, downlink float64) {
@@ -1512,7 +1524,7 @@ func (rg *RequestGenerator) generateNetworkInfo() (rtt, downlink float64) {
 			downlink += 0.00342
 		}
 	}
-	return
+	return rtt, downlink
 }
 
 func (rg *RequestGenerator) addChromeRuntimeData(data map[string]interface{}) {
@@ -1667,6 +1679,7 @@ func (rg *RequestGenerator) generateAudio() string {
 	b, _ := json.Marshal(data)
 	return string(b)
 }
+
 func (rg *RequestGenerator) calculateSharedDimensions() sharedDimensions {
 	p := rg.profile
 	res := p.Resolutions[rg.rng.Intn(len(p.Resolutions))]

@@ -309,8 +309,8 @@ func (s *CaptureServer) calculateJA3(t *TLSFingerprint) string {
 	return strings.Join(parts, ",")
 }
 
-
 // calculateJA4 computes JA4 fingerprint (currently unused but kept for future use)
+//
 //nolint:unused
 func (s *CaptureServer) calculateJA4(t *TLSFingerprint) string {
 	// JA4 format: t[protocol][version][SNI][cipher_count][ext_count][ALPN]_[cipher_hash]_[ext_hash]

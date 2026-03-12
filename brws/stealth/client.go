@@ -12,12 +12,12 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/semantic"
 	"github.com/skunkworq/stealth/brws/behavior"
 	"github.com/skunkworq/stealth/brws/challenge"
 	"github.com/skunkworq/stealth/brws/engine"
 	"github.com/skunkworq/stealth/brws/instrumentation"
 	"github.com/skunkworq/stealth/brws/ml"
+	"github.com/skunkworq/stealth/brws/semantic"
 	"github.com/skunkworq/stealth/brws/session"
 	"github.com/skunkworq/stealth/brws/solver"
 	"github.com/skunkworq/stealth/brws/stealth/challengefsm"

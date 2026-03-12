@@ -14,6 +14,7 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
+
 	"github.com/skunkworq/stealth/brws/behavior"
 	"github.com/skunkworq/stealth/brws/engine"
 	"github.com/skunkworq/stealth/brws/instrumentation"
@@ -591,4 +592,3 @@ func (s *StealthEngine) FSM() *instrumentation.FSM {
 func (s *StealthEngine) Logger() *instrumentation.Logger {
 	return s.logger
 }
-

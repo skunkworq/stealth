@@ -77,7 +77,7 @@ func (ct *CaptchaTracer) AddEvent(challengeID string, event CaptchaEvent) {
 	if trace, ok := ct.traces[challengeID]; ok {
 		trace.Events = append(trace.Events, event)
 		ct.updateMetrics(trace)
-		log.Printf("TRACE_EVENT challenge=%s type=%s events=%d velocity=%.2f", 
+		log.Printf("TRACE_EVENT challenge=%s type=%s events=%d velocity=%.2f",
 			challengeID, event.Type, len(trace.Events), trace.Metrics.MouseVelocity)
 	}
 }
@@ -87,7 +87,7 @@ func (ct *CaptchaTracer) updateMetrics(trace *CaptchaTrace) {
 		trace.Metrics = &TraceMetrics{}
 	}
 	m := trace.Metrics
-	
+
 	// Reset accumulation metrics to avoid O(N^2) bug since we re-scan all events
 	*m = TraceMetrics{}
 	m.TotalEvents = len(trace.Events)

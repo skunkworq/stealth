@@ -7,7 +7,7 @@ import (
 
 // SolveMetrics tracks per-provider success rates and timing for challenge solves.
 type SolveMetrics struct {
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	providers map[string]*ProviderMetrics
 }
 

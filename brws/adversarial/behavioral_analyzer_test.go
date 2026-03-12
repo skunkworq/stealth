@@ -55,8 +55,16 @@ func TestBehavioralAnalyzer_StraightLineMovement(t *testing.T) {
 	// Bot-like: perfectly straight line
 	events := &EnhancedBehavioralEvents{
 		MousePositions: []Position{
-			{0, 0}, {10, 10}, {20, 20}, {30, 30}, {40, 40},
-			{50, 50}, {60, 60}, {70, 70}, {80, 80}, {90, 90},
+			{0, 0},
+			{10, 10},
+			{20, 20},
+			{30, 30},
+			{40, 40},
+			{50, 50},
+			{60, 60},
+			{70, 70},
+			{80, 80},
+			{90, 90},
 		},
 	}
 
@@ -80,8 +88,16 @@ func TestBehavioralAnalyzer_NaturalCurvedMovement(t *testing.T) {
 	// Human-like: curved path with significant variation (Bezier-like)
 	events := &EnhancedBehavioralEvents{
 		MousePositions: []Position{
-			{0, 0}, {15, 30}, {40, 55}, {70, 45}, {90, 20},
-			{120, 50}, {140, 90}, {170, 70}, {200, 40}, {230, 80},
+			{0, 0},
+			{15, 30},
+			{40, 55},
+			{70, 45},
+			{90, 20},
+			{120, 50},
+			{140, 90},
+			{170, 70},
+			{200, 40},
+			{230, 80},
 		},
 	}
 
@@ -388,9 +404,9 @@ func TestBehavioralAnalyzer_FittsLawViolation(t *testing.T) {
 	events := &EnhancedBehavioralEvents{
 		ClickTimestamps: []int64{0, 500, 1000, 1500},
 		ClickPositions: []Position{
-			{100, 100},    // → 50px to next
-			{150, 100},    // → 300px to next
-			{450, 100},    // → 80px to next
+			{100, 100}, // → 50px to next
+			{150, 100}, // → 300px to next
+			{450, 100}, // → 80px to next
 			{530, 100},
 		},
 		// Uniform intervals (500ms each) regardless of distance = violates Fitts'

@@ -150,7 +150,7 @@ func (b *FingerprintBuilder) Build() *CompleteFingerprint {
 }
 
 func (b *FingerprintBuilder) detectBrowser() {
-	var scores = make(map[string]float64)
+	scores := make(map[string]float64)
 
 	if b.fingerprint.TLS != nil {
 		browser := DetectBrowserFromJA4(b.fingerprint.TLS.JA4)

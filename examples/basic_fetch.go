@@ -59,8 +59,8 @@ func fetchWithEngine(ctx context.Context, engineName, url string) error {
 
 	// Create request
 	req := &engine.Request{
-		Method:  "GET",
-		URL:     url,
+		Method: "GET",
+		URL:    url,
 		Headers: map[string][]string{
 			"Accept": {"application/json"},
 		},

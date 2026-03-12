@@ -69,7 +69,7 @@ func TestPoolRelease(t *testing.T) {
 
 	ctx := context.Background()
 	inst, _ := pool.Acquire(ctx)
-		_ = inst
+	_ = inst
 
 	// Release should not error
 	pool.Release(inst)

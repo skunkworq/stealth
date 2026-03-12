@@ -496,14 +496,14 @@ func (g *Generator) drawCharAt(img *image.RGBA, text string, x, y, size int) {
 		// Apply optional wave/rotation to the character drawing
 		for row := 0; row < 7; row++ {
 			for col := 0; col < 5; col++ {
-				if (bitmap[row] >> (7 - col)) & 1 == 1 {
+				if (bitmap[row]>>(7-col))&1 == 1 {
 					// Center point of the character for rotation
 					cx := float64(charWidth) / 2.0
 					cy := float64(charHeight) / 2.0
 
 					// Relative coordinates within char
-					rx := float64(col*pixelSize + pixelSize/2) - cx
-					ry := float64(row*pixelSize + pixelSize/2) - cy
+					rx := float64(col*pixelSize+pixelSize/2) - cx
+					ry := float64(row*pixelSize+pixelSize/2) - cy
 
 					// Apply rotation
 					rotX := rx*cosA - ry*sinA
@@ -621,9 +621,9 @@ func (g *Generator) applyMultiWaveDeformation(img *image.RGBA) {
 
 	// Pre-compute wave parameters per layer
 	type waveLayer struct {
-		ampX, ampY     float64
+		ampX, ampY       float64
 		periodX, periodY float64
-		phaseX, phaseY float64
+		phaseX, phaseY   float64
 	}
 	layers := make([]waveLayer, numLayers)
 	for l := 0; l < numLayers; l++ {
@@ -705,17 +705,17 @@ func (g *Generator) applyWaveDeformation(img *image.RGBA) {
 	bounds := img.Bounds()
 	width := bounds.Dx()
 	height := bounds.Dy()
-	
+
 	// Create a temporary copy to read from while writing to img
 	tempImg := image.NewRGBA(bounds)
 	draw.Draw(tempImg, bounds, img, bounds.Min, draw.Src)
 	draw.Draw(img, bounds, &image.Uniform{g.config.BackgroundColor}, bounds.Min, draw.Src) // clear original
-	
+
 	amplitudeX := float64(g.rng.IntBetween(1, 3))
 	amplitudeY := float64(g.rng.IntBetween(1, 3))
 	periodX := float64(g.rng.IntBetween(80, 150))
 	periodY := float64(g.rng.IntBetween(80, 150))
-	
+
 	phaseX := g.rng.FloatBetween(0, 2*math.Pi)
 	phaseY := g.rng.FloatBetween(0, 2*math.Pi)
 
@@ -724,11 +724,11 @@ func (g *Generator) applyWaveDeformation(img *image.RGBA) {
 			// Calculate source pixel coordinates with reverse sine wave offset
 			srcX := float64(x) + amplitudeX*math.Sin(float64(y)/periodX*2*math.Pi+phaseX)
 			srcY := float64(y) + amplitudeY*math.Sin(float64(x)/periodY*2*math.Pi+phaseY)
-			
+
 			// Nearest neighbor interpolation
 			ix := int(math.Round(srcX))
 			iy := int(math.Round(srcY))
-			
+
 			if ix >= 0 && ix < width && iy >= 0 && iy < height {
 				img.Set(x, y, tempImg.At(ix, iy))
 			}
@@ -787,7 +787,7 @@ func (g *Generator) addNoiseDots(img *image.RGBA, count int) {
 	}
 }
 
-func (g *Generator) drawLine(img *image.RGBA, x1, y1, x2 int, y2 int, c color.RGBA) {
+func (g *Generator) drawLine(img *image.RGBA, x1, y1, x2, y2 int, c color.RGBA) {
 	dx := abs(x2 - x1)
 	dy := abs(y2 - y1)
 	sx := -1

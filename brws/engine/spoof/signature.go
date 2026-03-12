@@ -183,7 +183,7 @@ func (db *SignatureDatabase) Save(key string, sig *BrowserSignature) error {
 			return fmt.Errorf("marshaling signature: %w", err)
 		}
 
-		if err := os.WriteFile(path, data, 0600); err != nil {
+		if err := os.WriteFile(path, data, 0o600); err != nil {
 			return fmt.Errorf("writing signature: %w", err)
 		}
 	}

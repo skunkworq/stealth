@@ -1125,7 +1125,6 @@ func NewWebGLCaptcha(config *WebGLSceneConfig) *WebGLCaptcha {
 	return captcha
 }
 
-
 func (w *WebGLCaptcha) generateScene() {
 	objects := make([]WebGLSceneObject, w.Config.ObjectCount)
 	targetIndex := webGLRand.Intn(w.Config.ObjectCount)

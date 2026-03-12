@@ -68,10 +68,9 @@ func (sa *ScreenAnalyzer) Analyze(data *ScreenData) *VectorResult {
 		return result
 	}
 
-	indicators := make([]string, 0)
-	indicators = sa.checkScreenIsExtended(data, result, indicators)
-	indicators = sa.checkAvailGeometryConsistency(data, result, indicators)
-	indicators = sa.checkOrientationLock(data, result, indicators)
+	sa.checkScreenIsExtended(data, result, nil)
+	sa.checkAvailGeometryConsistency(data, result, nil)
+	sa.checkOrientationLock(data, result, nil)
 
 	// Check 1: No browser chrome (outerWidth == innerWidth or outerHeight == innerHeight)
 	// Ignore for mobile where full screen is standard.
@@ -79,7 +78,7 @@ func (sa *ScreenAnalyzer) Analyze(data *ScreenData) *VectorResult {
 	if data.Width < 1200 && data.Height < 1200 { // heuristic
 		isMobile = true
 	}
-	
+
 	if !isMobile && data.OuterWidth > 0 && data.InnerWidth > 0 && data.OuterWidth == data.InnerWidth {
 		weight := 0.40
 		result.Indicators = append(result.Indicators, VectorIndicator{
@@ -267,6 +266,7 @@ func (sa *ScreenAnalyzer) checkScreenIsExtended(data *ScreenData, result *Vector
 	}
 	return indicators
 }
+
 func (sa *ScreenAnalyzer) checkAvailGeometryConsistency(data *ScreenData, result *VectorResult, indicators []string) []string {
 	// Phase 79: availLeft/availTop should be 0 if not extended, or reasonably consistent if it is.
 	// Many simple bots/headless environments report availLeft=0, availTop=0 regardless.

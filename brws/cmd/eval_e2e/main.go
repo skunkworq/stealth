@@ -25,7 +25,6 @@ func main() {
 		Method: "GET",
 		URL:    "https://localhost:8443",
 	})
-	
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		return

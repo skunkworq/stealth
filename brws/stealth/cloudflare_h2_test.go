@@ -13,9 +13,10 @@ import (
 
 	"github.com/andybalholm/brotli"
 	utls "github.com/refraction-networking/utls"
+	"golang.org/x/net/http2"
+
 	"github.com/skunkworq/stealth/brws/engine"
 	_ "github.com/skunkworq/stealth/brws/engine/native"
-	"golang.org/x/net/http2"
 )
 
 // TestExampleCom_IsolateDetectionVector tests different combinations to find

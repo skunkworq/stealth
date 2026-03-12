@@ -24,7 +24,7 @@ func NewCacheStore(ctx context.Context, dbPath string) (*CacheStore, error) {
 		dbPath = filepath.Join(home, ".semantic", "cache.db")
 	}
 
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
 		return nil, NewCacheError(fmt.Sprintf("failed to create cache directory: %v", err))
 	}
 
@@ -125,7 +125,6 @@ func (s *CacheStore) PutChunk(ctx context.Context, contentHash string, node *Sem
 		 VALUES (?, ?, ?, ?)`,
 		contentHash, nodeJSON, now, now,
 	)
-
 	if err != nil {
 		return NewCacheError(fmt.Sprintf("failed to store chunk: %v", err))
 	}
@@ -162,7 +161,6 @@ func (s *CacheStore) PutImageDescription(ctx context.Context, urlHash, descripti
 		 VALUES (?, ?, ?)`,
 		urlHash, description, time.Now().Unix(),
 	)
-
 	if err != nil {
 		return NewCacheError(fmt.Sprintf("failed to store image description: %v", err))
 	}
@@ -173,7 +171,8 @@ func (s *CacheStore) PutImageDescription(ctx context.Context, urlHash, descripti
 func (s *CacheStore) GetImageQueries(ctx context.Context, urlHash string) ([]struct {
 	Embedding []float32
 	Answer    string
-}, error) {
+}, error,
+) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -233,7 +232,6 @@ func (s *CacheStore) PutImageQuery(ctx context.Context, urlHash string, embeddin
 		 VALUES (?, ?, ?, ?)`,
 		urlHash, embeddingBytes, answer, time.Now().Unix(),
 	)
-
 	if err != nil {
 		return NewCacheError(fmt.Sprintf("failed to store image query: %v", err))
 	}
@@ -245,17 +243,17 @@ func (s *CacheStore) Close() error {
 	return s.db.Close()
 }
 
-func (s *CacheStore) Stats(ctx context.Context) (chunks int64, images int64, queries int64, err error) {
+func (s *CacheStore) Stats(ctx context.Context) (chunks, images, queries int64, err error) {
 	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM chunk_cache").Scan(&chunks)
 	if err != nil {
-		return
+		return chunks, images, queries, err
 	}
 	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM image_descriptions").Scan(&images)
 	if err != nil {
-		return
+		return chunks, images, queries, err
 	}
 	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM image_queries").Scan(&queries)
-	return
+	return chunks, images, queries, err
 }
 
 func (s *CacheStore) PruneOld(ctx context.Context, maxAge time.Duration) (int64, error) {

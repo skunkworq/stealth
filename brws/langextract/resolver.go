@@ -250,7 +250,7 @@ func asInt(v any) (int, bool) {
 }
 
 // Align aligns extractions against source text.
-func (r *Resolver) Align(extractions []Extraction, sourceText string, tokenOffset int, charOffset int, options AlignOptions) []Extraction {
+func (r *Resolver) Align(extractions []Extraction, sourceText string, tokenOffset, charOffset int, options AlignOptions) []Extraction {
 	if len(extractions) == 0 {
 		return nil
 	}

@@ -212,9 +212,9 @@ func (s *DataDomeFSMSolver) solveWithInnerCaptcha(cctx *ChallengeContext, fsm *i
 
 // SliderPoint represents a single point in the slider path.
 type SliderPoint struct {
-	X    float64
-	Y    float64
-	T    float64 // timestamp offset in ms
+	X float64
+	Y float64
+	T float64 // timestamp offset in ms
 }
 
 // generateSliderPath creates a realistic slider Bézier curve path.
@@ -269,18 +269,18 @@ func (s *DataDomeFSMSolver) generateSliderPath(width float64, numPoints int) []S
 // DataDome analyzes these 31 signals to distinguish human from bot.
 type MotionSignals struct {
 	// Path geometry
-	TotalDistance    float64 // total path length
-	DirectDistance   float64 // straight-line start-to-end distance
-	PathEfficiency  float64 // directDistance / totalDistance (1.0 = perfectly straight)
-	NumPoints       int     // number of path points
-	AvgStepSize     float64 // average distance between consecutive points
+	TotalDistance  float64 // total path length
+	DirectDistance float64 // straight-line start-to-end distance
+	PathEfficiency float64 // directDistance / totalDistance (1.0 = perfectly straight)
+	NumPoints      int     // number of path points
+	AvgStepSize    float64 // average distance between consecutive points
 
 	// Velocity
-	AvgVelocity     float64 // average velocity in px/ms
-	MaxVelocity     float64 // peak velocity
-	MinVelocity     float64 // minimum velocity (excluding endpoints)
-	VelocityStdDev  float64 // velocity standard deviation
-	VelocityCV      float64 // coefficient of variation (stddev/mean)
+	AvgVelocity    float64 // average velocity in px/ms
+	MaxVelocity    float64 // peak velocity
+	MinVelocity    float64 // minimum velocity (excluding endpoints)
+	VelocityStdDev float64 // velocity standard deviation
+	VelocityCV     float64 // coefficient of variation (stddev/mean)
 
 	// Acceleration
 	AvgAcceleration float64 // average acceleration
@@ -288,9 +288,9 @@ type MotionSignals struct {
 	AccelStdDev     float64 // acceleration standard deviation
 
 	// Curvature
-	AvgCurvature    float64 // average curvature (angle change between segments)
-	MaxCurvature    float64 // maximum curvature
-	CurvatureSum    float64 // total curvature
+	AvgCurvature float64 // average curvature (angle change between segments)
+	MaxCurvature float64 // maximum curvature
+	CurvatureSum float64 // total curvature
 
 	// Timing
 	TotalDuration   float64 // total path duration in ms
@@ -301,9 +301,9 @@ type MotionSignals struct {
 	IntervalEntropy float64 // Shannon entropy of interval distribution
 
 	// Jitter/Tremor
-	AvgJitterX      float64 // average X-axis micro-tremor
-	AvgJitterY      float64 // average Y-axis micro-tremor
-	JitterRatio     float64 // ratio of jitter events to total events
+	AvgJitterX  float64 // average X-axis micro-tremor
+	AvgJitterY  float64 // average Y-axis micro-tremor
+	JitterRatio float64 // ratio of jitter events to total events
 
 	// Direction
 	DirectionChanges int     // number of direction reversals

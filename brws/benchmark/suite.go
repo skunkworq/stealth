@@ -26,88 +26,88 @@ const (
 
 // SuiteConfig configures a benchmark suite
 type SuiteConfig struct {
-	Type          SuiteType
-	Engines       []string
-	Categories    []string
-	Endpoints     []Endpoint
-	Iterations    int
-	Timeout       time.Duration
-	OutputFormat  string // "json", "yaml", "table"
-	OutputPath    string
-	Verbose       bool
-	Parallel      bool
-	MaxParallel   int
+	Type         SuiteType
+	Engines      []string
+	Categories   []string
+	Endpoints    []Endpoint
+	Iterations   int
+	Timeout      time.Duration
+	OutputFormat string // "json", "yaml", "table"
+	OutputPath   string
+	Verbose      bool
+	Parallel     bool
+	MaxParallel  int
 }
 
 // SuiteResult contains all benchmark results
 type SuiteResult struct {
-	Timestamp       time.Time                     `json:"timestamp"`
-	Duration        time.Duration                 `json:"duration"`
-	Config          SuiteConfig                   `json:"config"`
-	EndpointResults []EndpointBenchmarkResult     `json:"endpoint_results,omitempty"`
-	CapabilityReport *CapabilityReport            `json:"capability_report,omitempty"`
+	Timestamp          time.Time                     `json:"timestamp"`
+	Duration           time.Duration                 `json:"duration"`
+	Config             SuiteConfig                   `json:"config"`
+	EndpointResults    []EndpointBenchmarkResult     `json:"endpoint_results,omitempty"`
+	CapabilityReport   *CapabilityReport             `json:"capability_report,omitempty"`
 	FingerprintReports map[string]*ConsistencyReport `json:"fingerprint_reports,omitempty"`
-	PerformanceResults []PerformanceResult         `json:"performance_results,omitempty"`
-	Summary         SuiteSummary                  `json:"summary"`
+	PerformanceResults []PerformanceResult           `json:"performance_results,omitempty"`
+	Summary            SuiteSummary                  `json:"summary"`
 }
 
 // EndpointBenchmarkResult represents results from endpoint testing
 type EndpointBenchmarkResult struct {
-	EngineName    string            `json:"engine_name"`
-	Endpoint      Endpoint          `json:"endpoint"`
-	Success       bool              `json:"success"`
-	StatusCode    int               `json:"status_code"`
-	Duration      time.Duration     `json:"duration"`
-	BodySize      int               `json:"body_size"`
-	Protocol      string            `json:"protocol"`
-	Error         string            `json:"error,omitempty"`
-	Blocked       bool              `json:"blocked"`
-	Blocker       string            `json:"blocker,omitempty"`
-	Evidence      string            `json:"evidence,omitempty"`
-	RetryCount    int               `json:"retry_count"`
-	Timestamp     time.Time         `json:"timestamp"`
+	EngineName string        `json:"engine_name"`
+	Endpoint   Endpoint      `json:"endpoint"`
+	Success    bool          `json:"success"`
+	StatusCode int           `json:"status_code"`
+	Duration   time.Duration `json:"duration"`
+	BodySize   int           `json:"body_size"`
+	Protocol   string        `json:"protocol"`
+	Error      string        `json:"error,omitempty"`
+	Blocked    bool          `json:"blocked"`
+	Blocker    string        `json:"blocker,omitempty"`
+	Evidence   string        `json:"evidence,omitempty"`
+	RetryCount int           `json:"retry_count"`
+	Timestamp  time.Time     `json:"timestamp"`
 }
 
 // PerformanceResult represents a performance benchmark result
 type PerformanceResult struct {
-	EngineName string         `json:"engine_name"`
-	TestName   string         `json:"test_name"`
-	Iterations int            `json:"iterations"`
-	TotalTime  time.Duration  `json:"total_time"`
-	AvgTime    time.Duration  `json:"avg_time"`
-	MinTime    time.Duration  `json:"min_time"`
-	MaxTime    time.Duration  `json:"max_time"`
-	P95Time    time.Duration  `json:"p95_time"`
-	P99Time    time.Duration  `json:"p99_time"`
+	EngineName string        `json:"engine_name"`
+	TestName   string        `json:"test_name"`
+	Iterations int           `json:"iterations"`
+	TotalTime  time.Duration `json:"total_time"`
+	AvgTime    time.Duration `json:"avg_time"`
+	MinTime    time.Duration `json:"min_time"`
+	MaxTime    time.Duration `json:"max_time"`
+	P95Time    time.Duration `json:"p95_time"`
+	P99Time    time.Duration `json:"p99_time"`
 }
 
 // SuiteSummary provides overall summary
 type SuiteSummary struct {
-	TotalTests      int                    `json:"total_tests"`
-	PassedTests     int                    `json:"passed_tests"`
-	FailedTests     int                    `json:"failed_tests"`
-	BlockedTests    int                    `json:"blocked_tests"`
-	SkippedTests    int                    `json:"skipped_tests"`
-	ByEngine        map[string]EngineSummary `json:"by_engine"`
-	ByCategory      map[string]CategorySummary `json:"by_category"`
+	TotalTests   int                        `json:"total_tests"`
+	PassedTests  int                        `json:"passed_tests"`
+	FailedTests  int                        `json:"failed_tests"`
+	BlockedTests int                        `json:"blocked_tests"`
+	SkippedTests int                        `json:"skipped_tests"`
+	ByEngine     map[string]EngineSummary   `json:"by_engine"`
+	ByCategory   map[string]CategorySummary `json:"by_category"`
 }
 
 // EngineSummary summary per engine
 type EngineSummary struct {
-	Total    int     `json:"total"`
-	Passed   int     `json:"passed"`
-	Failed   int     `json:"failed"`
-	Blocked  int     `json:"blocked"`
-	SuccessRate float64 `json:"success_rate"`
+	Total       int           `json:"total"`
+	Passed      int           `json:"passed"`
+	Failed      int           `json:"failed"`
+	Blocked     int           `json:"blocked"`
+	SuccessRate float64       `json:"success_rate"`
 	AvgLatency  time.Duration `json:"avg_latency"`
 }
 
 // CategorySummary summary per category
 type CategorySummary struct {
-	Total    int     `json:"total"`
-	Passed   int     `json:"passed"`
-	Failed   int     `json:"failed"`
-	Blocked  int     `json:"blocked"`
+	Total   int `json:"total"`
+	Passed  int `json:"passed"`
+	Failed  int `json:"failed"`
+	Blocked int `json:"blocked"`
 }
 
 // SuiteRunner runs benchmark suites
@@ -551,7 +551,7 @@ func (sr *SuiteRunner) printJSON(result *SuiteResult) error {
 	}
 
 	if sr.config.OutputPath != "" {
-		return os.WriteFile(sr.config.OutputPath, data, 0644)
+		return os.WriteFile(sr.config.OutputPath, data, 0o644)
 	}
 
 	fmt.Println(string(data))

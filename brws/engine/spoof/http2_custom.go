@@ -251,22 +251,26 @@ func (t *CustomHTTP2Transport) encodeHeaders(
 		switch pseudo {
 		case ":method":
 			if err := encoder.WriteField(hpack.HeaderField{
-				Name: ":method", Value: method, Sensitive: false}); err != nil {
+				Name: ":method", Value: method, Sensitive: false,
+			}); err != nil {
 				return nil, err
 			}
 		case ":authority":
 			if err := encoder.WriteField(hpack.HeaderField{
-				Name: ":authority", Value: authority, Sensitive: false}); err != nil {
+				Name: ":authority", Value: authority, Sensitive: false,
+			}); err != nil {
 				return nil, err
 			}
 		case ":scheme":
 			if err := encoder.WriteField(hpack.HeaderField{
-				Name: ":scheme", Value: scheme, Sensitive: false}); err != nil {
+				Name: ":scheme", Value: scheme, Sensitive: false,
+			}); err != nil {
 				return nil, err
 			}
 		case ":path":
 			if err := encoder.WriteField(hpack.HeaderField{
-				Name: ":path", Value: path, Sensitive: false}); err != nil {
+				Name: ":path", Value: path, Sensitive: false,
+			}); err != nil {
 				return nil, err
 			}
 		}

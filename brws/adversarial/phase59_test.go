@@ -21,7 +21,7 @@ func TestPhase59Integration(t *testing.T) {
 	// 2. Round 1: Verification of presence and consistency
 	// Since I've already updated the generator, we expect these to be present.
 	hReq := ag.GenerateRequest("https://example.com/")
-	
+
 	navJSON := hReq.Header.Get(constants.HeaderNavigatorData)
 	var navData map[string]interface{}
 	json.Unmarshal([]byte(navJSON), &navData)
@@ -41,11 +41,11 @@ func TestPhase59Integration(t *testing.T) {
 
 	// 3. Run full detector analysis
 	detection := detector.AnalyzeRequest(hReq, nil)
-	
+
 	for _, ind := range detection.Indicators {
 		if strings.Contains(ind.Name, "missing_navigator_scheduling") ||
-		   strings.Contains(ind.Name, "missing_navigator_locks") ||
-		   strings.Contains(ind.Name, "intl_timezone_mismatch") {
+			strings.Contains(ind.Name, "missing_navigator_locks") ||
+			strings.Contains(ind.Name, "intl_timezone_mismatch") {
 			t.Errorf("Shield flagged with Phase 59 gap: %s", ind.Name)
 		}
 	}
@@ -62,13 +62,13 @@ func TestPhase59Integration(t *testing.T) {
 			})
 		}
 	}
-	
+
 	ag.ApplyFeedback(report)
-	
+
 	// Re-verify after feedback (should pass as before)
 	hReq2 := ag.GenerateRequest("https://example.com/")
 	detection2 := detector.AnalyzeRequest(hReq2, nil)
-	
+
 	for _, ind := range detection2.Indicators {
 		if strings.Contains(ind.Name, "missing_navigator_scheduling") {
 			t.Errorf("Shield still flagged after feedback: %s", ind.Name)

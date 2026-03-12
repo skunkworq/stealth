@@ -253,7 +253,6 @@ func (c *Crawler) executeRequest(req *Request) *CrawlResult {
 	engineReq := ToEngineRequest(req)
 
 	resp, err := c.engine.Do(c.ctx, engineReq)
-
 	if err != nil {
 		c.stats.IncValue("error")
 		c.stats.IncValue("error/" + err.Error())

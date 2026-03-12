@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/playwright-community/playwright-go"
+
 	"github.com/skunkworq/stealth/brws/engine"
 )
 

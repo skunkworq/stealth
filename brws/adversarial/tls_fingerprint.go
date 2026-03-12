@@ -1,4 +1,5 @@
 // Package adversarial provides detection and fingerprinting capabilities for adversarial systems.
+//
 //nolint:gosec // G401/G501: MD5 required for JA3 fingerprinting per JA3 spec
 package adversarial
 
@@ -42,7 +43,7 @@ type TLSFingerprint struct {
 }
 
 // CaptureFingerprint captures a TLS fingerprint from the given address.
-func (t *TLSFingerprinter) CaptureFingerprint(addr string, _ string) (*TLSFingerprint, error) {
+func (t *TLSFingerprinter) CaptureFingerprint(addr, _ string) (*TLSFingerprint, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("dial: %w", err)
@@ -79,7 +80,7 @@ func (t *TLSFingerprinter) CaptureFingerprint(addr string, _ string) (*TLSFinger
 	return fp, nil
 }
 
-func (t *TLSFingerprinter) calculateJA4(version uint16, cipher uint16, alpn string) string {
+func (t *TLSFingerprinter) calculateJA4(version, cipher uint16, alpn string) string {
 	ver := "12"
 	if version >= 0x0304 {
 		ver = "13"

@@ -43,7 +43,7 @@ func (q *QAPromptGenerator) FormatExampleAsText(example ExampleData) (string, er
 }
 
 // Render renders the full prompt for a question/chunk.
-func (q *QAPromptGenerator) Render(question string, additionalContext string) (string, error) {
+func (q *QAPromptGenerator) Render(question, additionalContext string) (string, error) {
 	lines := []string{q.Template.Description, ""}
 	if strings.TrimSpace(additionalContext) != "" {
 		lines = append(lines, additionalContext, "")

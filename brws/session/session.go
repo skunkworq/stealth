@@ -53,7 +53,7 @@ type Manager struct {
 
 // NewManager creates a new session manager.
 func NewManager(sessionsDir string) (*Manager, error) {
-	if err := os.MkdirAll(sessionsDir, 0750); err != nil {
+	if err := os.MkdirAll(sessionsDir, 0o750); err != nil {
 		return nil, fmt.Errorf("creating sessions dir: %w", err)
 	}
 
@@ -78,7 +78,7 @@ func (m *Manager) Create(name, engine string) (*Session, error) {
 	sessionID := uuid.New().String()
 	profileDir := filepath.Join(m.sessionsDir, sessionID, "profile")
 
-	if err := os.MkdirAll(profileDir, 0750); err != nil {
+	if err := os.MkdirAll(profileDir, 0o750); err != nil {
 		return nil, fmt.Errorf("creating profile dir: %w", err)
 	}
 
@@ -191,7 +191,7 @@ func (s *Session) ExportCookies(path string) error {
 		return fmt.Errorf("marshaling cookies: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("writing cookies file: %w", err)
 	}
 
@@ -324,7 +324,7 @@ func (m *Manager) saveSession(s *Session) error {
 		return err
 	}
 
-	return os.WriteFile(sessionFile, data, 0600)
+	return os.WriteFile(sessionFile, data, 0o600)
 }
 
 // UpdateLastUsed updates the LastUsedAt timestamp.

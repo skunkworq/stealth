@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/engine"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
+
+	"github.com/skunkworq/stealth/brws/engine"
 )
 
 type Spider interface {

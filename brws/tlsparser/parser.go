@@ -1,4 +1,5 @@
 // Package tlsparser provides TLS ClientHello parsing for complete fingerprint capture
+//
 //nolint:gosec // G401/G501: MD5 required for JA3 fingerprinting per JA3 spec
 package tlsparser
 

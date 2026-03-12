@@ -218,7 +218,7 @@ func (s *Spoofer) DetectBrowserFromJA4(ja4 string) string {
 	return "unknown"
 }
 
-func (s *Spoofer) CalculateJA3(cipherSuites []uint16, extensions []uint16, version uint16) string {
+func (s *Spoofer) CalculateJA3(cipherSuites, extensions []uint16, version uint16) string {
 	var cipherStrs []string
 	for _, c := range cipherSuites {
 		cipherStrs = append(cipherStrs, fmt.Sprintf("%04x", c))
@@ -238,7 +238,7 @@ func (s *Spoofer) CalculateJA3Hash(ja3 string) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (s *Spoofer) CalculateJA4(version uint16, cipherSuite uint16, alpn string, extensions []uint16) string {
+func (s *Spoofer) CalculateJA4(version, cipherSuite uint16, alpn string, extensions []uint16) string {
 	var verStr string
 	switch version {
 	case 0x0304:

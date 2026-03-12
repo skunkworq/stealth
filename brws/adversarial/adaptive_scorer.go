@@ -40,13 +40,13 @@ type BypassRecord struct {
 
 // EnsembleResult is the output of the adaptive scoring engine.
 type EnsembleResult struct {
-	FinalScore    float64                      `json:"final_score"`
-	IsBot         bool                         `json:"is_bot"`
-	WeightedAvg   float64                      `json:"weighted_avg"`
-	MaxScore      float64                      `json:"max_score"`
-	MajorityVote  float64                      `json:"majority_vote"`
-	VectorWeights map[VectorCategory]float64   `json:"vector_weights"`
-	VectorScores  map[VectorCategory]float64   `json:"vector_scores"`
+	FinalScore    float64                    `json:"final_score"`
+	IsBot         bool                       `json:"is_bot"`
+	WeightedAvg   float64                    `json:"weighted_avg"`
+	MaxScore      float64                    `json:"max_score"`
+	MajorityVote  float64                    `json:"majority_vote"`
+	VectorWeights map[VectorCategory]float64 `json:"vector_weights"`
+	VectorScores  map[VectorCategory]float64 `json:"vector_scores"`
 }
 
 // AdaptiveScorer adjusts detection vector weights based on historical bypass data.
@@ -65,23 +65,23 @@ func NewAdaptiveScorer(config *AdaptiveScorerConfig) *AdaptiveScorer {
 	}
 
 	weights := map[VectorCategory]float64{
-		VectorTLS:        1.0,
-		VectorHTTP:       1.0,
-		VectorHTTP2:      0.8,
-		VectorBehavioral: 1.2,
-		VectorWebGL:      1.0,
-		VectorCanvas:     1.0,
-		VectorNavigator:  1.0,
-		VectorTiming:     0.8,
-		VectorWebRTC:     1.0,
-		VectorFont:       0.8,
-		VectorScreen:     0.9,
-		VectorPlugin:     0.7,
-		VectorAudio:      1.0,
+		VectorTLS:                 1.0,
+		VectorHTTP:                1.0,
+		VectorHTTP2:               0.8,
+		VectorBehavioral:          1.2,
+		VectorWebGL:               1.0,
+		VectorCanvas:              1.0,
+		VectorNavigator:           1.0,
+		VectorTiming:              0.8,
+		VectorWebRTC:              1.0,
+		VectorFont:                0.8,
+		VectorScreen:              0.9,
+		VectorPlugin:              0.7,
+		VectorAudio:               1.0,
 		VectorAutomation:          1.1,
 		VectorHeadless:            0.9,
 		VectorFingerprintCoverage: 1.0,
-		VectorCrossVector:        1.0,
+		VectorCrossVector:         1.0,
 	}
 
 	return &AdaptiveScorer{

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+
 	"github.com/skunkworq/stealth/brws/engine"
 	_ "github.com/skunkworq/stealth/brws/engine/chromium"
 	_ "github.com/skunkworq/stealth/brws/engine/firefox"

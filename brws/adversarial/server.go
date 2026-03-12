@@ -517,7 +517,8 @@ type TestResult struct {
 func RunTestSuite(tests []struct {
 	Name    string
 	Request func(*http.Request)
-}) []TestResult {
+},
+) []TestResult {
 	results := make([]TestResult, 0)
 
 	server := NewTestServer()
