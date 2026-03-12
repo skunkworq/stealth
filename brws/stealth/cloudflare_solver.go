@@ -780,14 +780,6 @@ func (cs *CloudflareSolverClient) buildTurnstileSnapshot() *adversarial.Turnstil
 	}
 }
 
-func (cs *CloudflareSolverClient) buildTurnstileInteractionProof(cfg *adversarial.TurnstileWidgetConfig) *adversarial.TurnstileInteractionProof {
-	return cs.buildTurnstileInteractionPlan(cfg).interactionProof
-}
-
-func (cs *CloudflareSolverClient) generateTurnstileLabEvents(cfg *adversarial.TurnstileWidgetConfig) []adversarial.CaptchaEvent {
-	return cs.buildTurnstileInteractionPlan(cfg).events
-}
-
 func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial.TurnstileWidgetConfig) *turnstileInteractionPlan {
 	builder := newTurnstileTraceBuilder()
 	proof := &adversarial.TurnstileInteractionProof{
