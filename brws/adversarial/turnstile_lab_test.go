@@ -257,6 +257,73 @@ func TestTurnstileWidgetPageContainsContractFields(t *testing.T) {
 	}
 }
 
+func TestTurnstileWidgetPageRendersRiskVariants(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	cases := []struct {
+		name            string
+		sessionID       string
+		detectionScore  string
+		wantRisk        string
+		wantInteraction string
+		wantLabel       string
+		wantSubtitle    string
+	}{
+		{
+			name:            "low checkbox",
+			sessionID:       "widget-low",
+			detectionScore:  "0.20",
+			wantRisk:        "low",
+			wantInteraction: turnstileInteractionCheckbox,
+			wantLabel:       `aria-label="Local Turnstile harness checkbox"`,
+			wantSubtitle:    "Local Turnstile harness ready",
+		},
+		{
+			name:            "medium hold",
+			sessionID:       "widget-medium",
+			detectionScore:  "0.55",
+			wantRisk:        "medium",
+			wantInteraction: turnstileInteractionHold,
+			wantLabel:       `aria-label="Local Turnstile harness hold button"`,
+			wantSubtitle:    "Press and hold to continue",
+		},
+		{
+			name:            "high drag",
+			sessionID:       "widget-high",
+			detectionScore:  "0.85",
+			wantRisk:        "high",
+			wantInteraction: turnstileInteractionDrag,
+			wantLabel:       `aria-label="Local Turnstile harness drag handle"`,
+			wantSubtitle:    "Drag the handle to the end",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/api/cloudflare/turnstile/widget?session_id="+tc.sessionID+"&site_key=1x00000000000000000000AA&detection_score="+tc.detectionScore, nil)
+			w := httptest.NewRecorder()
+			cc.HandleTurnstileWidgetPage(w, req)
+
+			if w.Code != http.StatusForbidden {
+				t.Fatalf("expected 403 widget page, got %d", w.Code)
+			}
+
+			body := w.Body.String()
+			checks := []string{
+				`data-risk-level="` + tc.wantRisk + `"`,
+				`data-interaction="` + tc.wantInteraction + `"`,
+				tc.wantLabel,
+				tc.wantSubtitle,
+			}
+			for _, marker := range checks {
+				if !strings.Contains(body, marker) {
+					t.Fatalf("widget page missing %q", marker)
+				}
+			}
+		})
+	}
+}
+
 func TestTurnstilePresentedSessionRequiresLifecycleCallbacks(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 

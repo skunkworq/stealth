@@ -345,6 +345,12 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
     .cf-turnstile[data-state="complete"] .cf-ts-slider-knob{background:#16a34a;border-color:#16a34a}
     @keyframes cf-ts-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     .cf-meta{margin-top:14px;color:#6f6f6f;font-size:12px}
+    @media (max-width: 520px){
+      .cf-shell{padding:24px}
+      .cf-turnstile[data-interaction="drag"] .cf-turnstile-shell{grid-template-columns:1fr;gap:10px}
+      .cf-turnstile[data-interaction="drag"] .cf-ts-control{justify-content:flex-start}
+      .cf-turnstile[data-interaction="drag"] .cf-ts-brand{justify-self:start}
+    }
   </style>
 </head>
 <body>
