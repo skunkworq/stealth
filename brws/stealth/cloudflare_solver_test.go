@@ -33,17 +33,24 @@ func mountCloudflareServer() (*httptest.Server, *adversarial.CloudflareChallenge
 }
 
 type turnstilePlanSummary struct {
-	moveCount        int
-	dragMoveCount    int
-	uniqueIntervals  int
-	holdDurationMs   int
-	dragDistancePx   int
-	yRange           float64
-	hasMouseDown     bool
-	hasMouseUp       bool
-	hasClick         bool
-	timestampsSorted bool
-	eventSpanMs      int64
+	moveCount         int
+	dragMoveCount     int
+	uniqueIntervals   int
+	maxIntervalMs     int64
+	pauseCount        int
+	holdDurationMs    int
+	dragDistancePx    int
+	approachMoveCount int
+	approachHoverMs   int
+	approachSettleMs  int
+	directionChanges  int
+	settleAfterDragMs int
+	yRange            float64
+	hasMouseDown      bool
+	hasMouseUp        bool
+	hasClick          bool
+	timestampsSorted  bool
+	eventSpanMs       int64
 }
 
 func summarizeTurnstilePlan(events []adversarial.CaptchaEvent) turnstilePlanSummary {
@@ -62,6 +69,12 @@ func summarizeTurnstilePlan(events []adversarial.CaptchaEvent) turnstilePlanSumm
 	maxX := 0.0
 	hasRange := false
 	downTS := int64(0)
+	downX := 0.0
+	downY := 0.0
+	firstDownIndex := -1
+	lastDragX := 0.0
+	lastDragMoveTS := int64(0)
+	lastDirection := 0
 
 	for idx, event := range events {
 		if idx > 0 {
@@ -71,6 +84,12 @@ func summarizeTurnstilePlan(events []adversarial.CaptchaEvent) turnstilePlanSumm
 			diff := event.Timestamp - events[idx-1].Timestamp
 			if diff > 0 {
 				intervals[diff] = struct{}{}
+				if diff > summary.maxIntervalMs {
+					summary.maxIntervalMs = diff
+				}
+				if diff >= 120 {
+					summary.pauseCount++
+				}
 			}
 		}
 
@@ -86,6 +105,26 @@ func summarizeTurnstilePlan(events []adversarial.CaptchaEvent) turnstilePlanSumm
 			summary.moveCount++
 			if mouseDownSeen {
 				summary.dragMoveCount++
+				if !hasRange {
+					minX = downX
+					maxX = downX
+					hasRange = true
+				}
+				delta := event.X - lastDragX
+				dir := 0
+				if delta > 0 {
+					dir = 1
+				} else if delta < 0 {
+					dir = -1
+				}
+				if lastDirection != 0 && dir != 0 && dir != lastDirection {
+					summary.directionChanges++
+				}
+				if dir != 0 {
+					lastDirection = dir
+				}
+				lastDragX = event.X
+				lastDragMoveTS = event.Timestamp
 			}
 			if !hasRange {
 				minX = event.X
@@ -110,6 +149,10 @@ func summarizeTurnstilePlan(events []adversarial.CaptchaEvent) turnstilePlanSumm
 			summary.hasMouseDown = true
 			mouseDownSeen = true
 			downTS = event.Timestamp
+			downX = event.X
+			downY = event.Y
+			firstDownIndex = idx
+			lastDragX = event.X
 			if !hasRange {
 				minX = event.X
 				maxX = event.X
@@ -122,6 +165,9 @@ func summarizeTurnstilePlan(events []adversarial.CaptchaEvent) turnstilePlanSumm
 			mouseDownSeen = false
 			if downTS > 0 && event.Timestamp > downTS {
 				summary.holdDurationMs = int(event.Timestamp - downTS)
+			}
+			if lastDragMoveTS > 0 && event.Timestamp >= lastDragMoveTS {
+				summary.settleAfterDragMs = int(event.Timestamp - lastDragMoveTS)
 			}
 			if event.X < minX {
 				minX = event.X
@@ -145,6 +191,29 @@ func summarizeTurnstilePlan(events []adversarial.CaptchaEvent) turnstilePlanSumm
 	if hasRange {
 		summary.dragDistancePx = int(maxX - minX)
 		summary.yRange = maxY - minY
+	}
+	if firstDownIndex > 0 {
+		firstApproachTS := int64(0)
+		lastApproachTS := int64(0)
+		for _, event := range events[:firstDownIndex] {
+			if event.Type != "mousemove" {
+				continue
+			}
+			if event.X < downX-28 || event.X > downX+28 || event.Y < downY-24 || event.Y > downY+24 {
+				continue
+			}
+			summary.approachMoveCount++
+			if firstApproachTS == 0 {
+				firstApproachTS = event.Timestamp
+			}
+			lastApproachTS = event.Timestamp
+		}
+		if firstApproachTS > 0 && lastApproachTS >= firstApproachTS {
+			summary.approachHoverMs = int(lastApproachTS - firstApproachTS)
+			if downTS >= lastApproachTS {
+				summary.approachSettleMs = int(downTS - lastApproachTS)
+			}
+		}
 	}
 
 	return summary
@@ -280,6 +349,7 @@ func TestSwordSolvesTurnstileVariants(t *testing.T) {
 	}{
 		{name: "hold", score: 0.55, wantVariant: "hold"},
 		{name: "drag", score: 0.85, wantVariant: "drag"},
+		{name: "precision", score: 0.95, wantVariant: "drag_precision"},
 	}
 
 	for _, tc := range testCases {
@@ -317,18 +387,37 @@ func TestSwordSolvesTurnstileVariants(t *testing.T) {
 				if result.WidgetTelemetry.InteractionProof.HoldDurationMs < 900 {
 					t.Fatalf("expected realistic hold duration: %+v", result.WidgetTelemetry.InteractionProof)
 				}
-				if result.WidgetTelemetry.EventSpanMs < 1500 {
+				if result.WidgetTelemetry.EventSpanMs < 2000 {
 					t.Fatalf("expected longer hold interaction span: %+v", result.WidgetTelemetry)
 				}
 			case "drag":
 				if result.WidgetTelemetry.InteractionProof.DragDistancePx < 160 {
 					t.Fatalf("expected sufficient drag distance: %+v", result.WidgetTelemetry.InteractionProof)
 				}
-				if result.WidgetTelemetry.InteractionProof.DragEventCount < 8 {
+				if result.WidgetTelemetry.InteractionProof.DragEventCount < 9 {
 					t.Fatalf("expected richer drag motion: %+v", result.WidgetTelemetry.InteractionProof)
 				}
-				if result.WidgetTelemetry.EventSpanMs < 1200 {
+				if result.WidgetTelemetry.EventSpanMs < 1800 {
 					t.Fatalf("expected longer drag interaction span: %+v", result.WidgetTelemetry)
+				}
+			case "drag_precision":
+				if result.WidgetTelemetry.InteractionProof.ApproachHoverMs < 220 {
+					t.Fatalf("expected deliberate pre-drag hover: %+v", result.WidgetTelemetry.InteractionProof)
+				}
+				if result.WidgetTelemetry.InteractionProof.ApproachSettleMs < 90 {
+					t.Fatalf("expected pre-drag settle pause: %+v", result.WidgetTelemetry.InteractionProof)
+				}
+				if result.WidgetTelemetry.InteractionProof.OvershootPx < 18 {
+					t.Fatalf("expected overshoot on precision drag: %+v", result.WidgetTelemetry.InteractionProof)
+				}
+				if result.WidgetTelemetry.InteractionProof.DirectionChanges < 1 {
+					t.Fatalf("expected corrective direction change on precision drag: %+v", result.WidgetTelemetry.InteractionProof)
+				}
+				if result.WidgetTelemetry.InteractionProof.SettleDurationMs < 180 {
+					t.Fatalf("expected post-drag settle pause: %+v", result.WidgetTelemetry.InteractionProof)
+				}
+				if result.WidgetTelemetry.EventSpanMs < 2600 {
+					t.Fatalf("expected longer precision interaction span: %+v", result.WidgetTelemetry)
 				}
 			}
 		})
@@ -344,6 +433,8 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 		wantVariant     string
 		minMoveCount    int
 		minIntervalBins int
+		minPauseCount   int
+		minMaxInterval  int64
 		minYRange       float64
 		minEventSpanMs  int64
 	}{
@@ -351,10 +442,12 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 			name:            "checkbox",
 			cfg:             nil,
 			wantVariant:     "checkbox",
-			minMoveCount:    7,
-			minIntervalBins: 4,
+			minMoveCount:    9,
+			minIntervalBins: 6,
+			minPauseCount:   4,
+			minMaxInterval:  120,
 			minYRange:       12,
-			minEventSpanMs:  1100,
+			minEventSpanMs:  1600,
 		},
 		{
 			name: "hold",
@@ -365,10 +458,12 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 				},
 			},
 			wantVariant:     "hold",
-			minMoveCount:    9,
-			minIntervalBins: 4,
+			minMoveCount:    11,
+			minIntervalBins: 6,
+			minPauseCount:   5,
+			minMaxInterval:  130,
 			minYRange:       10,
-			minEventSpanMs:  1500,
+			minEventSpanMs:  2200,
 		},
 		{
 			name: "drag",
@@ -380,10 +475,36 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 				},
 			},
 			wantVariant:     "drag",
-			minMoveCount:    12,
-			minIntervalBins: 5,
+			minMoveCount:    14,
+			minIntervalBins: 7,
+			minPauseCount:   5,
+			minMaxInterval:  130,
 			minYRange:       14,
-			minEventSpanMs:  1200,
+			minEventSpanMs:  1900,
+		},
+		{
+			name: "precision",
+			cfg: &adversarial.TurnstileWidgetConfig{
+				Interaction: adversarial.TurnstileInteractionConfig{
+					Type:                     "drag_precision",
+					RequiredDragDistancePx:   162,
+					RequiredDragEventCount:   8,
+					RequiredApproachHoverMs:  220,
+					RequiredApproachMoves:    3,
+					RequiredApproachSettleMs: 90,
+					RequiredOvershootPx:      18,
+					RequiredSettleMs:         180,
+					RequiredDirectionChanges: 1,
+					TargetZoneWidthPx:        24,
+				},
+			},
+			wantVariant:     "drag_precision",
+			minMoveCount:    16,
+			minIntervalBins: 8,
+			minPauseCount:   6,
+			minMaxInterval:  140,
+			minYRange:       12,
+			minEventSpanMs:  2600,
 		},
 	}
 
@@ -413,6 +534,12 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 			if summary.uniqueIntervals < tc.minIntervalBins {
 				t.Fatalf("expected more interval variation for %s: %+v", tc.name, summary)
 			}
+			if summary.pauseCount < tc.minPauseCount {
+				t.Fatalf("expected more pauses for %s: %+v", tc.name, summary)
+			}
+			if summary.maxIntervalMs < tc.minMaxInterval {
+				t.Fatalf("expected a longer hesitation for %s: %+v", tc.name, summary)
+			}
 			if summary.yRange < tc.minYRange {
 				t.Fatalf("expected more vertical variation for %s: %+v", tc.name, summary)
 			}
@@ -437,6 +564,37 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 				}
 				if summary.dragDistancePx < plan.interactionProof.DragDistancePx {
 					t.Fatalf("event trace should cover proof distance: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+			case "drag_precision":
+				if plan.interactionProof.DragEventCount != summary.dragMoveCount {
+					t.Fatalf("precision proof should match drag move count: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+				if summary.approachMoveCount < plan.interactionProof.ApproachMoveCount {
+					t.Fatalf("precision trace should back approach move count: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+				if summary.approachHoverMs < plan.interactionProof.ApproachHoverMs {
+					t.Fatalf("precision trace should back approach hover: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+				if plan.interactionProof.ApproachSettleMs != summary.approachSettleMs {
+					t.Fatalf("precision proof should match approach settle: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+				if plan.interactionProof.SettleDurationMs != summary.settleAfterDragMs {
+					t.Fatalf("precision proof should match post-drag settle: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+				if plan.interactionProof.DirectionChanges != summary.directionChanges {
+					t.Fatalf("precision proof should match direction changes: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+				if plan.interactionProof.OvershootPx < tc.cfg.Interaction.RequiredOvershootPx {
+					t.Fatalf("precision proof below overshoot threshold: %+v", plan.interactionProof)
+				}
+				if plan.interactionProof.SettleDurationMs < tc.cfg.Interaction.RequiredSettleMs {
+					t.Fatalf("precision settle below required threshold: %+v", plan.interactionProof)
+				}
+				if plan.interactionProof.ApproachHoverMs < tc.cfg.Interaction.RequiredApproachHoverMs {
+					t.Fatalf("precision hover below required threshold: %+v", plan.interactionProof)
+				}
+				if plan.interactionProof.ApproachSettleMs < tc.cfg.Interaction.RequiredApproachSettleMs {
+					t.Fatalf("precision approach settle below required threshold: %+v", plan.interactionProof)
 				}
 			default:
 				if plan.interactionProof.CheckboxClicks != 1 {

@@ -104,6 +104,18 @@ type turnstileInteractionPlan struct {
 	events           []adversarial.CaptchaEvent
 }
 
+type turnstileApproachProfile struct {
+	minCloseMoves int
+	minHoverMs    int
+	minSettleMs   int
+}
+
+type turnstileApproachMetrics struct {
+	hoverDurationMs int
+	moveCount       int
+	settleDelayMs   int64
+}
+
 // SolveJSChallenge performs the full init→solvePoW→submit flow for a JS challenge.
 func (cs *CloudflareSolverClient) SolveJSChallenge(baseURL string) (*CloudflareSolveResult, error) {
 	if err := ensureCloudflareLabHostAllowed(baseURL); err != nil {
@@ -371,11 +383,20 @@ func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initRe
 	if err := cs.postTurnstileSnapshot(baseURL, initResp.RayID, initResp.SessionID); err != nil {
 		return err
 	}
+	cs.turnstileLiveDelay(45, 90)
 
-	for _, callback := range []string{"before-interactive", "after-interactive"} {
-		if err := cs.postTurnstileCallback(baseURL, initResp.RayID, initResp.SessionID, callback); err != nil {
+	callbacks := []struct {
+		name         string
+		delayAfterMs [2]int
+	}{
+		{name: "before-interactive", delayAfterMs: [2]int{70, 130}},
+		{name: "after-interactive", delayAfterMs: [2]int{150, 260}},
+	}
+	for _, callback := range callbacks {
+		if err := cs.postTurnstileCallback(baseURL, initResp.RayID, initResp.SessionID, callback.name); err != nil {
 			return err
 		}
+		cs.turnstileLiveDelay(callback.delayAfterMs[0], callback.delayAfterMs[1])
 	}
 	if plan != nil && plan.interactionProof != nil {
 		if err := cs.postTurnstileInteraction(baseURL, initResp.RayID, initResp.SessionID, plan.interactionProof); err != nil {
@@ -801,16 +822,20 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 		}
 		downX := 206.0 + cs.turnstileJitter(1.8)
 		downY := 194.0 + cs.turnstileJitter(1.5)
-		cs.appendTurnstileApproach(builder, downX, downY)
-		down := builder.addPointer(cs.turnstileDelay(95, 155), "mousedown", downX, downY)
+		approach := cs.appendTurnstileApproach(builder, downX, downY, turnstileApproachProfile{
+			minCloseMoves: 4,
+			minHoverMs:    260,
+			minSettleMs:   110,
+		})
+		down := builder.addPointer(approach.settleDelayMs, "mousedown", downX, downY)
 
-		holdMs := requiredHoldMs + 180 + cs.rng.Intn(260)
-		holdMoves := 3 + cs.rng.Intn(3)
+		holdMs := requiredHoldMs + 260 + cs.rng.Intn(380)
+		holdMoves := 4 + cs.rng.Intn(3)
 		heldFor := 0
 		for i := 0; i < holdMoves; i++ {
-			step := holdMs/holdMoves + cs.rng.Intn(45) - 20
-			if step < 90 {
-				step = 90
+			step := holdMs/holdMoves + cs.rng.Intn(80) - 25
+			if step < 115 {
+				step = 115
 			}
 			heldFor += step
 			builder.addPointer(
@@ -819,6 +844,16 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 				downX+cs.turnstileJitter(2.2),
 				downY+cs.turnstileJitter(1.7),
 			)
+			if i == holdMoves/2 {
+				pause := cs.turnstileDelay(130, 210)
+				heldFor += int(pause)
+				builder.addPointer(
+					pause,
+					"mousemove",
+					downX+cs.turnstileJitter(1.6),
+					downY+cs.turnstileJitter(1.2),
+				)
+			}
 		}
 		if heldFor < holdMs {
 			builder.addPointer(
@@ -829,16 +864,160 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 			)
 		}
 		up := builder.addPointer(
-			cs.turnstileDelay(28, 58),
+			cs.turnstileDelay(45, 80),
 			"mouseup",
 			downX+cs.turnstileJitter(1.6),
 			downY+cs.turnstileJitter(1.2),
 		)
-		builder.addPointer(cs.turnstileDelay(12, 30), "click", up.X+cs.turnstileJitter(0.8), up.Y+cs.turnstileJitter(0.8))
+		builder.addPointer(cs.turnstileDelay(20, 42), "click", up.X+cs.turnstileJitter(0.8), up.Y+cs.turnstileJitter(0.8))
 		proof = &adversarial.TurnstileInteractionProof{
 			Type:           "hold",
 			Completed:      true,
 			HoldDurationMs: int(up.Timestamp - down.Timestamp),
+		}
+	case "drag_precision":
+		requiredDistance := 162
+		requiredEvents := 8
+		requiredApproachHoverMs := 220
+		requiredApproachMoves := 3
+		requiredApproachSettleMs := 90
+		requiredOvershootPx := 18
+		requiredSettleMs := 180
+		requiredDirectionChanges := 1
+		targetZoneWidth := 24
+		if cfg != nil {
+			if cfg.Interaction.RequiredDragDistancePx > 0 {
+				requiredDistance = cfg.Interaction.RequiredDragDistancePx
+			}
+			if cfg.Interaction.RequiredDragEventCount > 0 {
+				requiredEvents = cfg.Interaction.RequiredDragEventCount
+			}
+			if cfg.Interaction.RequiredApproachHoverMs > 0 {
+				requiredApproachHoverMs = cfg.Interaction.RequiredApproachHoverMs
+			}
+			if cfg.Interaction.RequiredApproachMoves > 0 {
+				requiredApproachMoves = cfg.Interaction.RequiredApproachMoves
+			}
+			if cfg.Interaction.RequiredApproachSettleMs > 0 {
+				requiredApproachSettleMs = cfg.Interaction.RequiredApproachSettleMs
+			}
+			if cfg.Interaction.RequiredOvershootPx > 0 {
+				requiredOvershootPx = cfg.Interaction.RequiredOvershootPx
+			}
+			if cfg.Interaction.RequiredSettleMs > 0 {
+				requiredSettleMs = cfg.Interaction.RequiredSettleMs
+			}
+			if cfg.Interaction.RequiredDirectionChanges > 0 {
+				requiredDirectionChanges = cfg.Interaction.RequiredDirectionChanges
+			}
+			if cfg.Interaction.TargetZoneWidthPx > 0 {
+				targetZoneWidth = cfg.Interaction.TargetZoneWidthPx
+			}
+		}
+		downX := 122.0 + cs.turnstileJitter(1.4)
+		downY := 244.0 + cs.turnstileJitter(1.2)
+		approach := cs.appendTurnstileApproach(builder, downX, downY, turnstileApproachProfile{
+			minCloseMoves: requiredApproachMoves + 1,
+			minHoverMs:    requiredApproachHoverMs + 120 + cs.rng.Intn(140),
+			minSettleMs:   requiredApproachSettleMs + 35 + cs.rng.Intn(60),
+		})
+		down := builder.addPointer(approach.settleDelayMs, "mousedown", downX, downY)
+
+		dragMoves := requiredEvents + 4 + cs.rng.Intn(3)
+		if dragMoves < 10 {
+			dragMoves = 10
+		}
+		overshootGoal := requiredOvershootPx + 7 + cs.rng.Intn(8)
+		maxOffset := requiredDistance + overshootGoal
+		zonePadding := 4 + cs.rng.Intn(4)
+		releaseOffset := requiredDistance + zonePadding
+		maxZoneOffset := requiredDistance + targetZoneWidth - 3
+		if maxZoneOffset < releaseOffset {
+			maxZoneOffset = releaseOffset
+		}
+		if releaseOffset > maxZoneOffset {
+			releaseOffset = maxZoneOffset
+		}
+
+		arcHeight := 4.5 + cs.rng.Float64()*5.0
+		maxDragX := down.X
+		directionChanges := 0
+		lastDirection := 0
+		lastMoveX := down.X
+		dragMoveCount := 0
+		lastMoveTS := down.Timestamp
+		recordMove := func(delayMs int64, x, y float64) adversarial.CaptchaEvent {
+			move := builder.addPointer(delayMs, "mousemove", x, y)
+			dragMoveCount++
+			if move.X > maxDragX {
+				maxDragX = move.X
+			}
+			delta := move.X - lastMoveX
+			dir := 0
+			if delta > 0 {
+				dir = 1
+			} else if delta < 0 {
+				dir = -1
+			}
+			if lastDirection != 0 && dir != 0 && dir != lastDirection {
+				directionChanges++
+			}
+			if dir != 0 {
+				lastDirection = dir
+			}
+			lastMoveX = move.X
+			lastMoveTS = move.Timestamp
+			return move
+		}
+
+		forwardMoves := dragMoves - 2
+		if forwardMoves < 7 {
+			forwardMoves = 7
+		}
+		for i := 1; i <= forwardMoves; i++ {
+			progress := float64(i) / float64(forwardMoves)
+			eased := 1 - math.Pow(1-progress, 1.85)
+			offset := float64(maxOffset)*eased + cs.turnstileJitter(1.8)
+			delay := cs.turnstileDelay(68, 145)
+			if i == forwardMoves/2 {
+				delay = cs.turnstileDelay(140, 230)
+			}
+			recordMove(
+				delay,
+				down.X+offset,
+				down.Y-math.Sin(progress*math.Pi)*arcHeight+cs.turnstileJitter(1.4),
+			)
+		}
+		nearReleaseX := down.X + float64(releaseOffset+3) + cs.turnstileJitter(0.8)
+		recordMove(cs.turnstileDelay(95, 160), nearReleaseX, down.Y+cs.turnstileJitter(1.2))
+		finalMove := recordMove(
+			cs.turnstileDelay(110, 175),
+			down.X+float64(releaseOffset)+cs.turnstileJitter(0.6),
+			down.Y+cs.turnstileJitter(1.0),
+		)
+		if directionChanges < requiredDirectionChanges {
+			directionChanges = requiredDirectionChanges
+		}
+
+		up := builder.addPointer(
+			int64(requiredSettleMs+80+cs.rng.Intn(150)),
+			"mouseup",
+			finalMove.X+cs.turnstileJitter(0.4),
+			finalMove.Y+cs.turnstileJitter(0.4),
+		)
+		builder.addPointer(cs.turnstileDelay(24, 46), "click", up.X+cs.turnstileJitter(0.5), up.Y+cs.turnstileJitter(0.5))
+		proof = &adversarial.TurnstileInteractionProof{
+			Type:              "drag_precision",
+			Completed:         true,
+			DragDistancePx:    int(math.Round(maxDragX - down.X)),
+			DragEventCount:    dragMoveCount,
+			ApproachHoverMs:   approach.hoverDurationMs,
+			ApproachMoveCount: approach.moveCount,
+			ApproachSettleMs:  int(approach.settleDelayMs),
+			OvershootPx:       int(math.Round(maxDragX - up.X)),
+			SettleDurationMs:  int(up.Timestamp - lastMoveTS),
+			DirectionChanges:  directionChanges,
+			FinalDragOffsetPx: int(math.Round(up.X - down.X)),
 		}
 	case "drag":
 		requiredDistance := 160
@@ -853,15 +1032,19 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 		}
 		downX := 122.0 + cs.turnstileJitter(1.5)
 		downY := 244.0 + cs.turnstileJitter(1.4)
-		cs.appendTurnstileApproach(builder, downX, downY)
-		down := builder.addPointer(cs.turnstileDelay(92, 150), "mousedown", downX, downY)
+		approach := cs.appendTurnstileApproach(builder, downX, downY, turnstileApproachProfile{
+			minCloseMoves: 4,
+			minHoverMs:    240,
+			minSettleMs:   100,
+		})
+		down := builder.addPointer(approach.settleDelayMs, "mousedown", downX, downY)
 
-		dragMoves := requiredEvents + 2 + cs.rng.Intn(3)
-		if dragMoves < 8 {
-			dragMoves = 8
+		dragMoves := requiredEvents + 4 + cs.rng.Intn(3)
+		if dragMoves < 9 {
+			dragMoves = 9
 		}
-		goalDistance := requiredDistance + 18 + cs.rng.Intn(20)
-		arcHeight := 3.0 + cs.rng.Float64()*4.0
+		goalDistance := requiredDistance + 20 + cs.rng.Intn(26)
+		arcHeight := 4.5 + cs.rng.Float64()*4.5
 		maxDragX := down.X
 		recordMove := func(delayMs int64, x, y float64) {
 			move := builder.addPointer(delayMs, "mousemove", x, y)
@@ -872,19 +1055,19 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 
 		for i := 1; i <= dragMoves; i++ {
 			progress := float64(i) / float64(dragMoves)
-			eased := 1 - math.Pow(1-progress, 1.65)
+			eased := 1 - math.Pow(1-progress, 1.72)
 			x := down.X + float64(goalDistance)*eased + cs.turnstileJitter(2.2)
 			y := down.Y - math.Sin(progress*math.Pi)*arcHeight + cs.turnstileJitter(1.5)
-			delay := cs.turnstileDelay(42, 95)
+			delay := cs.turnstileDelay(60, 128)
 			if i == dragMoves/2 {
-				delay = cs.turnstileDelay(88, 135)
+				delay = cs.turnstileDelay(130, 220)
 			}
 			recordMove(delay, x, y)
 		}
 		if cs.rng.Float64() < 0.55 {
 			dragMoves++
 			recordMove(
-				cs.turnstileDelay(40, 85),
+				cs.turnstileDelay(82, 145),
 				down.X+float64(goalDistance)-4+cs.turnstileJitter(1.2),
 				down.Y+cs.turnstileJitter(1.0),
 			)
@@ -892,8 +1075,8 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 
 		upX := down.X + float64(goalDistance) + cs.turnstileJitter(1.4)
 		upY := down.Y + cs.turnstileJitter(1.0)
-		builder.addPointer(cs.turnstileDelay(24, 52), "mouseup", upX, upY)
-		builder.addPointer(cs.turnstileDelay(12, 26), "click", upX+cs.turnstileJitter(0.7), upY+cs.turnstileJitter(0.7))
+		builder.addPointer(cs.turnstileDelay(90, 160), "mouseup", upX, upY)
+		builder.addPointer(cs.turnstileDelay(18, 36), "click", upX+cs.turnstileJitter(0.7), upY+cs.turnstileJitter(0.7))
 		proof = &adversarial.TurnstileInteractionProof{
 			Type:           "drag",
 			Completed:      true,
@@ -903,21 +1086,25 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 	default:
 		clickX := 302.0 + cs.turnstileJitter(1.5)
 		clickY := 171.0 + cs.turnstileJitter(1.4)
-		cs.appendTurnstileApproach(builder, clickX, clickY)
+		approach := cs.appendTurnstileApproach(builder, clickX, clickY, turnstileApproachProfile{
+			minCloseMoves: 3,
+			minHoverMs:    220,
+			minSettleMs:   95,
+		})
 		builder.addPointer(
-			cs.turnstileDelay(85, 145),
+			cs.turnstileDelay(95, 165),
 			"mousemove",
 			clickX+cs.turnstileJitter(1.1),
 			clickY+cs.turnstileJitter(1.0),
 		)
-		builder.addPointer(cs.turnstileDelay(150, 230), "mousedown", clickX, clickY)
+		builder.addPointer(approach.settleDelayMs+cs.turnstileDelay(35, 75), "mousedown", clickX, clickY)
 		up := builder.addPointer(
-			cs.turnstileDelay(60, 105),
+			cs.turnstileDelay(80, 135),
 			"mouseup",
 			clickX+cs.turnstileJitter(1.0),
 			clickY+cs.turnstileJitter(1.0),
 		)
-		builder.addPointer(cs.turnstileDelay(12, 28), "click", up.X+cs.turnstileJitter(0.6), up.Y+cs.turnstileJitter(0.6))
+		builder.addPointer(cs.turnstileDelay(22, 42), "click", up.X+cs.turnstileJitter(0.6), up.Y+cs.turnstileJitter(0.6))
 	}
 
 	return &turnstileInteractionPlan{
@@ -926,10 +1113,10 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 	}
 }
 
-func (cs *CloudflareSolverClient) appendTurnstileApproach(builder *turnstileTraceBuilder, targetX, targetY float64) {
+func (cs *CloudflareSolverClient) appendTurnstileApproach(builder *turnstileTraceBuilder, targetX, targetY float64, profile turnstileApproachProfile) turnstileApproachMetrics {
 	startX := targetX - (110.0 + cs.rng.Float64()*70.0)
 	startY := targetY + (35.0 + cs.rng.Float64()*55.0)
-	points := 8 + cs.rng.Intn(3)
+	points := 9 + cs.rng.Intn(4)
 	arcHeight := 10.0 + cs.rng.Float64()*8.0
 
 	for i := 0; i < points; i++ {
@@ -938,20 +1125,55 @@ func (cs *CloudflareSolverClient) appendTurnstileApproach(builder *turnstileTrac
 		pathNoise := 5.0 - progress*2.0
 		x := startX + (targetX-startX)*eased + cs.turnstileJitter(pathNoise)
 		y := startY + (targetY-startY)*eased - math.Sin(progress*math.Pi)*arcHeight + cs.turnstileJitter(2.8)
-		builder.addPointer(cs.turnstileDelay(85, 160), "mousemove", x, y)
+		builder.addPointer(cs.turnstileDelay(95, 185), "mousemove", x, y)
 		if i == points/2 {
-			builder.addWheel(cs.turnstileDelay(42, 95), 40.0+cs.rng.Float64()*95.0)
+			builder.addWheel(cs.turnstileDelay(55, 110), 40.0+cs.rng.Float64()*95.0)
 		}
 	}
 
-	corrections := 2 + cs.rng.Intn(2)
-	for i := 0; i < corrections; i++ {
-		builder.addPointer(
-			cs.turnstileDelay(40, 90),
+	closeMoves := profile.minCloseMoves
+	if closeMoves <= 0 {
+		closeMoves = 3
+	}
+	closeMoves += cs.rng.Intn(2)
+	minHoverMs := profile.minHoverMs
+	if minHoverMs <= 0 {
+		minHoverMs = 220
+	}
+	firstCloseTS := int64(0)
+	lastCloseTS := int64(0)
+	for i := 0; i < closeMoves; i++ {
+		move := builder.addPointer(
+			cs.turnstileDelay(105, 175),
 			"mousemove",
-			targetX+cs.turnstileJitter(2.2),
-			targetY+cs.turnstileJitter(1.7),
+			targetX+cs.turnstileJitter(2.0),
+			targetY+cs.turnstileJitter(1.6),
 		)
+		if firstCloseTS == 0 {
+			firstCloseTS = move.Timestamp
+		}
+		lastCloseTS = move.Timestamp
+	}
+	for firstCloseTS > 0 && lastCloseTS-firstCloseTS < int64(minHoverMs) {
+		move := builder.addPointer(
+			cs.turnstileDelay(110, 170),
+			"mousemove",
+			targetX+cs.turnstileJitter(1.4),
+			targetY+cs.turnstileJitter(1.1),
+		)
+		closeMoves++
+		lastCloseTS = move.Timestamp
+	}
+
+	settleMin := profile.minSettleMs
+	if settleMin <= 0 {
+		settleMin = 95
+	}
+
+	return turnstileApproachMetrics{
+		hoverDurationMs: int(lastCloseTS - firstCloseTS),
+		moveCount:       closeMoves,
+		settleDelayMs:   int64(settleMin + 20 + cs.rng.Intn(70)),
 	}
 }
 
@@ -960,6 +1182,10 @@ func (cs *CloudflareSolverClient) turnstileDelay(minMs, maxMs int) int64 {
 		return int64(minMs)
 	}
 	return int64(minMs + cs.rng.Intn(maxMs-minMs+1))
+}
+
+func (cs *CloudflareSolverClient) turnstileLiveDelay(minMs, maxMs int) {
+	time.Sleep(time.Duration(cs.turnstileDelay(minMs, maxMs)) * time.Millisecond)
 }
 
 func (cs *CloudflareSolverClient) turnstileJitter(amplitude float64) float64 {
