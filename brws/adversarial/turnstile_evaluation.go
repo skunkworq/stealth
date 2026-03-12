@@ -7,25 +7,44 @@ import (
 
 // TurnstileEvaluationCase defines a repeatable local harness evaluation scenario.
 type TurnstileEvaluationCase struct {
-	Name        string
-	BuildEvents func() []CaptchaEvent
+	Name               string
+	ExpectPass         bool
+	PresentWidget      bool
+	LifecycleCallbacks []string
+	VerifyToken        bool
+	BuildEvents        func() []CaptchaEvent
+	MutateSession      func(*CloudflareChallengeSession)
 }
 
 // TurnstileEvaluationSample summarizes the outcome of one scenario.
 type TurnstileEvaluationSample struct {
-	Name         string  `json:"name"`
-	Trials       int     `json:"trials"`
-	Passes       int     `json:"passes"`
-	Failures     int     `json:"failures"`
-	PassRate     float64 `json:"pass_rate"`
-	RejectRate   float64 `json:"reject_rate"`
-	AverageScore float64 `json:"average_score"`
+	Name                 string  `json:"name"`
+	Trials               int     `json:"trials"`
+	ExpectedPass         bool    `json:"expected_pass"`
+	Passes               int     `json:"passes"`
+	Failures             int     `json:"failures"`
+	TrueAccepts          int     `json:"true_accepts"`
+	FalseRejects         int     `json:"false_rejects"`
+	TrueRejects          int     `json:"true_rejects"`
+	FalseAccepts         int     `json:"false_accepts"`
+	VerificationPasses   int     `json:"verification_passes"`
+	VerificationFailures int     `json:"verification_failures"`
+	PassRate             float64 `json:"pass_rate"`
+	RejectRate           float64 `json:"reject_rate"`
+	Accuracy             float64 `json:"accuracy"`
+	AverageScore         float64 `json:"average_score"`
 }
 
 // TurnstileEvaluationReport captures the defensive effectiveness of the local harness.
 type TurnstileEvaluationReport struct {
-	GeneratedAt time.Time                   `json:"generated_at"`
-	Samples     []TurnstileEvaluationSample `json:"samples"`
+	GeneratedAt  time.Time                   `json:"generated_at"`
+	Samples      []TurnstileEvaluationSample `json:"samples"`
+	TotalTrials  int                         `json:"total_trials"`
+	TrueAccepts  int                         `json:"true_accepts"`
+	FalseRejects int                         `json:"false_rejects"`
+	TrueRejects  int                         `json:"true_rejects"`
+	FalseAccepts int                         `json:"false_accepts"`
+	Accuracy     float64                     `json:"accuracy"`
 }
 
 // EvaluateTurnstileDefense executes the provided scenarios against the local Turnstile harness.
@@ -47,19 +66,34 @@ func (cc *CloudflareChallenger) EvaluateTurnstileDefense(cases []TurnstileEvalua
 			return nil, fmt.Errorf("evaluation case %q missing event builder", tc.Name)
 		}
 
-		sample := TurnstileEvaluationSample{Name: tc.Name, Trials: trials}
+		sample := TurnstileEvaluationSample{
+			Name:         tc.Name,
+			Trials:       trials,
+			ExpectedPass: tc.ExpectPass,
+		}
 		totalScore := 0.0
 
 		for trial := 0; trial < trials; trial++ {
 			sessionID := fmt.Sprintf("turnstile_eval_%s_%d", sanitizeTurnstileData(tc.Name, 24), trial)
 			session := cc.CreateTurnstileChallenge(sessionID, "1x00000000000000000000AA")
+			session.Hostname = "localhost"
+			if tc.PresentWidget {
+				cc.PresentTurnstileWidget(session.ID, "localhost")
+			}
+			for _, callback := range tc.LifecycleCallbacks {
+				cc.RecordTurnstileCallback(session.ID, callback)
+			}
+			if tc.MutateSession != nil {
+				tc.MutateSession(session)
+			}
+
 			events := tc.BuildEvents()
 			solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
 			if err != nil {
 				return nil, fmt.Errorf("solve PoW for %q trial %d: %w", tc.Name, trial, err)
 			}
 
-			_, err = cc.CompleteTurnstile(session.ID, solution, events)
+			result, err := cc.CompleteTurnstile(session.ID, solution, events)
 			cc.mu.RLock()
 			score := cc.sessions[session.ID].Score
 			cc.mu.RUnlock()
@@ -67,15 +101,44 @@ func (cc *CloudflareChallenger) EvaluateTurnstileDefense(cases []TurnstileEvalua
 
 			if err != nil {
 				sample.Failures++
+				if tc.ExpectPass {
+					sample.FalseRejects++
+				} else {
+					sample.TrueRejects++
+				}
 				continue
 			}
 			sample.Passes++
+			if tc.ExpectPass {
+				sample.TrueAccepts++
+			} else {
+				sample.FalseAccepts++
+			}
+
+			if tc.VerifyToken && result != nil {
+				verifyResult := cc.VerifyTurnstileToken(cc.TurnstileSecretKey(), result.TurnstileToken, "localhost")
+				if verifyResult.Success {
+					sample.VerificationPasses++
+				} else {
+					sample.VerificationFailures++
+				}
+			}
 		}
 
 		sample.PassRate = float64(sample.Passes) / float64(trials)
 		sample.RejectRate = float64(sample.Failures) / float64(trials)
+		sample.Accuracy = float64(sample.TrueAccepts+sample.TrueRejects) / float64(trials)
 		sample.AverageScore = totalScore / float64(trials)
 		report.Samples = append(report.Samples, sample)
+		report.TotalTrials += sample.Trials
+		report.TrueAccepts += sample.TrueAccepts
+		report.FalseRejects += sample.FalseRejects
+		report.TrueRejects += sample.TrueRejects
+		report.FalseAccepts += sample.FalseAccepts
+	}
+
+	if report.TotalTrials > 0 {
+		report.Accuracy = float64(report.TrueAccepts+report.TrueRejects) / float64(report.TotalTrials)
 	}
 
 	return report, nil

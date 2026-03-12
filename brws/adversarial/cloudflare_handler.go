@@ -232,11 +232,7 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
 		session = cc.CreateTurnstileChallenge(sessionID, siteKey)
 	}
 
-	cc.mu.Lock()
-	session.Hostname = r.Host
-	session.TurnstileTelemetry.recordCallback("before-interactive")
-	session.TurnstileConfig.CallbackState = session.TurnstileTelemetry.CallbackState
-	cc.mu.Unlock()
+	cc.PresentTurnstileWidget(session.ID, r.Host)
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Header().Set("Server", "cloudflare")
@@ -284,6 +280,7 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
     function __tsPost(callbackName){
       navigator.sendBeacon('/cdn-cgi/challenge-platform/h/g/cv/result/%s', JSON.stringify({callback: callbackName, session_id: %q}));
     }
+    __tsPost('before-interactive');
     function __tsBeforeInteractive(){ __tsPost('before-interactive'); }
     function __tsAfterInteractive(){ __tsPost('after-interactive'); }
     function __tsSuccess(token){ __tsPost('success'); return token; }
@@ -610,23 +607,24 @@ func (cc *CloudflareChallenger) HandleChallengeCallback(w http.ResponseWriter, r
 	_ = json.NewDecoder(r.Body).Decode(&payload)
 
 	rayID := strings.TrimPrefix(r.URL.Path, "/cdn-cgi/challenge-platform/h/g/cv/result/")
-	cc.mu.Lock()
+	cc.mu.RLock()
+	var matchedSessionID string
 	for _, session := range cc.sessions {
 		if session.RayID != rayID && payload.SessionID != session.ID {
 			continue
 		}
-		switch payload.Callback {
-		case "before-interactive", "after-interactive", "success", "expired", "timeout", "error":
-			session.TurnstileTelemetry.recordCallback(payload.Callback)
-		case "":
-			if payload.Type == "fp" {
-				session.TurnstileTelemetry.recordCallback("before-interactive")
-			}
-		}
-		session.TurnstileConfig.CallbackState = session.TurnstileTelemetry.CallbackState
+		matchedSessionID = session.ID
 		break
 	}
-	cc.mu.Unlock()
+	cc.mu.RUnlock()
+
+	switch {
+	case matchedSessionID == "":
+	case payload.Callback != "":
+		cc.RecordTurnstileCallback(matchedSessionID, payload.Callback)
+	case payload.Type == "fp":
+		cc.RecordTurnstileCallback(matchedSessionID, "before-interactive")
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Server", "cloudflare")

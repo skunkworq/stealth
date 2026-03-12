@@ -2,6 +2,7 @@ package stealth
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -21,9 +22,11 @@ func mountCloudflareServer() (*httptest.Server, *adversarial.CloudflareChallenge
 	mux.HandleFunc("/api/cloudflare/solve/turnstile", cc.HandleSolveTurnstile)
 	mux.HandleFunc("/api/cloudflare/turnstile/widget", cc.HandleTurnstileWidgetPage)
 	mux.HandleFunc("/api/cloudflare/turnstile/siteverify", cc.HandleTurnstileSiteVerify)
+	mux.HandleFunc("/turnstile/v0/siteverify", cc.HandleTurnstileSiteVerify)
 	mux.HandleFunc("/api/cloudflare/verify", cc.HandleVerifyClearance)
 	mux.HandleFunc("/api/cloudflare/challenge", cc.HandleChallengePage)
 	mux.HandleFunc("/api/cloudflare/status", cc.HandleStatus)
+	mux.HandleFunc("/cdn-cgi/challenge-platform/h/g/cv/result/", cc.HandleChallengeCallback)
 
 	ts := httptest.NewServer(mux)
 	return ts, cc
@@ -94,13 +97,20 @@ func TestSwordSolvesManagedChallenge(t *testing.T) {
 }
 
 func TestSwordSolvesTurnstile(t *testing.T) {
-	ts, _ := mountCloudflareServer()
+	ts, cc := mountCloudflareServer()
 	defer ts.Close()
 
 	solver := NewCloudflareSolverClient()
-	result, err := solver.HandleTurnstileLab(ts.URL)
+	result, err := solver.ExerciseTurnstileFlow(ts.URL, &TurnstileFlowOptions{
+		Verifier: &LabTurnstileVerifier{
+			HTTPClient: solver.httpClient,
+			BaseURL:    ts.URL,
+			Secret:     cc.TurnstileSecretKey(),
+			Hostname:   "localhost",
+		},
+	})
 	if err != nil {
-		t.Fatalf("HandleTurnstileLab failed: %v", err)
+		t.Fatalf("ExerciseTurnstileFlow failed: %v", err)
 	}
 
 	if !result.Passed {
@@ -114,6 +124,12 @@ func TestSwordSolvesTurnstile(t *testing.T) {
 	}
 	if result.WidgetTelemetry == nil || !result.WidgetTelemetry.CallbackState.Success {
 		t.Fatal("expected widget telemetry with success callback")
+	}
+	if result.WidgetTelemetry.CallbackCount < 3 {
+		t.Fatalf("expected full widget lifecycle to be recorded: %+v", result.WidgetTelemetry)
+	}
+	if result.Verification == nil || !result.Verification.Success {
+		t.Fatal("expected token verification result")
 	}
 	if result.ClearanceCookie == nil {
 		t.Fatal("expected clearance cookie")
@@ -130,6 +146,38 @@ func TestHandleTurnstileLabRejectsUnallowlistedHost(t *testing.T) {
 	solver := NewCloudflareSolverClient()
 	if _, err := solver.HandleTurnstileLab("https://example.com"); err == nil {
 		t.Fatal("expected non-local host to be rejected")
+	}
+}
+
+func TestLabTurnstileVerifierRejectsDuplicateToken(t *testing.T) {
+	ts, cc := mountCloudflareServer()
+	defer ts.Close()
+
+	solver := NewCloudflareSolverClient()
+	result, err := solver.ExerciseTurnstileFlow(ts.URL, &TurnstileFlowOptions{
+		Verifier: &LabTurnstileVerifier{
+			HTTPClient: solver.httpClient,
+			BaseURL:    ts.URL,
+			Secret:     cc.TurnstileSecretKey(),
+			Hostname:   "localhost",
+		},
+	})
+	if err != nil {
+		t.Fatalf("ExerciseTurnstileFlow failed: %v", err)
+	}
+
+	verifier := &LabTurnstileVerifier{
+		HTTPClient: solver.httpClient,
+		BaseURL:    ts.URL,
+		Secret:     cc.TurnstileSecretKey(),
+		Hostname:   "localhost",
+	}
+	verifyResult, err := verifier.Verify(context.Background(), result.TurnstileToken)
+	if err != nil {
+		t.Fatalf("duplicate verify failed: %v", err)
+	}
+	if verifyResult.Success {
+		t.Fatalf("expected duplicate token verification to fail: %+v", verifyResult)
 	}
 }
 

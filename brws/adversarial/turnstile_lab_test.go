@@ -29,6 +29,21 @@ func humanLikeTurnstileEvents() []CaptchaEvent {
 	}
 }
 
+func straightLineTurnstileEvents() []CaptchaEvent {
+	base := time.Now().UnixMilli()
+	return []CaptchaEvent{
+		{Type: "mousemove", Timestamp: base + 0, X: 100, Y: 200},
+		{Type: "mousemove", Timestamp: base + 100, X: 140, Y: 200},
+		{Type: "mousemove", Timestamp: base + 200, X: 180, Y: 200},
+		{Type: "mousemove", Timestamp: base + 300, X: 220, Y: 200},
+		{Type: "mousemove", Timestamp: base + 400, X: 260, Y: 200},
+		{Type: "mousemove", Timestamp: base + 500, X: 300, Y: 200},
+		{Type: "mousedown", Timestamp: base + 650, X: 300, Y: 200},
+		{Type: "mouseup", Timestamp: base + 700, X: 300, Y: 200},
+		{Type: "click", Timestamp: base + 701, X: 300, Y: 200},
+	}
+}
+
 func TestTurnstileInitExposesWidgetConfig(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 
@@ -101,8 +116,48 @@ func TestTurnstileWidgetPageContainsContractFields(t *testing.T) {
 	if !ok {
 		t.Fatal("expected session to be created")
 	}
-	if !session.TurnstileTelemetry.CallbackState.BeforeInteractive {
-		t.Fatal("expected before-interactive callback to be recorded")
+	if !session.TurnstilePresented {
+		t.Fatal("expected widget presentation to be recorded")
+	}
+}
+
+func TestTurnstilePresentedSessionRequiresLifecycleCallbacks(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallenge("widget-lifecycle", "1x00000000000000000000AA")
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW failed: %v", err)
+	}
+
+	if _, err := cc.CompleteTurnstile(session.ID, solution, humanLikeTurnstileEvents()); err == nil {
+		t.Fatal("expected solve without widget callbacks to be rejected once presented")
+	}
+
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+	if _, err := cc.CompleteTurnstile(session.ID, solution, humanLikeTurnstileEvents()); err != nil {
+		t.Fatalf("expected solve to pass with lifecycle callbacks: %v", err)
+	}
+}
+
+func TestTurnstileRejectsTimeoutCallback(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallenge("widget-timeout", "1x00000000000000000000AA")
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "timeout")
+
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW failed: %v", err)
+	}
+
+	if _, err := cc.CompleteTurnstile(session.ID, solution, humanLikeTurnstileEvents()); err == nil {
+		t.Fatal("expected timeout lifecycle to force rejection")
 	}
 }
 
@@ -175,13 +230,36 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 
 	report, err := cc.EvaluateTurnstileDefense([]TurnstileEvaluationCase{
 		{
-			Name: "human-like",
+			Name:               "human-like",
+			ExpectPass:         true,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
+			VerifyToken:        true,
 			BuildEvents: func() []CaptchaEvent {
 				return humanLikeTurnstileEvents()
 			},
 		},
 		{
-			Name: "empty-bot",
+			Name:               "straight-line-bot",
+			ExpectPass:         false,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
+			BuildEvents: func() []CaptchaEvent {
+				return straightLineTurnstileEvents()
+			},
+		},
+		{
+			Name:               "timed-out-widget",
+			ExpectPass:         false,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "timeout"},
+			BuildEvents: func() []CaptchaEvent {
+				return humanLikeTurnstileEvents()
+			},
+		},
+		{
+			Name:       "empty-bot",
+			ExpectPass: false,
 			BuildEvents: func() []CaptchaEvent {
 				return nil
 			},
@@ -191,14 +269,26 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 		t.Fatalf("EvaluateTurnstileDefense failed: %v", err)
 	}
 
-	if len(report.Samples) != 2 {
-		t.Fatalf("expected 2 samples, got %d", len(report.Samples))
+	if len(report.Samples) != 4 {
+		t.Fatalf("expected 4 samples, got %d", len(report.Samples))
 	}
 
 	if report.Samples[0].PassRate <= 0 {
 		t.Fatalf("expected human-like sample to pass at least once: %+v", report.Samples[0])
 	}
+	if report.Samples[0].VerificationPasses != report.Samples[0].Passes {
+		t.Fatalf("expected human-like sample to verify each issued token: %+v", report.Samples[0])
+	}
 	if report.Samples[1].RejectRate != 1 {
-		t.Fatalf("expected empty bot sample to reject every time: %+v", report.Samples[1])
+		t.Fatalf("expected straight-line bot sample to reject every time: %+v", report.Samples[1])
+	}
+	if report.Samples[2].RejectRate != 1 {
+		t.Fatalf("expected timeout sample to reject every time: %+v", report.Samples[2])
+	}
+	if report.Samples[3].RejectRate != 1 {
+		t.Fatalf("expected empty bot sample to reject every time: %+v", report.Samples[3])
+	}
+	if report.Accuracy < 0.75 {
+		t.Fatalf("expected aggregate accuracy >= 0.75, got %.2f", report.Accuracy)
 	}
 }

@@ -171,8 +171,12 @@ func mountCloudflareLabServer() (*httptest.Server, *adversarial.CloudflareChalle
 	mux.HandleFunc("/api/cloudflare/solve/js", cc.HandleSolveJS)
 	mux.HandleFunc("/api/cloudflare/solve/managed", cc.HandleSolveManaged)
 	mux.HandleFunc("/api/cloudflare/solve/turnstile", cc.HandleSolveTurnstile)
+	mux.HandleFunc("/api/cloudflare/turnstile/widget", cc.HandleTurnstileWidgetPage)
+	mux.HandleFunc("/api/cloudflare/turnstile/siteverify", cc.HandleTurnstileSiteVerify)
+	mux.HandleFunc("/turnstile/v0/siteverify", cc.HandleTurnstileSiteVerify)
 	mux.HandleFunc("/api/cloudflare/verify", cc.HandleVerifyClearance)
 	mux.HandleFunc("/api/cloudflare/status", cc.HandleStatus)
+	mux.HandleFunc("/cdn-cgi/challenge-platform/h/g/cv/result/", cc.HandleChallengeCallback)
 
 	return httptest.NewServer(mux), cc
 }

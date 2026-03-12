@@ -78,6 +78,7 @@ type CloudflareChallengeSession struct {
 	TurnstileTelemetry  WidgetTelemetry
 	TurnstileToken      *LabTurnstileToken
 	TurnstileTokenUsed  bool
+	TurnstilePresented  bool
 	CreatedAt           time.Time
 	SolvedAt            time.Time
 	ClearanceCookie     string
@@ -238,6 +239,40 @@ func (cc *CloudflareChallenger) GetSession(sessionID string) (*CloudflareChallen
 	defer cc.mu.RUnlock()
 	s, ok := cc.sessions[sessionID]
 	return s, ok
+}
+
+// PresentTurnstileWidget marks that the local widget has been rendered for a session.
+func (cc *CloudflareChallenger) PresentTurnstileWidget(sessionID, hostname string) bool {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	session, ok := cc.sessions[sessionID]
+	if !ok {
+		return false
+	}
+
+	session.TurnstilePresented = true
+	if hostname != "" {
+		session.Hostname = hostname
+	}
+
+	return true
+}
+
+// RecordTurnstileCallback records a widget lifecycle callback for a session.
+func (cc *CloudflareChallenger) RecordTurnstileCallback(sessionID, callback string) bool {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	session, ok := cc.sessions[sessionID]
+	if !ok {
+		return false
+	}
+
+	session.TurnstilePresented = true
+	session.TurnstileTelemetry.recordCallback(callback)
+	session.TurnstileConfig.CallbackState = session.TurnstileTelemetry.CallbackState
+	return true
 }
 
 // ValidatePoW verifies that a PoW solution is correct for the given session.
@@ -541,6 +576,24 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 	// Turnstile is lighter than a full managed challenge, but the lab still
 	// requires basic interaction quality and reasonable event volume.
 	behScore := cc.ValidateBehavioral(sessionID, events)
+
+	cc.mu.RLock()
+	session, exists := cc.sessions[sessionID]
+	cc.mu.RUnlock()
+	if exists {
+		switch {
+		case session.TurnstileTelemetry.CallbackState.Error:
+			cc.recordFailedAttempt(sessionID)
+			return nil, fmt.Errorf("turnstile challenge failed: widget reported error state")
+		case session.TurnstileTelemetry.CallbackState.Timeout:
+			cc.recordFailedAttempt(sessionID)
+			return nil, fmt.Errorf("turnstile challenge failed: widget reported timeout state")
+		case session.TurnstilePresented &&
+			(!session.TurnstileTelemetry.CallbackState.BeforeInteractive ||
+				!session.TurnstileTelemetry.CallbackState.AfterInteractive):
+			behScore = math.Max(behScore, 0.75)
+		}
+	}
 
 	mouseCount := 0
 	for _, e := range events {

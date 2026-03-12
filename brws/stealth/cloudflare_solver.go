@@ -2,11 +2,13 @@ package stealth
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"net/http/cookiejar"
@@ -87,6 +89,12 @@ type cfSolveResp struct {
 	TurnstileToken  string                         `json:"turnstile_token,omitempty"`
 	Turnstile       *adversarial.LabTurnstileToken `json:"turnstile,omitempty"`
 	WidgetTelemetry *adversarial.WidgetTelemetry   `json:"widget_telemetry,omitempty"`
+}
+
+// TurnstileFlowOptions controls how the owned-environment Turnstile flow is exercised.
+type TurnstileFlowOptions struct {
+	SiteKey  string
+	Verifier TurnstileVerifier
 }
 
 // SolveJSChallenge performs the full init→solvePoW→submit flow for a JS challenge.
@@ -213,27 +221,42 @@ func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*Cloudf
 
 // HandleTurnstileLab performs the full local Turnstile challenge flow against owned environments only.
 func (cs *CloudflareSolverClient) HandleTurnstileLab(baseURL string) (*CloudflareSolveResult, error) {
+	return cs.ExerciseTurnstileFlow(baseURL, nil)
+}
+
+// ExerciseTurnstileFlow performs the full local Turnstile widget flow and optional verification.
+func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *TurnstileFlowOptions) (*CloudflareSolveResult, error) {
 	if err := ensureCloudflareLabHostAllowed(baseURL); err != nil {
 		return nil, err
 	}
 	totalStart := time.Now()
 
+	siteKey := ""
+	if opts != nil {
+		siteKey = opts.SiteKey
+	}
+
 	// Step 1: Init
-	initResp, err := cs.initChallenge(baseURL, "cloudflare_turnstile", 0.3, "")
+	initResp, err := cs.initChallenge(baseURL, "cloudflare_turnstile", 0.3, siteKey)
 	if err != nil {
 		return nil, fmt.Errorf("init failed: %w", err)
 	}
 
-	// Step 2: Solve PoW
+	// Step 2: Exercise the local widget lifecycle.
+	if err := cs.exerciseTurnstileWidget(baseURL, initResp); err != nil {
+		return nil, fmt.Errorf("exercise widget: %w", err)
+	}
+
+	// Step 3: Solve PoW
 	powSolution, err := cs.solvePoW(initResp.PoW.Prefix, initResp.PoW.Difficulty)
 	if err != nil {
 		return nil, fmt.Errorf("PoW failed: %w", err)
 	}
 
-	// Step 3: Generate behavioral events
+	// Step 4: Generate behavioral events
 	events := cs.eventGen.GenerateHumanEvents(5000)
 
-	// Step 4: Submit
+	// Step 5: Submit
 	body, _ := json.Marshal(map[string]interface{}{
 		"session_id": initResp.SessionID,
 		"solution":   powSolution,
@@ -268,12 +291,98 @@ func (cs *CloudflareSolverClient) HandleTurnstileLab(baseURL string) (*Cloudflar
 		result.ClearanceCookie = extractCfClearanceCookie(resp)
 	}
 
+	if opts != nil && opts.Verifier != nil && solveResp.TurnstileToken != "" {
+		verifyResult, err := opts.Verifier.Verify(context.Background(), solveResp.TurnstileToken)
+		if err != nil {
+			return nil, fmt.Errorf("verify turnstile token: %w", err)
+		}
+		result.Verification = verifyResult
+		if !verifyResult.Success {
+			return nil, fmt.Errorf("turnstile token verification failed: %v", verifyResult.ErrorCodes)
+		}
+	}
+
 	return result, nil
 }
 
 // SolveTurnstile is kept as a compatibility wrapper around the lab-only handler.
 func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSolveResult, error) {
 	return cs.HandleTurnstileLab(baseURL)
+}
+
+func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initResp *cfInitResp) error {
+	widgetURL := fmt.Sprintf(
+		"%s/api/cloudflare/turnstile/widget?session_id=%s&site_key=%s",
+		strings.TrimRight(baseURL, "/"),
+		url.QueryEscape(initResp.SessionID),
+		url.QueryEscape(initResp.SiteKey),
+	)
+
+	resp, err := cs.httpClient.Get(widgetURL)
+	if err != nil {
+		return fmt.Errorf("fetch widget page: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read widget page: %w", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		return fmt.Errorf("unexpected widget status: %d", resp.StatusCode)
+	}
+
+	page := string(body)
+	if !strings.Contains(page, `class="cf-turnstile"`) {
+		return fmt.Errorf("widget page missing cf-turnstile marker")
+	}
+	if initResp.Turnstile != nil {
+		for _, marker := range []string{
+			fmt.Sprintf(`data-action="%s"`, initResp.Turnstile.Action),
+			fmt.Sprintf(`data-cdata="%s"`, initResp.Turnstile.CData),
+			fmt.Sprintf(`data-retry-interval="%d"`, initResp.Turnstile.RetryPolicy.IntervalMs),
+		} {
+			if !strings.Contains(page, marker) {
+				return fmt.Errorf("widget page missing marker %q", marker)
+			}
+		}
+	}
+
+	for _, callback := range []string{"before-interactive", "after-interactive"} {
+		if err := cs.postTurnstileCallback(baseURL, initResp.RayID, initResp.SessionID, callback); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (cs *CloudflareSolverClient) postTurnstileCallback(baseURL, rayID, sessionID, callback string) error {
+	payload, err := json.Marshal(map[string]string{
+		"session_id": sessionID,
+		"callback":   callback,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal callback payload: %w", err)
+	}
+
+	endpoint := fmt.Sprintf(
+		"%s/cdn-cgi/challenge-platform/h/g/cv/result/%s",
+		strings.TrimRight(baseURL, "/"),
+		url.PathEscape(rayID),
+	)
+
+	resp, err := cs.httpClient.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("post %s callback: %w", callback, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected %s callback status: %d", callback, resp.StatusCode)
+	}
+
+	return nil
 }
 
 // initChallenge sends a POST to /api/cloudflare/init and returns the session.
