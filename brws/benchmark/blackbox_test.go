@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/skunkworq/stealth/brws/types"
 )
@@ -166,5 +168,44 @@ func TestParseAvailabilityJSONIgnoresNoise(t *testing.T) {
 	}
 	if payload.Reason != "missing playwright" {
 		t.Fatalf("unexpected reason: %q", payload.Reason)
+	}
+}
+
+func TestBuildPhaseEnvAddsInsecureTLS(t *testing.T) {
+	env := buildPhaseEnv([]string{"A=B"}, true)
+	if len(env) != 2 {
+		t.Fatalf("expected 2 env entries, got %d", len(env))
+	}
+	if env[0] != "A=B" {
+		t.Fatalf("unexpected first env entry: %q", env[0])
+	}
+	if env[1] != "BLACKBOX_INSECURE_TLS=1" {
+		t.Fatalf("unexpected insecure tls env entry: %q", env[1])
+	}
+}
+
+func TestExecBlackboxRunnerPreservesProcessEnvironment(t *testing.T) {
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("sh not installed")
+	}
+
+	home := os.Getenv("HOME")
+	if home == "" {
+		t.Skip("HOME not set in test environment")
+	}
+
+	runner := ExecBlackboxRunner{}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	result, err := runner.Run(ctx, []string{"sh", "-c", "printf %s \"$HOME\""}, []string{"BLACKBOX_INSECURE_TLS=1"}, "")
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("expected exit code 0, got %d", result.ExitCode)
+	}
+	if got := strings.TrimSpace(result.Stdout); got != home {
+		t.Fatalf("expected HOME %q, got %q", home, got)
 	}
 }

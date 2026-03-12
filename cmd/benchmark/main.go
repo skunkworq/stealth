@@ -334,6 +334,7 @@ func blackboxCmd() *cobra.Command {
 		toolNames      []string
 		pythonBin      string
 		allowMissing   bool
+		insecureTLS    bool
 		jsonOutput     bool
 		includeModeled bool
 	)
@@ -363,6 +364,7 @@ Examples:
 
 			report, err := benchmark.RunBlackboxBenchmark(context.Background(), &benchmark.BlackboxConfig{
 				BaseURL:                  baseURL,
+				InsecureTLS:              insecureTLS,
 				Tools:                    tools,
 				AllowMissing:             allowMissing,
 				IncludeModeledComparison: includeModeled,
@@ -390,6 +392,7 @@ Examples:
 	cmd.Flags().StringSliceVar(&toolNames, "tools", nil, "Tool names to run (default: all built-in blackbox presets)")
 	cmd.Flags().StringVar(&pythonBin, "python", "python3", "Python binary to use for Python-based tool probes")
 	cmd.Flags().BoolVar(&allowMissing, "allow-missing", true, "Skip unavailable local tools instead of failing")
+	cmd.Flags().BoolVar(&insecureTLS, "insecure-tls", false, "Allow self-signed TLS for local HTTPS lab endpoints")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
 	cmd.Flags().BoolVar(&includeModeled, "modeled", true, "Include modeled profile comparison data")
 

@@ -2,12 +2,17 @@
 import argparse
 import asyncio
 import json
+import os
 import sys
 
 
 def emit_availability(available: bool, reason: str = "") -> int:
     print(json.dumps({"available": available, "reason": reason}))
     return 0 if available else 11
+
+
+def wants_insecure_tls() -> bool:
+    return os.environ.get("BLACKBOX_INSECURE_TLS", "").lower() in {"1", "true", "yes", "on"}
 
 
 def run_scrapy(url: str) -> int:
@@ -17,6 +22,7 @@ def run_scrapy(url: str) -> int:
     except Exception as exc:  # pragma: no cover - depends on local env
         return emit_availability(False, f"scrapy unavailable: {exc}")
 
+    insecure_tls = wants_insecure_tls()
     class ProbeSpider(scrapy.Spider):
         name = "blackbox_probe"
         handle_httpstatus_all = True
@@ -31,12 +37,16 @@ def run_scrapy(url: str) -> int:
         def parse(self, response):
             sys.stdout.write(response.text)
 
+    settings = {
+        "LOG_ENABLED": False,
+        "TELNETCONSOLE_ENABLED": False,
+        "HTTPERROR_ALLOW_ALL": True,
+    }
+    if insecure_tls:
+        settings["DOWNLOADER_CLIENT_TLS_VERIFY"] = False
+
     process = CrawlerProcess(
-        settings={
-            "LOG_ENABLED": False,
-            "TELNETCONSOLE_ENABLED": False,
-            "HTTPERROR_ALLOW_ALL": True,
-        }
+        settings=settings
     )
     process.crawl(ProbeSpider)
     process.start()
@@ -49,7 +59,11 @@ async def run_nodriver(url: str, wait_ms: int) -> int:
     except Exception as exc:  # pragma: no cover - depends on local env
         return emit_availability(False, f"nodriver unavailable: {exc}")
 
-    browser = await uc.start(headless=True)
+    browser_args = []
+    if wants_insecure_tls():
+        browser_args.extend(["--ignore-certificate-errors", "--allow-insecure-localhost"])
+
+    browser = await uc.start(headless=True, browser_args=browser_args or None)
     try:
         page = await browser.get(url)
         await asyncio.sleep(wait_ms / 1000)
@@ -79,10 +93,13 @@ def run_scrapling(url: str, tool: str) -> int:
         return emit_availability(False, f"scrapling unavailable: {exc}")
 
     fetcher_cls = StealthyFetcher if tool == "scrapling_stealthy" else DynamicFetcher
+    fetch_kwargs = {}
+    if wants_insecure_tls() and tool == "scrapling_playwright":
+        fetch_kwargs["additional_args"] = {"ignore_https_errors": True}
     try:
-        page = fetcher_cls.fetch(url)
+        page = fetcher_cls.fetch(url, **fetch_kwargs)
     except TypeError:
-        page = fetcher_cls().fetch(url)
+        page = fetcher_cls().fetch(url, **fetch_kwargs)
 
     for attr in ("json", "body", "text", "html", "content"):
         value = getattr(page, attr, None)

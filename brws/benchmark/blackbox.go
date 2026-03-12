@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -65,6 +66,7 @@ type BlackboxToolSpec struct {
 // BlackboxConfig controls a real-tool blackbox benchmark run.
 type BlackboxConfig struct {
 	BaseURL                  string
+	InsecureTLS              bool
 	Tools                    []BlackboxToolSpec
 	Runner                   BlackboxCommandRunner
 	AllowMissing             bool
@@ -156,7 +158,7 @@ func (ExecBlackboxRunner) Run(ctx context.Context, argv, env []string, workdir s
 
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	if len(env) > 0 {
-		cmd.Env = append(cmd.Env, env...)
+		cmd.Env = append(os.Environ(), env...)
 	}
 	if workdir != "" {
 		cmd.Dir = workdir
@@ -287,7 +289,7 @@ func RunBlackboxBenchmark(ctx context.Context, cfg *BlackboxConfig) (*BlackboxRe
 
 		report.ExecutedCount++
 		for _, phase := range tool.Phases {
-			phaseResult, err := runBlackboxPhase(ctx, runner, report.BaseURL, tool, phase)
+			phaseResult, err := runBlackboxPhase(ctx, runner, report.BaseURL, cfg.InsecureTLS, tool, phase)
 			if err != nil {
 				return nil, err
 			}
@@ -393,7 +395,7 @@ func detectBlackboxAvailability(ctx context.Context, runner BlackboxCommandRunne
 	return BlackboxAvailability{Available: true}, nil
 }
 
-func runBlackboxPhase(ctx context.Context, runner BlackboxCommandRunner, baseURL string, tool BlackboxToolSpec, phase BlackboxPhaseSpec) (*blackboxPhaseExecution, error) {
+func runBlackboxPhase(ctx context.Context, runner BlackboxCommandRunner, baseURL string, insecureTLS bool, tool BlackboxToolSpec, phase BlackboxPhaseSpec) (*blackboxPhaseExecution, error) {
 	command := expandBlackboxCommand(phase.Command, strings.TrimRight(baseURL, "/")+phase.URLPath)
 	timeout := phase.Timeout
 	if timeout <= 0 {
@@ -402,7 +404,7 @@ func runBlackboxPhase(ctx context.Context, runner BlackboxCommandRunner, baseURL
 	phaseCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	result, err := runner.Run(phaseCtx, command, phase.Env, phase.Workdir)
+	result, err := runner.Run(phaseCtx, command, buildPhaseEnv(phase.Env, insecureTLS), phase.Workdir)
 	if err != nil {
 		var execErr *exec.Error
 		if errors.As(err, &execErr) && errors.Is(execErr.Err, exec.ErrNotFound) {
@@ -468,6 +470,19 @@ func expandBlackboxCommand(command []string, targetURL string) []string {
 		expanded = append(expanded, strings.ReplaceAll(part, urlPlaceholder, targetURL))
 	}
 	return expanded
+}
+
+func buildPhaseEnv(base []string, insecureTLS bool) []string {
+	if len(base) == 0 && !insecureTLS {
+		return nil
+	}
+
+	env := make([]string, 0, len(base)+1)
+	env = append(env, base...)
+	if insecureTLS {
+		env = append(env, "BLACKBOX_INSECURE_TLS=1")
+	}
+	return env
 }
 
 func parseAvailabilityJSON(stdout string) *BlackboxAvailability {
