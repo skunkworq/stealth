@@ -1037,6 +1037,9 @@ func (sd *StealthDetector) analyzeHTTPHeaders(req *http.Request) *HTTPFingerprin
 		info.SecFetchDest == "document" && info.SecFetchMode == "navigate" &&
 		(req.ProtoMajor <= 1 || req.Proto == "") && !hasJSFingerprintHeaders(req) {
 		info.SuspiciousHeaders = append(info.SuspiciousHeaders, "firefox_navigation_priority_header")
+		if strings.Contains(req.Header.Get("Priority"), ", i") {
+			info.SuspiciousHeaders = append(info.SuspiciousHeaders, "firefox_chromium_priority_signature")
+		}
 	}
 
 	return info
@@ -1973,6 +1976,8 @@ func scoreForHTTPIndicator(indicator string) float64 {
 		return constants.SeverityHigh
 	case indicator == "firefox_navigation_priority_header":
 		return constants.SeverityHigh
+	case indicator == "firefox_chromium_priority_signature":
+		return constants.SeverityHigh
 	case indicator == "Sec-Ch-Ua*":
 		return constants.SeverityHigh
 	case indicator == "Sec-Fetch-*":
@@ -2031,6 +2036,11 @@ func buildHTTPCheckReport(indicator string, weight float64, info *HTTPFingerprin
 		report.Actual = "present"
 		report.Expected = "absent for simple Firefox-style top-level navigation"
 		report.Description = "The Firefox-style request carries Chromium-like priority metadata without other browser context."
+	case "firefox_chromium_priority_signature":
+		report.Field = "Priority"
+		report.Actual = "contains ', i'"
+		report.Expected = "Firefox-style request without Chromium incremental priority signature"
+		report.Description = "The Priority header uses a Chromium-style incremental scheduling signature on a Firefox-claimed request."
 	case "generic_accept_header":
 		report.Field = "Accept"
 		report.Actual = info.Accept

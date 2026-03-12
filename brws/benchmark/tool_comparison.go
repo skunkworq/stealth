@@ -430,7 +430,7 @@ func scraplingPlaywrightProfile() ToolProfile {
 }
 
 // ourStealthSwordProfile — our own stealth sword using behavior.NewRequestGenerator.
-// This is the positive control: should evade all detection.
+// It serves as the in-house browser-stealth profile in the comparison matrix.
 func ourStealthSwordProfile() ToolProfile {
 	return ToolProfile{
 		Info: ToolInfo{

@@ -379,6 +379,21 @@ func TestShieldEvaluation(t *testing.T) {
 	if detectedCount != len(results) {
 		t.Fatalf("expected shield to catch all eval profiles, but %d/%d passed", len(results)-detectedCount, len(results))
 	}
+
+	profileConfidence := make(map[string]float64, len(results))
+	for i, result := range results {
+		profileConfidence[profiles[i].Name] = result.Confidence
+	}
+
+	if profileConfidence["stealth_firefox_impersonate"] < 0.85 {
+		t.Fatalf("expected stealth_firefox_impersonate confidence >= 0.85, got %.3f", profileConfidence["stealth_firefox_impersonate"])
+	}
+
+	for _, profileName := range []string{"stealth_with_hints", "stealth_full_chrome", "playwright_stealth"} {
+		if profileConfidence[profileName] < 0.75 {
+			t.Fatalf("expected %s confidence >= 0.75, got %.3f", profileName, profileConfidence[profileName])
+		}
+	}
 }
 
 // TestNewShieldAnalyzers exercises the new Phase 4 analyzers with specific

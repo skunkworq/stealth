@@ -3,10 +3,12 @@ package adversarial_test
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"testing"
 
 	"github.com/skunkworq/stealth/brws/adversarial"
 	"github.com/skunkworq/stealth/brws/behavior"
+	"github.com/skunkworq/stealth/brws/benchmark"
 )
 
 // TestSwordVsShield runs the actual Sword (behavior.RequestGenerator) against the
@@ -22,6 +24,9 @@ func TestSwordVsShield(t *testing.T) {
 
 			const trials = 20
 			detections := 0
+			totalScore := 0.0
+			totalConfidence := 0.0
+			indicatorCounts := make(map[string]int)
 
 			for i := 0; i < trials; i++ {
 				gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
@@ -29,6 +34,8 @@ func TestSwordVsShield(t *testing.T) {
 				})
 				req := gen.GenerateRequest("http://test/api/ml/trap")
 				detection := detector.AnalyzeRequest(req, nil)
+				totalScore += detection.Score
+				totalConfidence += detection.Confidence
 
 				if detection.IsBot {
 					if i == 0 {
@@ -40,17 +47,87 @@ func TestSwordVsShield(t *testing.T) {
 					}
 					detections++
 				}
+
+				for _, vec := range detection.Vectors {
+					if !vec.Detected {
+						continue
+					}
+					for _, ind := range vec.Indicators {
+						indicatorCounts[ind]++
+					}
+				}
 			}
 
 			detectionRate := float64(detections) / float64(trials)
-			fmt.Printf("  %s: %d/%d detected (%.0f%%)\n", profile.Name, detections, trials, detectionRate*100)
+			avgScore := totalScore / float64(trials)
+			avgConfidence := totalConfidence / float64(trials)
+			fmt.Printf("  %s: %d/%d detected (%.0f%%) | avg score=%.3f | avg confidence=%.3f\n",
+				profile.Name, detections, trials, detectionRate*100, avgScore, avgConfidence)
 
-			if detectionRate < 0.70 {
-				t.Errorf("sword profile %q detection rate %.0f%% < 70%% (%d/%d)",
+			type indicatorHit struct {
+				name  string
+				count int
+			}
+			topIndicators := make([]indicatorHit, 0, len(indicatorCounts))
+			for name, count := range indicatorCounts {
+				topIndicators = append(topIndicators, indicatorHit{name: name, count: count})
+			}
+			sort.Slice(topIndicators, func(i, j int) bool {
+				if topIndicators[i].count == topIndicators[j].count {
+					return topIndicators[i].name < topIndicators[j].name
+				}
+				return topIndicators[i].count > topIndicators[j].count
+			})
+			for i := 0; i < len(topIndicators) && i < 5; i++ {
+				fmt.Printf("    top indicator %d: %s (%d/%d)\n", i+1, topIndicators[i].name, topIndicators[i].count, trials)
+			}
+
+			if detectionRate < 0.95 {
+				t.Errorf("sword profile %q detection rate %.0f%% < 95%% (%d/%d)",
 					profile.Name, detectionRate*100, detections, trials)
+			}
+			if avgScore < 0.90 {
+				t.Errorf("sword profile %q avg score %.3f < 0.90", profile.Name, avgScore)
+			}
+			if avgConfidence < 0.95 {
+				t.Errorf("sword profile %q avg confidence %.3f < 0.95", profile.Name, avgConfidence)
 			}
 		})
 	}
+
+	t.Run("library_matrix_comparison", func(t *testing.T) {
+		report := benchmark.RunToolComparison(&benchmark.ToolComparisonConfig{
+			IncludeBehavioral: true,
+			Iterations:        3,
+		})
+
+		resultMap := make(map[string]benchmark.ToolResult, len(report.Results))
+		for _, result := range report.Results {
+			resultMap[result.Tool.Name] = result
+		}
+
+		fmt.Println("  Library comparison against the current shield:")
+		for _, name := range []string{"our_stealth_sword", "playwright_default", "nodriver", "scrapling_stealthy", "curl_impersonate_ch116"} {
+			result, ok := resultMap[name]
+			if !ok {
+				t.Fatalf("missing tool result for %s", name)
+			}
+			fmt.Printf("    %-24s detection=%.0f%% avg score=%.3f avg confidence=%.3f\n",
+				name, result.DetectionRate*100, result.AvgBotScore, result.AvgConfidence)
+		}
+
+		swordResult, ok := resultMap["our_stealth_sword"]
+		if !ok {
+			t.Fatal("missing tool result for our_stealth_sword")
+		}
+		if swordResult.DetectionRate < 1.0 {
+			t.Fatalf("expected 100%% detection for our_stealth_sword in library matrix, got %.0f%%",
+				swordResult.DetectionRate*100)
+		}
+		if swordResult.AvgConfidence < 0.95 {
+			t.Fatalf("expected high sword confidence in library matrix, got %.3f", swordResult.AvgConfidence)
+		}
+	})
 
 	// Also verify a real browser request is NOT flagged.
 	t.Run("real_firefox_should_pass", func(t *testing.T) {

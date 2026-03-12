@@ -360,17 +360,36 @@ func TestFirefoxNavigationPriorityHeaderDetected(t *testing.T) {
 		t.Fatalf("expected firefox navigation with priority header to be detected, got score %.3f", detection.Score)
 	}
 
-	found := false
+	foundPriorityHeader := false
+	foundPrioritySignature := false
+	var httpVec *DetectionVector
 	for _, vec := range detection.Vectors {
+		if vec.Category == "http" {
+			httpVec = &vec
+		}
 		for _, ind := range vec.Indicators {
 			if ind == "firefox_navigation_priority_header" {
-				found = true
-				break
+				foundPriorityHeader = true
+			}
+			if ind == "firefox_chromium_priority_signature" {
+				foundPrioritySignature = true
 			}
 		}
 	}
-	if !found {
+	if !foundPriorityHeader {
 		t.Fatal("expected firefox_navigation_priority_header indicator")
+	}
+	if !foundPrioritySignature {
+		t.Fatal("expected firefox_chromium_priority_signature indicator")
+	}
+	if httpVec == nil {
+		t.Fatal("expected http vector")
+	}
+	if httpVec.Confidence < 0.85 {
+		t.Fatalf("expected firefox HTTP vector confidence >= 0.85, got %.3f", httpVec.Confidence)
+	}
+	if detection.Confidence < 0.85 {
+		t.Fatalf("expected firefox detection confidence >= 0.85, got %.3f", detection.Confidence)
 	}
 }
 
