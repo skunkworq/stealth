@@ -916,9 +916,14 @@ func (sd *StealthDetector) analyzeTLSFingerprint(tlsConn *tls.ConnectionState) *
 }
 
 func (sd *StealthDetector) analyzeHTTPHeaders(req *http.Request) *HTTPFingerprintInfo {
+	ua := req.Header.Get("User-Agent")
+	accept := req.Header.Get("Accept")
+	if ua == "" || accept == "" {
+		// bot indicators
+	}
 	info := &HTTPFingerprintInfo{
-		UserAgent:          req.Header.Get("User-Agent"),
-		Accept:             req.Header.Get("Accept"),
+		UserAgent:          ua,
+		Accept:             accept,
 		AcceptLanguage:     req.Header.Get("Accept-Language"),
 		AcceptEncoding:     req.Header.Get("Accept-Encoding"),
 		SecCHUA:            req.Header.Get("Sec-Ch-Ua"),

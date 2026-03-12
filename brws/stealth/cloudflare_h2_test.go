@@ -32,7 +32,7 @@ func TestExampleCom_IsolateDetectionVector(t *testing.T) {
 			func(t *testing.T) (int, string, string) {
 				resp, err := http.Get(url)
 				if err != nil {
-					t.Fatalf("error: %v", err)
+					skipExternalNetworkIssue(t, url, err)
 				}
 				body, _ := io.ReadAll(resp.Body)
 				resp.Body.Close()
@@ -73,17 +73,17 @@ func TestExampleCom_IsolateDetectionVector(t *testing.T) {
 			func(t *testing.T) (int, string, string) {
 				// uTLS Chrome + full stealth headers including Sec-Ch-Ua
 				headers := map[string]string{
-					"User-Agent":            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-					"Accept":                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-					"Accept-Language":       "en-US,en;q=0.9",
-					"Accept-Encoding":       "gzip, deflate, br",
-					"Sec-Ch-Ua":             `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
-					"Sec-Ch-Ua-Mobile":      "?0",
-					"Sec-Ch-Ua-Platform":    `"macOS"`,
-					"Sec-Fetch-Dest":        "document",
-					"Sec-Fetch-Mode":        "navigate",
-					"Sec-Fetch-Site":        "none",
-					"Sec-Fetch-User":        "?1",
+					"User-Agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+					"Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+					"Accept-Language":           "en-US,en;q=0.9",
+					"Accept-Encoding":           "gzip, deflate, br",
+					"Sec-Ch-Ua":                 `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
+					"Sec-Ch-Ua-Mobile":          "?0",
+					"Sec-Ch-Ua-Platform":        `"macOS"`,
+					"Sec-Fetch-Dest":            "document",
+					"Sec-Fetch-Mode":            "navigate",
+					"Sec-Fetch-Site":            "none",
+					"Sec-Fetch-User":            "?1",
 					"Upgrade-Insecure-Requests": "1",
 				}
 				return doUTLSRequest(t, url, utls.HelloChrome_120, headers)
@@ -94,17 +94,17 @@ func TestExampleCom_IsolateDetectionVector(t *testing.T) {
 			func(t *testing.T) (int, string, string) {
 				// uTLS Chrome + Chrome-like HTTP/2 SETTINGS
 				headers := map[string]string{
-					"User-Agent":            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-					"Accept":                "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-					"Accept-Language":       "en-US,en;q=0.9",
-					"Accept-Encoding":       "gzip, deflate, br",
-					"Sec-Ch-Ua":             `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
-					"Sec-Ch-Ua-Mobile":      "?0",
-					"Sec-Ch-Ua-Platform":    `"macOS"`,
-					"Sec-Fetch-Dest":        "document",
-					"Sec-Fetch-Mode":        "navigate",
-					"Sec-Fetch-Site":        "none",
-					"Sec-Fetch-User":        "?1",
+					"User-Agent":                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+					"Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+					"Accept-Language":           "en-US,en;q=0.9",
+					"Accept-Encoding":           "gzip, deflate, br",
+					"Sec-Ch-Ua":                 `"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`,
+					"Sec-Ch-Ua-Mobile":          "?0",
+					"Sec-Ch-Ua-Platform":        `"macOS"`,
+					"Sec-Fetch-Dest":            "document",
+					"Sec-Fetch-Mode":            "navigate",
+					"Sec-Fetch-Site":            "none",
+					"Sec-Fetch-User":            "?1",
 					"Upgrade-Insecure-Requests": "1",
 				}
 				return doUTLSRequestWithH2Settings(t, url, utls.HelloChrome_120, headers)
@@ -131,7 +131,7 @@ func TestExampleCom_IsolateDetectionVector(t *testing.T) {
 					Timeout: 15 * time.Second,
 				})
 				if err != nil {
-					t.Fatalf("request error: %v", err)
+					skipExternalNetworkIssue(t, url, err)
 				}
 				return resp.Status, extractTitle(string(resp.Body)), resp.Protocol
 			},
@@ -160,7 +160,7 @@ func doUTLSRequest(t *testing.T, targetURL string, fingerprint utls.ClientHelloI
 	// Dial TCP
 	conn, err := net.DialTimeout("tcp", "example.com:443", 10*time.Second)
 	if err != nil {
-		t.Fatalf("dial error: %v", err)
+		skipExternalNetworkIssue(t, targetURL, err)
 	}
 
 	// uTLS handshake
@@ -172,7 +172,7 @@ func doUTLSRequest(t *testing.T, targetURL string, fingerprint utls.ClientHelloI
 
 	if err := tlsConn.Handshake(); err != nil {
 		conn.Close()
-		t.Fatalf("TLS handshake error: %v", err)
+		skipExternalNetworkIssue(t, targetURL, err)
 	}
 
 	negotiated := tlsConn.ConnectionState().NegotiatedProtocol
@@ -183,7 +183,7 @@ func doUTLSRequest(t *testing.T, targetURL string, fingerprint utls.ClientHelloI
 		h2cc, err := h2t.NewClientConn(tlsConn)
 		if err != nil {
 			tlsConn.Close()
-			t.Fatalf("h2 client conn error: %v", err)
+			skipExternalNetworkIssue(t, targetURL, err)
 		}
 
 		req, _ := http.NewRequest("GET", targetURL, nil)
@@ -193,7 +193,7 @@ func doUTLSRequest(t *testing.T, targetURL string, fingerprint utls.ClientHelloI
 
 		resp, err := h2cc.RoundTrip(req)
 		if err != nil {
-			t.Fatalf("h2 request error: %v", err)
+			skipExternalNetworkIssue(t, targetURL, err)
 		}
 		body := decompressBody(t, resp)
 		resp.Body.Close()
@@ -212,7 +212,7 @@ func doUTLSRequestWithH2Settings(t *testing.T, targetURL string, fingerprint utl
 
 	conn, err := net.DialTimeout("tcp", "example.com:443", 10*time.Second)
 	if err != nil {
-		t.Fatalf("dial error: %v", err)
+		skipExternalNetworkIssue(t, targetURL, err)
 	}
 
 	tlsConn := utls.UClient(conn, &utls.Config{
@@ -223,21 +223,21 @@ func doUTLSRequestWithH2Settings(t *testing.T, targetURL string, fingerprint utl
 
 	if err := tlsConn.Handshake(); err != nil {
 		conn.Close()
-		t.Fatalf("TLS handshake error: %v", err)
+		skipExternalNetworkIssue(t, targetURL, err)
 	}
 
 	// HTTP/2 transport with Chrome-like settings
 	h2t := &http2.Transport{
 		// Chrome-like HTTP/2 settings
-		MaxHeaderListSize:        262144,
+		MaxHeaderListSize:         262144,
 		MaxDecoderHeaderTableSize: 65536,
-		MaxReadFrameSize:         16384,
+		MaxReadFrameSize:          16384,
 	}
 
 	h2cc, err := h2t.NewClientConn(tlsConn)
 	if err != nil {
 		tlsConn.Close()
-		t.Fatalf("h2 client conn error: %v", err)
+		skipExternalNetworkIssue(t, targetURL, err)
 	}
 
 	req, _ := http.NewRequest("GET", targetURL, nil)
@@ -247,7 +247,7 @@ func doUTLSRequestWithH2Settings(t *testing.T, targetURL string, fingerprint utl
 
 	resp, err := h2cc.RoundTrip(req)
 	if err != nil {
-		t.Fatalf("h2 request error: %v", err)
+		skipExternalNetworkIssue(t, targetURL, err)
 	}
 	body := decompressBody(t, resp)
 	resp.Body.Close()

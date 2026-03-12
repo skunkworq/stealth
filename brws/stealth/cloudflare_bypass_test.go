@@ -78,7 +78,7 @@ func TestCloudflareBypass_RealWorld(t *testing.T) {
 				Timeout: 15 * time.Second,
 			})
 			if err != nil {
-				t.Fatalf("  stealth request failed: %v", err)
+				skipExternalNetworkIssue(t, target.URL, err)
 			}
 
 			// Convert headers for CF detection
@@ -158,7 +158,7 @@ func TestCloudflareBypass_ExampleCom(t *testing.T) {
 				client := &http.Client{Timeout: 15 * time.Second}
 				resp, err := client.Get("https://example.com")
 				if err != nil {
-					t.Fatalf("request error: %v", err)
+					skipExternalNetworkIssue(t, "https://example.com", err)
 				}
 				body, _ = io.ReadAll(resp.Body)
 				resp.Body.Close()
@@ -184,7 +184,7 @@ func TestCloudflareBypass_ExampleCom(t *testing.T) {
 					Timeout: 15 * time.Second,
 				})
 				if err != nil {
-					t.Fatalf("request error: %v", err)
+					skipExternalNetworkIssue(t, "https://example.com", err)
 				}
 				statusCode = resp.Status
 				body = resp.Body

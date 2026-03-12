@@ -22,70 +22,70 @@ import (
 
 // RequestGeneratorConfig controls the full request generation.
 type RequestGeneratorConfig struct {
-	Profile            *BrowserProfile  // Browser identity to emulate
-	EventConfig        *GeneratorConfig // Config for behavioral event generation (optional)
-	SpoofLocalIPs        bool             // Whether to spoof local LAN IPs
-	EvadeCanvasEntropy   bool             // Phase 32: Generate low entropy IDAT chunks
-	EvadeWebGLCount         bool             // Phase 34: Ensure sufficient WebGL extensions
-	EvadeScreenHeightGap    bool             // Phase 35: Ensure screen/availHeight gap is 30-50px
-	EvadeWebGLViewport      bool             // Phase 36: Append max viewport dimensions based on max texture size
-	EvadeDeviceMemoryClamp  bool             // Phase 38: Cap deviceMemory at 8
-	EvadeAudioBaseLatency    bool            // Phase 53: realistic base latency
-	EvadeScreenOrientation   bool            // Phase 53: consistent screen orientation
-	EvadeBatteryStatus       bool            // Phase 54: realistic battery level and state
-	EvadeStorageQuota        bool            // Phase 54: realistic storage quota (e.g. > 1GB)
-	EvadeConnectionSaveData bool             // Phase 39: Inject saveData: false into connection
-	EvadeNavigatorKeyboard  bool             // Phase 41: Inject mock keyboard API for Chrome
-	EvadeHardwareConcurrency bool            // Phase 42: Ensure hardwareConcurrency is even
-	EvadeNetworkQuantization bool            // Phase 43: Quantize RTT/downlink values
-	EvadeDPRQuantization     bool            // Phase 44: Use standard OS DPR scaling values only
-	EvadeErrorStackFormat    bool            // Phase 46: Generate engine-consistent Error.stack
-	EvadeWebGLParameters     bool            // Phase 47: Ensure MAX_TEXTURE_SIZE matches Renderer
-	EvadeLanguageConsistency bool            // Phase 48: Ensure Accept-Language matches navigator.languages/Intl
-	EvadeMediaQueryHover      bool            // Phase 49: Ensure media query hover/any-hover is "hover"
-	EvadeTLSFingerprint       bool            // Phase 3: Use uTLS to match browser JA3/JA4
-	EvadeHardwareCoherence    bool            // Phase 50: Ensure CPU cores match GPU (e.g. Apple M2 >= 8 cores)
-	EvadePointerInteraction   bool            // Phase 51: Ensure pointer/any-pointer are "fine"
-	EvadePluginFilenames      bool            // Phase 51: Ensure all Chrome PDF plugins use internal-pdf-viewer
-	EvadeWebGPU               bool            // Phase 52: Ensure WebGPU is disabled or spoofed
-	EvadePermissions          bool            // Phase 52: Ensure permissions API is spoofed
-	EvadeMediaDevices         bool            // Phase 55: realistic media device enumeration
-	EvadeWebRTC               bool            // Phase 56: realistic WebRTC ICE candidates
-	EvadeCanvasNoise          bool            // Phase 57: spatially correlated canvas noise
-	EvadeScreenIsExtended     bool            // Phase 64: ensure screen.isExtended is present
-	EvadeNavigatorConnectivity bool           // Phase 65: ensure onLine and vibrate are present
-	EvadeNavigatorHardware     bool           // Phase 66: ensure bluetooth and usb are present
-	EvadeNavigatorModernAPIs   bool           // Phase 67: ensure clipboard and credentials are present
-	EvadeNavigatorMediaAPIs    bool           // Phase 68: ensure mediaCapabilities and mediaSession are present
-	EvadeHeaderOrder           bool           // Phase 69: ensure browser-consistent header order
-	EvadeNavigatorWorkers      bool           // Phase 70: ensure serviceWorker and sharedWorker are present
-	EvadeWebGLShaderPrecision  bool           // Phase 71: ensure realistic shader precision values
-	EvadeTimingDeepAnalysis    bool           // Phase 72: ensure realistic byte counts and protocols in timing
-	EvadePlugins               bool           // Phase 73: ensure realistic plugins and mimeTypes
-	EvadePermissionsDeep       bool           // Phase 74: ensure deep permissions consistency (cam, mic, geo)
-	EvadeClientHintsDeep       bool           // Phase 75: ensure deep client hints consistency (full version, arch)
-	EvadeOffscreenCanvasDeep   bool           // Phase 76: ensure offscreen canvas metrics consistency
-	EvadeGamepadAPI            bool           // Phase 77: ensure Gamepad API consistency
-	EvadeHardwareHardening     bool           // Phase 78: ensure Bluetooth/USB API consistency
-	EvadeScreenGeometryDeep    bool           // Phase 79: ensure screen.availLeft/Top consistency
-	EvadeNavigatorPrototype    bool           // Phase 80: ensure Navigator prototype chain consistency
-	EvadeWebGLRendererDeep     bool           // Phase 81: ensure WebGL renderer/OS consistency
-	EvadeAudioContextDeep      bool           // Phase 82: ensure AudioContext state/latency consistency
-	EvadePerformanceDeep      bool           // Phase 83: ensure performance.memory/navigation consistency
-	EvadeTimingDeep           bool           // Phase 84: ensure navigation/resource timing consistency
-	EvadeTouchDeep            bool           // Phase 85: ensure touch/pointer consistency
-	EvadeOrientationDeep      bool           // Phase 86: ensure screen orientation hardening
-	EvadeNetworkInfoDeep      bool           // Phase 87: ensure network info/effectiveType consistency
-	EvadeStorageDeep          bool           // Phase 88: ensure storage quota/persistence consistency
-	EvadeWebGLAttributesDeep  bool           // Phase 89: ensure WebGL context attributes consistency
-	EvadePaintTimingDeep      bool           // Phase 90: ensure performance paint timing consistency
-	EvadeWorkerCoherence      bool           // Phase 91: ensure consistency between main thread and workers
-	EvadeIntrospectionDeep    bool           // Phase 92: ensure prototype integrity and proxy evasion
-	EvadeAudioGraphDeep       bool           // Phase 93: ensure WebAudio graph correlation
-	EvadeCanvasGeometryDeep    bool           // Phase 94: ensure canvas measureText geometry consistency
-	EvadeMathPrecision        bool           // Phase 95: ensure floating point / math precision consistency
-	EvadeUADataDeep           bool           // Phase 96: ensure navigator.userAgentData high-entropy correlation
-	ForceDetections           bool            // Overrides random chance to always trigger checks (for tests)
+	Profile                    *BrowserProfile  // Browser identity to emulate
+	EventConfig                *GeneratorConfig // Config for behavioral event generation (optional)
+	SpoofLocalIPs              bool             // Whether to spoof local LAN IPs
+	EvadeCanvasEntropy         bool             // Phase 32: Generate low entropy IDAT chunks
+	EvadeWebGLCount            bool             // Phase 34: Ensure sufficient WebGL extensions
+	EvadeScreenHeightGap       bool             // Phase 35: Ensure screen/availHeight gap is 30-50px
+	EvadeWebGLViewport         bool             // Phase 36: Append max viewport dimensions based on max texture size
+	EvadeDeviceMemoryClamp     bool             // Phase 38: Cap deviceMemory at 8
+	EvadeAudioBaseLatency      bool             // Phase 53: realistic base latency
+	EvadeScreenOrientation     bool             // Phase 53: consistent screen orientation
+	EvadeBatteryStatus         bool             // Phase 54: realistic battery level and state
+	EvadeStorageQuota          bool             // Phase 54: realistic storage quota (e.g. > 1GB)
+	EvadeConnectionSaveData    bool             // Phase 39: Inject saveData: false into connection
+	EvadeNavigatorKeyboard     bool             // Phase 41: Inject mock keyboard API for Chrome
+	EvadeHardwareConcurrency   bool             // Phase 42: Ensure hardwareConcurrency is even
+	EvadeNetworkQuantization   bool             // Phase 43: Quantize RTT/downlink values
+	EvadeDPRQuantization       bool             // Phase 44: Use standard OS DPR scaling values only
+	EvadeErrorStackFormat      bool             // Phase 46: Generate engine-consistent Error.stack
+	EvadeWebGLParameters       bool             // Phase 47: Ensure MAX_TEXTURE_SIZE matches Renderer
+	EvadeLanguageConsistency   bool             // Phase 48: Ensure Accept-Language matches navigator.languages/Intl
+	EvadeMediaQueryHover       bool             // Phase 49: Ensure media query hover/any-hover is "hover"
+	EvadeTLSFingerprint        bool             // Phase 3: Use uTLS to match browser JA3/JA4
+	EvadeHardwareCoherence     bool             // Phase 50: Ensure CPU cores match GPU (e.g. Apple M2 >= 8 cores)
+	EvadePointerInteraction    bool             // Phase 51: Ensure pointer/any-pointer are "fine"
+	EvadePluginFilenames       bool             // Phase 51: Ensure all Chrome PDF plugins use internal-pdf-viewer
+	EvadeWebGPU                bool             // Phase 52: Ensure WebGPU is disabled or spoofed
+	EvadePermissions           bool             // Phase 52: Ensure permissions API is spoofed
+	EvadeMediaDevices          bool             // Phase 55: realistic media device enumeration
+	EvadeWebRTC                bool             // Phase 56: realistic WebRTC ICE candidates
+	EvadeCanvasNoise           bool             // Phase 57: spatially correlated canvas noise
+	EvadeScreenIsExtended      bool             // Phase 64: ensure screen.isExtended is present
+	EvadeNavigatorConnectivity bool             // Phase 65: ensure onLine and vibrate are present
+	EvadeNavigatorHardware     bool             // Phase 66: ensure bluetooth and usb are present
+	EvadeNavigatorModernAPIs   bool             // Phase 67: ensure clipboard and credentials are present
+	EvadeNavigatorMediaAPIs    bool             // Phase 68: ensure mediaCapabilities and mediaSession are present
+	EvadeHeaderOrder           bool             // Phase 69: ensure browser-consistent header order
+	EvadeNavigatorWorkers      bool             // Phase 70: ensure serviceWorker and sharedWorker are present
+	EvadeWebGLShaderPrecision  bool             // Phase 71: ensure realistic shader precision values
+	EvadeTimingDeepAnalysis    bool             // Phase 72: ensure realistic byte counts and protocols in timing
+	EvadePlugins               bool             // Phase 73: ensure realistic plugins and mimeTypes
+	EvadePermissionsDeep       bool             // Phase 74: ensure deep permissions consistency (cam, mic, geo)
+	EvadeClientHintsDeep       bool             // Phase 75: ensure deep client hints consistency (full version, arch)
+	EvadeOffscreenCanvasDeep   bool             // Phase 76: ensure offscreen canvas metrics consistency
+	EvadeGamepadAPI            bool             // Phase 77: ensure Gamepad API consistency
+	EvadeHardwareHardening     bool             // Phase 78: ensure Bluetooth/USB API consistency
+	EvadeScreenGeometryDeep    bool             // Phase 79: ensure screen.availLeft/Top consistency
+	EvadeNavigatorPrototype    bool             // Phase 80: ensure Navigator prototype chain consistency
+	EvadeWebGLRendererDeep     bool             // Phase 81: ensure WebGL renderer/OS consistency
+	EvadeAudioContextDeep      bool             // Phase 82: ensure AudioContext state/latency consistency
+	EvadePerformanceDeep       bool             // Phase 83: ensure performance.memory/navigation consistency
+	EvadeTimingDeep            bool             // Phase 84: ensure navigation/resource timing consistency
+	EvadeTouchDeep             bool             // Phase 85: ensure touch/pointer consistency
+	EvadeOrientationDeep       bool             // Phase 86: ensure screen orientation hardening
+	EvadeNetworkInfoDeep       bool             // Phase 87: ensure network info/effectiveType consistency
+	EvadeStorageDeep           bool             // Phase 88: ensure storage quota/persistence consistency
+	EvadeWebGLAttributesDeep   bool             // Phase 89: ensure WebGL context attributes consistency
+	EvadePaintTimingDeep       bool             // Phase 90: ensure performance paint timing consistency
+	EvadeWorkerCoherence       bool             // Phase 91: ensure consistency between main thread and workers
+	EvadeIntrospectionDeep     bool             // Phase 92: ensure prototype integrity and proxy evasion
+	EvadeAudioGraphDeep        bool             // Phase 93: ensure WebAudio graph correlation
+	EvadeCanvasGeometryDeep    bool             // Phase 94: ensure canvas measureText geometry consistency
+	EvadeMathPrecision         bool             // Phase 95: ensure floating point / math precision consistency
+	EvadeUADataDeep            bool             // Phase 96: ensure navigator.userAgentData high-entropy correlation
+	ForceDetections            bool             // Overrides random chance to always trigger checks (for tests)
 }
 
 // RequestGenerator produces complete, internally-consistent stealth HTTP requests
@@ -136,9 +136,9 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 		0x49, 0x48, 0x44, 0x52, // "IHDR"
 		0x00, 0x00, 0x01, 0x2C, // width = 300
 		0x00, 0x00, 0x00, 0xC8, // height = 200
-		0x08,                   // bit depth = 8
-		0x06,                   // color type = RGBA
-		0x00, 0x00, 0x00,       // compression, filter, interlace
+		0x08,             // bit depth = 8
+		0x06,             // color type = RGBA
+		0x00, 0x00, 0x00, // compression, filter, interlace
 		0x00, 0x00, 0x00, 0x00, // CRC (filled below)
 	}
 	// Compute CRC32 over chunk type + data (bytes 4..20 of ihdrChunk)
@@ -158,7 +158,7 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 		for i := 0; i < 32; i++ {
 			pattern[i] = byte(canvasRng.Intn(256))
 		}
-		
+
 		if config.EvadeCanvasNoise {
 			// Phase 57: Spatially correlated noise (Low-frequency)
 			// Instead of a strict modulo (which looks synthetic), we use a "clumped" approach.
@@ -172,7 +172,7 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 				} else {
 					// White background
 					for j := 0; j < 4 && i+j < len(rawPixels); j++ {
-						rawPixels[i+j] = 255 
+						rawPixels[i+j] = 255
 					}
 				}
 			}
@@ -377,15 +377,15 @@ func randomLocalIP() string {
 // sharedDimensions holds resolution, scrollbar width, and color depth picked once
 // per request so that generateScreen and generateNavigator produce consistent values.
 type sharedDimensions struct {
-	resolution   [2]int
-	scrollbarW   int
-	colorDepth   int
-	pixelRatio   float64
-	innerWidth   int
-	innerHeight  int
-	outerWidth   int
-	outerHeight  int
-	orientation  string
+	resolution  [2]int
+	scrollbarW  int
+	colorDepth  int
+	pixelRatio  float64
+	innerWidth  int
+	innerHeight int
+	outerWidth  int
+	outerHeight int
+	orientation string
 }
 
 // GenerateHeaders creates the full set of HTTP headers including all fingerprint
@@ -411,7 +411,6 @@ func (rg *RequestGenerator) GenerateHeaders() http.Header {
 	h.Set(constants.HeaderCanvasFingerprint, rg.generateCanvas())
 	h.Set(constants.HeaderAudioData, rg.generateAudio())
 
-	fmt.Printf("DEBUG: X-Navigator-Data in GenerateHeaders length: %d\n", len(h.Get(constants.HeaderNavigatorData)))
 	return h
 }
 
@@ -437,7 +436,40 @@ func (rg *RequestGenerator) setHTTPHeaders(h http.Header) {
 		h.Set("Sec-Ch-Ua-Platform", rg.profile.SecChUaPlatform)
 		h.Set("Sec-Ch-Ua-Mobile", rg.profile.SecChUaMobile)
 
-		if (rg.config != nil && rg.config.EvadeClientHintsDeep) || (rg.config != nil && rg.config.ForceDetections) {
+		if rg.config != nil && (rg.config.EvadeUADataDeep || rg.config.EvadeClientHintsDeep) {
+			// Phase 96/75: prioritize high-entropy Client Hints from profile
+			if rg.profile.SecChUaFullVersionList != "" {
+				h.Set("Sec-Ch-Ua-Full-Version-List", rg.profile.SecChUaFullVersionList)
+			} else if rg.config.EvadeClientHintsDeep {
+				// Fallback if list is missing but evasion requested
+				re := regexp.MustCompile(`"([^"]+)";v="(\d+)"`)
+				matches := re.FindAllStringSubmatch(rg.profile.SecChUa, -1)
+				fullVersions := []string{}
+				for _, m := range matches {
+					fullVersions = append(fullVersions, fmt.Sprintf(`"%s";v="%s.0.6998.77"`, m[1], m[2]))
+				}
+				h.Set("Sec-Ch-Ua-Full-Version-List", strings.Join(fullVersions, ", "))
+			}
+
+			if rg.profile.SecChUaArch != "" {
+				h.Set("Sec-Ch-Ua-Arch", rg.profile.SecChUaArch)
+			} else if rg.config.EvadeClientHintsDeep {
+				isArm := strings.Contains(strings.ToLower(rg.profile.UserAgent), "arm") ||
+					(strings.Contains(strings.ToLower(rg.profile.UserAgent), "applewebkit") && strings.Contains(strings.ToLower(rg.profile.UserAgent), "macintosh"))
+				if isArm {
+					h.Set("Sec-Ch-Ua-Arch", `"arm"`)
+				} else {
+					h.Set("Sec-Ch-Ua-Arch", `"x86"`)
+				}
+			}
+
+			if rg.profile.SecChUaBitness != "" {
+				h.Set("Sec-Ch-Ua-Bitness", rg.profile.SecChUaBitness)
+			} else if rg.config.EvadeClientHintsDeep {
+				h.Set("Sec-Ch-Ua-Bitness", `"64"`)
+			}
+		} else if rg.config != nil && rg.config.ForceDetections {
+			// Phase 75 Fallback/Forced Detection logic
 			re := regexp.MustCompile(`"([^"]+)";v="(\d+)"`)
 			matches := re.FindAllStringSubmatch(rg.profile.SecChUa, -1)
 			fullVersions := []string{}
@@ -490,7 +522,7 @@ func (rg *RequestGenerator) generateWebGL(renderer string) string {
 			"WEBGL_debug_renderer_info",
 			"WEBGL_debug_shaders",
 		}
-		
+
 		exts = append([]string(nil), exts...) // clone
 		for i := 0; i < len(genericExts); i++ {
 			found := false
@@ -540,28 +572,30 @@ func (rg *RequestGenerator) generateWebGL(renderer string) string {
 	}
 
 	data := map[string]interface{}{
-		"vendor":             rg.profile.WebGLVendor,
-		"renderer":           finalRenderer,
-		"unmasked_vendor":    rg.profile.WebGLUnmaskedVendor,
-		"unmasked_renderer":  unmaskedRenderer,
-		"version":            rg.profile.WebGLVersion,
-		"shading_version":    rg.profile.WebGLShadingVersion,
-		"platform":           rg.profile.WebGLPlatform,
-		"webgl2_supported":   true,
-		"max_texture_size":   maxTextureSize,
-		"webgl_extensions":   exts,
+		"vendor":              rg.profile.WebGLVendor,
+		"renderer":            finalRenderer,
+		"unmasked_vendor":     rg.profile.WebGLUnmaskedVendor,
+		"unmasked_renderer":   unmaskedRenderer,
+		"version":             rg.profile.WebGLVersion,
+		"shading_version":     rg.profile.WebGLShadingVersion,
+		"platform":            rg.profile.WebGLPlatform,
+		"webgl2_supported":    true,
+		"max_texture_size":    maxTextureSize,
+		"max_viewport_width":  maxTextureSize,
+		"max_viewport_height": maxTextureSize,
+		"webgl_extensions":    exts,
 	}
 
 	if rg.config.EvadeWebGLAttributesDeep {
 		data["context_attributes"] = map[string]interface{}{
-			"alpha":                          true,
-			"antialias":                      true,
-			"depth":                          true,
-			"desynchronized":                 false,
-			"failIfMajorPerformanceCaveat":    false,
-			"powerPreference":                "default",
-			"preserveDrawingBuffer":          false,
-			"stencil":                        true,
+			"alpha":                        true,
+			"antialias":                    true,
+			"depth":                        true,
+			"desynchronized":               false,
+			"failIfMajorPerformanceCaveat": false,
+			"powerPreference":              "default",
+			"preserveDrawingBuffer":        false,
+			"stencil":                      true,
 		}
 	} else if rg.config.ForceDetections {
 		// Bot-like: missing or unusual attributes
@@ -578,12 +612,12 @@ func (rg *RequestGenerator) generateWebGL(renderer string) string {
 		// Realistic shader precision for modern GPUs (NVIDIA/Apple/AMD)
 		// Usually Low/Med/High for both Vertex and Fragment shaders.
 		data["shader_precision"] = map[string]interface{}{
-			"VERTEX_SHADER_LOW_FLOAT":       map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
-			"VERTEX_SHADER_MEDIUM_FLOAT":    map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
-			"VERTEX_SHADER_HIGH_FLOAT":      map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
-			"FRAGMENT_SHADER_LOW_FLOAT":     map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
-			"FRAGMENT_SHADER_MEDIUM_FLOAT":  map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
-			"FRAGMENT_SHADER_HIGH_FLOAT":    map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
+			"VERTEX_SHADER_LOW_FLOAT":      map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
+			"VERTEX_SHADER_MEDIUM_FLOAT":   map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
+			"VERTEX_SHADER_HIGH_FLOAT":     map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
+			"FRAGMENT_SHADER_LOW_FLOAT":    map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
+			"FRAGMENT_SHADER_MEDIUM_FLOAT": map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
+			"FRAGMENT_SHADER_HIGH_FLOAT":   map[string]int{"range_min": 127, "range_max": 127, "precision": 23},
 			"VERTEX_SHADER_LOW_INT":        map[string]int{"range_min": 31, "range_max": 30, "precision": 0},
 			"VERTEX_SHADER_MEDIUM_INT":     map[string]int{"range_min": 31, "range_max": 30, "precision": 0},
 			"VERTEX_SHADER_HIGH_INT":       map[string]int{"range_min": 31, "range_max": 30, "precision": 0},
@@ -659,7 +693,7 @@ func (rg *RequestGenerator) generateScreen(dims sharedDimensions) string {
 	if rg.profile.Platform == "macos" {
 		scr.AvailTop = 25 // menu bar
 		scr.AvailHeight = h - 25
-	} else if rg.profile.Platform == "windows" {
+	} else if rg.profile.Platform == "windows" || rg.profile.Platform == "linux" {
 		scr.AvailHeight = h - 40 // taskbar
 	} else if isMobile {
 		// Mobile: availHeight might be slightly less due to status bar, or same for full screen
@@ -674,19 +708,17 @@ func (rg *RequestGenerator) generateScreen(dims sharedDimensions) string {
 		scr.OrientationType = "portrait-primary"
 	}
 
-	hasLock := false
-	if rg.profile.Platform == "android" || rg.profile.Platform == "ios" {
-		hasLock = true
-	}
-
+	// Phase 86: Screen orientation locking
 	if rg.config.EvadeOrientationDeep {
+		hasLock := true
 		scr.HasOrientationLock = &hasLock
 	} else if rg.config.ForceDetections {
-		// Simulate missing orientation lock on mobile
-		if hasLock {
-			lock := false
-			scr.HasOrientationLock = &lock
-		}
+		hasLock := false
+		scr.HasOrientationLock = &hasLock
+	} else {
+		// Default to true for standard profiles to avoid noise
+		hasLock := true
+		scr.HasOrientationLock = &hasLock
 	}
 
 	data := map[string]interface{}{
@@ -722,7 +754,7 @@ func (rg *RequestGenerator) generateScreen(dims sharedDimensions) string {
 		data["avail_left"] = 1920
 		data["is_extended"] = false
 	}
-	
+
 	// If not evading, randomly omit is_extended to trigger the sword (30% chance)
 	if !rg.config.EvadeScreenIsExtended && (rg.config.ForceDetections || rg.rng.Intn(10) < 3) {
 		delete(data, "is_extended")
@@ -821,11 +853,11 @@ func (rg *RequestGenerator) generateTiming() string {
 	}
 
 	entries := make([]entry, 0, len(resources))
-	
+
 	// Establish base timing
 	tsRelative := int64(0)
 	absStart := time.Now().UnixMilli() - 2000 // Start 2s ago
-	
+
 	for i, res := range resources {
 		referrer := ""
 		if res.hasReferrer {
@@ -890,6 +922,12 @@ func (rg *RequestGenerator) generateTiming() string {
 				e.EncodedBodySize = 1200
 				e.Protocol = "http/1.1"
 			}
+		} else {
+			// Default healthy behavior
+			e.Protocol = "h2"
+			e.TransferSize = float64(1000 + rg.rng.Intn(5000))
+			e.EncodedBodySize = e.TransferSize * 0.8
+			e.DecodedBodySize = e.TransferSize * 1.5
 		}
 
 		entries = append(entries, e)
@@ -902,24 +940,26 @@ func (rg *RequestGenerator) generateTiming() string {
 	}
 
 	navStart := absStart - int64(100+rg.rng.Intn(200)) // navStart before first request
-	loadEventEnd := absStart + tsRelative + 1000     // loadEnd after last request
+	loadEventEnd := absStart + tsRelative + 1000       // loadEnd after last request
 
 	if rg.config.EvadeTimingDeep {
 		// already good with absolute defaults above
 	} else if rg.config.ForceDetections {
 		// Simulate inconsistencies
-		navStart = absStart + 100               // AFTER first request (mismatch!)
+		navStart = absStart + 100                  // AFTER first request (mismatch!)
 		loadEventEnd = absStart + tsRelative - 100 // BEFORE last request finished (mismatch!)
 	}
 
 	// Phase 90: Paint Timing
 	paintEntries := make([]map[string]interface{}, 0)
 	if rg.config.EvadePaintTimingDeep {
-		// FP usually after first resource (HTML) finishes or during first CSS
-		// FCP usually after first visual resource (CSS) finishes
-		fp := resources[0].maxGap + 20 + int64(rg.rng.Intn(50))
-		fcp := fp + 10 + int64(rg.rng.Intn(100))
-		
+		// Calculate when the first visual resource (CSS) finished loading
+		// resources[0] is HTML, resources[1] is the first CSS
+		firstCSSLoadEnd := resources[0].maxGap + resources[1].maxGap + entries[1].DurationMs
+
+		fp := firstCSSLoadEnd - 20 - int64(rg.rng.Intn(30))
+		fcp := firstCSSLoadEnd + 10 + int64(rg.rng.Intn(50))
+
 		paintEntries = append(paintEntries, map[string]interface{}{
 			"name":       "first-paint",
 			"start_time": float64(fp),
@@ -933,6 +973,19 @@ func (rg *RequestGenerator) generateTiming() string {
 		paintEntries = append(paintEntries, map[string]interface{}{
 			"name":       "first-paint",
 			"start_time": 0.0,
+		})
+	} else {
+		// Healthy default paint markers — must be significantly after navigationStart
+		// and usually after a few resources have started/finished.
+		fp := 350.0 + float64(rg.rng.Intn(100))
+		fcp := fp + 20.0 + float64(rg.rng.Intn(100))
+		paintEntries = append(paintEntries, map[string]interface{}{
+			"name":       "first-paint",
+			"start_time": fp,
+		})
+		paintEntries = append(paintEntries, map[string]interface{}{
+			"name":       "first-contentful-paint",
+			"start_time": fcp,
 		})
 	}
 
@@ -1015,54 +1068,62 @@ func (rg *RequestGenerator) generateNavigator(dims sharedDimensions, renderer st
 	}
 
 	data := map[string]interface{}{
-		"webdriver":              false,
-		"webdriverString":        "function () { [native code] }",
-		"platform":               p.NavPlatform,
-		"vendor":                 p.NavVendor,
-		"userAgent":              p.UserAgent,
-		"appVersion":             appVersion,
-		"hardwareConcurrency":   concurrency,
-		"deviceMemory":           memory,
-		"cookieEnabled":          true,
-		"pdfViewerEnabled":       true,
-		"connection":             connObj,
-		"languages":              p.Languages,
-		"language":               p.Languages[0],
-		"intl_locale":            p.Languages[0],
-		"screen_color_depth":      dims.colorDepth,
-		"screen_inner_width":      dims.innerWidth,
-		"screen_inner_height":     dims.innerHeight,
-		"screen_outer_width":      dims.outerWidth,
-		"screen_outer_height":     dims.outerHeight,
-		"productSub":              p.ProductSub,
-		"maxTouchPoints":          maxTouch,
-		"Notification_permission": "default",
-		"gpu_present":             true,
+		"webdriver":                       false,
+		"webdriverString":                 "function () { [native code] }",
+		"platform":                        p.NavPlatform,
+		"vendor":                          p.NavVendor,
+		"userAgent":                       p.UserAgent,
+		"appVersion":                      appVersion,
+		"hardwareConcurrency":             concurrency,
+		"deviceMemory":                    memory,
+		"cookieEnabled":                   true,
+		"pdfViewerEnabled":                true,
+		"connection":                      connObj,
+		"languages":                       p.Languages,
+		"language":                        p.Languages[0],
+		"intl_locale":                     p.Languages[0],
+		"screen_color_depth":              dims.colorDepth,
+		"screen_inner_width":              dims.innerWidth,
+		"screen_inner_height":             dims.innerHeight,
+		"screen_outer_width":              dims.outerWidth,
+		"screen_outer_height":             dims.outerHeight,
+		"productSub":                      p.ProductSub,
+		"maxTouchPoints":                  maxTouch,
+		"Notification_permission":         "default",
+		"gpu_present":                     true,
 		"permissions_notifications_state": "default",
-		"screen_orientation":     dims.orientation,
-		"battery_status":         rg.generateBatteryStatus(),
-		"storage_quota":           rg.generateStorageQuota(dims, float64(memory)),
-		"media_devices":          rg.generateMediaDevices(),
-		"webrtc_data":            rg.generateWebRTC(),
-		"userAgentData":          rg.generateUserAgentData(),
-		"userActivation":         map[string]interface{}{"hasBeenActive": false, "isActive": false},
-		"keyboard":               map[string]interface{}{},
-		"scheduling":             map[string]interface{}{"isInputPending": false},
-		"locks":                  map[string]interface{}{},
-		"intl_timezone":          rg.profile.Timezone,
-		"audio_worklet_available": true,
+		"screen_orientation":              dims.orientation,
+		"screen": map[string]interface{}{
+			"orientation":          dims.orientation,
+			"has_orientation_lock": hasLockValue(rg),
+			"is_extended":          isExtendedValue(rg),
+			"colorDepth":           float64(dims.colorDepth),
+			"pixelDepth":           float64(dims.colorDepth),
+		},
+		"battery_status":             rg.generateBatteryStatus(),
+		"storage_quota":              rg.generateStorageQuota(dims, float64(memory)),
+		"media_devices":              rg.generateMediaDevices(),
+		"webrtc_data":                rg.generateWebRTC(),
+		"userAgentData":              rg.generateUserAgentData(),
+		"userActivation":             map[string]interface{}{"hasBeenActive": false, "isActive": false},
+		"keyboard":                   map[string]interface{}{},
+		"scheduling":                 map[string]interface{}{"isInputPending": false},
+		"locks":                      map[string]interface{}{},
+		"intl_timezone":              rg.profile.Timezone,
+		"timezone":                   rg.profile.Timezone,
+		"audio_worklet_available":    true,
 		"offscreen_canvas_available": true,
-		"storage_persisted":       rg.config.EvadeStorageDeep, // true on modern Chrome
-		"storage_usage":           float64(1024 * 1024 * (100 + rg.rng.Intn(900))), // 100MB - 1GB usage
-		"onLine":                 true,
-		"vibrate":                true,
-		"clipboard":              map[string]interface{}{},
-		"credentials":            map[string]interface{}{},
-		"mediaCapabilities":      map[string]interface{}{},
-		"mediaSession":           map[string]interface{}{},
-		"getGamepads":            true, // Presence indicator
-		"bluetooth":              map[string]interface{}{"getAvailability": true},
-		"usb":                    map[string]interface{}{"getDevices": true},
+		"storage_persisted":          rg.config.EvadeStorageDeep,                      // true on modern Chrome
+		"storage_usage":              float64(1024 * 1024 * (100 + rg.rng.Intn(900))), // 100MB - 1GB usage
+		"onLine":                     true,
+		"vibrate":                    true,
+		"clipboard":                  map[string]interface{}{},
+		"credentials":                map[string]interface{}{},
+		"mediaCapabilities":          map[string]interface{}{},
+		"mediaSession":               map[string]interface{}{},
+		"getGamepads":                true, // Presence indicator
+		"bluetooth":                  map[string]interface{}{"getAvailability": true},
+		"usb":                        map[string]interface{}{"getDevices": true},
 	}
 
 	rg.addMathPrecision(data)
@@ -1147,9 +1208,8 @@ func (rg *RequestGenerator) generateNavigator(dims sharedDimensions, renderer st
 		}
 	}
 
-	fmt.Printf("DEBUG: EvadeStorageQuota=%v EvadeStorageDeep=%v\n", rg.config.EvadeStorageQuota, rg.config.EvadeStorageDeep)
-	if !rg.config.EvadeStorageQuota && rg.rng.Intn(10) < 3 {
-		// Randomly simulate zero storage quota (common in restricted/headless)
+	if rg.config.ForceDetections && !rg.config.EvadeStorageQuota {
+		// Only force obviously bad quota data when a test explicitly asks for detections.
 		data["storage_quota"] = 0.0
 	}
 
@@ -1180,7 +1240,6 @@ func (rg *RequestGenerator) generateNavigator(dims sharedDimensions, renderer st
 
 	rg.addNavigatorMediaQueries(data)
 
-	fmt.Printf("DEBUG: browser=%s\n", rg.profile.Browser)
 	if rg.profile.Browser == "chrome" {
 		rg.addChromeRuntimeData(data)
 	}
@@ -1270,8 +1329,35 @@ func (rg *RequestGenerator) generateNavigator(dims sharedDimensions, renderer st
 	}
 
 	b, _ := json.Marshal(data)
-	fmt.Printf("DEBUG: navigator data: %s\n", string(b))
 	return string(b)
+}
+
+func hasLockValue(rg *RequestGenerator) *bool {
+	hasLock := false
+	if rg.profile.Platform == "android" || rg.profile.Platform == "ios" {
+		hasLock = true
+	}
+	if rg.config.EvadeOrientationDeep {
+		return &hasLock
+	} else if rg.config.ForceDetections {
+		if hasLock {
+			lock := false
+			return &lock
+		}
+	}
+	// Default: provide the value
+	return &hasLock
+}
+
+func isExtendedValue(rg *RequestGenerator) *bool {
+	isExt := false
+	if rg.config != nil && rg.profile.Browser == "chrome" {
+		isExt = true
+	}
+	if rg.config != nil && !rg.config.EvadeScreenIsExtended && (rg.config.ForceDetections || rg.rng.Intn(10) < 3) {
+		return nil
+	}
+	return &isExt
 }
 
 func (rg *RequestGenerator) addNavigatorMediaQueries(data map[string]interface{}) {
@@ -1299,12 +1385,23 @@ func (rg *RequestGenerator) addNavigatorMediaQueries(data map[string]interface{}
 		}
 	}
 
-	if !rg.config.EvadePointerInteraction && !rg.config.EvadeTouchDeep && (rg.config.ForceDetections || rg.rng.Intn(10) < 3) {
-		// Randomly simulate non-standard pointer
-		if isMobile {
-			pointer = "fine"
-		} else {
-			pointer = "coarse"
+	if !rg.config.EvadePointerInteraction && !rg.config.EvadeTouchDeep {
+		if rg.config.ForceDetections {
+			if isMobile {
+				// Mismatch: maxTouchPoints=0 but primary pointer=coarse
+				pointer = "coarse"
+			} else {
+				// Mismatch: maxTouchPoints=5 but only fine pointers reported
+				pointer = "fine"
+				anyPointer = "fine"
+			}
+		} else if rg.rng.Intn(10) < 3 {
+			// Randomly simulate non-standard pointer
+			if isMobile {
+				pointer = "fine"
+			} else {
+				pointer = "coarse"
+			}
 		}
 	}
 
@@ -1322,9 +1419,9 @@ func (rg *RequestGenerator) generateHardwareSpecsWithRenderer(renderer string) (
 		{16, 8}, {16, 12},
 		{32, 8}, {32, 12}, {32, 16},
 	}
-	
+
 	rLow := strings.ToLower(renderer)
-	
+
 	// If profile has specific memory values, use them to filter pairs
 	availableMem := make(map[int]bool)
 	for _, m := range rg.profile.DeviceMemory {
@@ -1334,7 +1431,7 @@ func (rg *RequestGenerator) generateHardwareSpecsWithRenderer(renderer string) (
 	filtered := make([]hwPair, 0)
 	for _, pair := range hardwarePairs {
 		coherent := true
-		
+
 		// 1. Enforce profile memory constraints
 		if len(availableMem) > 0 && !availableMem[pair.memory] {
 			coherent = false
@@ -1467,11 +1564,11 @@ func (rg *RequestGenerator) addMathPrecision(data map[string]interface{}) {
 	// Phase 95: Floating Point / Math Precision Evasion
 	sin1e15 := -0.8582732024756439
 	cos1e15 := -0.5131970812354724
-	
+
 	// Real V8 values for 1e15:
 	// Math.sin(1e15) = -0.8582732024756439
 	// Math.cos(1e15) = -0.5131970812354724
-	
+
 	if !rg.config.EvadeMathPrecision && rg.config.ForceDetections {
 		// Detection: stubbed math
 		sin1e15 = 0.0
@@ -1514,7 +1611,6 @@ func (rg *RequestGenerator) addPerformanceMemory(data map[string]interface{}) {
 		"totalJSHeapSize": float64(totalHeap),
 		"usedJSHeapSize":  float64(usedHeap),
 	}
-	fmt.Printf("DEBUG: added performance_memory to data\n")
 }
 
 // generateCanvas creates the X-Canvas-Fingerprint header.
@@ -1552,16 +1648,16 @@ func (rg *RequestGenerator) generateAudio() string {
 	}
 
 	data := map[string]interface{}{
-		"sample_rate":            p.AudioSampleRate,
-		"channel_count":          p.AudioChannelCount,
-		"max_channel_count":      p.AudioMaxChannelCount,
-		"base_latency":           latency,
-		"output_latency":         0.005 + rg.rng.Float64()*0.035,
-		"state":                  state,
+		"sample_rate":             p.AudioSampleRate,
+		"channel_count":           p.AudioChannelCount,
+		"max_channel_count":       p.AudioMaxChannelCount,
+		"base_latency":            latency,
+		"output_latency":          0.005 + rg.rng.Float64()*0.035,
+		"state":                   state,
 		"audio_worklet_available": true,
-		"offline_context_hash":   offlineHash,
-		"compressor_attack":      attack,
-		"compressor_release":     release,
+		"offline_context_hash":    offlineHash,
+		"compressor_attack":       attack,
+		"compressor_release":      release,
 	}
 
 	if !rg.config.EvadeAudioBaseLatency && rg.rng.Intn(10) < 3 {
@@ -1575,13 +1671,13 @@ func (rg *RequestGenerator) calculateSharedDimensions() sharedDimensions {
 	p := rg.profile
 	res := p.Resolutions[rg.rng.Intn(len(p.Resolutions))]
 	pixelRatio := rg.getDPR()
-	
+
 	// screen.width/height are LOGICAL resolution
 	width := res[0]
 	height := res[1]
-	
+
 	isMobile := p.Platform == "android" || p.Platform == "ios"
-	
+
 	scrollbarW := 0
 	if !isMobile {
 		scrollbarW = 12 + rg.rng.Intn(6) // 12-17px
@@ -1590,7 +1686,7 @@ func (rg *RequestGenerator) calculateSharedDimensions() sharedDimensions {
 	// innerWidth/innerHeight are also logical
 	innerWidth := width
 	innerHeight := height
-	
+
 	if !isMobile {
 		innerWidth -= scrollbarW
 		innerHeight -= 40 + rg.rng.Intn(60) // top chrome
@@ -1696,7 +1792,6 @@ func (rg *RequestGenerator) generateStorageQuota(dims sharedDimensions, memory f
 	}
 
 	q := float64(baseQuota + rg.rng.Intn(480*1024*1024*1024))
-	fmt.Printf("DEBUG: generated storage_quota: %.0f\n", q)
 	return q
 }
 
@@ -1710,7 +1805,7 @@ func (rg *RequestGenerator) generateMediaDevices() []interface{} {
 	}
 
 	groupId := genId()
-	
+
 	// If deep permissions evasion is enabled, we default to "prompt" state
 	// which means devices should NOT have labels or deviceIds should be empty/mangled.
 	showLabels := true
@@ -1786,7 +1881,7 @@ func (rg *RequestGenerator) generateWebRTC() map[string]interface{} {
 
 	// 1. Host Candidates (mDNS is common in modern browsers)
 	candidates = append(candidates, fmt.Sprintf("candidate:0 1 UDP 2122252543 %s 58349 typ host", genMDNS()))
-	
+
 	if rg.rng.Float64() < 0.3 {
 		// Occasionally add a real local IP (older styles or specific configs)
 		candidates = append(candidates, fmt.Sprintf("candidate:1 1 UDP 2122252542 %s 58350 typ host", genLocalIP()))
@@ -1886,10 +1981,10 @@ func (rg *RequestGenerator) generateUserAgentData() map[string]interface{} {
 			})
 		}
 		uaData["fullVersionList"] = fullBrands
-		
+
 		arch := "x86"
-		if strings.Contains(strings.ToLower(rg.profile.UserAgent), "arm") || 
-		   (strings.Contains(strings.ToLower(rg.profile.UserAgent), "macintosh") && rg.profile.Platform == "macos") {
+		if strings.Contains(strings.ToLower(rg.profile.UserAgent), "arm") ||
+			(strings.Contains(strings.ToLower(rg.profile.UserAgent), "macintosh") && rg.profile.Platform == "macos") {
 			arch = "arm"
 		}
 		uaData["architecture"] = arch

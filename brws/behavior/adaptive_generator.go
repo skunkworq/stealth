@@ -696,8 +696,7 @@ func mutateEvadeScrollSpearman(ag *AdaptiveRequestGenerator) {
 }
 
 func mutateFixCanvasEntropy(ag *AdaptiveRequestGenerator) {
-	// Rebuild and ensure canvas generation uses low entropy pixels.
-	// We'll update generateCanvas to natively produce low entropy, so nothing extra needed here.
+	ag.config.EvadeCanvasEntropy = true
 	ag.rebuild()
 }
 

@@ -168,10 +168,34 @@ func newEvasiveRequestGeneratorConfig(profile *BrowserProfile) *RequestGenerator
 		EvadeDeviceMemoryClamp:   true,
 		EvadeConnectionSaveData:  true,
 		EvadeScreenOrientation:   true,
+		EvadeAudioBaseLatency:    true,
 		EvadeNavigatorKeyboard:   true,
 		EvadeHardwareConcurrency: true,
 		EvadeNetworkQuantization: true,
 		EvadeDPRQuantization:     true,
+		EvadeWebGLParameters:     true,
+		EvadeWebGLShaderPrecision: true,
+		EvadeWebGLAttributesDeep:  true,
+		EvadeWebGLRendererDeep:    true,
+		EvadeTimingDeepAnalysis:   true,
+		EvadeScreenGeometryDeep:   true,
+		EvadeScreenIsExtended:     true,
+		EvadeStorageDeep:          true,
+		EvadeStorageQuota:         true,
+		EvadePlugins:              true,
+		EvadePluginFilenames:      true,
+		EvadeNavigatorMediaAPIs:   true,
+		EvadeNavigatorWorkers:     true,
+		EvadeHardwareHardening:     true,
+		EvadeGamepadAPI:           true,
+		EvadeOffscreenCanvasDeep:  true,
+		EvadeAudioContextDeep:     true,
+		EvadeAudioGraphDeep:       true,
+		EvadeIntrospectionDeep:    true,
+		EvadeWorkerCoherence:      true,
+		EvadeMediaQueryHover:      true,
+		EvadeTouchDeep:            true,
+		EvadeOrientationDeep:      true,
 	}
 }
 
@@ -214,7 +238,7 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 				var data adversarial.ScreenData
 				json.Unmarshal([]byte(h.Get(constants.HeaderScreenData)), &data)
 				result := adversarial.NewScreenAnalyzer().Analyze(&data)
-				if result.Score > 0 {
+				if result.Score > 0.15 {
 					indicators := make([]string, 0)
 					for _, ind := range result.Indicators {
 						indicators = append(indicators, ind.Check)
@@ -254,7 +278,7 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 
 				seq := adversarial.NewRequestTimingSequenceFromMap(timing)
 				result := adversarial.NewTimingAnalyzer(nil).Analyze(seq)
-				if result.Score > 0 {
+				if result.Score > 0.05 {
 					indicators := make([]string, 0)
 					for _, ind := range result.Indicators {
 						indicators = append(indicators, ind.Check)

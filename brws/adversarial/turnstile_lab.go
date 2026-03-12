@@ -39,6 +39,20 @@ type WidgetTelemetry struct {
 	LastEventAt   time.Time              `json:"last_event_at,omitempty"`
 }
 
+// TurnstileClientSnapshot captures the browser state observed while the widget is rendered.
+type TurnstileClientSnapshot struct {
+	UserAgent           string   `json:"user_agent,omitempty"`
+	Language            string   `json:"language,omitempty"`
+	Languages           []string `json:"languages,omitempty"`
+	Platform            string   `json:"platform,omitempty"`
+	HardwareConcurrency int      `json:"hardware_concurrency"`
+	Webdriver           bool     `json:"webdriver"`
+	ScreenWidth         int      `json:"screen_width"`
+	ScreenHeight        int      `json:"screen_height"`
+	ColorDepth          int      `json:"color_depth"`
+	Timezone            string   `json:"timezone,omitempty"`
+}
+
 // TurnstileWidgetConfig captures the local widget contract returned by init.
 type TurnstileWidgetConfig struct {
 	Mode            string                 `json:"mode"`
