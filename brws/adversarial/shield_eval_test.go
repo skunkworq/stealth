@@ -18,6 +18,7 @@ type EvasionProfile struct {
 type ShieldEvalResult struct {
 	Profile    string
 	BotScore   float64
+	Confidence float64
 	IsBot      bool
 	Vectors    map[string]float64 // vector name → score
 	Indicators []string
@@ -212,6 +213,7 @@ func TestShieldEvaluation(t *testing.T) {
 		evalResult := ShieldEvalResult{
 			Profile:    profile.Name,
 			BotScore:   detection.Score,
+			Confidence: detection.Confidence,
 			IsBot:      detection.IsBot,
 			Vectors:    make(map[string]float64),
 			Indicators: make([]string, 0),
@@ -246,7 +248,7 @@ func TestShieldEvaluation(t *testing.T) {
 	}
 
 	// Print header
-	fmt.Printf("%-28s │ %5s │ %3s │", "Profile", "Score", "Bot")
+	fmt.Printf("%-28s │ %5s │ %5s │ %3s │", "Profile", "Score", "Conf", "Bot")
 	for _, cat := range allCategories {
 		short := cat
 		if len(short) > 8 {
@@ -255,7 +257,7 @@ func TestShieldEvaluation(t *testing.T) {
 		fmt.Printf(" %8s │", short)
 	}
 	fmt.Println()
-	fmt.Println(strings.Repeat("─", 40+10*len(allCategories)))
+	fmt.Println(strings.Repeat("─", 48+10*len(allCategories)))
 
 	// Print each result
 	for i, r := range results {
@@ -263,7 +265,7 @@ func TestShieldEvaluation(t *testing.T) {
 		if r.IsBot {
 			botMark = "!!"
 		}
-		fmt.Printf("%-28s │ %5.3f │ %s  │", profiles[i].Name, r.BotScore, botMark)
+		fmt.Printf("%-28s │ %5.3f │ %5.3f │ %s  │", profiles[i].Name, r.BotScore, r.Confidence, botMark)
 		for _, cat := range allCategories {
 			score := r.Vectors[cat]
 			if score > 0.3 {
@@ -287,7 +289,7 @@ func TestShieldEvaluation(t *testing.T) {
 		if r.IsBot {
 			status = "DETECTED"
 		}
-		fmt.Printf("[%s] %s (score=%.3f)\n", status, profiles[i].Name, r.BotScore)
+		fmt.Printf("[%s] %s (score=%.3f confidence=%.3f)\n", status, profiles[i].Name, r.BotScore, r.Confidence)
 		if len(r.Indicators) > 0 {
 			for _, ind := range r.Indicators {
 				fmt.Printf("    - %s\n", ind)

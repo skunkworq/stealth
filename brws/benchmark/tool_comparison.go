@@ -57,6 +57,7 @@ type ToolComparisonConfig struct {
 type ScenarioResult struct {
 	Name         string             `json:"name"`
 	BotScore     float64            `json:"bot_score"`
+	Confidence   float64            `json:"confidence"`
 	IsBot        bool               `json:"is_bot"`
 	Indicators   []string           `json:"indicators"`
 	VectorScores map[string]float64 `json:"vector_scores"`
@@ -66,6 +67,7 @@ type ScenarioResult struct {
 type ToolResult struct {
 	Tool          ToolInfo         `json:"tool"`
 	AvgBotScore   float64          `json:"avg_bot_score"`
+	AvgConfidence float64          `json:"avg_confidence"`
 	DetectionRate float64          `json:"detection_rate"`
 	EvasionRate   float64          `json:"evasion_rate"`
 	FiredVectors  []string         `json:"fired_vectors"`
@@ -533,12 +535,14 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 		}
 
 		totalScore := 0.0
+		totalConfidence := 0.0
 		detectedCount := 0
 		firedVecMap := make(map[string]bool)
 
 		for _, scenario := range tp.Scenarios {
 			// Run multiple iterations and average
 			var scenAvgScore float64
+			var scenAvgConfidence float64
 			var scenIsBot bool
 			var scenIndicators []string
 			scenVecScores := make(map[string]float64)
@@ -548,6 +552,7 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 				detection := detector.AnalyzeRequest(req, nil)
 
 				scenAvgScore += detection.Score
+				scenAvgConfidence += detection.Confidence
 
 				if detection.IsBot {
 					scenIsBot = true
@@ -570,12 +575,14 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 			}
 
 			scenAvgScore /= float64(cfg.Iterations)
+			scenAvgConfidence /= float64(cfg.Iterations)
 			// Deduplicate indicators
 			scenIndicators = dedup(scenIndicators)
 
 			sr := ScenarioResult{
 				Name:         scenario.Name,
 				BotScore:     scenAvgScore,
+				Confidence:   scenAvgConfidence,
 				IsBot:        scenIsBot,
 				Indicators:   scenIndicators,
 				VectorScores: scenVecScores,
@@ -583,6 +590,7 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 			tr.Scenarios = append(tr.Scenarios, sr)
 
 			totalScore += scenAvgScore
+			totalConfidence += scenAvgConfidence
 			if scenIsBot {
 				detectedCount++
 			}
@@ -591,6 +599,7 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 		numScenarios := len(tp.Scenarios)
 		if numScenarios > 0 {
 			tr.AvgBotScore = totalScore / float64(numScenarios)
+			tr.AvgConfidence = totalConfidence / float64(numScenarios)
 			tr.DetectionRate = float64(detectedCount) / float64(numScenarios)
 			tr.EvasionRate = 1.0 - tr.DetectionRate
 		}

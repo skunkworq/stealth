@@ -21,6 +21,7 @@ type VectorReport struct {
 	Name        string        `json:"name"`
 	Category    string        `json:"category"`
 	Score       float64       `json:"score"`
+	Confidence  float64       `json:"confidence"`
 	Weight      float64       `json:"weight"`
 	Detected    bool          `json:"detected"`
 	Description string        `json:"description"`
@@ -32,6 +33,7 @@ type VectorReport struct {
 type DetectionReport struct {
 	RequestID   string         `json:"request_id"`
 	TotalScore  float64        `json:"total_score"`
+	Confidence  float64        `json:"confidence"`
 	IsBot       bool           `json:"is_bot"`
 	IsStealth   bool           `json:"is_stealth"`
 	Vectors     []VectorReport `json:"vectors"`
@@ -46,6 +48,7 @@ func (sd *StealthDetection) ToDetectionReport() *DetectionReport {
 	report := &DetectionReport{
 		RequestID:  sd.RequestID,
 		TotalScore: sd.Score,
+		Confidence: sd.Confidence,
 		IsBot:      sd.IsBot,
 		IsStealth:  sd.IsStealth,
 		Vectors:    make([]VectorReport, 0, len(sd.Vectors)),
@@ -56,6 +59,7 @@ func (sd *StealthDetection) ToDetectionReport() *DetectionReport {
 			Name:        vec.Name,
 			Category:    vec.Category,
 			Score:       vec.Score,
+			Confidence:  vec.Confidence,
 			Weight:      vec.Weight,
 			Detected:    vec.Detected,
 			Description: vec.Description,

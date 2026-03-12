@@ -18,10 +18,11 @@ func TestToolComparisonBasicRanking(t *testing.T) {
 
 	// Print scoreboard
 	t.Logf("\n=== Tool Comparison Scoreboard ===")
-	t.Logf("%-30s %10s %12s %10s", "Tool", "Avg Score", "Detection %", "Evasion %")
-	t.Logf("%-30s %10s %12s %10s", "----", "---------", "-----------", "---------")
+	t.Logf("%-30s %10s %10s %12s %10s", "Tool", "Avg Score", "Avg Conf", "Detection %", "Evasion %")
+	t.Logf("%-30s %10s %10s %12s %10s", "----", "---------", "--------", "-----------", "---------")
 	for _, r := range report.Ranking {
-		t.Logf("%-30s %10.3f %11.0f%% %9.0f%%", r.ToolName, r.AvgScore, (1-r.EvasionRate)*100, r.EvasionRate*100)
+		tr := resultMapByName(report.Results, r.ToolName)
+		t.Logf("%-30s %10.3f %10.3f %11.0f%% %9.0f%%", r.ToolName, r.AvgScore, tr.AvgConfidence, (1-r.EvasionRate)*100, r.EvasionRate*100)
 	}
 
 	// Build a map for easy lookup
@@ -107,6 +108,9 @@ func TestToolComparisonBasicRanking(t *testing.T) {
 				t.Errorf("  scenario %s evaded (score: %.3f), indicators: %v", s.Name, s.BotScore, s.Indicators)
 			}
 		}
+	}
+	if sword.AvgConfidence < 0.80 {
+		t.Errorf("our_stealth_sword: expected high detection confidence, got %.3f", sword.AvgConfidence)
 	}
 
 	// Ranking: sword is no longer #1 (detected by new checks)
@@ -247,4 +251,13 @@ func findSubstr(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func resultMapByName(results []ToolResult, name string) ToolResult {
+	for _, r := range results {
+		if r.Tool.Name == name {
+			return r
+		}
+	}
+	return ToolResult{}
 }

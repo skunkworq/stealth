@@ -92,6 +92,7 @@ type DetectionVector struct {
 	Name         string        `json:"name"`
 	Category     string        `json:"category"`
 	Score        float64       `json:"score"`
+	Confidence   float64       `json:"confidence,omitempty"`
 	Weight       float64       `json:"weight"`
 	Detected     bool          `json:"detected"`
 	Description  string        `json:"description"`
@@ -585,6 +586,10 @@ func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.Connec
 	}
 
 	// Phase 57: Collect indicators from all vectors for the flat indicator list
+	for i := range detection.Vectors {
+		detection.Vectors[i].Confidence = calculateVectorConfidence(&detection.Vectors[i])
+	}
+
 	for _, v := range detection.Vectors {
 		for _, indName := range v.Indicators {
 			detection.Indicators = append(detection.Indicators, StealthIndicator{
@@ -604,8 +609,8 @@ func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.Connec
 		detection.Score = totalScore / totalWeight
 	}
 
-	detection.Confidence = detection.Score
 	detection.IsBot = detection.Score >= sd.config.ThresholdBot
+	detection.Confidence = calculateDetectionConfidence(&detection)
 
 	// Determine if it's specifically our stealth browser
 	detection.IsStealth = sd.detectStealthBrowser(&detection)
@@ -1931,30 +1936,20 @@ func (sd *StealthDetector) httpInfoToVector(info *HTTPFingerprintInfo) Detection
 	indicators = append(indicators, info.MissingHeaders...)
 	indicators = append(indicators, info.SuspiciousHeaders...)
 	vec.Indicators = indicators
+	vec.CheckReports = make([]CheckReport, 0, len(indicators))
 
 	// Score missing headers
-	vec.Score = float64(len(info.MissingHeaders)) * constants.SeverityLow
+	for _, missing := range info.MissingHeaders {
+		weight := scoreForHTTPIndicator(missing)
+		vec.Score += weight
+		vec.CheckReports = append(vec.CheckReports, buildHTTPCheckReport(missing, weight, info))
+	}
 
 	// Score suspicious headers with severity-based weights
 	for _, s := range info.SuspiciousHeaders {
-		switch {
-		case strings.HasPrefix(s, "suspicious_ua_"):
-			vec.Score += constants.SeverityHigh // 0.35 — strong bot signal
-		case s == "missing_user_agent":
-			vec.Score += constants.SeverityHigh
-		case s == "webdriver_exposed":
-			vec.Score += constants.SeverityHigh
-		case s == "chrome_navigation_missing_client_hints":
-			vec.Score += constants.SeverityHigh
-		case s == "firefox_navigation_priority_header":
-			vec.Score += constants.SeverityHigh
-		case s == "too_few_headers":
-			vec.Score += constants.SeverityMedium // 0.25
-		case s == "generic_accept_header":
-			vec.Score += constants.SeverityLow // 0.15
-		default:
-			vec.Score += 0.2
-		}
+		weight := scoreForHTTPIndicator(s)
+		vec.Score += weight
+		vec.CheckReports = append(vec.CheckReports, buildHTTPCheckReport(s, weight, info))
 	}
 
 	if vec.Score > 1.0 {
@@ -1964,6 +1959,278 @@ func (sd *StealthDetector) httpInfoToVector(info *HTTPFingerprintInfo) Detection
 	vec.Detected = vec.Score > 0.3
 
 	return vec
+}
+
+func scoreForHTTPIndicator(indicator string) float64 {
+	switch {
+	case strings.HasPrefix(indicator, "suspicious_ua_"):
+		return constants.SeverityHigh
+	case indicator == "missing_user_agent":
+		return constants.SeverityHigh
+	case indicator == "webdriver_exposed":
+		return constants.SeverityHigh
+	case indicator == "chrome_navigation_missing_client_hints":
+		return constants.SeverityHigh
+	case indicator == "firefox_navigation_priority_header":
+		return constants.SeverityHigh
+	case indicator == "Sec-Ch-Ua*":
+		return constants.SeverityHigh
+	case indicator == "Sec-Fetch-*":
+		return constants.SeverityMedium
+	case indicator == "too_few_headers":
+		return constants.SeverityMedium
+	case indicator == "generic_accept_header":
+		return constants.SeverityLow
+	case indicator == "Accept":
+		return constants.SeverityLow
+	case indicator == "Accept-Language":
+		return constants.SeverityLow
+	default:
+		return 0.2
+	}
+}
+
+func buildHTTPCheckReport(indicator string, weight float64, info *HTTPFingerprintInfo) CheckReport {
+	report := CheckReport{
+		Name:        indicator,
+		Fired:       true,
+		Weight:      weight,
+		Score:       weight,
+		Severity:    severityFromScore(weight),
+		Description: "HTTP fingerprint anomaly",
+	}
+
+	switch indicator {
+	case "Accept":
+		report.Field = "Accept"
+		report.Actual = info.Accept
+		report.Expected = "non-empty browser accept header"
+		report.Description = "The request is missing the standard Accept header used by browsers."
+	case "Accept-Language":
+		report.Field = "Accept-Language"
+		report.Actual = info.AcceptLanguage
+		report.Expected = "locale-aware browser language header"
+		report.Description = "The request is missing Accept-Language, which is unusual for real browsers."
+	case "Sec-Fetch-*":
+		report.Field = "Sec-Fetch-*"
+		report.Actual = strings.Join([]string{info.SecFetchDest, info.SecFetchMode, info.SecFetchSite}, "|")
+		report.Expected = "document|navigate|none-style navigation metadata"
+		report.Description = "Chrome-class browsers should include coherent Sec-Fetch navigation metadata."
+	case "Sec-Ch-Ua*":
+		report.Field = "Sec-CH-UA"
+		report.Actual = strings.Join([]string{info.SecCHUA, info.SecCHUAPlatform, info.SecCHUAMobile}, "|")
+		report.Expected = "Chrome-class client hints present"
+		report.Description = "The request claims a Chromium browser but omits required client hints."
+	case "chrome_navigation_missing_client_hints":
+		report.Field = "User-Agent/Sec-CH-UA"
+		report.Actual = info.UserAgent
+		report.Expected = "Chrome navigation with client hints"
+		report.Description = "A Chromium navigation without client hints is strongly indicative of spoofed headers."
+	case "firefox_navigation_priority_header":
+		report.Field = "Priority"
+		report.Actual = "present"
+		report.Expected = "absent for simple Firefox-style top-level navigation"
+		report.Description = "The Firefox-style request carries Chromium-like priority metadata without other browser context."
+	case "generic_accept_header":
+		report.Field = "Accept"
+		report.Actual = info.Accept
+		report.Expected = "browser navigation accept header with negotiated content types"
+		report.Description = "A generic */* Accept header is common in bots and uncommon on top-level browser navigations."
+	case "too_few_headers":
+		report.Field = "header_count"
+		report.Actual = fmt.Sprintf("%d", info.HeaderCount)
+		report.Expected = ">= 5"
+		report.Description = "The request includes too few headers for a normal browser navigation."
+	case "missing_user_agent":
+		report.Field = "User-Agent"
+		report.Actual = info.UserAgent
+		report.Expected = "browser user agent"
+		report.Description = "Missing User-Agent is a strong automation signal."
+	case "webdriver_exposed":
+		report.Field = "X-Navigator-Webdriver"
+		report.Actual = "true"
+		report.Expected = "absent or false"
+		report.Description = "The request directly exposes navigator.webdriver."
+	default:
+		if strings.HasPrefix(indicator, "suspicious_ua_") {
+			report.Field = "User-Agent"
+			report.Actual = info.UserAgent
+			report.Expected = "browser user agent without automation keywords"
+			report.Description = "The User-Agent contains automation-specific keywords."
+		}
+	}
+
+	return report
+}
+
+func calculateVectorConfidence(vec *DetectionVector) float64 {
+	if vec == nil || vec.Score <= 0 {
+		return 0
+	}
+
+	firedChecks := 0
+	highSeverityChecks := 0
+	severitySum := 0.0
+	maxCheckWeight := 0.0
+	distinctFields := make(map[string]struct{})
+
+	if len(vec.CheckReports) > 0 {
+		for _, check := range vec.CheckReports {
+			if !check.Fired {
+				continue
+			}
+			firedChecks++
+			if check.Weight > maxCheckWeight {
+				maxCheckWeight = check.Weight
+			}
+			if check.Field != "" {
+				distinctFields[check.Field] = struct{}{}
+			}
+
+			switch strings.ToLower(check.Severity) {
+			case "critical":
+				severitySum += 1.0
+				highSeverityChecks++
+			case "high":
+				severitySum += 0.85
+				highSeverityChecks++
+			case "medium":
+				severitySum += 0.60
+			default:
+				severitySum += 0.35
+			}
+		}
+	} else {
+		firedChecks = len(vec.Indicators)
+		maxCheckWeight = vec.Score
+		switch severityFromScore(vec.Score) {
+		case "critical":
+			severitySum = 1.0
+			highSeverityChecks = 1
+		case "high":
+			severitySum = 0.85
+			highSeverityChecks = 1
+		case "medium":
+			severitySum = 0.60
+		default:
+			severitySum = 0.35
+		}
+	}
+
+	if maxCheckWeight == 0 {
+		maxCheckWeight = vec.Weight
+	}
+	if firedChecks == 0 {
+		firedChecks = len(vec.Indicators)
+	}
+
+	evidenceRatio := minFloat(1.0, float64(firedChecks)/3.0)
+	severityRatio := minFloat(1.0, severitySum/maxFloat(1.0, float64(firedChecks)))
+	weightRatio := minFloat(1.0, maxFloat(vec.Weight, maxCheckWeight))
+
+	confidence := 0.45*vec.Score + 0.20*evidenceRatio + 0.15*severityRatio + 0.10*weightRatio
+	if vec.Detected {
+		confidence += 0.10
+	}
+	if len(distinctFields) >= 2 || firedChecks >= 2 {
+		confidence += 0.10
+	}
+	if highSeverityChecks >= 2 {
+		confidence += 0.07
+	}
+	if isHighSignalCategory(vec.Category) && vec.Score >= constants.SeverityHigh {
+		confidence += 0.10
+	} else if isHighSignalCategory(vec.Category) && vec.Score >= constants.SeverityMedium {
+		confidence += 0.05
+	}
+	if firedChecks == 1 && isHighSignalCategory(vec.Category) && vec.Score >= 0.45 {
+		confidence += 0.08
+	}
+
+	return minFloat(1.0, confidence)
+}
+
+func calculateDetectionConfidence(detection *StealthDetection) float64 {
+	if detection == nil {
+		return 0
+	}
+
+	activeVectors := 0
+	strongVectors := 0
+	totalVectorConfidence := 0.0
+	maxVectorConfidence := 0.0
+	corroboratingCategories := make(map[string]struct{})
+
+	for _, vec := range detection.Vectors {
+		if vec.Score <= 0 {
+			continue
+		}
+		activeVectors++
+		totalVectorConfidence += vec.Confidence
+		if vec.Confidence > maxVectorConfidence {
+			maxVectorConfidence = vec.Confidence
+		}
+		if vec.Confidence >= 0.75 || vec.Score >= 0.50 {
+			strongVectors++
+			corroboratingCategories[vec.Category] = struct{}{}
+		}
+	}
+
+	if activeVectors == 0 {
+		return minFloat(1.0, detection.Score)
+	}
+
+	avgVectorConfidence := totalVectorConfidence / float64(activeVectors)
+	confidence := 0.45*detection.Score + 0.35*avgVectorConfidence + 0.20*maxVectorConfidence
+
+	if detection.IsBot {
+		if len(corroboratingCategories) >= 2 {
+			confidence += 0.10
+		}
+		if strongVectors >= 2 {
+			confidence += 0.08
+		}
+		if maxVectorConfidence >= 0.85 {
+			confidence += 0.12
+		} else if maxVectorConfidence >= 0.70 {
+			confidence += 0.10
+		}
+		if activeVectors >= 3 {
+			confidence += 0.05
+		}
+		if activeVectors == 1 && detection.Score >= 0.45 {
+			confidence += 0.08
+		}
+		if detection.Score >= 0.45 {
+			confidence += 0.08
+		}
+	} else {
+		maxAllowed := detection.Score + 0.05
+		if activeVectors > 1 {
+			maxAllowed += 0.05
+		}
+		confidence = minFloat(confidence, maxAllowed)
+	}
+
+	return minFloat(1.0, confidence)
+}
+
+func isHighSignalCategory(category string) bool {
+	switch category {
+	case string(VectorHTTP), string(VectorTLS), string(VectorNavigator), string(VectorIsomorphic),
+		string(VectorAutomation), string(VectorBehavioral), string(VectorCrossVector),
+		string(VectorFingerprintCoverage):
+		return true
+	default:
+		return false
+	}
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 //nolint:unused
