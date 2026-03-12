@@ -84,25 +84,23 @@ func TestToolComparisonBasicRanking(t *testing.T) {
 		}
 	}
 
-	// Our broken stealth: should be mostly detected (relaxed from 100% due to edge cases)
+	// Our broken stealth: should now be fully detected.
 	r, ok := resultMap["our_stealth_broken"]
 	if !ok {
 		t.Fatal("missing tool result for our_stealth_broken")
 	}
-	if r.DetectionRate < 0.90 {
-		t.Errorf("our_stealth_broken: expected >=90%% detection rate, got %.0f%% (avg score: %.3f)",
+	if r.DetectionRate < 1.0 {
+		t.Errorf("our_stealth_broken: expected 100%% detection rate, got %.0f%% (avg score: %.3f)",
 			r.DetectionRate*100, r.AvgBotScore)
 	}
 
-	// Our stealth sword: should be detected after shield upgrade (100% detection rate)
+	// Our stealth sword: should also be fully detected by the comparison harness.
 	sword, ok := resultMap["our_stealth_sword"]
 	if !ok {
 		t.Fatal("missing tool result for our_stealth_sword")
 	}
-	// With only 3 scenarios per tool and stochastic behavioral checks,
-	// expect >= 50% detection (at least 2/3 scenarios detected).
-	if sword.DetectionRate < 0.50 {
-		t.Errorf("our_stealth_sword: expected >= 50%% detection rate after shield upgrade, got %.0f%% (avg score: %.3f)",
+	if sword.DetectionRate < 1.0 {
+		t.Errorf("our_stealth_sword: expected 100%% detection rate after shield upgrade, got %.0f%% (avg score: %.3f)",
 			sword.DetectionRate*100, sword.AvgBotScore)
 		for _, s := range sword.Scenarios {
 			if !s.IsBot {

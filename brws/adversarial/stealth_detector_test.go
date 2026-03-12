@@ -302,6 +302,78 @@ func TestStealthBrowserWithNativeEngine(t *testing.T) {
 	})
 }
 
+func TestChromeNavigationMissingClientHintsDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://example.com", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+
+	detection := detector.AnalyzeRequest(req, nil)
+
+	if !detection.IsBot {
+		t.Fatalf("expected chrome navigation without client hints to be detected, got score %.3f", detection.Score)
+	}
+
+	found := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "chrome_navigation_missing_client_hints" {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected chrome_navigation_missing_client_hints indicator")
+	}
+}
+
+func TestFirefoxNavigationPriorityHeaderDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://example.com", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("DNT", "1")
+	req.Header.Set("Priority", "u=0, i")
+
+	detection := detector.AnalyzeRequest(req, nil)
+
+	if !detection.IsBot {
+		t.Fatalf("expected firefox navigation with priority header to be detected, got score %.3f", detection.Score)
+	}
+
+	found := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "firefox_navigation_priority_header" {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Fatal("expected firefox_navigation_priority_header indicator")
+	}
+}
+
 func TestDetectionVectorsComprehensive(t *testing.T) {
 	detector := NewStealthDetector()
 

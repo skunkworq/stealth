@@ -999,6 +999,7 @@ func (sd *StealthDetector) analyzeHTTPHeaders(req *http.Request) *HTTPFingerprin
 
 	// Check Sec-Fetch-* headers — Chrome/Edge always send these on navigation
 	isChromeUA := strings.Contains(strings.ToLower(info.UserAgent), "chrome")
+	isFirefoxUA := strings.Contains(strings.ToLower(info.UserAgent), "firefox")
 	if isChromeUA {
 		if info.SecFetchDest == "" || info.SecFetchMode == "" || info.SecFetchSite == "" {
 			info.MissingHeaders = append(info.MissingHeaders, "Sec-Fetch-*")
@@ -1015,11 +1016,22 @@ func (sd *StealthDetector) analyzeHTTPHeaders(req *http.Request) *HTTPFingerprin
 	// Check for missing Client Hints (Chrome should always send these; Firefox never does)
 	if isChromeUA && (info.SecCHUA == "" || info.SecCHUAPlatform == "") {
 		info.MissingHeaders = append(info.MissingHeaders, "Sec-Ch-Ua*")
+		if info.SecFetchDest == "document" && info.SecFetchMode == "navigate" {
+			info.SuspiciousHeaders = append(info.SuspiciousHeaders, "chrome_navigation_missing_client_hints")
+		}
 	}
 
 	// Check for webdriver header (simple boolean flag from stealth bypass tools)
 	if req.Header.Get("X-Navigator-Webdriver") == "true" {
 		info.SuspiciousHeaders = append(info.SuspiciousHeaders, "webdriver_exposed")
+	}
+
+	// Firefox should not present Chromium-style request priority metadata on a
+	// synthetic top-level HTTP/1.x navigation without deeper browser context.
+	if isFirefoxUA && req.Header.Get("Priority") != "" &&
+		info.SecFetchDest == "document" && info.SecFetchMode == "navigate" &&
+		(req.ProtoMajor <= 1 || req.Proto == "") && !hasJSFingerprintHeaders(req) {
+		info.SuspiciousHeaders = append(info.SuspiciousHeaders, "firefox_navigation_priority_header")
 	}
 
 	return info
@@ -1931,6 +1943,10 @@ func (sd *StealthDetector) httpInfoToVector(info *HTTPFingerprintInfo) Detection
 		case s == "missing_user_agent":
 			vec.Score += constants.SeverityHigh
 		case s == "webdriver_exposed":
+			vec.Score += constants.SeverityHigh
+		case s == "chrome_navigation_missing_client_hints":
+			vec.Score += constants.SeverityHigh
+		case s == "firefox_navigation_priority_header":
 			vec.Score += constants.SeverityHigh
 		case s == "too_few_headers":
 			vec.Score += constants.SeverityMedium // 0.25

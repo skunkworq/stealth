@@ -373,6 +373,10 @@ func TestShieldEvaluation(t *testing.T) {
 	fmt.Printf("  Detected as bot: %d\n", detectedCount)
 	fmt.Printf("  Passed as human: %d\n", len(results)-detectedCount)
 	fmt.Printf("  Detection rate:  %.1f%%\n", float64(detectedCount)/float64(len(results))*100)
+
+	if detectedCount != len(results) {
+		t.Fatalf("expected shield to catch all eval profiles, but %d/%d passed", len(results)-detectedCount, len(results))
+	}
 }
 
 // TestNewShieldAnalyzers exercises the new Phase 4 analyzers with specific
