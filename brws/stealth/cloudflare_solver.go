@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"net/http"
 	"net/http/cookiejar"
@@ -98,6 +99,11 @@ type TurnstileFlowOptions struct {
 	Verifier       TurnstileVerifier
 }
 
+type turnstileInteractionPlan struct {
+	interactionProof *adversarial.TurnstileInteractionProof
+	events           []adversarial.CaptchaEvent
+}
+
 // SolveJSChallenge performs the full init→solvePoW→submit flow for a JS challenge.
 func (cs *CloudflareSolverClient) SolveJSChallenge(baseURL string) (*CloudflareSolveResult, error) {
 	if err := ensureCloudflareLabHostAllowed(baseURL); err != nil {
@@ -174,8 +180,8 @@ func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*Cloudf
 	// Step 3: Generate fingerprint from a random profile
 	fp := cs.generateFingerprint()
 
-	// Step 4: Generate deterministic human-like widget events for the lab harness.
-	events := cs.generateTurnstileLabEvents(nil)
+	// Step 4: Generate a human-like pointer trace for the lab harness.
+	events := cs.buildTurnstileInteractionPlan(nil).events
 
 	// Step 4.5: Human-like delay — managed challenges require ≥1.5s solve time
 	elapsed := time.Since(totalStart)
@@ -247,8 +253,10 @@ func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *Tu
 		return nil, fmt.Errorf("init failed: %w", err)
 	}
 
+	plan := cs.buildTurnstileInteractionPlan(initResp.Turnstile)
+
 	// Step 2: Exercise the local widget lifecycle.
-	if err := cs.exerciseTurnstileWidget(baseURL, initResp); err != nil {
+	if err := cs.exerciseTurnstileWidget(baseURL, initResp, plan); err != nil {
 		return nil, fmt.Errorf("exercise widget: %w", err)
 	}
 
@@ -258,8 +266,8 @@ func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *Tu
 		return nil, fmt.Errorf("PoW failed: %w", err)
 	}
 
-	// Step 4: Generate deterministic human-like widget events for the lab harness.
-	events := cs.generateTurnstileLabEvents(initResp.Turnstile)
+	// Step 4: Submit the same interaction trace that informed the widget proof.
+	events := plan.events
 
 	// Step 5: Submit
 	body, _ := json.Marshal(map[string]interface{}{
@@ -321,7 +329,7 @@ func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSol
 	return cs.HandleTurnstileLab(baseURL)
 }
 
-func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initResp *cfInitResp) error {
+func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initResp *cfInitResp, plan *turnstileInteractionPlan) error {
 	widgetURL := fmt.Sprintf(
 		"%s/api/cloudflare/turnstile/widget?session_id=%s&site_key=%s",
 		strings.TrimRight(baseURL, "/"),
@@ -369,8 +377,8 @@ func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initRe
 			return err
 		}
 	}
-	if initResp.Turnstile != nil {
-		if err := cs.postTurnstileInteraction(baseURL, initResp.RayID, initResp.SessionID, cs.buildTurnstileInteractionProof(initResp.Turnstile)); err != nil {
+	if plan != nil && plan.interactionProof != nil {
+		if err := cs.postTurnstileInteraction(baseURL, initResp.RayID, initResp.SessionID, plan.interactionProof); err != nil {
 			return err
 		}
 	}
@@ -773,106 +781,242 @@ func (cs *CloudflareSolverClient) buildTurnstileSnapshot() *adversarial.Turnstil
 }
 
 func (cs *CloudflareSolverClient) buildTurnstileInteractionProof(cfg *adversarial.TurnstileWidgetConfig) *adversarial.TurnstileInteractionProof {
-	if cfg == nil {
-		return &adversarial.TurnstileInteractionProof{
-			Type:           "checkbox",
-			Completed:      true,
-			CheckboxClicks: 1,
-		}
-	}
-
-	switch cfg.Interaction.Type {
-	case "hold":
-		holdMs := cfg.Interaction.RequiredHoldMs + 260
-		if holdMs <= 0 {
-			holdMs = 1100
-		}
-		return &adversarial.TurnstileInteractionProof{
-			Type:           "hold",
-			Completed:      true,
-			HoldDurationMs: holdMs,
-		}
-	case "drag":
-		distance := cfg.Interaction.RequiredDragDistancePx + 28
-		if distance <= 0 {
-			distance = 188
-		}
-		eventCount := cfg.Interaction.RequiredDragEventCount + 2
-		if eventCount <= 0 {
-			eventCount = 8
-		}
-		return &adversarial.TurnstileInteractionProof{
-			Type:           "drag",
-			Completed:      true,
-			DragDistancePx: distance,
-			DragEventCount: eventCount,
-		}
-	default:
-		return &adversarial.TurnstileInteractionProof{
-			Type:           "checkbox",
-			Completed:      true,
-			CheckboxClicks: 1,
-		}
-	}
+	return cs.buildTurnstileInteractionPlan(cfg).interactionProof
 }
 
 func (cs *CloudflareSolverClient) generateTurnstileLabEvents(cfg *adversarial.TurnstileWidgetConfig) []adversarial.CaptchaEvent {
-	base := time.Now().UnixMilli()
-	if cfg != nil {
-		switch cfg.Interaction.Type {
-		case "hold":
-			requiredHoldMs := cfg.Interaction.RequiredHoldMs
-			if requiredHoldMs <= 0 {
-				requiredHoldMs = 900
+	return cs.buildTurnstileInteractionPlan(cfg).events
+}
+
+func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial.TurnstileWidgetConfig) *turnstileInteractionPlan {
+	builder := newTurnstileTraceBuilder()
+	proof := &adversarial.TurnstileInteractionProof{
+		Type:           "checkbox",
+		Completed:      true,
+		CheckboxClicks: 1,
+	}
+
+	interactionType := "checkbox"
+	if cfg != nil && cfg.Interaction.Type != "" {
+		interactionType = cfg.Interaction.Type
+	}
+
+	switch interactionType {
+	case "hold":
+		requiredHoldMs := 900
+		if cfg != nil && cfg.Interaction.RequiredHoldMs > 0 {
+			requiredHoldMs = cfg.Interaction.RequiredHoldMs
+		}
+		downX := 206.0 + cs.turnstileJitter(1.8)
+		downY := 194.0 + cs.turnstileJitter(1.5)
+		cs.appendTurnstileApproach(builder, downX, downY)
+		down := builder.addPointer(cs.turnstileDelay(95, 155), "mousedown", downX, downY)
+
+		holdMs := requiredHoldMs + 180 + cs.rng.Intn(260)
+		holdMoves := 3 + cs.rng.Intn(3)
+		heldFor := 0
+		for i := 0; i < holdMoves; i++ {
+			step := holdMs/holdMoves + cs.rng.Intn(45) - 20
+			if step < 90 {
+				step = 90
 			}
-			return []adversarial.CaptchaEvent{
-				{Type: "mousemove", Timestamp: base + 0, X: 126, Y: 250},
-				{Type: "mousemove", Timestamp: base + 123, X: 152, Y: 230},
-				{Type: "mousemove", Timestamp: base + 247, X: 174, Y: 214},
-				{Type: "mousemove", Timestamp: base + 402, X: 198, Y: 198},
-				{Type: "mousedown", Timestamp: base + 565, X: 206, Y: 194},
-				{Type: "mousemove", Timestamp: base + 910, X: 207, Y: 194},
-				{Type: "mousemove", Timestamp: base + int64(requiredHoldMs) + 705, X: 208, Y: 195},
-				{Type: "mouseup", Timestamp: base + int64(requiredHoldMs) + 845, X: 208, Y: 195},
-				{Type: "click", Timestamp: base + int64(requiredHoldMs) + 852, X: 208, Y: 195},
+			heldFor += step
+			builder.addPointer(
+				int64(step),
+				"mousemove",
+				downX+cs.turnstileJitter(2.2),
+				downY+cs.turnstileJitter(1.7),
+			)
+		}
+		if heldFor < holdMs {
+			builder.addPointer(
+				int64(holdMs-heldFor),
+				"mousemove",
+				downX+cs.turnstileJitter(1.5),
+				downY+cs.turnstileJitter(1.2),
+			)
+		}
+		up := builder.addPointer(
+			cs.turnstileDelay(28, 58),
+			"mouseup",
+			downX+cs.turnstileJitter(1.6),
+			downY+cs.turnstileJitter(1.2),
+		)
+		builder.addPointer(cs.turnstileDelay(12, 30), "click", up.X+cs.turnstileJitter(0.8), up.Y+cs.turnstileJitter(0.8))
+		proof = &adversarial.TurnstileInteractionProof{
+			Type:           "hold",
+			Completed:      true,
+			HoldDurationMs: int(up.Timestamp - down.Timestamp),
+		}
+	case "drag":
+		requiredDistance := 160
+		requiredEvents := 6
+		if cfg != nil {
+			if cfg.Interaction.RequiredDragDistancePx > 0 {
+				requiredDistance = cfg.Interaction.RequiredDragDistancePx
 			}
-		case "drag":
-			requiredDistance := cfg.Interaction.RequiredDragDistancePx
-			if requiredDistance <= 0 {
-				requiredDistance = 160
+			if cfg.Interaction.RequiredDragEventCount > 0 {
+				requiredEvents = cfg.Interaction.RequiredDragEventCount
 			}
-			endX := float64(122 + requiredDistance + 32)
-			return []adversarial.CaptchaEvent{
-				{Type: "mousemove", Timestamp: base + 0, X: 110, Y: 260},
-				{Type: "mousemove", Timestamp: base + 96, X: 121, Y: 249},
-				{Type: "mousedown", Timestamp: base + 211, X: 122, Y: 244},
-				{Type: "mousemove", Timestamp: base + 418, X: 152, Y: 244},
-				{Type: "mousemove", Timestamp: base + 605, X: 183, Y: 243},
-				{Type: "mousemove", Timestamp: base + 781, X: 216, Y: 243},
-				{Type: "mousemove", Timestamp: base + 954, X: 248, Y: 244},
-				{Type: "mousemove", Timestamp: base + 1132, X: 281, Y: 244},
-				{Type: "mousemove", Timestamp: base + 1317, X: endX, Y: 244},
-				{Type: "mouseup", Timestamp: base + 1473, X: endX, Y: 244},
-				{Type: "click", Timestamp: base + 1480, X: endX, Y: 244},
+		}
+		downX := 122.0 + cs.turnstileJitter(1.5)
+		downY := 244.0 + cs.turnstileJitter(1.4)
+		cs.appendTurnstileApproach(builder, downX, downY)
+		down := builder.addPointer(cs.turnstileDelay(92, 150), "mousedown", downX, downY)
+
+		dragMoves := requiredEvents + 2 + cs.rng.Intn(3)
+		if dragMoves < 8 {
+			dragMoves = 8
+		}
+		goalDistance := requiredDistance + 18 + cs.rng.Intn(20)
+		arcHeight := 3.0 + cs.rng.Float64()*4.0
+		maxDragX := down.X
+		recordMove := func(delayMs int64, x, y float64) {
+			move := builder.addPointer(delayMs, "mousemove", x, y)
+			if move.X > maxDragX {
+				maxDragX = move.X
 			}
+		}
+
+		for i := 1; i <= dragMoves; i++ {
+			progress := float64(i) / float64(dragMoves)
+			eased := 1 - math.Pow(1-progress, 1.65)
+			x := down.X + float64(goalDistance)*eased + cs.turnstileJitter(2.2)
+			y := down.Y - math.Sin(progress*math.Pi)*arcHeight + cs.turnstileJitter(1.5)
+			delay := cs.turnstileDelay(42, 95)
+			if i == dragMoves/2 {
+				delay = cs.turnstileDelay(88, 135)
+			}
+			recordMove(delay, x, y)
+		}
+		if cs.rng.Float64() < 0.55 {
+			dragMoves++
+			recordMove(
+				cs.turnstileDelay(40, 85),
+				down.X+float64(goalDistance)-4+cs.turnstileJitter(1.2),
+				down.Y+cs.turnstileJitter(1.0),
+			)
+		}
+
+		upX := down.X + float64(goalDistance) + cs.turnstileJitter(1.4)
+		upY := down.Y + cs.turnstileJitter(1.0)
+		builder.addPointer(cs.turnstileDelay(24, 52), "mouseup", upX, upY)
+		builder.addPointer(cs.turnstileDelay(12, 26), "click", upX+cs.turnstileJitter(0.7), upY+cs.turnstileJitter(0.7))
+		proof = &adversarial.TurnstileInteractionProof{
+			Type:           "drag",
+			Completed:      true,
+			DragDistancePx: int(math.Round(maxDragX - down.X)),
+			DragEventCount: dragMoves,
+		}
+	default:
+		clickX := 302.0 + cs.turnstileJitter(1.5)
+		clickY := 171.0 + cs.turnstileJitter(1.4)
+		cs.appendTurnstileApproach(builder, clickX, clickY)
+		builder.addPointer(
+			cs.turnstileDelay(85, 145),
+			"mousemove",
+			clickX+cs.turnstileJitter(1.1),
+			clickY+cs.turnstileJitter(1.0),
+		)
+		builder.addPointer(cs.turnstileDelay(150, 230), "mousedown", clickX, clickY)
+		up := builder.addPointer(
+			cs.turnstileDelay(60, 105),
+			"mouseup",
+			clickX+cs.turnstileJitter(1.0),
+			clickY+cs.turnstileJitter(1.0),
+		)
+		builder.addPointer(cs.turnstileDelay(12, 28), "click", up.X+cs.turnstileJitter(0.6), up.Y+cs.turnstileJitter(0.6))
+	}
+
+	return &turnstileInteractionPlan{
+		interactionProof: proof,
+		events:           builder.events,
+	}
+}
+
+func (cs *CloudflareSolverClient) appendTurnstileApproach(builder *turnstileTraceBuilder, targetX, targetY float64) {
+	startX := targetX - (110.0 + cs.rng.Float64()*70.0)
+	startY := targetY + (35.0 + cs.rng.Float64()*55.0)
+	points := 8 + cs.rng.Intn(3)
+	arcHeight := 10.0 + cs.rng.Float64()*8.0
+
+	for i := 0; i < points; i++ {
+		progress := float64(i+1) / float64(points)
+		eased := 1 - math.Pow(1-progress, 1.55)
+		pathNoise := 5.0 - progress*2.0
+		x := startX + (targetX-startX)*eased + cs.turnstileJitter(pathNoise)
+		y := startY + (targetY-startY)*eased - math.Sin(progress*math.Pi)*arcHeight + cs.turnstileJitter(2.8)
+		builder.addPointer(cs.turnstileDelay(85, 160), "mousemove", x, y)
+		if i == points/2 {
+			builder.addWheel(cs.turnstileDelay(42, 95), 40.0+cs.rng.Float64()*95.0)
 		}
 	}
 
-	return []adversarial.CaptchaEvent{
-		{Type: "mousemove", Timestamp: base + 0, X: 118, Y: 266},
-		{Type: "mousemove", Timestamp: base + 94, X: 137, Y: 258},
-		{Type: "mousemove", Timestamp: base + 213, X: 161, Y: 244},
-		{Type: "mousemove", Timestamp: base + 371, X: 186, Y: 223},
-		{Type: "mousemove", Timestamp: base + 522, X: 214, Y: 202},
-		{Type: "mousemove", Timestamp: base + 705, X: 242, Y: 186},
-		{Type: "mousemove", Timestamp: base + 881, X: 269, Y: 179},
-		{Type: "wheel", Timestamp: base + 1048, Delta: 114},
-		{Type: "wheel", Timestamp: base + 1235, Delta: 78},
-		{Type: "mousemove", Timestamp: base + 1412, X: 294, Y: 173},
-		{Type: "mousedown", Timestamp: base + 1554, X: 302, Y: 171},
-		{Type: "mouseup", Timestamp: base + 1662, X: 303, Y: 170},
-		{Type: "click", Timestamp: base + 1669, X: 303, Y: 170},
+	corrections := 2 + cs.rng.Intn(2)
+	for i := 0; i < corrections; i++ {
+		builder.addPointer(
+			cs.turnstileDelay(40, 90),
+			"mousemove",
+			targetX+cs.turnstileJitter(2.2),
+			targetY+cs.turnstileJitter(1.7),
+		)
 	}
+}
+
+func (cs *CloudflareSolverClient) turnstileDelay(minMs, maxMs int) int64 {
+	if maxMs <= minMs {
+		return int64(minMs)
+	}
+	return int64(minMs + cs.rng.Intn(maxMs-minMs+1))
+}
+
+func (cs *CloudflareSolverClient) turnstileJitter(amplitude float64) float64 {
+	if amplitude <= 0 {
+		return 0
+	}
+	return (cs.rng.Float64()*2 - 1) * amplitude
+}
+
+type turnstileTraceBuilder struct {
+	base   int64
+	cursor int64
+	events []adversarial.CaptchaEvent
+}
+
+func newTurnstileTraceBuilder() *turnstileTraceBuilder {
+	return &turnstileTraceBuilder{
+		base:   time.Now().UnixMilli(),
+		events: make([]adversarial.CaptchaEvent, 0, 16),
+	}
+}
+
+func (tb *turnstileTraceBuilder) addPointer(delayMs int64, eventType string, x, y float64) adversarial.CaptchaEvent {
+	if delayMs < 0 {
+		delayMs = 0
+	}
+	tb.cursor += delayMs
+	event := adversarial.CaptchaEvent{
+		Type:      eventType,
+		Timestamp: tb.base + tb.cursor,
+		ElapsedMs: tb.cursor,
+		X:         x,
+		Y:         y,
+	}
+	tb.events = append(tb.events, event)
+	return event
+}
+
+func (tb *turnstileTraceBuilder) addWheel(delayMs int64, delta float64) {
+	if delayMs < 0 {
+		delayMs = 0
+	}
+	tb.cursor += delayMs
+	tb.events = append(tb.events, adversarial.CaptchaEvent{
+		Type:      "wheel",
+		Timestamp: tb.base + tb.cursor,
+		ElapsedMs: tb.cursor,
+		Delta:     delta,
+	})
 }
 
 func ensureCloudflareLabHostAllowed(baseURL string) error {

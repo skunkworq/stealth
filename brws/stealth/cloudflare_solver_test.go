@@ -32,6 +32,124 @@ func mountCloudflareServer() (*httptest.Server, *adversarial.CloudflareChallenge
 	return ts, cc
 }
 
+type turnstilePlanSummary struct {
+	moveCount        int
+	dragMoveCount    int
+	uniqueIntervals  int
+	holdDurationMs   int
+	dragDistancePx   int
+	yRange           float64
+	hasMouseDown     bool
+	hasMouseUp       bool
+	hasClick         bool
+	timestampsSorted bool
+	eventSpanMs      int64
+}
+
+func summarizeTurnstilePlan(events []adversarial.CaptchaEvent) turnstilePlanSummary {
+	summary := turnstilePlanSummary{timestampsSorted: true}
+	if len(events) == 0 {
+		return summary
+	}
+
+	firstTS := events[0].Timestamp
+	lastTS := events[0].Timestamp
+	minY := events[0].Y
+	maxY := events[0].Y
+	intervals := map[int64]struct{}{}
+	mouseDownSeen := false
+	minX := 0.0
+	maxX := 0.0
+	hasRange := false
+	downTS := int64(0)
+
+	for idx, event := range events {
+		if idx > 0 {
+			if event.Timestamp < events[idx-1].Timestamp {
+				summary.timestampsSorted = false
+			}
+			diff := event.Timestamp - events[idx-1].Timestamp
+			if diff > 0 {
+				intervals[diff] = struct{}{}
+			}
+		}
+
+		if event.Timestamp < firstTS {
+			firstTS = event.Timestamp
+		}
+		if event.Timestamp > lastTS {
+			lastTS = event.Timestamp
+		}
+
+		switch event.Type {
+		case "mousemove":
+			summary.moveCount++
+			if mouseDownSeen {
+				summary.dragMoveCount++
+			}
+			if !hasRange {
+				minX = event.X
+				maxX = event.X
+				minY = event.Y
+				maxY = event.Y
+				hasRange = true
+			}
+			if event.X < minX {
+				minX = event.X
+			}
+			if event.X > maxX {
+				maxX = event.X
+			}
+			if event.Y < minY {
+				minY = event.Y
+			}
+			if event.Y > maxY {
+				maxY = event.Y
+			}
+		case "mousedown":
+			summary.hasMouseDown = true
+			mouseDownSeen = true
+			downTS = event.Timestamp
+			if !hasRange {
+				minX = event.X
+				maxX = event.X
+				minY = event.Y
+				maxY = event.Y
+				hasRange = true
+			}
+		case "mouseup":
+			summary.hasMouseUp = true
+			mouseDownSeen = false
+			if downTS > 0 && event.Timestamp > downTS {
+				summary.holdDurationMs = int(event.Timestamp - downTS)
+			}
+			if event.X < minX {
+				minX = event.X
+			}
+			if event.X > maxX {
+				maxX = event.X
+			}
+			if event.Y < minY {
+				minY = event.Y
+			}
+			if event.Y > maxY {
+				maxY = event.Y
+			}
+		case "click":
+			summary.hasClick = true
+		}
+	}
+
+	summary.uniqueIntervals = len(intervals)
+	summary.eventSpanMs = lastTS - firstTS
+	if hasRange {
+		summary.dragDistancePx = int(maxX - minX)
+		summary.yRange = maxY - minY
+	}
+
+	return summary
+}
+
 func TestSwordSolvesJSChallenge(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
@@ -191,17 +309,180 @@ func TestSwordSolvesTurnstileVariants(t *testing.T) {
 			if !result.WidgetTelemetry.InteractionProof.Completed {
 				t.Fatalf("expected completed interaction proof: %+v", result.WidgetTelemetry.InteractionProof)
 			}
+			if result.WidgetTelemetry.EventCount < 9 {
+				t.Fatalf("expected richer event trace for %s: %+v", tc.wantVariant, result.WidgetTelemetry)
+			}
 			switch tc.wantVariant {
 			case "hold":
 				if result.WidgetTelemetry.InteractionProof.HoldDurationMs < 900 {
 					t.Fatalf("expected realistic hold duration: %+v", result.WidgetTelemetry.InteractionProof)
 				}
+				if result.WidgetTelemetry.EventSpanMs < 1500 {
+					t.Fatalf("expected longer hold interaction span: %+v", result.WidgetTelemetry)
+				}
 			case "drag":
 				if result.WidgetTelemetry.InteractionProof.DragDistancePx < 160 {
 					t.Fatalf("expected sufficient drag distance: %+v", result.WidgetTelemetry.InteractionProof)
 				}
+				if result.WidgetTelemetry.InteractionProof.DragEventCount < 8 {
+					t.Fatalf("expected richer drag motion: %+v", result.WidgetTelemetry.InteractionProof)
+				}
+				if result.WidgetTelemetry.EventSpanMs < 1200 {
+					t.Fatalf("expected longer drag interaction span: %+v", result.WidgetTelemetry)
+				}
 			}
 		})
+	}
+}
+
+func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
+	solver := NewCloudflareSolverClient()
+
+	testCases := []struct {
+		name            string
+		cfg             *adversarial.TurnstileWidgetConfig
+		wantVariant     string
+		minMoveCount    int
+		minIntervalBins int
+		minYRange       float64
+		minEventSpanMs  int64
+	}{
+		{
+			name:            "checkbox",
+			cfg:             nil,
+			wantVariant:     "checkbox",
+			minMoveCount:    7,
+			minIntervalBins: 4,
+			minYRange:       12,
+			minEventSpanMs:  1100,
+		},
+		{
+			name: "hold",
+			cfg: &adversarial.TurnstileWidgetConfig{
+				Interaction: adversarial.TurnstileInteractionConfig{
+					Type:           "hold",
+					RequiredHoldMs: 900,
+				},
+			},
+			wantVariant:     "hold",
+			minMoveCount:    9,
+			minIntervalBins: 4,
+			minYRange:       10,
+			minEventSpanMs:  1500,
+		},
+		{
+			name: "drag",
+			cfg: &adversarial.TurnstileWidgetConfig{
+				Interaction: adversarial.TurnstileInteractionConfig{
+					Type:                   "drag",
+					RequiredDragDistancePx: 160,
+					RequiredDragEventCount: 6,
+				},
+			},
+			wantVariant:     "drag",
+			minMoveCount:    12,
+			minIntervalBins: 5,
+			minYRange:       14,
+			minEventSpanMs:  1200,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := solver.buildTurnstileInteractionPlan(tc.cfg)
+			if plan == nil || plan.interactionProof == nil {
+				t.Fatalf("expected interaction plan for %s", tc.name)
+			}
+			if plan.interactionProof.Type != tc.wantVariant {
+				t.Fatalf("expected %s proof, got %+v", tc.wantVariant, plan.interactionProof)
+			}
+			if len(plan.events) == 0 {
+				t.Fatalf("expected events for %s", tc.name)
+			}
+
+			summary := summarizeTurnstilePlan(plan.events)
+			if !summary.timestampsSorted {
+				t.Fatalf("expected sorted timestamps: %+v", plan.events)
+			}
+			if !summary.hasMouseDown || !summary.hasMouseUp || !summary.hasClick {
+				t.Fatalf("expected complete pointer lifecycle: %+v", summary)
+			}
+			if summary.moveCount < tc.minMoveCount {
+				t.Fatalf("expected more mouse movement for %s: %+v", tc.name, summary)
+			}
+			if summary.uniqueIntervals < tc.minIntervalBins {
+				t.Fatalf("expected more interval variation for %s: %+v", tc.name, summary)
+			}
+			if summary.yRange < tc.minYRange {
+				t.Fatalf("expected more vertical variation for %s: %+v", tc.name, summary)
+			}
+			if summary.eventSpanMs < tc.minEventSpanMs {
+				t.Fatalf("expected longer event span for %s: %+v", tc.name, summary)
+			}
+
+			switch tc.wantVariant {
+			case "hold":
+				if plan.interactionProof.HoldDurationMs != summary.holdDurationMs {
+					t.Fatalf("hold proof should match event trace: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+				if plan.interactionProof.HoldDurationMs < tc.cfg.Interaction.RequiredHoldMs {
+					t.Fatalf("hold proof below required threshold: %+v", plan.interactionProof)
+				}
+			case "drag":
+				if plan.interactionProof.DragEventCount != summary.dragMoveCount {
+					t.Fatalf("drag proof should match drag move count: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+				if plan.interactionProof.DragDistancePx < tc.cfg.Interaction.RequiredDragDistancePx {
+					t.Fatalf("drag proof below required threshold: %+v", plan.interactionProof)
+				}
+				if summary.dragDistancePx < plan.interactionProof.DragDistancePx {
+					t.Fatalf("event trace should cover proof distance: proof=%+v summary=%+v", plan.interactionProof, summary)
+				}
+			default:
+				if plan.interactionProof.CheckboxClicks != 1 {
+					t.Fatalf("expected a single checkbox click: %+v", plan.interactionProof)
+				}
+			}
+		})
+	}
+}
+
+func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
+	solver := NewCloudflareSolverClient()
+	cfg := &adversarial.TurnstileWidgetConfig{
+		Interaction: adversarial.TurnstileInteractionConfig{
+			Type:                   "drag",
+			RequiredDragDistancePx: 160,
+			RequiredDragEventCount: 6,
+		},
+	}
+
+	first := solver.buildTurnstileInteractionPlan(cfg)
+	second := solver.buildTurnstileInteractionPlan(cfg)
+
+	firstJSON, err := json.Marshal(struct {
+		Proof  *adversarial.TurnstileInteractionProof `json:"proof"`
+		Events []adversarial.CaptchaEvent             `json:"events"`
+	}{
+		Proof:  first.interactionProof,
+		Events: first.events,
+	})
+	if err != nil {
+		t.Fatalf("marshal first plan: %v", err)
+	}
+	secondJSON, err := json.Marshal(struct {
+		Proof  *adversarial.TurnstileInteractionProof `json:"proof"`
+		Events []adversarial.CaptchaEvent             `json:"events"`
+	}{
+		Proof:  second.interactionProof,
+		Events: second.events,
+	})
+	if err != nil {
+		t.Fatalf("marshal second plan: %v", err)
+	}
+
+	if bytes.Equal(firstJSON, secondJSON) {
+		t.Fatalf("expected non-identical interaction plans across runs:\n%s", string(firstJSON))
 	}
 }
 
