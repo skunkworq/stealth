@@ -60,6 +60,21 @@ type TurnstileInteractionProof struct {
 	FinalDragOffsetPx int    `json:"final_drag_offset_px,omitempty"`
 }
 
+// TurnstileHeuristicSignal captures one heuristic bot-detection indicator.
+type TurnstileHeuristicSignal struct {
+	Name   string  `json:"name"`
+	Weight float64 `json:"weight"`
+	Detail string  `json:"detail,omitempty"`
+}
+
+// TurnstileHeuristicReport summarizes post-solve heuristic analysis.
+type TurnstileHeuristicReport struct {
+	Score   float64                    `json:"score"`
+	Verdict string                     `json:"verdict"`
+	Flagged bool                       `json:"flagged"`
+	Signals []TurnstileHeuristicSignal `json:"signals,omitempty"`
+}
+
 // TurnstileCallbackState tracks the current lifecycle callback state for a widget.
 type TurnstileCallbackState struct {
 	BeforeInteractive bool `json:"before_interactive"`
@@ -80,12 +95,15 @@ type WidgetTelemetry struct {
 	EventSpanMs        int64                      `json:"event_span_ms,omitempty"`
 	LastEventAt        time.Time                  `json:"last_event_at,omitempty"`
 	PresentedAt        time.Time                  `json:"presented_at,omitempty"`
+	SnapshotAt         time.Time                  `json:"snapshot_at,omitempty"`
 	BeforeAt           time.Time                  `json:"before_interactive_at,omitempty"`
 	AfterAt            time.Time                  `json:"after_interactive_at,omitempty"`
+	InteractionAt      time.Time                  `json:"interaction_at,omitempty"`
 	SuccessAt          time.Time                  `json:"success_at,omitempty"`
 	LastCallbackAt     time.Time                  `json:"last_callback_at,omitempty"`
 	ClientSnapshot     *TurnstileClientSnapshot   `json:"client_snapshot,omitempty"`
 	InteractionProof   *TurnstileInteractionProof `json:"interaction_proof,omitempty"`
+	HeuristicReport    *TurnstileHeuristicReport  `json:"heuristic_report,omitempty"`
 }
 
 // TurnstileClientSnapshot captures the browser state observed while the widget is rendered.
@@ -295,6 +313,7 @@ func (wt *WidgetTelemetry) recordInteraction(proof *TurnstileInteractionProof) {
 	copyProof := *proof
 	copyProof.Type = strings.TrimSpace(copyProof.Type)
 	wt.InteractionProof = &copyProof
+	wt.InteractionAt = time.Now().UTC()
 }
 
 func isLoopbackOrLocalHost(host string) bool {

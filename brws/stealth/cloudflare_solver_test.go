@@ -373,6 +373,9 @@ func TestSwordSolvesTurnstileVariants(t *testing.T) {
 			if result.WidgetTelemetry == nil || result.WidgetTelemetry.InteractionProof == nil {
 				t.Fatalf("expected interaction telemetry: %+v", result.WidgetTelemetry)
 			}
+			if result.WidgetTelemetry.HeuristicReport == nil {
+				t.Fatalf("expected heuristic report in widget telemetry: %+v", result.WidgetTelemetry)
+			}
 			if result.WidgetTelemetry.InteractionProof.Type != tc.wantVariant {
 				t.Fatalf("expected %s proof, got %+v", tc.wantVariant, result.WidgetTelemetry.InteractionProof)
 			}

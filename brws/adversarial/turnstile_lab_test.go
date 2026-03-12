@@ -1025,3 +1025,104 @@ func TestTurnstileStatusReturnsSessionTelemetry(t *testing.T) {
 		t.Fatalf("expected turnstile snapshot in status response: %+v", resp.TurnstileSnapshot)
 	}
 }
+
+func TestTurnstileHeuristicReportFlagsImpossibleSubmissionGap(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallengeWithRisk("heuristic-precision", "1x00000000000000000000AA", 0.95)
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+	cc.RecordTurnstileInteractionProof(session.ID, precisionDragTurnstileProof(
+		session.TurnstileConfig.Interaction.RequiredDragDistancePx,
+		session.TurnstileConfig.Interaction.RequiredDragEventCount,
+		session.TurnstileConfig.Interaction.RequiredOvershootPx,
+		session.TurnstileConfig.Interaction.RequiredSettleMs,
+		session.TurnstileConfig.Interaction.TargetZoneWidthPx,
+		session.TurnstileConfig.Interaction.RequiredDirectionChanges,
+	))
+
+	base := time.Now().UTC()
+	session.TurnstileTelemetry.PresentedAt = base
+	session.TurnstileTelemetry.SnapshotAt = base.Add(20 * time.Millisecond)
+	session.TurnstileTelemetry.BeforeAt = base.Add(45 * time.Millisecond)
+	session.TurnstileTelemetry.AfterAt = base.Add(80 * time.Millisecond)
+	session.TurnstileTelemetry.InteractionAt = base.Add(210 * time.Millisecond)
+
+	report := evaluateTurnstileHeuristics(session, precisionDragTurnstileEvents(
+		session.TurnstileConfig.Interaction.RequiredDragDistancePx,
+		session.TurnstileConfig.Interaction.RequiredOvershootPx,
+		session.TurnstileConfig.Interaction.RequiredSettleMs,
+	))
+	if report == nil {
+		t.Fatal("expected heuristic report")
+	}
+	if !report.Flagged {
+		t.Fatalf("expected impossible submission gap to be flagged: %+v", report)
+	}
+	found := false
+	for _, signal := range report.Signals {
+		if signal.Name == "interaction_submitted_too_quickly" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected timing mismatch signal, got %+v", report.Signals)
+	}
+}
+
+func TestTurnstileSolvedStatusIncludesHeuristicReport(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallengeWithRisk("status-heuristic", "1x00000000000000000000AA", 0.95)
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+	cc.RecordTurnstileInteractionProof(session.ID, precisionDragTurnstileProof(
+		session.TurnstileConfig.Interaction.RequiredDragDistancePx,
+		session.TurnstileConfig.Interaction.RequiredDragEventCount,
+		session.TurnstileConfig.Interaction.RequiredOvershootPx,
+		session.TurnstileConfig.Interaction.RequiredSettleMs,
+		session.TurnstileConfig.Interaction.TargetZoneWidthPx,
+		session.TurnstileConfig.Interaction.RequiredDirectionChanges,
+	))
+
+	base := time.Now().UTC()
+	session.TurnstileTelemetry.PresentedAt = base
+	session.TurnstileTelemetry.SnapshotAt = base.Add(20 * time.Millisecond)
+	session.TurnstileTelemetry.BeforeAt = base.Add(45 * time.Millisecond)
+	session.TurnstileTelemetry.AfterAt = base.Add(80 * time.Millisecond)
+	session.TurnstileTelemetry.InteractionAt = base.Add(210 * time.Millisecond)
+
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW failed: %v", err)
+	}
+	if _, err := cc.CompleteTurnstile(session.ID, solution, precisionDragTurnstileEvents(
+		session.TurnstileConfig.Interaction.RequiredDragDistancePx,
+		session.TurnstileConfig.Interaction.RequiredOvershootPx,
+		session.TurnstileConfig.Interaction.RequiredSettleMs,
+	)); err != nil {
+		t.Fatalf("expected solve to pass while retaining heuristic report: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cloudflare/status?session_id="+session.ID, nil)
+	w := httptest.NewRecorder()
+	cc.HandleStatus(w, req)
+
+	var resp struct {
+		WidgetTelemetry *WidgetTelemetry `json:"widget_telemetry"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode status response: %v", err)
+	}
+	if resp.WidgetTelemetry == nil || resp.WidgetTelemetry.HeuristicReport == nil {
+		t.Fatalf("expected heuristic report in solved status: %+v", resp.WidgetTelemetry)
+	}
+	if !resp.WidgetTelemetry.HeuristicReport.Flagged {
+		t.Fatalf("expected solved status to retain heuristic flag: %+v", resp.WidgetTelemetry.HeuristicReport)
+	}
+}
