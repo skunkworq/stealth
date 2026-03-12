@@ -32,11 +32,19 @@ type TurnstileCallbackState struct {
 
 // WidgetTelemetry captures widget callback ordering and event metadata.
 type WidgetTelemetry struct {
-	CallbackState TurnstileCallbackState `json:"callback_state"`
-	CallbackOrder []string               `json:"callback_order,omitempty"`
-	CallbackCount int                    `json:"callback_count"`
-	EventCount    int                    `json:"event_count"`
-	LastEventAt   time.Time              `json:"last_event_at,omitempty"`
+	CallbackState      TurnstileCallbackState   `json:"callback_state"`
+	CallbackOrder      []string                 `json:"callback_order,omitempty"`
+	CallbackCount      int                      `json:"callback_count"`
+	DuplicateCallbacks int                      `json:"duplicate_callbacks"`
+	EventCount         int                      `json:"event_count"`
+	EventSpanMs        int64                    `json:"event_span_ms,omitempty"`
+	LastEventAt        time.Time                `json:"last_event_at,omitempty"`
+	PresentedAt        time.Time                `json:"presented_at,omitempty"`
+	BeforeAt           time.Time                `json:"before_interactive_at,omitempty"`
+	AfterAt            time.Time                `json:"after_interactive_at,omitempty"`
+	SuccessAt          time.Time                `json:"success_at,omitempty"`
+	LastCallbackAt     time.Time                `json:"last_callback_at,omitempty"`
+	ClientSnapshot     *TurnstileClientSnapshot `json:"client_snapshot,omitempty"`
 }
 
 // TurnstileClientSnapshot captures the browser state observed while the widget is rendered.
@@ -51,6 +59,8 @@ type TurnstileClientSnapshot struct {
 	ScreenHeight        int      `json:"screen_height"`
 	ColorDepth          int      `json:"color_depth"`
 	Timezone            string   `json:"timezone,omitempty"`
+	MaxTouchPoints      int      `json:"max_touch_points"`
+	CookieEnabled       bool     `json:"cookie_enabled"`
 }
 
 // TurnstileWidgetConfig captures the local widget contract returned by init.
@@ -143,24 +153,49 @@ func sanitizeTurnstileData(value string, maxLen int) string {
 }
 
 func (wt *WidgetTelemetry) recordCallback(name string) {
+	now := time.Now().UTC()
+	if wt.PresentedAt.IsZero() {
+		wt.PresentedAt = now
+	}
+
+	duplicate := false
 	switch name {
 	case "before-interactive":
+		duplicate = wt.CallbackState.BeforeInteractive
 		wt.CallbackState.BeforeInteractive = true
+		if wt.BeforeAt.IsZero() {
+			wt.BeforeAt = now
+		}
 	case "after-interactive":
+		duplicate = wt.CallbackState.AfterInteractive
 		wt.CallbackState.AfterInteractive = true
+		if wt.AfterAt.IsZero() {
+			wt.AfterAt = now
+		}
 	case "success":
+		duplicate = wt.CallbackState.Success
 		wt.CallbackState.Success = true
+		if wt.SuccessAt.IsZero() {
+			wt.SuccessAt = now
+		}
 	case "expired":
+		duplicate = wt.CallbackState.Expired
 		wt.CallbackState.Expired = true
 	case "timeout":
+		duplicate = wt.CallbackState.Timeout
 		wt.CallbackState.Timeout = true
 	case "error":
+		duplicate = wt.CallbackState.Error
 		wt.CallbackState.Error = true
 	}
 
 	if name != "" {
+		if duplicate {
+			wt.DuplicateCallbacks++
+		}
 		wt.CallbackOrder = append(wt.CallbackOrder, name)
 		wt.CallbackCount++
+		wt.LastCallbackAt = now
 	}
 }
 

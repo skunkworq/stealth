@@ -128,6 +128,12 @@ func TestSwordSolvesTurnstile(t *testing.T) {
 	if result.WidgetTelemetry.CallbackCount < 3 {
 		t.Fatalf("expected full widget lifecycle to be recorded: %+v", result.WidgetTelemetry)
 	}
+	if result.WidgetTelemetry.ClientSnapshot == nil || result.WidgetTelemetry.ClientSnapshot.Webdriver {
+		t.Fatalf("expected human-like client snapshot to be recorded: %+v", result.WidgetTelemetry)
+	}
+	if result.WidgetTelemetry.EventSpanMs < 1000 {
+		t.Fatalf("expected realistic event span to be recorded: %+v", result.WidgetTelemetry)
+	}
 	if result.Verification == nil || !result.Verification.Success {
 		t.Fatal("expected token verification result")
 	}

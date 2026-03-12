@@ -44,6 +44,27 @@ func straightLineTurnstileEvents() []CaptchaEvent {
 	}
 }
 
+func humanLikeTurnstileSnapshot() *TurnstileClientSnapshot {
+	return &TurnstileClientSnapshot{
+		UserAgent:           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+		Language:            "en-US",
+		Languages:           []string{"en-US", "en"},
+		Platform:            "Win32",
+		HardwareConcurrency: 8,
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		ColorDepth:          24,
+		Timezone:            "America/New_York",
+		CookieEnabled:       true,
+	}
+}
+
+func webdriverTurnstileSnapshot() *TurnstileClientSnapshot {
+	snapshot := humanLikeTurnstileSnapshot()
+	snapshot.Webdriver = true
+	return snapshot
+}
+
 func TestTurnstileInitExposesWidgetConfig(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 
@@ -126,6 +147,7 @@ func TestTurnstilePresentedSessionRequiresLifecycleCallbacks(t *testing.T) {
 
 	session := cc.CreateTurnstileChallenge("widget-lifecycle", "1x00000000000000000000AA")
 	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 
 	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
 	if err != nil {
@@ -148,6 +170,7 @@ func TestTurnstileRejectsTimeoutCallback(t *testing.T) {
 
 	session := cc.CreateTurnstileChallenge("widget-timeout", "1x00000000000000000000AA")
 	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")
 	cc.RecordTurnstileCallback(session.ID, "timeout")
 
@@ -166,6 +189,10 @@ func TestTurnstileSiteVerifySingleUseAndExpiry(t *testing.T) {
 
 	session := cc.CreateTurnstileChallenge("siteverify-1", "1x00000000000000000000AA")
 	session.Hostname = "localhost"
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
 	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
 	if err != nil {
 		t.Fatalf("SolvePoW failed: %v", err)
@@ -206,6 +233,10 @@ func TestTurnstileSiteVerifySingleUseAndExpiry(t *testing.T) {
 
 	expiredSession := cc.CreateTurnstileChallenge("siteverify-expired", "1x00000000000000000000AA")
 	expiredSession.Hostname = "localhost"
+	cc.PresentTurnstileWidget(expiredSession.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(expiredSession.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(expiredSession.ID, "before-interactive")
+	cc.RecordTurnstileCallback(expiredSession.ID, "after-interactive")
 	expiredSolution, err := SolvePoW(expiredSession.PoW.Prefix, expiredSession.PoW.Difficulty, expiredSession.PoW.MaxIterations)
 	if err != nil {
 		t.Fatalf("SolvePoW expired failed: %v", err)
@@ -238,6 +269,7 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 			BuildEvents: func() []CaptchaEvent {
 				return humanLikeTurnstileEvents()
 			},
+			BuildSnapshot: humanLikeTurnstileSnapshot,
 		},
 		{
 			Name:               "straight-line-bot",
@@ -247,6 +279,7 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 			BuildEvents: func() []CaptchaEvent {
 				return straightLineTurnstileEvents()
 			},
+			BuildSnapshot: humanLikeTurnstileSnapshot,
 		},
 		{
 			Name:               "timed-out-widget",
@@ -256,6 +289,17 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 			BuildEvents: func() []CaptchaEvent {
 				return humanLikeTurnstileEvents()
 			},
+			BuildSnapshot: humanLikeTurnstileSnapshot,
+		},
+		{
+			Name:               "webdriver-bot",
+			ExpectPass:         false,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
+			BuildEvents: func() []CaptchaEvent {
+				return humanLikeTurnstileEvents()
+			},
+			BuildSnapshot: webdriverTurnstileSnapshot,
 		},
 		{
 			Name:       "empty-bot",
@@ -269,8 +313,8 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 		t.Fatalf("EvaluateTurnstileDefense failed: %v", err)
 	}
 
-	if len(report.Samples) != 4 {
-		t.Fatalf("expected 4 samples, got %d", len(report.Samples))
+	if len(report.Samples) != 5 {
+		t.Fatalf("expected 5 samples, got %d", len(report.Samples))
 	}
 
 	if report.Samples[0].PassRate <= 0 {
@@ -286,9 +330,96 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 		t.Fatalf("expected timeout sample to reject every time: %+v", report.Samples[2])
 	}
 	if report.Samples[3].RejectRate != 1 {
-		t.Fatalf("expected empty bot sample to reject every time: %+v", report.Samples[3])
+		t.Fatalf("expected webdriver sample to reject every time: %+v", report.Samples[3])
+	}
+	if report.Samples[4].RejectRate != 1 {
+		t.Fatalf("expected empty bot sample to reject every time: %+v", report.Samples[4])
 	}
 	if report.Accuracy < 0.75 {
 		t.Fatalf("expected aggregate accuracy >= 0.75, got %.2f", report.Accuracy)
+	}
+}
+
+func TestTurnstileRejectsWebdriverSnapshot(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallenge("webdriver-session", "1x00000000000000000000AA")
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, webdriverTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW failed: %v", err)
+	}
+
+	if _, err := cc.CompleteTurnstile(session.ID, solution, humanLikeTurnstileEvents()); err == nil {
+		t.Fatal("expected webdriver snapshot to be rejected")
+	}
+}
+
+func TestTurnstileSiteVerifyRejectsHostnameMismatch(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallenge("siteverify-hostname", "1x00000000000000000000AA")
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW failed: %v", err)
+	}
+
+	result, err := cc.CompleteTurnstile(session.ID, solution, humanLikeTurnstileEvents())
+	if err != nil {
+		t.Fatalf("CompleteTurnstile failed: %v", err)
+	}
+
+	verify := cc.VerifyTurnstileToken(cc.TurnstileSecretKey(), result.TurnstileToken, "example.com")
+	if verify.Success {
+		t.Fatalf("expected hostname mismatch verification to fail: %+v", verify)
+	}
+}
+
+func TestTurnstileStatusReturnsSessionTelemetry(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallenge("status-turnstile", "1x00000000000000000000AA")
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/cloudflare/status?session_id="+session.ID, nil)
+	w := httptest.NewRecorder()
+	cc.HandleStatus(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp struct {
+		SessionID          string                   `json:"session_id"`
+		TurnstilePresented bool                     `json:"turnstile_presented"`
+		WidgetTelemetry    *WidgetTelemetry         `json:"widget_telemetry"`
+		TurnstileSnapshot  *TurnstileClientSnapshot `json:"turnstile_snapshot"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode status response: %v", err)
+	}
+
+	if resp.SessionID != session.ID {
+		t.Fatalf("expected session %q, got %q", session.ID, resp.SessionID)
+	}
+	if !resp.TurnstilePresented {
+		t.Fatal("expected presented session to be reported")
+	}
+	if resp.WidgetTelemetry == nil || !resp.WidgetTelemetry.CallbackState.BeforeInteractive {
+		t.Fatalf("expected widget telemetry in status response: %+v", resp.WidgetTelemetry)
+	}
+	if resp.TurnstileSnapshot == nil || resp.TurnstileSnapshot.UserAgent == "" {
+		t.Fatalf("expected turnstile snapshot in status response: %+v", resp.TurnstileSnapshot)
 	}
 }

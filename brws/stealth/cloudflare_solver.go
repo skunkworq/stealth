@@ -173,8 +173,8 @@ func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*Cloudf
 	// Step 3: Generate fingerprint from a random profile
 	fp := cs.generateFingerprint()
 
-	// Step 4: Generate behavioral events
-	events := cs.eventGen.GenerateHumanEvents(5000)
+	// Step 4: Generate deterministic human-like widget events for the lab harness.
+	events := cs.generateTurnstileLabEvents()
 
 	// Step 4.5: Human-like delay — managed challenges require ≥1.5s solve time
 	elapsed := time.Since(totalStart)
@@ -253,8 +253,8 @@ func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *Tu
 		return nil, fmt.Errorf("PoW failed: %w", err)
 	}
 
-	// Step 4: Generate behavioral events
-	events := cs.eventGen.GenerateHumanEvents(5000)
+	// Step 4: Generate deterministic human-like widget events for the lab harness.
+	events := cs.generateTurnstileLabEvents()
 
 	// Step 5: Submit
 	body, _ := json.Marshal(map[string]interface{}{
@@ -289,6 +289,12 @@ func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *Tu
 
 	if solveResp.Success {
 		result.ClearanceCookie = extractCfClearanceCookie(resp)
+	}
+	if !solveResp.Success {
+		if solveResp.Error == "" {
+			solveResp.Error = fmt.Sprintf("turnstile solve failed with status %d", resp.StatusCode)
+		}
+		return result, fmt.Errorf("%s", solveResp.Error)
 	}
 
 	if opts != nil && opts.Verifier != nil && solveResp.TurnstileToken != "" {
@@ -348,10 +354,44 @@ func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initRe
 		}
 	}
 
+	if err := cs.postTurnstileSnapshot(baseURL, initResp.RayID, initResp.SessionID); err != nil {
+		return err
+	}
+
 	for _, callback := range []string{"before-interactive", "after-interactive"} {
 		if err := cs.postTurnstileCallback(baseURL, initResp.RayID, initResp.SessionID, callback); err != nil {
 			return err
 		}
+	}
+
+	return nil
+}
+
+func (cs *CloudflareSolverClient) postTurnstileSnapshot(baseURL, rayID, sessionID string) error {
+	snapshot := cs.buildTurnstileSnapshot()
+	payload, err := json.Marshal(map[string]interface{}{
+		"session_id": sessionID,
+		"type":       "snapshot",
+		"snapshot":   snapshot,
+	})
+	if err != nil {
+		return fmt.Errorf("marshal snapshot payload: %w", err)
+	}
+
+	endpoint := fmt.Sprintf(
+		"%s/cdn-cgi/challenge-platform/h/g/cv/result/%s",
+		strings.TrimRight(baseURL, "/"),
+		url.PathEscape(rayID),
+	)
+
+	resp, err := cs.httpClient.Post(endpoint, "application/json", bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("post snapshot: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected snapshot status: %d", resp.StatusCode)
 	}
 
 	return nil
@@ -643,6 +683,68 @@ func extractCfClearanceCookie(resp *http.Response) *http.Cookie {
 		}
 	}
 	return nil
+}
+
+func (cs *CloudflareSolverClient) buildTurnstileSnapshot() *adversarial.TurnstileClientSnapshot {
+	if cs.pinnedFingerprint == nil || cs.pinnedProfile == nil {
+		cs.generateFingerprint()
+	}
+
+	profile := cs.pinnedProfile
+	fp := cs.pinnedFingerprint
+	if profile == nil || fp == nil {
+		return &adversarial.TurnstileClientSnapshot{
+			UserAgent:           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+			Language:            "en-US",
+			Languages:           []string{"en-US", "en"},
+			Platform:            "Win32",
+			HardwareConcurrency: 8,
+			ScreenWidth:         1920,
+			ScreenHeight:        1080,
+			ColorDepth:          24,
+			Timezone:            "America/New_York",
+			CookieEnabled:       true,
+		}
+	}
+
+	language := ""
+	if len(profile.Languages) > 0 {
+		language = profile.Languages[0]
+	}
+
+	return &adversarial.TurnstileClientSnapshot{
+		UserAgent:           profile.UserAgent,
+		Language:            language,
+		Languages:           append([]string(nil), profile.Languages...),
+		Platform:            profile.NavPlatform,
+		HardwareConcurrency: fp.HardwareConcurrency,
+		Webdriver:           false,
+		ScreenWidth:         fp.ScreenWidth,
+		ScreenHeight:        fp.ScreenHeight,
+		ColorDepth:          fp.ColorDepth,
+		Timezone:            profile.Timezone,
+		MaxTouchPoints:      profile.MaxTouchPoints,
+		CookieEnabled:       true,
+	}
+}
+
+func (cs *CloudflareSolverClient) generateTurnstileLabEvents() []adversarial.CaptchaEvent {
+	base := time.Now().UnixMilli()
+	return []adversarial.CaptchaEvent{
+		{Type: "mousemove", Timestamp: base + 0, X: 118, Y: 266},
+		{Type: "mousemove", Timestamp: base + 94, X: 137, Y: 258},
+		{Type: "mousemove", Timestamp: base + 213, X: 161, Y: 244},
+		{Type: "mousemove", Timestamp: base + 371, X: 186, Y: 223},
+		{Type: "mousemove", Timestamp: base + 522, X: 214, Y: 202},
+		{Type: "mousemove", Timestamp: base + 705, X: 242, Y: 186},
+		{Type: "mousemove", Timestamp: base + 881, X: 269, Y: 179},
+		{Type: "wheel", Timestamp: base + 1048, Delta: 114},
+		{Type: "wheel", Timestamp: base + 1235, Delta: 78},
+		{Type: "mousemove", Timestamp: base + 1412, X: 294, Y: 173},
+		{Type: "mousedown", Timestamp: base + 1554, X: 302, Y: 171},
+		{Type: "mouseup", Timestamp: base + 1662, X: 303, Y: 170},
+		{Type: "click", Timestamp: base + 1669, X: 303, Y: 170},
+	}
 }
 
 func ensureCloudflareLabHostAllowed(baseURL string) error {

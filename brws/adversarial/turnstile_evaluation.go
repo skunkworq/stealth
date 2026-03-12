@@ -2,6 +2,7 @@ package adversarial
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -13,26 +14,28 @@ type TurnstileEvaluationCase struct {
 	LifecycleCallbacks []string
 	VerifyToken        bool
 	BuildEvents        func() []CaptchaEvent
+	BuildSnapshot      func() *TurnstileClientSnapshot
 	MutateSession      func(*CloudflareChallengeSession)
 }
 
 // TurnstileEvaluationSample summarizes the outcome of one scenario.
 type TurnstileEvaluationSample struct {
-	Name                 string  `json:"name"`
-	Trials               int     `json:"trials"`
-	ExpectedPass         bool    `json:"expected_pass"`
-	Passes               int     `json:"passes"`
-	Failures             int     `json:"failures"`
-	TrueAccepts          int     `json:"true_accepts"`
-	FalseRejects         int     `json:"false_rejects"`
-	TrueRejects          int     `json:"true_rejects"`
-	FalseAccepts         int     `json:"false_accepts"`
-	VerificationPasses   int     `json:"verification_passes"`
-	VerificationFailures int     `json:"verification_failures"`
-	PassRate             float64 `json:"pass_rate"`
-	RejectRate           float64 `json:"reject_rate"`
-	Accuracy             float64 `json:"accuracy"`
-	AverageScore         float64 `json:"average_score"`
+	Name                 string         `json:"name"`
+	Trials               int            `json:"trials"`
+	ExpectedPass         bool           `json:"expected_pass"`
+	Passes               int            `json:"passes"`
+	Failures             int            `json:"failures"`
+	TrueAccepts          int            `json:"true_accepts"`
+	FalseRejects         int            `json:"false_rejects"`
+	TrueRejects          int            `json:"true_rejects"`
+	FalseAccepts         int            `json:"false_accepts"`
+	VerificationPasses   int            `json:"verification_passes"`
+	VerificationFailures int            `json:"verification_failures"`
+	RejectionReasons     map[string]int `json:"rejection_reasons,omitempty"`
+	PassRate             float64        `json:"pass_rate"`
+	RejectRate           float64        `json:"reject_rate"`
+	Accuracy             float64        `json:"accuracy"`
+	AverageScore         float64        `json:"average_score"`
 }
 
 // TurnstileEvaluationReport captures the defensive effectiveness of the local harness.
@@ -67,9 +70,10 @@ func (cc *CloudflareChallenger) EvaluateTurnstileDefense(cases []TurnstileEvalua
 		}
 
 		sample := TurnstileEvaluationSample{
-			Name:         tc.Name,
-			Trials:       trials,
-			ExpectedPass: tc.ExpectPass,
+			Name:             tc.Name,
+			Trials:           trials,
+			ExpectedPass:     tc.ExpectPass,
+			RejectionReasons: make(map[string]int),
 		}
 		totalScore := 0.0
 
@@ -79,6 +83,9 @@ func (cc *CloudflareChallenger) EvaluateTurnstileDefense(cases []TurnstileEvalua
 			session.Hostname = "localhost"
 			if tc.PresentWidget {
 				cc.PresentTurnstileWidget(session.ID, "localhost")
+			}
+			if tc.BuildSnapshot != nil {
+				cc.RecordTurnstileClientSnapshot(session.ID, tc.BuildSnapshot())
 			}
 			for _, callback := range tc.LifecycleCallbacks {
 				cc.RecordTurnstileCallback(session.ID, callback)
@@ -101,6 +108,7 @@ func (cc *CloudflareChallenger) EvaluateTurnstileDefense(cases []TurnstileEvalua
 
 			if err != nil {
 				sample.Failures++
+				sample.RejectionReasons[classifyTurnstileRejection(err)]++
 				if tc.ExpectPass {
 					sample.FalseRejects++
 				} else {
@@ -142,4 +150,35 @@ func (cc *CloudflareChallenger) EvaluateTurnstileDefense(cases []TurnstileEvalua
 	}
 
 	return report, nil
+}
+
+func classifyTurnstileRejection(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	msg := err.Error()
+	switch {
+	case msg == "":
+		return "unknown"
+	case containsAllParts(msg, "widget", "error"):
+		return "widget_error"
+	case containsAllParts(msg, "widget", "timeout"):
+		return "widget_timeout"
+	case containsAllParts(msg, "composite", "threshold"):
+		return "composite_threshold"
+	case containsAllParts(msg, "PoW", "validation"):
+		return "pow_validation"
+	default:
+		return "other"
+	}
+}
+
+func containsAllParts(msg string, parts ...string) bool {
+	for _, part := range parts {
+		if !strings.Contains(msg, part) {
+			return false
+		}
+	}
+	return true
 }

@@ -61,7 +61,7 @@ func (ia *IsomorphicAnalyzer) Analyze(req *http.Request, httpInfo *HTTPFingerpri
 
 	indicators = ia.checkPlatformGPU(canvasData, httpPlatform, vec, indicators)
 	indicators = ia.checkGPUCoreCoherence(webglData, navData, vec, indicators)
-	
+
 	if navData != nil {
 		indicators = ia.checkNavigatorPlatform(navData, httpPlatform, vec, indicators)
 		indicators = ia.checkLanguages(navData, httpInfo.AcceptLanguage, vec, indicators)
@@ -141,8 +141,20 @@ func (ia *IsomorphicAnalyzer) checkGPUCoreCoherence(webglData map[string]interfa
 	// Base M1 has 8 cores. M1 Pro/Max 10+. M2 8+. M3 8+.
 	// Headless typically reports 2 or 4.
 	if strings.Contains(rLow, "apple m") && cores < 8 {
-		indicators = append(indicators, fmt.Sprintf("hardware_core_mismatch: %s_with_%d_cores", renderer, cores))
+		name := "hardware_core_mismatch"
+		indicators = append(indicators, fmt.Sprintf("%s: %s_with_%d_cores", name, renderer, cores))
 		vec.Score += 0.40
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        name,
+			Fired:       true,
+			Weight:      0.40,
+			Score:       0.40,
+			Field:       "hardwareConcurrency vs unmaskedRenderer",
+			Actual:      fmt.Sprintf("%s with %d cores", renderer, cores),
+			Expected:    ">= 8 cores for Apple Silicon GPUs",
+			Severity:    "medium",
+			Description: "Apple Silicon renderers should not present extremely low CPU core counts in normal desktop environments.",
+		})
 	}
 
 	// 2. High-End Desktop GPU Coherence
@@ -397,8 +409,8 @@ func (ia *IsomorphicAnalyzer) checkScreenDPR(req *http.Request, vec *DetectionVe
 		if json.Unmarshal([]byte(screenHeader), &screenData) == nil {
 			dpr, hasDPR := screenData["pixel_ratio"].(float64)
 			scrWidth, hasW := screenData["width"].(float64)
-			isMobile := strings.Contains(strings.ToLower(req.UserAgent()), "mobile") || 
-				strings.Contains(strings.ToLower(req.UserAgent()), "android") || 
+			isMobile := strings.Contains(strings.ToLower(req.UserAgent()), "mobile") ||
+				strings.Contains(strings.ToLower(req.UserAgent()), "android") ||
 				strings.Contains(strings.ToLower(req.UserAgent()), "iphone")
 
 			if hasDPR && hasW && dpr >= 2.0 && scrWidth < 1920 && !isMobile {
@@ -688,7 +700,7 @@ func (ia *IsomorphicAnalyzer) checkHeaderOrder(httpInfo *HTTPFingerprintInfo, ve
 	// Browsers typically have User-Agent near the top, and Accept shortly after.
 	// Go's default map iteration often puts random headers first.
 	// We check if specific common headers are in "suspicious" relative positions.
-	
+
 	uaIdx := -1
 	acceptIdx := -1
 	secChIdx := -1

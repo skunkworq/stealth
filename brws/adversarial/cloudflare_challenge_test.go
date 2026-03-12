@@ -265,6 +265,13 @@ func TestChallengePageMarkers(t *testing.T) {
 		}
 	}
 
+	if !strings.Contains(body, `id="cf-managed-widget"`) {
+		t.Fatal("challenge page should render a visible managed widget shell")
+	}
+	if !strings.Contains(body, "Verify you are human") {
+		t.Fatal("challenge page should expose visible managed challenge copy")
+	}
+
 	// Now verify DetectChallenge can detect it
 	headers := make(http.Header)
 	headers.Set("Server", resp.Header.Get("Server"))
@@ -621,7 +628,7 @@ func TestP12_CFBMCookie_ValidatedOnSolve(t *testing.T) {
 	cc.HandleInit(initW, initReq)
 
 	var initResp struct {
-		SessionID string       `json:"session_id"`
+		SessionID string        `json:"session_id"`
 		PoW       *PoWChallenge `json:"pow"`
 	}
 	_ = json.NewDecoder(initW.Body).Decode(&initResp)
@@ -856,4 +863,3 @@ func TestP12_MountRoutes_WithRateLimiting(t *testing.T) {
 
 	t.Logf("rate limiting working: first=%d second=%d", resp2.StatusCode, resp3.StatusCode)
 }
-

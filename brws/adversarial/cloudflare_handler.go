@@ -72,7 +72,23 @@ func (cc *CloudflareChallenger) HandleChallengePage(w http.ResponseWriter, r *ht
     body{margin:0;padding:0;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:#f5f5f5}
     .main-wrapper{text-align:center;padding:20px}
     .challenge-platform{margin:20px 0}
-    #cf-spinner-please-wait{width:40px;height:40px;border:4px solid #ddd;border-top-color:#f38020;border-radius:50%%;animation:spin 1s linear infinite;margin:20px auto}
+    .managed_challenge{display:flex;justify-content:center}
+    .cf-managed-shell{width:min(420px,92vw);padding:16px;background:#fff;border:1px solid #e5e5e5;border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.08);text-align:left}
+    .cf-managed-widget{min-height:65px;border:1px solid #d9d9d9;border-radius:12px;padding:12px;background:#fafafa;display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}
+    .cf-managed-checkbox{width:28px;height:28px;border:2px solid #8c8c8c;border-radius:6px;background:#fff;display:grid;place-items:center;padding:0;cursor:pointer;transition:border-color .18s ease, background-color .18s ease}
+    .cf-managed-checkbox:hover{border-color:#3b82f6}
+    #cf-spinner-please-wait{width:16px;height:16px;border:2px solid #cbd5e1;border-top-color:#2563eb;border-radius:50%%;animation:spin 1s linear infinite;display:block}
+    .cf-managed-check{display:none;font-size:16px;line-height:1}
+    .cf-managed-copy{min-width:0}
+    .cf-managed-title{font-size:14px;font-weight:600;color:#1f2937}
+    .cf-managed-subtitle{font-size:12px;color:#6b7280;margin:0}
+    .cf-managed-brand{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em}
+    .cf-managed-widget[data-state="interactive"] #cf-spinner-please-wait{display:none}
+    .cf-managed-widget[data-state="interactive"] .cf-managed-checkbox{border-color:#3b82f6}
+    .cf-managed-widget[data-state="solving"] #cf-spinner-please-wait{display:block}
+    .cf-managed-widget[data-state="complete"] #cf-spinner-please-wait{display:none}
+    .cf-managed-widget[data-state="complete"] .cf-managed-check{display:block}
+    .cf-managed-widget[data-state="complete"] .cf-managed-checkbox{border-color:#16a34a;background:#16a34a;color:#fff}
     @keyframes spin{to{transform:rotate(360deg)}}
     .cf-error-footer{color:#999;font-size:12px;margin-top:20px}
   </style>
@@ -84,8 +100,19 @@ func (cc *CloudflareChallenger) HandleChallengePage(w http.ResponseWriter, r *ht
       <div id="cf-challenge-running" class="challenge-platform">
         <h2 data-translate="checking_browser">Checking if the site connection is secure</h2>
         <div class="managed_challenge" id="challenge-stage">
-          <div id="cf-spinner-please-wait"></div>
-          <p id="cf-spinner-text">This process is automatic. Your browser will redirect shortly.</p>
+          <div class="cf-managed-shell">
+            <div class="cf-managed-widget" id="cf-managed-widget" data-state="loading">
+              <button class="cf-managed-checkbox" id="cf-managed-checkbox" type="button" aria-label="Local managed challenge checkbox" aria-pressed="false">
+                <span id="cf-spinner-please-wait"></span>
+                <span class="cf-managed-check">✓</span>
+              </button>
+              <div class="cf-managed-copy">
+                <div class="cf-managed-title">Verify you are human</div>
+                <p class="cf-managed-subtitle" id="cf-spinner-text">Checking your browser before accessing the local harness.</p>
+              </div>
+              <div class="cf-managed-brand">Turnstile</div>
+            </div>
+          </div>
         </div>
       </div>
       <script>var _cf_chl_opt=%s;</script>
@@ -179,7 +206,7 @@ func (cc *CloudflareChallenger) HandleInit(w http.ResponseWriter, r *http.Reques
 		// Default to managed challenge
 		session = cc.CreateManagedChallenge(req.SessionID, req.DetectionScore)
 	}
-	session.Hostname = r.Host
+	session.Hostname = normalizeChallengeHost(r.Host)
 
 	resp := cfInitResponse{
 		SessionID:           session.ID,
@@ -249,6 +276,20 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
     body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f7f7;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
     .cf-shell{width:min(420px,92vw);padding:28px;background:#fff;border:1px solid #e5e5e5;border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.08)}
     .cf-turnstile{min-height:65px;border:1px solid #d9d9d9;border-radius:12px;padding:12px;background:#fafafa}
+    .cf-turnstile-shell{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}
+    .cf-ts-checkbox{width:28px;height:28px;border:2px solid #8c8c8c;border-radius:6px;background:#fff;display:grid;place-items:center;padding:0;cursor:pointer;transition:border-color .18s ease, background-color .18s ease}
+    .cf-ts-checkbox:hover{border-color:#3b82f6}
+    .cf-ts-spinner,.cf-ts-check{display:none;font-size:16px;line-height:1}
+    .cf-ts-copy{min-width:0}
+    .cf-ts-title{font-size:14px;font-weight:600;color:#1f2937}
+    .cf-ts-subtitle{font-size:12px;color:#6b7280}
+    .cf-ts-brand{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em}
+    .cf-turnstile[data-state="solving"] .cf-ts-spinner{display:block;animation:cf-ts-spin 1s linear infinite}
+    .cf-turnstile[data-state="solving"] .cf-ts-checkbox{border-color:#2563eb}
+    .cf-turnstile[data-state="complete"] .cf-ts-checkbox{border-color:#16a34a;background:#16a34a;color:#fff}
+    .cf-turnstile[data-state="complete"] .cf-ts-check{display:block}
+    .cf-turnstile[data-state="complete"] .cf-ts-spinner{display:none}
+    @keyframes cf-ts-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     .cf-meta{margin-top:14px;color:#6f6f6f;font-size:12px}
   </style>
 </head>
@@ -273,21 +314,86 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
       data-callback="__tsSuccess"
       data-expired-callback="__tsExpired"
       data-timeout-callback="__tsTimeout"
-      data-error-callback="__tsError"></div>
+      data-error-callback="__tsError">
+      <div class="cf-turnstile-shell">
+        <button class="cf-ts-checkbox" type="button" aria-label="Local Turnstile harness checkbox" aria-pressed="false">
+          <span class="cf-ts-spinner">↻</span>
+          <span class="cf-ts-check">✓</span>
+        </button>
+        <div class="cf-ts-copy">
+          <div class="cf-ts-title">Verify you are human</div>
+          <div class="cf-ts-subtitle">Local Turnstile harness ready</div>
+        </div>
+        <div class="cf-ts-brand">Turnstile</div>
+      </div>
+      <input type="hidden" name="cf-turnstile-response" value="">
+    </div>
     <div class="cf-meta">Ray ID: %s</div>
   </main>
   <script>
-    function __tsPost(callbackName){
-      navigator.sendBeacon('/cdn-cgi/challenge-platform/h/g/cv/result/%s', JSON.stringify({callback: callbackName, session_id: %q}));
+    const __tsWidget = document.querySelector('.cf-turnstile');
+    const __tsCheckbox = document.querySelector('.cf-ts-checkbox');
+    const __tsSubtitle = document.querySelector('.cf-ts-subtitle');
+    function __tsSetState(state, subtitle){
+      if (__tsWidget) {
+        __tsWidget.dataset.state = state;
+      }
+      if (__tsSubtitle && subtitle) {
+        __tsSubtitle.textContent = subtitle;
+      }
+      if (__tsCheckbox) {
+        __tsCheckbox.setAttribute('aria-pressed', state === 'complete' ? 'true' : 'false');
+      }
     }
-    __tsPost('before-interactive');
-    function __tsBeforeInteractive(){ __tsPost('before-interactive'); }
-    function __tsAfterInteractive(){ __tsPost('after-interactive'); }
-    function __tsSuccess(token){ __tsPost('success'); return token; }
-    function __tsExpired(){ __tsPost('expired'); }
-    function __tsTimeout(){ __tsPost('timeout'); }
-    function __tsError(){ __tsPost('error'); }
-    setTimeout(__tsAfterInteractive, 10);
+    function __tsPost(payload){
+      navigator.sendBeacon('/cdn-cgi/challenge-platform/h/g/cv/result/%s', JSON.stringify(Object.assign({session_id: %q}, payload)));
+    }
+    function __tsSnapshot(){
+      __tsPost({
+        type: 'snapshot',
+        snapshot: {
+          user_agent: navigator.userAgent || '',
+          language: navigator.language || '',
+          languages: navigator.languages || [],
+          platform: navigator.platform || '',
+          hardware_concurrency: navigator.hardwareConcurrency || 0,
+          webdriver: !!navigator.webdriver,
+          screen_width: screen.width || 0,
+          screen_height: screen.height || 0,
+          color_depth: screen.colorDepth || 0,
+          timezone: (Intl.DateTimeFormat().resolvedOptions().timeZone || ''),
+          max_touch_points: navigator.maxTouchPoints || 0,
+          cookie_enabled: !!navigator.cookieEnabled
+        }
+      });
+    }
+    function __tsPostCallback(callbackName){
+      __tsPost({callback: callbackName});
+    }
+    __tsSetState('ready', 'Local Turnstile harness ready');
+    __tsSnapshot();
+    __tsPostCallback('before-interactive');
+    function __tsBeforeInteractive(){ __tsPostCallback('before-interactive'); }
+    function __tsAfterInteractive(){ __tsPostCallback('after-interactive'); }
+    function __tsSuccess(token){ __tsPostCallback('success'); return token; }
+    function __tsExpired(){ __tsPostCallback('expired'); }
+    function __tsTimeout(){ __tsPostCallback('timeout'); }
+    function __tsError(){ __tsPostCallback('error'); }
+    setTimeout(function(){
+      __tsSetState('interactive', 'Interaction telemetry armed');
+      __tsAfterInteractive();
+    }, 10);
+    if (__tsCheckbox) {
+      __tsCheckbox.addEventListener('click', function(){
+        if (__tsWidget && __tsWidget.dataset.state === 'solving') {
+          return;
+        }
+        __tsSetState('solving', 'Checking your browser in the local harness...');
+        setTimeout(function(){
+          __tsSetState('complete', 'Interaction recorded. Submit via the lab flow to mint a token.');
+        }, 650);
+      });
+    }
   </script>
 </body>
 </html>`,
@@ -542,6 +648,29 @@ func (cc *CloudflareChallenger) HandleStatus(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	if sessionID := strings.TrimSpace(r.URL.Query().Get("session_id")); sessionID != "" {
+		session, ok := cc.GetSession(sessionID)
+		if !ok {
+			http.Error(w, `{"error":"session not found"}`, http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"session_id":           session.ID,
+			"type":                 session.Type,
+			"hostname":             session.Hostname,
+			"passed":               session.Passed,
+			"score":                session.Score,
+			"turnstile_presented":  session.TurnstilePresented,
+			"turnstile_config":     session.TurnstileConfig,
+			"widget_telemetry":     session.TurnstileTelemetry,
+			"turnstile_snapshot":   session.TurnstileSnapshot,
+			"turnstile_token_used": session.TurnstileTokenUsed,
+		})
+		return
+	}
+
 	stats := cc.GetStats()
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(stats)
@@ -600,11 +729,16 @@ func (cc *CloudflareChallenger) HandleChallengeCallback(w http.ResponseWriter, r
 	}
 
 	var payload struct {
-		SessionID string `json:"session_id"`
-		Callback  string `json:"callback"`
-		Type      string `json:"t"`
+		SessionID  string                   `json:"session_id"`
+		Callback   string                   `json:"callback"`
+		Type       string                   `json:"type"`
+		LegacyType string                   `json:"t"`
+		Snapshot   *TurnstileClientSnapshot `json:"snapshot"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&payload)
+	if payload.Type == "" {
+		payload.Type = payload.LegacyType
+	}
 
 	rayID := strings.TrimPrefix(r.URL.Path, "/cdn-cgi/challenge-platform/h/g/cv/result/")
 	cc.mu.RLock()
@@ -622,6 +756,8 @@ func (cc *CloudflareChallenger) HandleChallengeCallback(w http.ResponseWriter, r
 	case matchedSessionID == "":
 	case payload.Callback != "":
 		cc.RecordTurnstileCallback(matchedSessionID, payload.Callback)
+	case payload.Type == "snapshot" || payload.Snapshot != nil:
+		cc.RecordTurnstileClientSnapshot(matchedSessionID, payload.Snapshot)
 	case payload.Type == "fp":
 		cc.RecordTurnstileCallback(matchedSessionID, "before-interactive")
 	}
@@ -644,7 +780,29 @@ func (cc *CloudflareChallenger) HandleManagedJS(w http.ResponseWriter, r *http.R
 (function(){
   var opt = window._cf_chl_opt;
   if (!opt || !opt.pow) return;
-  document.getElementById('cf-spinner-text').textContent = 'Verifying you are human...';
+  var widget = document.getElementById('cf-managed-widget');
+  var checkbox = document.getElementById('cf-managed-checkbox');
+  var subtitle = document.getElementById('cf-spinner-text');
+  function setState(state, text) {
+    if (widget) {
+      widget.dataset.state = state;
+    }
+    if (subtitle && text) {
+      subtitle.textContent = text;
+    }
+    if (checkbox) {
+      checkbox.setAttribute('aria-pressed', state === 'complete' ? 'true' : 'false');
+    }
+  }
+  setState('interactive', 'Verifying you are human...');
+  if (checkbox) {
+    checkbox.addEventListener('click', function() {
+      setState('solving', 'Recording interaction telemetry in the local harness...');
+      window.setTimeout(function() {
+        setState('complete', 'Interaction captured. Continue with the lab solver flow.');
+      }, 700);
+    });
+  }
   // In the real flow, this script would:
   // 1. Solve the PoW challenge
   // 2. Collect fingerprint data

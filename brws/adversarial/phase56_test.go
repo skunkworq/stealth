@@ -24,13 +24,13 @@ func TestPhase56AdaptiveLoop(t *testing.T) {
 	var webrtcFound bool
 	for i := 0; i < 100; i++ {
 		hReq := ag.GenerateRequest("https://example.com/")
-		
+
 		detection := detector.AnalyzeRequest(hReq, nil)
 		foundThisRound := false
 		for _, vec := range detection.Vectors {
 			for _, ind := range vec.Indicators {
-				if strings.Contains(ind, "missing_webrtc") || 
-				   strings.Contains(ind, "empty_ice_candidates") {
+				if strings.Contains(ind, "missing_webrtc") ||
+					strings.Contains(ind, "empty_ice_candidates") {
 					webrtcFound = true
 					foundThisRound = true
 				}
@@ -38,6 +38,7 @@ func TestPhase56AdaptiveLoop(t *testing.T) {
 		}
 		if foundThisRound {
 			ag.ApplyFeedback(detection.ToDetectionReport())
+			ag.GetConfig().ForceDetections = false
 		}
 		if webrtcFound {
 			break
@@ -50,12 +51,12 @@ func TestPhase56AdaptiveLoop(t *testing.T) {
 
 	// 3. Final Verification: Generate and Verify Evasion
 	hReq2 := ag.GenerateRequest("https://example.com/")
-	
+
 	// Check Navigator Data
 	navJSON := hReq2.Header.Get(constants.HeaderNavigatorData)
 	var navData map[string]interface{}
 	json.Unmarshal([]byte(navJSON), &navData)
-	
+
 	webrtc, ok := navData["webrtc_data"].(map[string]interface{})
 	if !ok {
 		t.Errorf("Round 2 has missing WebRTC data after mutation")
@@ -69,9 +70,9 @@ func TestPhase56AdaptiveLoop(t *testing.T) {
 	// 4. Final verification via Detector
 	detection2 := detector.AnalyzeRequest(hReq2, nil)
 	for _, ind := range detection2.Indicators {
-		if strings.Contains(ind.Name, "missing_webrtc") || 
-		   strings.Contains(ind.Name, "empty_ice_candidates") ||
-		   strings.Contains(ind.Name, "suspicious_ice_format") {
+		if strings.Contains(ind.Name, "missing_webrtc") ||
+			strings.Contains(ind.Name, "empty_ice_candidates") ||
+			strings.Contains(ind.Name, "suspicious_ice_format") {
 			t.Errorf("Round 2 still flagged with indicator: %s", ind.Name)
 		}
 	}

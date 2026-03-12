@@ -315,6 +315,8 @@ func (s *EnhancedServer) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/turnstile/v0/siteverify", cf.HandleTurnstileSiteVerify)
 	mux.HandleFunc("/api/cloudflare/verify", cf.HandleVerifyClearance)
 	mux.HandleFunc("/api/cloudflare/status", cf.HandleStatus)
+	mux.HandleFunc("/cdn-cgi/challenge-platform/h/g/cv/result/", cf.HandleChallengeCallback)
+	mux.HandleFunc("/cdn-cgi/challenge-platform/scripts/turnstile/managed.js", cf.HandleManagedJS)
 
 	// CAPTCHA API endpoints
 	mux.HandleFunc("/api/captcha/catalogue", s.handleCaptchaCatalogue)

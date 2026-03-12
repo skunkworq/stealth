@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -64,26 +65,28 @@ type FingerprintPayload struct {
 
 // CloudflareChallengeSession tracks a full Cloudflare challenge lifecycle.
 type CloudflareChallengeSession struct {
-	ID                  string
-	Type                CloudflareChallengeType
-	RayID               string
-	SiteKey             string
-	Hostname            string
-	PoW                 *PoWChallenge
-	RequiresFingerprint bool
-	RequiresBehavioral  bool
-	Fingerprint         *FingerprintPayload
-	Events              []CaptchaEvent
-	TurnstileConfig     TurnstileWidgetConfig
-	TurnstileTelemetry  WidgetTelemetry
-	TurnstileToken      *LabTurnstileToken
-	TurnstileTokenUsed  bool
-	TurnstilePresented  bool
-	CreatedAt           time.Time
-	SolvedAt            time.Time
-	ClearanceCookie     string
-	Passed              bool
-	Score               float64
+	ID                   string
+	Type                 CloudflareChallengeType
+	RayID                string
+	SiteKey              string
+	Hostname             string
+	PoW                  *PoWChallenge
+	RequiresFingerprint  bool
+	RequiresBehavioral   bool
+	Fingerprint          *FingerprintPayload
+	Events               []CaptchaEvent
+	TurnstileConfig      TurnstileWidgetConfig
+	TurnstileTelemetry   WidgetTelemetry
+	TurnstileSnapshot    *TurnstileClientSnapshot
+	TurnstileToken       *LabTurnstileToken
+	TurnstileTokenUsed   bool
+	TurnstilePresented   bool
+	TurnstilePresentedAt time.Time
+	CreatedAt            time.Time
+	SolvedAt             time.Time
+	ClearanceCookie      string
+	Passed               bool
+	Score                float64
 
 	// Phase 6: session state machine fields
 	State          ChallengeState
@@ -252,8 +255,12 @@ func (cc *CloudflareChallenger) PresentTurnstileWidget(sessionID, hostname strin
 	}
 
 	session.TurnstilePresented = true
+	if session.TurnstilePresentedAt.IsZero() {
+		session.TurnstilePresentedAt = time.Now().UTC()
+		session.TurnstileTelemetry.PresentedAt = session.TurnstilePresentedAt
+	}
 	if hostname != "" {
-		session.Hostname = hostname
+		session.Hostname = normalizeChallengeHost(hostname)
 	}
 
 	return true
@@ -270,8 +277,40 @@ func (cc *CloudflareChallenger) RecordTurnstileCallback(sessionID, callback stri
 	}
 
 	session.TurnstilePresented = true
+	if session.TurnstilePresentedAt.IsZero() {
+		session.TurnstilePresentedAt = time.Now().UTC()
+		session.TurnstileTelemetry.PresentedAt = session.TurnstilePresentedAt
+	}
 	session.TurnstileTelemetry.recordCallback(callback)
 	session.TurnstileConfig.CallbackState = session.TurnstileTelemetry.CallbackState
+	return true
+}
+
+// RecordTurnstileClientSnapshot stores a browser snapshot observed while the widget was active.
+func (cc *CloudflareChallenger) RecordTurnstileClientSnapshot(sessionID string, snapshot *TurnstileClientSnapshot) bool {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	session, ok := cc.sessions[sessionID]
+	if !ok || snapshot == nil {
+		return false
+	}
+
+	copySnapshot := *snapshot
+	copySnapshot.UserAgent = strings.TrimSpace(copySnapshot.UserAgent)
+	copySnapshot.Language = strings.TrimSpace(copySnapshot.Language)
+	copySnapshot.Platform = strings.TrimSpace(copySnapshot.Platform)
+	copySnapshot.Timezone = strings.TrimSpace(copySnapshot.Timezone)
+	copySnapshot.Languages = append([]string(nil), copySnapshot.Languages...)
+
+	session.TurnstilePresented = true
+	if session.TurnstilePresentedAt.IsZero() {
+		session.TurnstilePresentedAt = time.Now().UTC()
+		session.TurnstileTelemetry.PresentedAt = session.TurnstilePresentedAt
+	}
+	session.TurnstileSnapshot = &copySnapshot
+	session.TurnstileTelemetry.ClientSnapshot = &copySnapshot
+
 	return true
 }
 
@@ -573,13 +612,14 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		return nil, fmt.Errorf("PoW validation failed: %w", err)
 	}
 
-	// Turnstile is lighter than a full managed challenge, but the lab still
-	// requires basic interaction quality and reasonable event volume.
 	behScore := cc.ValidateBehavioral(sessionID, events)
+	eventSpan := turnstileEventSpan(events)
 
 	cc.mu.RLock()
 	session, exists := cc.sessions[sessionID]
 	cc.mu.RUnlock()
+	lifecycleScore := 0.0
+	snapshotScore := 0.0
 	if exists {
 		switch {
 		case session.TurnstileTelemetry.CallbackState.Error:
@@ -593,12 +633,36 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 				!session.TurnstileTelemetry.CallbackState.AfterInteractive):
 			behScore = math.Max(behScore, 0.75)
 		}
+		lifecycleScore = evaluateTurnstileLifecycle(session, eventSpan)
+		snapshotScore = evaluateTurnstileSnapshot(session.TurnstileSnapshot)
+		if session.TurnstilePresented && session.TurnstileSnapshot == nil {
+			snapshotScore = math.Max(snapshotScore, 0.95)
+		}
 	}
 
 	mouseCount := 0
+	mouseYConst := true
+	lastMouseY := 0.0
+	haveMouseY := false
+	hasMouseDown := false
+	hasMouseUp := false
+	hasClick := false
 	for _, e := range events {
 		if e.Type == "mousemove" {
 			mouseCount++
+			if haveMouseY && math.Abs(e.Y-lastMouseY) > 2 {
+				mouseYConst = false
+			}
+			lastMouseY = e.Y
+			haveMouseY = true
+		}
+		switch e.Type {
+		case "mousedown":
+			hasMouseDown = true
+		case "mouseup":
+			hasMouseUp = true
+		case "click":
+			hasClick = true
 		}
 	}
 
@@ -607,13 +671,33 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		behScore = math.Max(behScore, 1.0)
 	case mouseCount < 3:
 		behScore = math.Max(behScore, 0.85)
+	case eventSpan > 0 && eventSpan < 1100:
+		behScore = math.Max(behScore, 0.80)
+	case haveMouseY && mouseYConst:
+		behScore = math.Max(behScore, 0.78)
+	case !(hasMouseDown && hasMouseUp && hasClick):
+		behScore = math.Max(behScore, 0.82)
 	case behScore > 0.65:
 		behScore = math.Max(behScore, 0.75)
 	}
 
-	if behScore > 0.70 {
+	compositeScore := behScore*0.55 + snapshotScore*0.25 + lifecycleScore*0.20
+	if lifecycleScore >= 0.90 || snapshotScore >= 0.90 {
+		compositeScore = math.Max(compositeScore, 0.85)
+	}
+	if eventSpan > 0 && eventSpan < 1100 {
+		compositeScore = math.Max(compositeScore, 0.82)
+	}
+	if haveMouseY && mouseYConst {
+		compositeScore = math.Max(compositeScore, 0.82)
+	}
+	if !(hasMouseDown && hasMouseUp && hasClick) {
+		compositeScore = math.Max(compositeScore, 0.82)
+	}
+
+	if compositeScore > 0.70 {
 		cc.recordFailedAttempt(sessionID)
-		return nil, fmt.Errorf("turnstile challenge failed: behavioral score %.2f exceeds threshold", behScore)
+		return nil, fmt.Errorf("turnstile challenge failed: composite score %.2f exceeds threshold", compositeScore)
 	}
 
 	token := cc.issueTurnstileToken(sessionID)
@@ -625,10 +709,12 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		session.SolvedAt = time.Now()
 		session.ClearanceCookie = cookie.Value
 		session.Score = behScore
+		session.Score = compositeScore
 		session.State = StateSolved
 		session.TurnstileToken = token
 		session.TurnstileTokenUsed = false
 		session.TurnstileTelemetry.EventCount = len(events)
+		session.TurnstileTelemetry.EventSpanMs = eventSpan
 		if len(events) > 0 {
 			lastTS := events[len(events)-1].Timestamp
 			if lastTS > 0 {
@@ -885,6 +971,7 @@ func (cc *CloudflareChallenger) VerifyTurnstileToken(secret, response, hostname 
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
+	normalizedHost := normalizeChallengeHost(hostname)
 	for _, session := range cc.sessions {
 		if session.TurnstileToken == nil || session.TurnstileToken.Value != response {
 			continue
@@ -897,14 +984,18 @@ func (cc *CloudflareChallenger) VerifyTurnstileToken(secret, response, hostname 
 		case session.TurnstileTokenUsed:
 			result.ErrorCodes = []string{"timeout-or-duplicate"}
 			return result
+		case normalizedHost != "" && session.TurnstileToken.Hostname != "" &&
+			!turnstileHostsEquivalent(normalizedHost, session.TurnstileToken.Hostname):
+			result.ErrorCodes = []string{"hostname-mismatch"}
+			return result
 		default:
 			session.TurnstileTokenUsed = true
 			result.Success = true
 			result.ChallengeTS = session.CreatedAt.Format(time.RFC3339)
-			if hostname != "" {
-				result.Hostname = hostname
+			if normalizedHost != "" {
+				result.Hostname = normalizedHost
 			} else {
-				result.Hostname = session.Hostname
+				result.Hostname = normalizeChallengeHost(session.Hostname)
 			}
 			result.Action = session.TurnstileConfig.Action
 			result.CData = session.TurnstileConfig.CData
@@ -951,6 +1042,193 @@ func (cc *CloudflareChallenger) GetStats() map[string]interface{} {
 		"avg_solve_ms":   avgSolveTime,
 		"by_type":        byType,
 	}
+}
+
+func normalizeChallengeHost(host string) string {
+	host = strings.TrimSpace(strings.ToLower(host))
+	if host == "" {
+		return ""
+	}
+
+	if parsedHost, _, err := net.SplitHostPort(host); err == nil {
+		return parsedHost
+	}
+
+	return strings.Trim(host, "[]")
+}
+
+func turnstileHostsEquivalent(left, right string) bool {
+	left = normalizeChallengeHost(left)
+	right = normalizeChallengeHost(right)
+	if left == right {
+		return true
+	}
+
+	return isLoopbackOrLocalHost(left) && isLoopbackOrLocalHost(right)
+}
+
+func turnstileEventSpan(events []CaptchaEvent) int64 {
+	if len(events) < 2 {
+		return 0
+	}
+
+	first := events[0].Timestamp
+	last := events[0].Timestamp
+	for _, event := range events[1:] {
+		if event.Timestamp < first {
+			first = event.Timestamp
+		}
+		if event.Timestamp > last {
+			last = event.Timestamp
+		}
+	}
+	if last <= first {
+		return 0
+	}
+	return last - first
+}
+
+func evaluateTurnstileLifecycle(session *CloudflareChallengeSession, eventSpan int64) float64 {
+	if session == nil {
+		return 1.0
+	}
+	if session.TurnstilePresented &&
+		(!session.TurnstileTelemetry.CallbackState.BeforeInteractive ||
+			!session.TurnstileTelemetry.CallbackState.AfterInteractive) {
+		return 1.0
+	}
+
+	score := 0.0
+	weights := 0.0
+	order := session.TurnstileTelemetry.CallbackOrder
+
+	if !session.TurnstilePresented {
+		score += 0.45
+	}
+	weights += 0.45
+
+	if len(order) < 2 || !isValidTurnstileCallbackOrder(order) {
+		score += 0.35
+	}
+	weights += 0.35
+
+	if session.TurnstileTelemetry.DuplicateCallbacks > 0 {
+		score += 0.10
+	}
+	weights += 0.10
+
+	if eventSpan > 0 && eventSpan < 1100 {
+		score += 0.10
+	}
+	weights += 0.10
+
+	if session.TurnstileTelemetry.CallbackState.Timeout ||
+		session.TurnstileTelemetry.CallbackState.Error ||
+		session.TurnstileTelemetry.CallbackState.Expired {
+		return 1.0
+	}
+
+	if weights == 0 {
+		return 0
+	}
+	return score / weights
+}
+
+func isValidTurnstileCallbackOrder(order []string) bool {
+	beforeIdx := -1
+	afterIdx := -1
+
+	for idx, name := range order {
+		switch name {
+		case "before-interactive":
+			if beforeIdx == -1 {
+				beforeIdx = idx
+			}
+		case "after-interactive":
+			if afterIdx == -1 {
+				afterIdx = idx
+			}
+		case "success":
+			if afterIdx == -1 || idx < afterIdx {
+				return false
+			}
+		case "timeout", "error", "expired":
+			return false
+		}
+	}
+
+	return beforeIdx >= 0 && afterIdx > beforeIdx
+}
+
+func evaluateTurnstileSnapshot(snapshot *TurnstileClientSnapshot) float64 {
+	if snapshot == nil {
+		return 1.0
+	}
+
+	score := 0.0
+	weights := 0.0
+	ua := strings.ToLower(strings.TrimSpace(snapshot.UserAgent))
+	platform := strings.TrimSpace(snapshot.Platform)
+
+	if snapshot.Webdriver ||
+		strings.Contains(ua, "headless") ||
+		strings.Contains(ua, "playwright") ||
+		strings.Contains(ua, "selenium") {
+		return 1.0
+	}
+
+	if ua == "" {
+		score += 0.35
+	}
+	weights += 0.35
+
+	weights += 0.30
+
+	if snapshot.Language == "" || len(snapshot.Languages) == 0 || snapshot.Language != snapshot.Languages[0] {
+		score += 0.10
+	}
+	weights += 0.10
+
+	if snapshot.HardwareConcurrency <= 0 || snapshot.HardwareConcurrency > 64 {
+		score += 0.05
+	}
+	weights += 0.05
+
+	if snapshot.ScreenWidth < 640 || snapshot.ScreenHeight < 480 {
+		score += 0.05
+	}
+	weights += 0.05
+
+	if snapshot.ColorDepth != 24 && snapshot.ColorDepth != 30 && snapshot.ColorDepth != 32 {
+		score += 0.05
+	}
+	weights += 0.05
+
+	if snapshot.Timezone == "" {
+		score += 0.05
+	}
+	weights += 0.05
+
+	if !snapshot.CookieEnabled {
+		score += 0.05
+	}
+	weights += 0.05
+
+	switch {
+	case strings.Contains(ua, "windows") && platform != "Win32":
+		score += 0.10
+	case strings.Contains(ua, "macintosh") && platform != "MacIntel":
+		score += 0.10
+	case strings.Contains(ua, "linux") && !strings.Contains(strings.ToLower(platform), "linux"):
+		score += 0.10
+	}
+	weights += 0.10
+
+	if weights == 0 {
+		return 0
+	}
+
+	return math.Min(1.0, score/weights)
 }
 
 // eventsToEnhancedBehavioral converts CaptchaEvent slice to EnhancedBehavioralEvents
