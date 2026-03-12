@@ -1334,11 +1334,12 @@ func (sd *StealthDetector) analyzeFingerprintCoverage(req *http.Request) *Detect
 
 	totalHeaders := len(allJSHeaders)
 	vec := &DetectionVector{
-		Name:        "Fingerprint Coverage",
-		Category:    string(VectorFingerprintCoverage),
-		Weight:      1.0,
-		Description: "Graduated fingerprint header coverage analysis",
-		Indicators:  make([]string, 0),
+		Name:         "Fingerprint Coverage",
+		Category:     string(VectorFingerprintCoverage),
+		Weight:       1.0,
+		Description:  "Graduated fingerprint header coverage analysis",
+		Indicators:   make([]string, 0),
+		CheckReports: make([]CheckReport, 0),
 	}
 
 	switch {
@@ -1347,6 +1348,32 @@ func (sd *StealthDetector) analyzeFingerprintCoverage(req *http.Request) *Detect
 		vec.Score = 0.50
 		vec.Detected = true
 		vec.Indicators = append(vec.Indicators, "http_impersonation_no_js_context")
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        "http_impersonation_no_js_context",
+			Fired:       true,
+			Weight:      constants.SeverityHigh,
+			Score:       vec.Score,
+			Field:       "X-*-Fingerprint-Headers",
+			Actual:      fmt.Sprintf("%d of %d present", presentCount, totalHeaders),
+			Expected:    "at least one coherent JS/runtime fingerprint surface",
+			Severity:    "high",
+			Description: "The request claims a browser navigation context but exposes no JS-derived runtime fingerprint data.",
+		})
+		if isRichChromiumNavigationWithoutRuntimeState(req) {
+			vec.Score = 0.65
+			vec.Indicators = append(vec.Indicators, "rich_chromium_headers_without_runtime_state")
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        "rich_chromium_headers_without_runtime_state",
+				Fired:       true,
+				Weight:      constants.SeverityHigh,
+				Score:       vec.Score,
+				Field:       "Sec-Ch-Ua/Accept/Accept-Encoding",
+				Actual:      "rich Chromium navigation bundle with 0 runtime surfaces",
+				Expected:    "runtime surfaces consistent with a rich Chromium navigation bundle",
+				Severity:    "high",
+				Description: "The request sends a high-fidelity Chromium navigation header set, but still exposes no navigator, timing, canvas, or behavioral runtime state.",
+			})
+		}
 
 	case presentCount <= 5:
 		// Partial coverage — some cherry-picked headers
@@ -1369,6 +1396,39 @@ func (sd *StealthDetector) analyzeFingerprintCoverage(req *http.Request) *Detect
 	}
 
 	return vec
+}
+
+func isRichChromiumNavigationWithoutRuntimeState(req *http.Request) bool {
+	uaLower := strings.ToLower(req.Header.Get("User-Agent"))
+	secChLower := strings.ToLower(req.Header.Get("Sec-Ch-Ua"))
+	if !strings.Contains(uaLower, "chrome") && !strings.Contains(secChLower, "chrom") {
+		return false
+	}
+
+	if req.Header.Get("Sec-Fetch-Dest") != "document" ||
+		req.Header.Get("Sec-Fetch-Mode") != "navigate" ||
+		req.Header.Get("Upgrade-Insecure-Requests") != "1" {
+		return false
+	}
+
+	richSignals := 0
+	if strings.Contains(req.Header.Get("Accept"), "application/signed-exchange") {
+		richSignals++
+	}
+	if strings.Contains(req.Header.Get("Accept-Encoding"), "zstd") {
+		richSignals++
+	}
+	if req.Header.Get("Sec-Ch-Ua-Full-Version-List") != "" {
+		richSignals++
+	}
+	if req.Header.Get("Sec-Ch-Ua-Arch") != "" || req.Header.Get("Sec-Ch-Ua-Bitness") != "" {
+		richSignals++
+	}
+	if req.Header.Get("Priority") != "" {
+		richSignals++
+	}
+
+	return richSignals >= 2
 }
 
 // analyzeCrossVectorConsistency checks temporal and spatial consistency between

@@ -390,8 +390,8 @@ func TestShieldEvaluation(t *testing.T) {
 	}
 
 	for _, profileName := range []string{"stealth_with_hints", "stealth_full_chrome", "playwright_stealth"} {
-		if profileConfidence[profileName] < 0.75 {
-			t.Fatalf("expected %s confidence >= 0.75, got %.3f", profileName, profileConfidence[profileName])
+		if profileConfidence[profileName] < 0.90 {
+			t.Fatalf("expected %s confidence >= 0.90, got %.3f", profileName, profileConfidence[profileName])
 		}
 	}
 }
