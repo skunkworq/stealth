@@ -8,14 +8,16 @@ import (
 
 // TurnstileEvaluationCase defines a repeatable local harness evaluation scenario.
 type TurnstileEvaluationCase struct {
-	Name               string
-	ExpectPass         bool
-	PresentWidget      bool
-	LifecycleCallbacks []string
-	VerifyToken        bool
-	BuildEvents        func() []CaptchaEvent
-	BuildSnapshot      func() *TurnstileClientSnapshot
-	MutateSession      func(*CloudflareChallengeSession)
+	Name                  string
+	DetectionScore        float64
+	ExpectPass            bool
+	PresentWidget         bool
+	LifecycleCallbacks    []string
+	VerifyToken           bool
+	BuildEvents           func() []CaptchaEvent
+	BuildSnapshot         func() *TurnstileClientSnapshot
+	BuildInteractionProof func() *TurnstileInteractionProof
+	MutateSession         func(*CloudflareChallengeSession)
 }
 
 // TurnstileEvaluationSample summarizes the outcome of one scenario.
@@ -79,13 +81,16 @@ func (cc *CloudflareChallenger) EvaluateTurnstileDefense(cases []TurnstileEvalua
 
 		for trial := 0; trial < trials; trial++ {
 			sessionID := fmt.Sprintf("turnstile_eval_%s_%d", sanitizeTurnstileData(tc.Name, 24), trial)
-			session := cc.CreateTurnstileChallenge(sessionID, "1x00000000000000000000AA")
+			session := cc.CreateTurnstileChallengeWithRisk(sessionID, "1x00000000000000000000AA", tc.DetectionScore)
 			session.Hostname = "localhost"
 			if tc.PresentWidget {
 				cc.PresentTurnstileWidget(session.ID, "localhost")
 			}
 			if tc.BuildSnapshot != nil {
 				cc.RecordTurnstileClientSnapshot(session.ID, tc.BuildSnapshot())
+			}
+			if tc.BuildInteractionProof != nil {
+				cc.RecordTurnstileInteractionProof(session.ID, tc.BuildInteractionProof())
 			}
 			for _, callback := range tc.LifecycleCallbacks {
 				cc.RecordTurnstileCallback(session.ID, callback)

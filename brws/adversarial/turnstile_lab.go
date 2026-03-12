@@ -8,6 +8,12 @@ import (
 
 const defaultTurnstileTokenTTL = 5 * time.Minute
 
+const (
+	turnstileInteractionCheckbox = "checkbox"
+	turnstileInteractionHold     = "hold"
+	turnstileInteractionDrag     = "drag"
+)
+
 // TurnstileRetryPolicy models the widget retry behavior exposed to the client.
 type TurnstileRetryPolicy struct {
 	Mode       string `json:"mode"`
@@ -18,6 +24,25 @@ type TurnstileRetryPolicy struct {
 type TurnstileRefreshPolicy struct {
 	Expired string `json:"expired"`
 	Timeout string `json:"timeout"`
+}
+
+// TurnstileInteractionConfig describes the specific interaction the local widget expects.
+type TurnstileInteractionConfig struct {
+	Type                   string `json:"type"`
+	RequiredHoldMs         int    `json:"required_hold_ms,omitempty"`
+	RequiredDragDistancePx int    `json:"required_drag_distance_px,omitempty"`
+	RequiredDragEventCount int    `json:"required_drag_event_count,omitempty"`
+	DragTrackLengthPx      int    `json:"drag_track_length_px,omitempty"`
+}
+
+// TurnstileInteractionProof captures the interaction performed against the widget.
+type TurnstileInteractionProof struct {
+	Type           string `json:"type"`
+	Completed      bool   `json:"completed"`
+	CheckboxClicks int    `json:"checkbox_clicks,omitempty"`
+	HoldDurationMs int    `json:"hold_duration_ms,omitempty"`
+	DragDistancePx int    `json:"drag_distance_px,omitempty"`
+	DragEventCount int    `json:"drag_event_count,omitempty"`
 }
 
 // TurnstileCallbackState tracks the current lifecycle callback state for a widget.
@@ -32,19 +57,20 @@ type TurnstileCallbackState struct {
 
 // WidgetTelemetry captures widget callback ordering and event metadata.
 type WidgetTelemetry struct {
-	CallbackState      TurnstileCallbackState   `json:"callback_state"`
-	CallbackOrder      []string                 `json:"callback_order,omitempty"`
-	CallbackCount      int                      `json:"callback_count"`
-	DuplicateCallbacks int                      `json:"duplicate_callbacks"`
-	EventCount         int                      `json:"event_count"`
-	EventSpanMs        int64                    `json:"event_span_ms,omitempty"`
-	LastEventAt        time.Time                `json:"last_event_at,omitempty"`
-	PresentedAt        time.Time                `json:"presented_at,omitempty"`
-	BeforeAt           time.Time                `json:"before_interactive_at,omitempty"`
-	AfterAt            time.Time                `json:"after_interactive_at,omitempty"`
-	SuccessAt          time.Time                `json:"success_at,omitempty"`
-	LastCallbackAt     time.Time                `json:"last_callback_at,omitempty"`
-	ClientSnapshot     *TurnstileClientSnapshot `json:"client_snapshot,omitempty"`
+	CallbackState      TurnstileCallbackState     `json:"callback_state"`
+	CallbackOrder      []string                   `json:"callback_order,omitempty"`
+	CallbackCount      int                        `json:"callback_count"`
+	DuplicateCallbacks int                        `json:"duplicate_callbacks"`
+	EventCount         int                        `json:"event_count"`
+	EventSpanMs        int64                      `json:"event_span_ms,omitempty"`
+	LastEventAt        time.Time                  `json:"last_event_at,omitempty"`
+	PresentedAt        time.Time                  `json:"presented_at,omitempty"`
+	BeforeAt           time.Time                  `json:"before_interactive_at,omitempty"`
+	AfterAt            time.Time                  `json:"after_interactive_at,omitempty"`
+	SuccessAt          time.Time                  `json:"success_at,omitempty"`
+	LastCallbackAt     time.Time                  `json:"last_callback_at,omitempty"`
+	ClientSnapshot     *TurnstileClientSnapshot   `json:"client_snapshot,omitempty"`
+	InteractionProof   *TurnstileInteractionProof `json:"interaction_proof,omitempty"`
 }
 
 // TurnstileClientSnapshot captures the browser state observed while the widget is rendered.
@@ -65,17 +91,19 @@ type TurnstileClientSnapshot struct {
 
 // TurnstileWidgetConfig captures the local widget contract returned by init.
 type TurnstileWidgetConfig struct {
-	Mode            string                 `json:"mode"`
-	Appearance      string                 `json:"appearance"`
-	Execution       string                 `json:"execution"`
-	Action          string                 `json:"action,omitempty"`
-	CData           string                 `json:"cdata,omitempty"`
-	Theme           string                 `json:"theme"`
-	Size            string                 `json:"size"`
-	TokenTTLSeconds int                    `json:"token_ttl_seconds"`
-	RetryPolicy     TurnstileRetryPolicy   `json:"retry_policy"`
-	RefreshPolicy   TurnstileRefreshPolicy `json:"refresh_policy"`
-	CallbackState   TurnstileCallbackState `json:"callback_state"`
+	Mode            string                     `json:"mode"`
+	RiskLevel       string                     `json:"risk_level"`
+	Appearance      string                     `json:"appearance"`
+	Execution       string                     `json:"execution"`
+	Action          string                     `json:"action,omitempty"`
+	CData           string                     `json:"cdata,omitempty"`
+	Theme           string                     `json:"theme"`
+	Size            string                     `json:"size"`
+	Interaction     TurnstileInteractionConfig `json:"interaction"`
+	TokenTTLSeconds int                        `json:"token_ttl_seconds"`
+	RetryPolicy     TurnstileRetryPolicy       `json:"retry_policy"`
+	RefreshPolicy   TurnstileRefreshPolicy     `json:"refresh_policy"`
+	CallbackState   TurnstileCallbackState     `json:"callback_state"`
 }
 
 // LabTurnstileToken represents a locally issued Turnstile token for owned-environment testing.
@@ -105,13 +133,17 @@ func defaultTurnstileWidgetConfig(sessionID string) TurnstileWidgetConfig {
 	}
 
 	return TurnstileWidgetConfig{
-		Mode:            "managed",
-		Appearance:      "always",
-		Execution:       "render",
-		Action:          "managed",
-		CData:           cdata,
-		Theme:           "auto",
-		Size:            "normal",
+		Mode:       "managed",
+		RiskLevel:  "low",
+		Appearance: "always",
+		Execution:  "render",
+		Action:     "managed",
+		CData:      cdata,
+		Theme:      "auto",
+		Size:       "normal",
+		Interaction: TurnstileInteractionConfig{
+			Type: turnstileInteractionCheckbox,
+		},
 		TokenTTLSeconds: int(defaultTurnstileTokenTTL / time.Second),
 		RetryPolicy: TurnstileRetryPolicy{
 			Mode:       "auto",
@@ -122,6 +154,32 @@ func defaultTurnstileWidgetConfig(sessionID string) TurnstileWidgetConfig {
 			Timeout: "auto",
 		},
 	}
+}
+
+func turnstileWidgetConfigForRisk(sessionID string, detectionScore float64) TurnstileWidgetConfig {
+	cfg := defaultTurnstileWidgetConfig(sessionID)
+	switch {
+	case detectionScore >= 0.75:
+		cfg.RiskLevel = "high"
+		cfg.Interaction = TurnstileInteractionConfig{
+			Type:                   turnstileInteractionDrag,
+			RequiredDragDistancePx: 160,
+			RequiredDragEventCount: 6,
+			DragTrackLengthPx:      220,
+		}
+	case detectionScore >= 0.45:
+		cfg.RiskLevel = "medium"
+		cfg.Interaction = TurnstileInteractionConfig{
+			Type:           turnstileInteractionHold,
+			RequiredHoldMs: 900,
+		}
+	default:
+		cfg.RiskLevel = "low"
+		cfg.Interaction = TurnstileInteractionConfig{
+			Type: turnstileInteractionCheckbox,
+		}
+	}
+	return cfg
 }
 
 func sanitizeTurnstileData(value string, maxLen int) string {
@@ -197,6 +255,16 @@ func (wt *WidgetTelemetry) recordCallback(name string) {
 		wt.CallbackCount++
 		wt.LastCallbackAt = now
 	}
+}
+
+func (wt *WidgetTelemetry) recordInteraction(proof *TurnstileInteractionProof) {
+	if proof == nil {
+		return
+	}
+
+	copyProof := *proof
+	copyProof.Type = strings.TrimSpace(copyProof.Type)
+	wt.InteractionProof = &copyProof
 }
 
 func isLoopbackOrLocalHost(host string) bool {

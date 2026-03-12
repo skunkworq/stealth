@@ -206,6 +206,11 @@ func (cc *CloudflareChallenger) CreateManagedChallenge(sessionID string, detecti
 
 // CreateTurnstileChallenge creates a Turnstile widget challenge with light PoW + behavioral.
 func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteKey string) *CloudflareChallengeSession {
+	return cc.CreateTurnstileChallengeWithRisk(sessionID, siteKey, 0.30)
+}
+
+// CreateTurnstileChallengeWithRisk creates a Turnstile widget challenge configured for a risk tier.
+func (cc *CloudflareChallenger) CreateTurnstileChallengeWithRisk(sessionID string, siteKey string, detectionScore float64) *CloudflareChallengeSession {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
@@ -221,7 +226,7 @@ func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteK
 		PoW:                 pow,
 		RequiresFingerprint: false,
 		RequiresBehavioral:  true,
-		TurnstileConfig:     defaultTurnstileWidgetConfig(sessionID),
+		TurnstileConfig:     turnstileWidgetConfigForRisk(sessionID, detectionScore),
 		CreatedAt:           time.Now(),
 		State:               StatePending,
 		CFBMValue:           cfbm,
@@ -311,6 +316,25 @@ func (cc *CloudflareChallenger) RecordTurnstileClientSnapshot(sessionID string, 
 	session.TurnstileSnapshot = &copySnapshot
 	session.TurnstileTelemetry.ClientSnapshot = &copySnapshot
 
+	return true
+}
+
+// RecordTurnstileInteractionProof stores the interaction proof captured while the widget was active.
+func (cc *CloudflareChallenger) RecordTurnstileInteractionProof(sessionID string, proof *TurnstileInteractionProof) bool {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	session, ok := cc.sessions[sessionID]
+	if !ok || proof == nil {
+		return false
+	}
+
+	session.TurnstilePresented = true
+	if session.TurnstilePresentedAt.IsZero() {
+		session.TurnstilePresentedAt = time.Now().UTC()
+		session.TurnstileTelemetry.PresentedAt = session.TurnstilePresentedAt
+	}
+	session.TurnstileTelemetry.recordInteraction(proof)
 	return true
 }
 
@@ -620,6 +644,7 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 	cc.mu.RUnlock()
 	lifecycleScore := 0.0
 	snapshotScore := 0.0
+	interactionScore := 0.0
 	if exists {
 		switch {
 		case session.TurnstileTelemetry.CallbackState.Error:
@@ -635,6 +660,7 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		}
 		lifecycleScore = evaluateTurnstileLifecycle(session, eventSpan)
 		snapshotScore = evaluateTurnstileSnapshot(session.TurnstileSnapshot)
+		interactionScore = evaluateTurnstileInteraction(session, events)
 		if session.TurnstilePresented && session.TurnstileSnapshot == nil {
 			snapshotScore = math.Max(snapshotScore, 0.95)
 		}
@@ -681,8 +707,8 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		behScore = math.Max(behScore, 0.75)
 	}
 
-	compositeScore := behScore*0.55 + snapshotScore*0.25 + lifecycleScore*0.20
-	if lifecycleScore >= 0.90 || snapshotScore >= 0.90 {
+	compositeScore := behScore*0.40 + snapshotScore*0.20 + lifecycleScore*0.15 + interactionScore*0.25
+	if lifecycleScore >= 0.90 || snapshotScore >= 0.90 || interactionScore >= 0.90 {
 		compositeScore = math.Max(compositeScore, 0.85)
 	}
 	if eventSpan > 0 && eventSpan < 1100 {
@@ -693,6 +719,9 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 	}
 	if !(hasMouseDown && hasMouseUp && hasClick) {
 		compositeScore = math.Max(compositeScore, 0.82)
+	}
+	if interactionScore >= 0.70 {
+		compositeScore = math.Max(compositeScore, 0.83)
 	}
 
 	if compositeScore > 0.70 {
@@ -1229,6 +1258,120 @@ func evaluateTurnstileSnapshot(snapshot *TurnstileClientSnapshot) float64 {
 	}
 
 	return math.Min(1.0, score/weights)
+}
+
+type turnstileEventInteractionSummary struct {
+	HasMouseDown   bool
+	HasMouseUp     bool
+	HasClick       bool
+	MoveCount      int
+	HoldDurationMs int
+	DragDistancePx int
+}
+
+func evaluateTurnstileInteraction(session *CloudflareChallengeSession, events []CaptchaEvent) float64 {
+	if session == nil {
+		return 1.0
+	}
+
+	config := session.TurnstileConfig.Interaction
+	if config.Type == "" {
+		config.Type = turnstileInteractionCheckbox
+	}
+
+	summary := summarizeTurnstileInteractionEvents(events)
+	proof := session.TurnstileTelemetry.InteractionProof
+	if session.TurnstilePresented && proof == nil {
+		return 1.0
+	}
+
+	score := 0.0
+	weights := 0.0
+	addPenalty := func(condition bool, weight float64) {
+		if condition {
+			score += weight
+		}
+		weights += weight
+	}
+
+	if proof != nil && proof.Type != "" && proof.Type != config.Type {
+		return 1.0
+	}
+
+	switch config.Type {
+	case turnstileInteractionHold:
+		addPenalty(proof == nil || !proof.Completed, 0.30)
+		addPenalty(proof == nil || proof.HoldDurationMs < config.RequiredHoldMs, 0.25)
+		addPenalty(summary.HoldDurationMs < config.RequiredHoldMs, 0.25)
+		addPenalty(!(summary.HasMouseDown && summary.HasMouseUp && summary.HasClick), 0.10)
+		addPenalty(summary.MoveCount < 2, 0.10)
+	case turnstileInteractionDrag:
+		addPenalty(proof == nil || !proof.Completed, 0.30)
+		addPenalty(proof == nil || proof.DragDistancePx < config.RequiredDragDistancePx, 0.20)
+		addPenalty(proof == nil || proof.DragEventCount < config.RequiredDragEventCount, 0.10)
+		addPenalty(summary.DragDistancePx < config.RequiredDragDistancePx, 0.20)
+		addPenalty(summary.MoveCount < config.RequiredDragEventCount, 0.10)
+		addPenalty(!(summary.HasMouseDown && summary.HasMouseUp && summary.HasClick), 0.10)
+	default:
+		addPenalty(proof == nil || !proof.Completed || proof.CheckboxClicks < 1, 0.35)
+		addPenalty(!(summary.HasMouseDown && summary.HasMouseUp && summary.HasClick), 0.35)
+		addPenalty(summary.MoveCount < 3, 0.10)
+	}
+
+	if weights == 0 {
+		return 0.0
+	}
+	return math.Min(1.0, score/weights)
+}
+
+func summarizeTurnstileInteractionEvents(events []CaptchaEvent) turnstileEventInteractionSummary {
+	summary := turnstileEventInteractionSummary{}
+	var downTS int64
+	minX := math.MaxFloat64
+	maxX := -math.MaxFloat64
+
+	for _, event := range events {
+		switch event.Type {
+		case "mousemove":
+			summary.MoveCount++
+			if event.X < minX {
+				minX = event.X
+			}
+			if event.X > maxX {
+				maxX = event.X
+			}
+		case "mousedown":
+			summary.HasMouseDown = true
+			if downTS == 0 {
+				downTS = event.Timestamp
+			}
+			if event.X < minX {
+				minX = event.X
+			}
+			if event.X > maxX {
+				maxX = event.X
+			}
+		case "mouseup":
+			summary.HasMouseUp = true
+			if downTS > 0 && event.Timestamp >= downTS {
+				summary.HoldDurationMs = int(event.Timestamp - downTS)
+			}
+			if event.X < minX {
+				minX = event.X
+			}
+			if event.X > maxX {
+				maxX = event.X
+			}
+		case "click":
+			summary.HasClick = true
+		}
+	}
+
+	if minX != math.MaxFloat64 && maxX != -math.MaxFloat64 && maxX > minX {
+		summary.DragDistancePx = int(math.Round(maxX - minX))
+	}
+
+	return summary
 }
 
 // eventsToEnhancedBehavioral converts CaptchaEvent slice to EnhancedBehavioralEvents

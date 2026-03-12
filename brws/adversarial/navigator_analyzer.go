@@ -217,7 +217,7 @@ func (na *NavigatorAnalyzer) checkChromeRuntime(navData map[string]interface{}, 
 	// Phase 83: performance.navigation
 	if perfNav, ok := navData["performance_navigation"].(map[string]interface{}); ok {
 		if navType, ok := perfNav["type"].(float64); ok {
-			// type 0 = TYPE_NAVIGATE (direct link, bookmark, etc). 
+			// type 0 = TYPE_NAVIGATE (direct link, bookmark, etc).
 			// type 1 = TYPE_RELOAD. type 2 = TYPE_BACK_FORWARD.
 			// Most simple bots/scrapers should report 0 unless specifically testing reloads.
 			if navType != 0 {
@@ -530,7 +530,7 @@ func (na *NavigatorAnalyzer) checkNetworkCoherence(navData map[string]interface{
 			indicators = append(indicators, name)
 			vec.Score += 0.20
 		}
-		
+
 		if hasDown && downlink > 10.0 && (effType == "2g" || effType == "3g") {
 			name := "network_high_downlink_low_efftype"
 			indicators = append(indicators, fmt.Sprintf("%s: %s_downlink=%.1fMbps", name, effType, downlink))
@@ -863,7 +863,7 @@ func (na *NavigatorAnalyzer) checkPermissionsExtended(navData map[string]interfa
 	// 3. Multi-permission consistency (e.g., camera/mic)
 	camState, hasCam := navData["permissions_camera_state"].(string)
 	micState, hasMic := navData["permissions_microphone_state"].(string)
-	
+
 	devices, hasDevices := navData["media_devices"].([]interface{})
 	if (hasCam && camState == "granted") || (hasMic && micState == "granted") {
 		// If granted, we should have labeled devices
@@ -1119,7 +1119,7 @@ func (na *NavigatorAnalyzer) checkStorageQuotaCoherence(navData map[string]inter
 
 func (na *NavigatorAnalyzer) checkMediaDevices(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	devices, _ := navData["media_devices"].([]interface{})
-	
+
 	if len(devices) == 0 {
 		indicators = append(indicators, "empty_media_devices")
 		vec.Score += 0.25
@@ -1175,8 +1175,20 @@ func (na *NavigatorAnalyzer) checkWebRTC(navData map[string]interface{}, vec *De
 	if !ok {
 		// Chrome browsers (desktop) should always have WebRTC available.
 		if strings.Contains(reqUA, "Chrome") && !strings.Contains(reqUA, "Mobile") {
-			indicators = append(indicators, "missing_webrtc")
+			name := "missing_webrtc"
+			indicators = append(indicators, name)
 			vec.Score += 0.20
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        name,
+				Fired:       true,
+				Weight:      0.20,
+				Score:       0.20,
+				Field:       "RTCPeerConnection",
+				Actual:      "missing webrtc_data",
+				Expected:    "webrtc_data with ICE candidates",
+				Severity:    "medium",
+				Description: "Desktop Chrome environments should expose WebRTC metadata and candidate generation.",
+			})
 		}
 		return indicators
 	}
@@ -1494,7 +1506,7 @@ func (na *NavigatorAnalyzer) checkAudioWorklet(navData map[string]interface{}, v
 	uaLower := strings.ToLower(ua)
 	isChrome := strings.Contains(uaLower, "chrome")
 	isFirefox := strings.Contains(uaLower, "firefox")
-	
+
 	if isChrome || isFirefox {
 		awAvailable, ok := navData["audio_worklet_available"].(bool)
 		// If it's explicitly false or missing in a modern browser navigator data (if reported there)

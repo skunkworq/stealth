@@ -125,6 +125,9 @@ func TestSwordSolvesTurnstile(t *testing.T) {
 	if result.WidgetTelemetry == nil || !result.WidgetTelemetry.CallbackState.Success {
 		t.Fatal("expected widget telemetry with success callback")
 	}
+	if result.WidgetTelemetry.InteractionProof == nil || result.WidgetTelemetry.InteractionProof.Type != "checkbox" {
+		t.Fatalf("expected checkbox interaction proof, got %+v", result.WidgetTelemetry)
+	}
 	if result.WidgetTelemetry.CallbackCount < 3 {
 		t.Fatalf("expected full widget lifecycle to be recorded: %+v", result.WidgetTelemetry)
 	}
@@ -146,6 +149,60 @@ func TestSwordSolvesTurnstile(t *testing.T) {
 
 	t.Logf("Turnstile challenge: token=%s... pow_time=%dms total=%dms",
 		result.TurnstileToken[:20], result.PoWTimeMs, result.TotalTimeMs)
+}
+
+func TestSwordSolvesTurnstileVariants(t *testing.T) {
+	ts, cc := mountCloudflareServer()
+	defer ts.Close()
+
+	testCases := []struct {
+		name        string
+		score       float64
+		wantVariant string
+	}{
+		{name: "hold", score: 0.55, wantVariant: "hold"},
+		{name: "drag", score: 0.85, wantVariant: "drag"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			solver := NewCloudflareSolverClient()
+			result, err := solver.ExerciseTurnstileFlow(ts.URL, &TurnstileFlowOptions{
+				DetectionScore: tc.score,
+				Verifier: &LabTurnstileVerifier{
+					HTTPClient: solver.httpClient,
+					BaseURL:    ts.URL,
+					Secret:     cc.TurnstileSecretKey(),
+					Hostname:   "localhost",
+				},
+			})
+			if err != nil {
+				t.Fatalf("ExerciseTurnstileFlow failed: %v", err)
+			}
+			if !result.Passed {
+				t.Fatal("turnstile challenge should have passed")
+			}
+			if result.WidgetTelemetry == nil || result.WidgetTelemetry.InteractionProof == nil {
+				t.Fatalf("expected interaction telemetry: %+v", result.WidgetTelemetry)
+			}
+			if result.WidgetTelemetry.InteractionProof.Type != tc.wantVariant {
+				t.Fatalf("expected %s proof, got %+v", tc.wantVariant, result.WidgetTelemetry.InteractionProof)
+			}
+			if !result.WidgetTelemetry.InteractionProof.Completed {
+				t.Fatalf("expected completed interaction proof: %+v", result.WidgetTelemetry.InteractionProof)
+			}
+			switch tc.wantVariant {
+			case "hold":
+				if result.WidgetTelemetry.InteractionProof.HoldDurationMs < 900 {
+					t.Fatalf("expected realistic hold duration: %+v", result.WidgetTelemetry.InteractionProof)
+				}
+			case "drag":
+				if result.WidgetTelemetry.InteractionProof.DragDistancePx < 160 {
+					t.Fatalf("expected sufficient drag distance: %+v", result.WidgetTelemetry.InteractionProof)
+				}
+			}
+		})
+	}
 }
 
 func TestHandleTurnstileLabRejectsUnallowlistedHost(t *testing.T) {

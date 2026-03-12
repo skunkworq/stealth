@@ -29,6 +29,45 @@ func humanLikeTurnstileEvents() []CaptchaEvent {
 	}
 }
 
+func holdTurnstileEvents(requiredHoldMs int) []CaptchaEvent {
+	base := time.Now().UnixMilli()
+	if requiredHoldMs <= 0 {
+		requiredHoldMs = 900
+	}
+	return []CaptchaEvent{
+		{Type: "mousemove", Timestamp: base + 0, X: 126, Y: 250},
+		{Type: "mousemove", Timestamp: base + 123, X: 152, Y: 230},
+		{Type: "mousemove", Timestamp: base + 247, X: 174, Y: 214},
+		{Type: "mousemove", Timestamp: base + 402, X: 198, Y: 198},
+		{Type: "mousedown", Timestamp: base + 565, X: 206, Y: 194},
+		{Type: "mousemove", Timestamp: base + 910, X: 207, Y: 194},
+		{Type: "mousemove", Timestamp: base + int64(requiredHoldMs) + 705, X: 208, Y: 195},
+		{Type: "mouseup", Timestamp: base + int64(requiredHoldMs) + 845, X: 208, Y: 195},
+		{Type: "click", Timestamp: base + int64(requiredHoldMs) + 852, X: 208, Y: 195},
+	}
+}
+
+func dragTurnstileEvents(requiredDistance int) []CaptchaEvent {
+	base := time.Now().UnixMilli()
+	if requiredDistance <= 0 {
+		requiredDistance = 160
+	}
+	endX := float64(122 + requiredDistance + 32)
+	return []CaptchaEvent{
+		{Type: "mousemove", Timestamp: base + 0, X: 110, Y: 260},
+		{Type: "mousemove", Timestamp: base + 96, X: 121, Y: 249},
+		{Type: "mousedown", Timestamp: base + 211, X: 122, Y: 244},
+		{Type: "mousemove", Timestamp: base + 418, X: 152, Y: 244},
+		{Type: "mousemove", Timestamp: base + 605, X: 183, Y: 243},
+		{Type: "mousemove", Timestamp: base + 781, X: 216, Y: 243},
+		{Type: "mousemove", Timestamp: base + 954, X: 248, Y: 244},
+		{Type: "mousemove", Timestamp: base + 1132, X: 281, Y: 244},
+		{Type: "mousemove", Timestamp: base + 1317, X: endX, Y: 244},
+		{Type: "mouseup", Timestamp: base + 1473, X: endX, Y: 244},
+		{Type: "click", Timestamp: base + 1480, X: endX, Y: 244},
+	}
+}
+
 func straightLineTurnstileEvents() []CaptchaEvent {
 	base := time.Now().UnixMilli()
 	return []CaptchaEvent{
@@ -63,6 +102,40 @@ func webdriverTurnstileSnapshot() *TurnstileClientSnapshot {
 	snapshot := humanLikeTurnstileSnapshot()
 	snapshot.Webdriver = true
 	return snapshot
+}
+
+func checkboxTurnstileProof() *TurnstileInteractionProof {
+	return &TurnstileInteractionProof{
+		Type:           turnstileInteractionCheckbox,
+		Completed:      true,
+		CheckboxClicks: 1,
+	}
+}
+
+func holdTurnstileProof(requiredHoldMs int) *TurnstileInteractionProof {
+	if requiredHoldMs <= 0 {
+		requiredHoldMs = 900
+	}
+	return &TurnstileInteractionProof{
+		Type:           turnstileInteractionHold,
+		Completed:      true,
+		HoldDurationMs: requiredHoldMs + 260,
+	}
+}
+
+func dragTurnstileProof(requiredDistance, requiredEvents int) *TurnstileInteractionProof {
+	if requiredDistance <= 0 {
+		requiredDistance = 160
+	}
+	if requiredEvents <= 0 {
+		requiredEvents = 6
+	}
+	return &TurnstileInteractionProof{
+		Type:           turnstileInteractionDrag,
+		Completed:      true,
+		DragDistancePx: requiredDistance + 28,
+		DragEventCount: requiredEvents + 2,
+	}
 }
 
 func TestTurnstileInitExposesWidgetConfig(t *testing.T) {
@@ -103,6 +176,46 @@ func TestTurnstileInitExposesWidgetConfig(t *testing.T) {
 	if resp.Turnstile.CallbackState.Success {
 		t.Fatal("callback state should start empty")
 	}
+	if resp.Turnstile.RiskLevel != "low" || resp.Turnstile.Interaction.Type != turnstileInteractionCheckbox {
+		t.Fatalf("expected low-risk checkbox contract, got %+v", resp.Turnstile)
+	}
+}
+
+func TestTurnstileInitEscalatesInteractionByRisk(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	testCases := []struct {
+		name        string
+		body        string
+		wantRisk    string
+		wantVariant string
+	}{
+		{name: "low", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.20}`, wantRisk: "low", wantVariant: turnstileInteractionCheckbox},
+		{name: "medium", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.55}`, wantRisk: "medium", wantVariant: turnstileInteractionHold},
+		{name: "high", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.85}`, wantRisk: "high", wantVariant: turnstileInteractionDrag},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/cloudflare/init", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			cc.HandleInit(w, req)
+
+			var resp struct {
+				Turnstile *TurnstileWidgetConfig `json:"turnstile"`
+			}
+			if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+				t.Fatalf("decode init response: %v", err)
+			}
+			if resp.Turnstile == nil {
+				t.Fatal("expected turnstile config")
+			}
+			if resp.Turnstile.RiskLevel != tc.wantRisk || resp.Turnstile.Interaction.Type != tc.wantVariant {
+				t.Fatalf("unexpected risk/variant: %+v", resp.Turnstile)
+			}
+		})
+	}
 }
 
 func TestTurnstileWidgetPageContainsContractFields(t *testing.T) {
@@ -121,6 +234,8 @@ func TestTurnstileWidgetPageContainsContractFields(t *testing.T) {
 		`class="cf-turnstile"`,
 		`data-action="managed"`,
 		`data-cdata="widget-1"`,
+		`data-risk-level="low"`,
+		`data-interaction="checkbox"`,
 		`data-retry-interval="8000"`,
 		`data-refresh-expired="auto"`,
 		`data-before-interactive-callback="__tsBeforeInteractive"`,
@@ -148,6 +263,7 @@ func TestTurnstilePresentedSessionRequiresLifecycleCallbacks(t *testing.T) {
 	session := cc.CreateTurnstileChallenge("widget-lifecycle", "1x00000000000000000000AA")
 	cc.PresentTurnstileWidget(session.ID, "localhost")
 	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileInteractionProof(session.ID, checkboxTurnstileProof())
 
 	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
 	if err != nil {
@@ -173,6 +289,7 @@ func TestTurnstileRejectsTimeoutCallback(t *testing.T) {
 	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")
 	cc.RecordTurnstileCallback(session.ID, "timeout")
+	cc.RecordTurnstileInteractionProof(session.ID, checkboxTurnstileProof())
 
 	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
 	if err != nil {
@@ -181,6 +298,83 @@ func TestTurnstileRejectsTimeoutCallback(t *testing.T) {
 
 	if _, err := cc.CompleteTurnstile(session.ID, solution, humanLikeTurnstileEvents()); err == nil {
 		t.Fatal("expected timeout lifecycle to force rejection")
+	}
+}
+
+func TestTurnstileHoldVariantRequiresHoldProof(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallengeWithRisk("widget-hold", "1x00000000000000000000AA", 0.55)
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW failed: %v", err)
+	}
+
+	cc.RecordTurnstileInteractionProof(session.ID, &TurnstileInteractionProof{
+		Type:           turnstileInteractionHold,
+		Completed:      false,
+		HoldDurationMs: 320,
+	})
+	if _, err := cc.CompleteTurnstile(session.ID, solution, holdTurnstileEvents(320)); err == nil {
+		t.Fatal("expected short hold proof to be rejected")
+	}
+
+	session = cc.CreateTurnstileChallengeWithRisk("widget-hold-pass", "1x00000000000000000000AA", 0.55)
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+	cc.RecordTurnstileInteractionProof(session.ID, holdTurnstileProof(session.TurnstileConfig.Interaction.RequiredHoldMs))
+	solution, err = SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW hold pass failed: %v", err)
+	}
+	if _, err := cc.CompleteTurnstile(session.ID, solution, holdTurnstileEvents(session.TurnstileConfig.Interaction.RequiredHoldMs)); err != nil {
+		t.Fatalf("expected hold proof to pass: %v", err)
+	}
+}
+
+func TestTurnstileDragVariantRequiresDragProof(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallengeWithRisk("widget-drag", "1x00000000000000000000AA", 0.85)
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW failed: %v", err)
+	}
+
+	cc.RecordTurnstileInteractionProof(session.ID, &TurnstileInteractionProof{
+		Type:           turnstileInteractionDrag,
+		Completed:      false,
+		DragDistancePx: 84,
+		DragEventCount: 3,
+	})
+	if _, err := cc.CompleteTurnstile(session.ID, solution, holdTurnstileEvents(900)); err == nil {
+		t.Fatal("expected short drag proof to be rejected")
+	}
+
+	session = cc.CreateTurnstileChallengeWithRisk("widget-drag-pass", "1x00000000000000000000AA", 0.85)
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+	cc.RecordTurnstileInteractionProof(session.ID, dragTurnstileProof(session.TurnstileConfig.Interaction.RequiredDragDistancePx, session.TurnstileConfig.Interaction.RequiredDragEventCount))
+	solution, err = SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW drag pass failed: %v", err)
+	}
+	if _, err := cc.CompleteTurnstile(session.ID, solution, dragTurnstileEvents(session.TurnstileConfig.Interaction.RequiredDragDistancePx)); err != nil {
+		t.Fatalf("expected drag proof to pass: %v", err)
 	}
 }
 
@@ -193,6 +387,7 @@ func TestTurnstileSiteVerifySingleUseAndExpiry(t *testing.T) {
 	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")
 	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+	cc.RecordTurnstileInteractionProof(session.ID, checkboxTurnstileProof())
 	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
 	if err != nil {
 		t.Fatalf("SolvePoW failed: %v", err)
@@ -237,6 +432,7 @@ func TestTurnstileSiteVerifySingleUseAndExpiry(t *testing.T) {
 	cc.RecordTurnstileClientSnapshot(expiredSession.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(expiredSession.ID, "before-interactive")
 	cc.RecordTurnstileCallback(expiredSession.ID, "after-interactive")
+	cc.RecordTurnstileInteractionProof(expiredSession.ID, checkboxTurnstileProof())
 	expiredSolution, err := SolvePoW(expiredSession.PoW.Prefix, expiredSession.PoW.Difficulty, expiredSession.PoW.MaxIterations)
 	if err != nil {
 		t.Fatalf("SolvePoW expired failed: %v", err)
@@ -269,7 +465,36 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 			BuildEvents: func() []CaptchaEvent {
 				return humanLikeTurnstileEvents()
 			},
+			BuildSnapshot:         humanLikeTurnstileSnapshot,
+			BuildInteractionProof: checkboxTurnstileProof,
+		},
+		{
+			Name:               "hold-human-like",
+			DetectionScore:     0.55,
+			ExpectPass:         true,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
+			BuildEvents: func() []CaptchaEvent {
+				return holdTurnstileEvents(900)
+			},
 			BuildSnapshot: humanLikeTurnstileSnapshot,
+			BuildInteractionProof: func() *TurnstileInteractionProof {
+				return holdTurnstileProof(900)
+			},
+		},
+		{
+			Name:               "drag-human-like",
+			DetectionScore:     0.85,
+			ExpectPass:         true,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
+			BuildEvents: func() []CaptchaEvent {
+				return dragTurnstileEvents(160)
+			},
+			BuildSnapshot: humanLikeTurnstileSnapshot,
+			BuildInteractionProof: func() *TurnstileInteractionProof {
+				return dragTurnstileProof(160, 6)
+			},
 		},
 		{
 			Name:               "straight-line-bot",
@@ -279,7 +504,8 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 			BuildEvents: func() []CaptchaEvent {
 				return straightLineTurnstileEvents()
 			},
-			BuildSnapshot: humanLikeTurnstileSnapshot,
+			BuildSnapshot:         humanLikeTurnstileSnapshot,
+			BuildInteractionProof: checkboxTurnstileProof,
 		},
 		{
 			Name:               "timed-out-widget",
@@ -289,7 +515,8 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 			BuildEvents: func() []CaptchaEvent {
 				return humanLikeTurnstileEvents()
 			},
-			BuildSnapshot: humanLikeTurnstileSnapshot,
+			BuildSnapshot:         humanLikeTurnstileSnapshot,
+			BuildInteractionProof: checkboxTurnstileProof,
 		},
 		{
 			Name:               "webdriver-bot",
@@ -299,7 +526,27 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 			BuildEvents: func() []CaptchaEvent {
 				return humanLikeTurnstileEvents()
 			},
-			BuildSnapshot: webdriverTurnstileSnapshot,
+			BuildSnapshot:         webdriverTurnstileSnapshot,
+			BuildInteractionProof: checkboxTurnstileProof,
+		},
+		{
+			Name:               "drag-short",
+			DetectionScore:     0.85,
+			ExpectPass:         false,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
+			BuildEvents: func() []CaptchaEvent {
+				return holdTurnstileEvents(900)
+			},
+			BuildSnapshot: humanLikeTurnstileSnapshot,
+			BuildInteractionProof: func() *TurnstileInteractionProof {
+				return &TurnstileInteractionProof{
+					Type:           turnstileInteractionDrag,
+					Completed:      false,
+					DragDistancePx: 72,
+					DragEventCount: 3,
+				}
+			},
 		},
 		{
 			Name:       "empty-bot",
@@ -313,8 +560,8 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 		t.Fatalf("EvaluateTurnstileDefense failed: %v", err)
 	}
 
-	if len(report.Samples) != 5 {
-		t.Fatalf("expected 5 samples, got %d", len(report.Samples))
+	if len(report.Samples) != 8 {
+		t.Fatalf("expected 8 samples, got %d", len(report.Samples))
 	}
 
 	if report.Samples[0].PassRate <= 0 {
@@ -323,17 +570,26 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 	if report.Samples[0].VerificationPasses != report.Samples[0].Passes {
 		t.Fatalf("expected human-like sample to verify each issued token: %+v", report.Samples[0])
 	}
-	if report.Samples[1].RejectRate != 1 {
-		t.Fatalf("expected straight-line bot sample to reject every time: %+v", report.Samples[1])
+	if report.Samples[1].PassRate <= 0 {
+		t.Fatalf("expected hold sample to pass at least once: %+v", report.Samples[1])
 	}
-	if report.Samples[2].RejectRate != 1 {
-		t.Fatalf("expected timeout sample to reject every time: %+v", report.Samples[2])
+	if report.Samples[2].PassRate <= 0 {
+		t.Fatalf("expected drag sample to pass at least once: %+v", report.Samples[2])
 	}
 	if report.Samples[3].RejectRate != 1 {
-		t.Fatalf("expected webdriver sample to reject every time: %+v", report.Samples[3])
+		t.Fatalf("expected straight-line bot sample to reject every time: %+v", report.Samples[3])
 	}
 	if report.Samples[4].RejectRate != 1 {
-		t.Fatalf("expected empty bot sample to reject every time: %+v", report.Samples[4])
+		t.Fatalf("expected timeout sample to reject every time: %+v", report.Samples[4])
+	}
+	if report.Samples[5].RejectRate != 1 {
+		t.Fatalf("expected webdriver sample to reject every time: %+v", report.Samples[5])
+	}
+	if report.Samples[6].RejectRate != 1 {
+		t.Fatalf("expected short drag sample to reject every time: %+v", report.Samples[6])
+	}
+	if report.Samples[7].RejectRate != 1 {
+		t.Fatalf("expected empty bot sample to reject every time: %+v", report.Samples[7])
 	}
 	if report.Accuracy < 0.75 {
 		t.Fatalf("expected aggregate accuracy >= 0.75, got %.2f", report.Accuracy)
@@ -348,6 +604,7 @@ func TestTurnstileRejectsWebdriverSnapshot(t *testing.T) {
 	cc.RecordTurnstileClientSnapshot(session.ID, webdriverTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")
 	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+	cc.RecordTurnstileInteractionProof(session.ID, checkboxTurnstileProof())
 
 	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
 	if err != nil {
@@ -367,6 +624,7 @@ func TestTurnstileSiteVerifyRejectsHostnameMismatch(t *testing.T) {
 	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")
 	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+	cc.RecordTurnstileInteractionProof(session.ID, checkboxTurnstileProof())
 
 	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
 	if err != nil {
@@ -391,6 +649,7 @@ func TestTurnstileStatusReturnsSessionTelemetry(t *testing.T) {
 	cc.PresentTurnstileWidget(session.ID, "localhost")
 	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileInteractionProof(session.ID, checkboxTurnstileProof())
 
 	req := httptest.NewRequest(http.MethodGet, "/api/cloudflare/status?session_id="+session.ID, nil)
 	w := httptest.NewRecorder()

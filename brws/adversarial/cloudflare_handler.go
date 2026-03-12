@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -201,7 +202,7 @@ func (cc *CloudflareChallenger) HandleInit(w http.ResponseWriter, r *http.Reques
 		if siteKey == "" {
 			siteKey = "0x4AAAAAAAfake_sitekey"
 		}
-		session = cc.CreateTurnstileChallenge(req.SessionID, siteKey)
+		session = cc.CreateTurnstileChallengeWithRisk(req.SessionID, siteKey, req.DetectionScore)
 	default:
 		// Default to managed challenge
 		session = cc.CreateManagedChallenge(req.SessionID, req.DetectionScore)
@@ -237,6 +238,39 @@ func (cc *CloudflareChallenger) HandleInit(w http.ResponseWriter, r *http.Reques
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+func turnstileInitialSubtitle(cfg TurnstileWidgetConfig) string {
+	switch cfg.Interaction.Type {
+	case turnstileInteractionHold:
+		return "Press and hold to continue"
+	case turnstileInteractionDrag:
+		return "Drag the handle to the end"
+	default:
+		return "Local Turnstile harness ready"
+	}
+}
+
+func turnstileControlMarkup(cfg TurnstileWidgetConfig) string {
+	switch cfg.Interaction.Type {
+	case turnstileInteractionHold:
+		return `<button class="cf-ts-hold" type="button" data-primary-control="true" aria-label="Local Turnstile harness hold button" aria-pressed="false">Hold</button>`
+	case turnstileInteractionDrag:
+		trackLength := cfg.Interaction.DragTrackLengthPx
+		if trackLength <= 0 {
+			trackLength = 220
+		}
+		return fmt.Sprintf(`<div class="cf-ts-slider" style="width:%dpx">
+          <div class="cf-ts-slider-track"></div>
+          <div class="cf-ts-slider-fill"></div>
+          <button class="cf-ts-slider-knob" type="button" data-primary-control="true" aria-label="Local Turnstile harness drag handle" aria-pressed="false"></button>
+        </div>`, trackLength)
+	default:
+		return `<button class="cf-ts-checkbox" type="button" data-primary-control="true" aria-label="Local Turnstile harness checkbox" aria-pressed="false">
+          <span class="cf-ts-spinner">↻</span>
+          <span class="cf-ts-check">✓</span>
+        </button>`
+	}
+}
+
 // HandleTurnstileWidgetPage serves a local Turnstile-style widget page for owned-environment testing.
 func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -253,10 +287,11 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
 	if siteKey == "" {
 		siteKey = "1x00000000000000000000AA"
 	}
+	detectionScore, _ := strconv.ParseFloat(r.URL.Query().Get("detection_score"), 64)
 
 	session, ok := cc.GetSession(sessionID)
 	if !ok || session.Type != ChallengeTurnstile {
-		session = cc.CreateTurnstileChallenge(sessionID, siteKey)
+		session = cc.CreateTurnstileChallengeWithRisk(sessionID, siteKey, detectionScore)
 	}
 
 	cc.PresentTurnstileWidget(session.ID, r.Host)
@@ -265,6 +300,9 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
 	w.Header().Set("Server", "cloudflare")
 	w.Header().Set("Cf-Ray", session.RayID)
 	w.WriteHeader(http.StatusForbidden)
+
+	initialSubtitle := turnstileInitialSubtitle(session.TurnstileConfig)
+	controlMarkup := turnstileControlMarkup(session.TurnstileConfig)
 
 	html := fmt.Sprintf(`<!DOCTYPE html>
 <html lang="en">
@@ -277,18 +315,34 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
     .cf-shell{width:min(420px,92vw);padding:28px;background:#fff;border:1px solid #e5e5e5;border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.08)}
     .cf-turnstile{min-height:65px;border:1px solid #d9d9d9;border-radius:12px;padding:12px;background:#fafafa}
     .cf-turnstile-shell{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}
+    .cf-ts-control{display:flex;align-items:center;justify-content:center;min-width:40px;min-height:32px}
     .cf-ts-checkbox{width:28px;height:28px;border:2px solid #8c8c8c;border-radius:6px;background:#fff;display:grid;place-items:center;padding:0;cursor:pointer;transition:border-color .18s ease, background-color .18s ease}
     .cf-ts-checkbox:hover{border-color:#3b82f6}
+    .cf-ts-hold{display:none;min-width:84px;height:32px;padding:0 14px;border:1px solid #8c8c8c;border-radius:999px;background:#fff;color:#1f2937;font-size:12px;font-weight:600;cursor:pointer;transition:border-color .18s ease, background-color .18s ease}
+    .cf-ts-hold:hover{border-color:#3b82f6}
+    .cf-ts-slider{display:none;position:relative;height:32px;align-items:center}
+    .cf-ts-slider-track{position:absolute;left:0;right:0;height:10px;border-radius:999px;background:#e5e7eb}
+    .cf-ts-slider-fill{position:absolute;left:0;width:18px;height:10px;border-radius:999px;background:#93c5fd;transition:width .08s linear}
+    .cf-ts-slider-knob{position:absolute;left:0;top:50%%;width:28px;height:28px;border:1px solid #9ca3af;border-radius:999px;background:#fff;transform:translate(0px,-50%%);box-shadow:0 1px 4px rgba(0,0,0,.12);cursor:grab}
     .cf-ts-spinner,.cf-ts-check{display:none;font-size:16px;line-height:1}
     .cf-ts-copy{min-width:0}
     .cf-ts-title{font-size:14px;font-weight:600;color:#1f2937}
     .cf-ts-subtitle{font-size:12px;color:#6b7280}
     .cf-ts-brand{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em}
+    .cf-turnstile[data-interaction="hold"] .cf-ts-hold{display:inline-flex;align-items:center;justify-content:center}
+    .cf-turnstile[data-interaction="drag"] .cf-ts-slider{display:flex}
+    .cf-turnstile[data-interaction="drag"] .cf-turnstile-shell{grid-template-columns:minmax(220px,1fr) 1fr auto}
+    .cf-turnstile[data-interaction="hold"] .cf-ts-checkbox,
+    .cf-turnstile[data-interaction="drag"] .cf-ts-checkbox{display:none}
     .cf-turnstile[data-state="solving"] .cf-ts-spinner{display:block;animation:cf-ts-spin 1s linear infinite}
     .cf-turnstile[data-state="solving"] .cf-ts-checkbox{border-color:#2563eb}
+    .cf-turnstile[data-state="solving"] .cf-ts-hold{border-color:#2563eb;background:#eff6ff}
     .cf-turnstile[data-state="complete"] .cf-ts-checkbox{border-color:#16a34a;background:#16a34a;color:#fff}
     .cf-turnstile[data-state="complete"] .cf-ts-check{display:block}
     .cf-turnstile[data-state="complete"] .cf-ts-spinner{display:none}
+    .cf-turnstile[data-state="complete"] .cf-ts-hold{border-color:#16a34a;background:#16a34a;color:#fff}
+    .cf-turnstile[data-state="complete"] .cf-ts-slider-fill{background:#16a34a}
+    .cf-turnstile[data-state="complete"] .cf-ts-slider-knob{background:#16a34a;border-color:#16a34a}
     @keyframes cf-ts-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     .cf-meta{margin-top:14px;color:#6f6f6f;font-size:12px}
   </style>
@@ -305,6 +359,12 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
       data-size="%s"
       data-appearance="%s"
       data-execution="%s"
+      data-risk-level="%s"
+      data-interaction="%s"
+      data-required-hold-ms="%d"
+      data-required-drag-distance="%d"
+      data-required-drag-events="%d"
+      data-drag-track-length="%d"
       data-retry="%s"
       data-retry-interval="%d"
       data-refresh-expired="%s"
@@ -316,13 +376,10 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
       data-timeout-callback="__tsTimeout"
       data-error-callback="__tsError">
       <div class="cf-turnstile-shell">
-        <button class="cf-ts-checkbox" type="button" aria-label="Local Turnstile harness checkbox" aria-pressed="false">
-          <span class="cf-ts-spinner">↻</span>
-          <span class="cf-ts-check">✓</span>
-        </button>
+        <div class="cf-ts-control">%s</div>
         <div class="cf-ts-copy">
           <div class="cf-ts-title">Verify you are human</div>
-          <div class="cf-ts-subtitle">Local Turnstile harness ready</div>
+          <div class="cf-ts-subtitle">%s</div>
         </div>
         <div class="cf-ts-brand">Turnstile</div>
       </div>
@@ -332,8 +389,18 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
   </main>
   <script>
     const __tsWidget = document.querySelector('.cf-turnstile');
-    const __tsCheckbox = document.querySelector('.cf-ts-checkbox');
+    const __tsPrimaryControl = document.querySelector('[data-primary-control="true"]');
     const __tsSubtitle = document.querySelector('.cf-ts-subtitle');
+    const __tsCheckbox = document.querySelector('.cf-ts-checkbox');
+    const __tsHoldButton = document.querySelector('.cf-ts-hold');
+    const __tsSlider = document.querySelector('.cf-ts-slider');
+    const __tsSliderFill = document.querySelector('.cf-ts-slider-fill');
+    const __tsSliderKnob = document.querySelector('.cf-ts-slider-knob');
+    const __tsVariant = (__tsWidget && __tsWidget.dataset.interaction) || 'checkbox';
+    const __tsRequiredHoldMs = parseInt((__tsWidget && __tsWidget.dataset.requiredHoldMs) || '900', 10);
+    const __tsRequiredDragDistance = parseInt((__tsWidget && __tsWidget.dataset.requiredDragDistance) || '160', 10);
+    const __tsRequiredDragEvents = parseInt((__tsWidget && __tsWidget.dataset.requiredDragEvents) || '6', 10);
+    const __tsDragTrackLength = parseInt((__tsWidget && __tsWidget.dataset.dragTrackLength) || '220', 10);
     function __tsSetState(state, subtitle){
       if (__tsWidget) {
         __tsWidget.dataset.state = state;
@@ -341,12 +408,15 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
       if (__tsSubtitle && subtitle) {
         __tsSubtitle.textContent = subtitle;
       }
-      if (__tsCheckbox) {
-        __tsCheckbox.setAttribute('aria-pressed', state === 'complete' ? 'true' : 'false');
+      if (__tsPrimaryControl && __tsPrimaryControl.setAttribute) {
+        __tsPrimaryControl.setAttribute('aria-pressed', state === 'complete' ? 'true' : 'false');
       }
     }
     function __tsPost(payload){
       navigator.sendBeacon('/cdn-cgi/challenge-platform/h/g/cv/result/%s', JSON.stringify(Object.assign({session_id: %q}, payload)));
+    }
+    function __tsPostInteraction(proof){
+      __tsPost({type: 'interaction', interaction: Object.assign({type: __tsVariant}, proof)});
     }
     function __tsSnapshot(){
       __tsPost({
@@ -379,8 +449,18 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
     function __tsExpired(){ __tsPostCallback('expired'); }
     function __tsTimeout(){ __tsPostCallback('timeout'); }
     function __tsError(){ __tsPostCallback('error'); }
+    function __tsArmSubtitle(){
+      switch (__tsVariant) {
+        case 'hold':
+          return 'Press and hold to continue';
+        case 'drag':
+          return 'Drag the handle to the end';
+        default:
+          return 'Interaction telemetry armed';
+      }
+    }
     setTimeout(function(){
-      __tsSetState('interactive', 'Interaction telemetry armed');
+      __tsSetState('interactive', __tsArmSubtitle());
       __tsAfterInteractive();
     }, 10);
     if (__tsCheckbox) {
@@ -390,8 +470,99 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
         }
         __tsSetState('solving', 'Checking your browser in the local harness...');
         setTimeout(function(){
+          __tsPostInteraction({completed: true, checkbox_clicks: 1});
           __tsSetState('complete', 'Interaction recorded. Submit via the lab flow to mint a token.');
         }, 650);
+      });
+    }
+    let __tsHoldStartedAt = 0;
+    if (__tsHoldButton) {
+      const __tsReleaseHold = function(){
+        if (!__tsHoldStartedAt) {
+          return;
+        }
+        const heldFor = Date.now() - __tsHoldStartedAt;
+        __tsHoldStartedAt = 0;
+        const completed = heldFor >= __tsRequiredHoldMs;
+        __tsPostInteraction({completed: completed, hold_duration_ms: heldFor});
+        if (completed) {
+          __tsSetState('complete', 'Hold interaction recorded. Submit via the lab flow to mint a token.');
+          return;
+        }
+        __tsSetState('interactive', 'Hold a little longer to continue');
+      };
+      __tsHoldButton.addEventListener('pointerdown', function(event){
+        event.preventDefault();
+        if (__tsWidget && __tsWidget.dataset.state === 'solving') {
+          return;
+        }
+        __tsHoldStartedAt = Date.now();
+        __tsSetState('solving', 'Keep holding to confirm you are human...');
+      });
+      window.addEventListener('pointerup', __tsReleaseHold);
+      window.addEventListener('pointercancel', __tsReleaseHold);
+    }
+    let __tsDragging = false;
+    let __tsDragOrigin = 0;
+    let __tsDragOffset = 0;
+    let __tsDragMoveCount = 0;
+    function __tsResetDrag(){
+      __tsDragOffset = 0;
+      __tsDragMoveCount = 0;
+      if (__tsSliderKnob) {
+        __tsSliderKnob.style.transform = 'translate(0px, -50%%)';
+      }
+      if (__tsSliderFill) {
+        __tsSliderFill.style.width = '18px';
+      }
+    }
+    if (__tsSlider && __tsSliderKnob) {
+      __tsSliderKnob.addEventListener('pointerdown', function(event){
+        event.preventDefault();
+        if (__tsWidget && __tsWidget.dataset.state === 'solving') {
+          return;
+        }
+        __tsDragging = true;
+        __tsDragOrigin = event.clientX;
+        __tsDragOffset = 0;
+        __tsDragMoveCount = 0;
+        __tsSetState('solving', 'Drag the handle to complete verification...');
+      });
+      window.addEventListener('pointermove', function(event){
+        if (!__tsDragging) {
+          return;
+        }
+        __tsDragMoveCount += 1;
+        const nextOffset = Math.max(0, Math.min(__tsDragTrackLength, event.clientX - __tsDragOrigin));
+        __tsDragOffset = nextOffset;
+        __tsSliderKnob.style.transform = 'translate(' + nextOffset + 'px, -50%%)';
+        __tsSliderFill.style.width = (18 + nextOffset) + 'px';
+      });
+      window.addEventListener('pointerup', function(){
+        if (!__tsDragging) {
+          return;
+        }
+        __tsDragging = false;
+        const completed = __tsDragOffset >= __tsRequiredDragDistance && __tsDragMoveCount >= __tsRequiredDragEvents;
+        __tsPostInteraction({
+          completed: completed,
+          drag_distance_px: Math.round(__tsDragOffset),
+          drag_event_count: __tsDragMoveCount
+        });
+        if (completed) {
+          __tsSetState('complete', 'Drag interaction recorded. Submit via the lab flow to mint a token.');
+          return;
+        }
+        __tsResetDrag();
+        __tsSetState('interactive', 'Drag the handle further to continue');
+      });
+      window.addEventListener('pointercancel', function(){
+        if (!__tsDragging) {
+          return;
+        }
+        __tsDragging = false;
+        __tsResetDrag();
+        __tsSetState('interactive', 'Drag the handle to the end');
       });
     }
   </script>
@@ -404,10 +575,18 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
 		session.TurnstileConfig.Size,
 		session.TurnstileConfig.Appearance,
 		session.TurnstileConfig.Execution,
+		session.TurnstileConfig.RiskLevel,
+		session.TurnstileConfig.Interaction.Type,
+		session.TurnstileConfig.Interaction.RequiredHoldMs,
+		session.TurnstileConfig.Interaction.RequiredDragDistancePx,
+		session.TurnstileConfig.Interaction.RequiredDragEventCount,
+		session.TurnstileConfig.Interaction.DragTrackLengthPx,
 		session.TurnstileConfig.RetryPolicy.Mode,
 		session.TurnstileConfig.RetryPolicy.IntervalMs,
 		session.TurnstileConfig.RefreshPolicy.Expired,
 		session.TurnstileConfig.RefreshPolicy.Timeout,
+		controlMarkup,
+		initialSubtitle,
 		session.RayID,
 		session.RayID,
 		session.ID,
@@ -729,11 +908,12 @@ func (cc *CloudflareChallenger) HandleChallengeCallback(w http.ResponseWriter, r
 	}
 
 	var payload struct {
-		SessionID  string                   `json:"session_id"`
-		Callback   string                   `json:"callback"`
-		Type       string                   `json:"type"`
-		LegacyType string                   `json:"t"`
-		Snapshot   *TurnstileClientSnapshot `json:"snapshot"`
+		SessionID   string                     `json:"session_id"`
+		Callback    string                     `json:"callback"`
+		Type        string                     `json:"type"`
+		LegacyType  string                     `json:"t"`
+		Snapshot    *TurnstileClientSnapshot   `json:"snapshot"`
+		Interaction *TurnstileInteractionProof `json:"interaction"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&payload)
 	if payload.Type == "" {
@@ -756,6 +936,8 @@ func (cc *CloudflareChallenger) HandleChallengeCallback(w http.ResponseWriter, r
 	case matchedSessionID == "":
 	case payload.Callback != "":
 		cc.RecordTurnstileCallback(matchedSessionID, payload.Callback)
+	case payload.Type == "interaction" || payload.Interaction != nil:
+		cc.RecordTurnstileInteractionProof(matchedSessionID, payload.Interaction)
 	case payload.Type == "snapshot" || payload.Snapshot != nil:
 		cc.RecordTurnstileClientSnapshot(matchedSessionID, payload.Snapshot)
 	case payload.Type == "fp":
