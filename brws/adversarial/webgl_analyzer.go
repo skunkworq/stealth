@@ -3,6 +3,7 @@ package adversarial
 import (
 	"fmt"
 	"math"
+	"sort"
 	"strings"
 )
 
@@ -18,8 +19,17 @@ type WebGLData struct {
 	MaxTextureSize    int      `json:"max_texture_size"`
 	MaxViewportWidth  int      `json:"max_viewport_width"`
 	MaxViewportHeight int      `json:"max_viewport_height"`
-	Platform          string   `json:"platform"`
-	Extensions        []string `json:"webgl_extensions"`
+	Platform          string                            `json:"platform"`
+	Extensions        []string                          `json:"webgl_extensions"`
+	ShaderPrecision   map[string]ShaderPrecisionFormat `json:"shader_precision"`
+	ContextAttributes map[string]interface{}            `json:"context_attributes"`
+}
+
+// ShaderPrecisionFormat matches the WebGLShaderPrecisionFormat interface.
+type ShaderPrecisionFormat struct {
+	RangeMin  int `json:"range_min"`
+	RangeMax  int `json:"range_max"`
+	Precision int `json:"precision"`
 }
 
 // WebGLAnalyzer validates WebGL parameters for consistency and spoofing detection.
@@ -67,7 +77,7 @@ func (wa *WebGLAnalyzer) Analyze(data *WebGLData) *VectorResult {
 	}
 
 	// Check 1: Renderer vs platform mismatch
-	mismatchScore := wa.validateRendererVsPlatform(data.Renderer, data.Platform)
+	mismatchScore := wa.validateRendererVsPlatform(data.Renderer, data.UnmaskedRenderer, data.Platform)
 	if mismatchScore > 0 {
 		weight := 0.40
 		result.Indicators = append(result.Indicators, VectorIndicator{
@@ -215,6 +225,62 @@ func (wa *WebGLAnalyzer) Analyze(data *WebGLData) *VectorResult {
 		}
 	}
 
+	// Check 9: WebGL parameter vs Renderer consistency (MAX_TEXTURE_SIZE)
+	paramScore := wa.validateWebGLParameters(data)
+	if paramScore > 0 {
+		weight := 0.45
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "webgl_parameter_mismatch",
+			Message: fmt.Sprintf("MAX_TEXTURE_SIZE (%d) is too low for GPU renderer '%s'", data.MaxTextureSize, data.Renderer),
+			Weight:  weight,
+			Field:   "max_texture_size",
+			Value:   fmt.Sprintf("%d", data.MaxTextureSize),
+		})
+		result.Score += weight * paramScore
+	}
+
+	// Check 10: Missing common draft extensions
+	draftScore := wa.checkDraftExtensions(data.Extensions)
+	if draftScore > 0 {
+		weight := 0.25
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "missing_webgl_draft_extensions",
+			Message: "Common WebGL draft extensions (e.g. EXT_disjoint_timer_query_webgl2) are missing",
+			Weight:  weight,
+			Field:   "extensions",
+			Value:   fmt.Sprintf("%d", len(data.Extensions)),
+		})
+		result.Score += weight * draftScore
+	}
+
+	// Check 11: Shader Precision Validation (Phase 71)
+	precisionScore := wa.validateShaderPrecision(data)
+	if precisionScore > 0 {
+		weight := 0.45
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "webgl_shader_precision_mismatch",
+			Message: "WebGL shader precision values are inconsistent with the reported GPU renderer",
+			Weight:  weight,
+			Field:   "shader_precision",
+			Value:   "mismatch",
+		})
+		result.Score += weight * precisionScore
+	}
+
+	// Check 12: Advanced Context Attributes (Phase 89)
+	attrScore := wa.checkWebGLContextAttributes(data)
+	if attrScore > 0 {
+		weight := 0.35
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "webgl_context_attributes_mismatch",
+			Message: "WebGL context attributes (antialias, depth, etc.) are suspicious or missing",
+			Weight:  weight,
+			Field:   "context_attributes",
+			Value:   "mismatch",
+		})
+		result.Score += weight * attrScore
+	}
+
 	result.Score = math.Min(1.0, result.Score)
 	result.Detected = result.Score > 0.3
 
@@ -222,8 +288,8 @@ func (wa *WebGLAnalyzer) Analyze(data *WebGLData) *VectorResult {
 }
 
 // validateRendererVsPlatform checks if the GPU renderer is plausible for the platform.
-func (wa *WebGLAnalyzer) validateRendererVsPlatform(renderer, platform string) float64 {
-	if renderer == "" || platform == "" {
+func (wa *WebGLAnalyzer) validateRendererVsPlatform(renderer, unmasked, platform string) float64 {
+	if (renderer == "" && unmasked == "") || platform == "" {
 		return 0
 	}
 
@@ -232,15 +298,27 @@ func (wa *WebGLAnalyzer) validateRendererVsPlatform(renderer, platform string) f
 		return 0 // Unknown platform, can't validate
 	}
 
-	rendererLower := strings.ToLower(renderer)
-	for _, gpu := range gpuList {
-		if strings.Contains(rendererLower, strings.ToLower(gpu)) {
-			return 0 // Match found
+	renderers := []string{renderer, unmasked}
+	for _, r := range renderers {
+		if r == "" {
+			continue
+		}
+		rendererLower := strings.ToLower(r)
+		match := false
+		for _, gpu := range gpuList {
+			if strings.Contains(rendererLower, strings.ToLower(gpu)) {
+				match = true
+				break
+			}
+		}
+		if !match {
+			// No match — e.g., Apple GPU claimed on Win32, or NVIDIA on Mac (modern)
+			// But careful: older Macs DID have NVIDIA. However, for "MacIntel" it's usually Intel/AMD/Apple.
+			return 1.0
 		}
 	}
 
-	// No match — e.g., Apple GPU claimed on Win32
-	return 1.0
+	return 0
 }
 
 // detectSoftwareRenderer identifies software renderers commonly found in headless.
@@ -347,4 +425,160 @@ func isModernGPU(renderer string) bool {
 		}
 	}
 	return false
+}
+
+func (wa *WebGLAnalyzer) validateWebGLParameters(data *WebGLData) float64 {
+	if data.MaxTextureSize == 0 || data.Renderer == "" {
+		return 0
+	}
+
+	r := strings.ToLower(data.Renderer)
+
+	// Profiles for high-end GPUs that should definitely have >= 16384
+	highEndKeywords := []string{
+		"rtx 30", "rtx 40", "rtx 50",
+		"rx 6", "rx 7",
+		"apple m1", "apple m2", "apple m3", "apple m4",
+		"iris xe", "geforce 40", "geforce 30",
+	}
+
+	isHighEnd := false
+	for _, kw := range highEndKeywords {
+		if strings.Contains(r, kw) {
+			isHighEnd = true
+			break
+		}
+	}
+
+	if isHighEnd && data.MaxTextureSize < 16384 {
+		// RT 4090 reporting 4096 or 8192 is a clear spoofing indicator.
+		return 1.0
+	}
+
+	// Mid-range or Older but still should be >= 8192
+	if data.MaxTextureSize < 8192 && !strings.Contains(r, "intel") {
+		// Most discrete GPUs since 2012 support 16384; 8192 is a very safe floor.
+		return 0.5
+	}
+
+	return 0
+}
+func (wa *WebGLAnalyzer) checkDraftExtensions(extensions []string) float64 {
+	if len(extensions) == 0 {
+		return 0
+	}
+
+	// Draft extensions often missing in basic spoofers but present in real browsers
+	draftExts := []string{
+		"EXT_disjoint_timer_query_webgl2",
+		"WEBGL_debug_renderer_info",
+		"WEBGL_debug_shaders",
+	}
+
+	missingCount := 0
+	extMap := make(map[string]bool)
+	for _, e := range extensions {
+		extMap[e] = true
+	}
+
+	for _, de := range draftExts {
+		if !extMap[de] {
+			missingCount++
+		}
+	}
+
+	if missingCount >= 2 {
+		return 1.0
+	} else if missingCount == 1 {
+		return 0.5
+	}
+
+	return 0
+}
+func (wa *WebGLAnalyzer) validateShaderPrecision(data *WebGLData) float64 {
+	if data.ShaderPrecision == nil || len(data.ShaderPrecision) == 0 {
+		// If missing entirely, could be an old telemetry format or a simplified spoofer
+		return 0.3
+	}
+
+	r := strings.ToLower(data.Renderer)
+
+	// High-float precision is a common check.
+	// Key format: "FRAGMENT_SHADER_HIGH_FLOAT"
+	highFloat, ok := data.ShaderPrecision["FRAGMENT_SHADER_HIGH_FLOAT"]
+	if !ok {
+		return 0.5
+	}
+
+	// Software renderers (e.g. SwiftShader) often report specific fixed values.
+	// SwiftShader: rangeMin: 127, rangeMax: 127, precision: 23 (often seen in Headless Chrome)
+	if highFloat.RangeMin == 127 && highFloat.RangeMax == 127 {
+		if !strings.Contains(r, "swiftshader") && !strings.Contains(r, "llvmpipe") {
+			// Discrete GPUs (NVIDIA/AMD/Apple) never report 127/127 for High Float.
+			// NVIDIA typically has 127/127 for range but precision is 23 or higher.
+			// Actually, standard IEEE 754 float32 is 127/127/23.
+			// However, real GPUs often report differently in WebGL.
+		}
+	}
+
+	// Apple M1/M2/M3: Fragmment High Float is usually 127/127/23.
+	// NVIDIA: 127/127/23 is also common.
+	// The most suspicious thing is "missing" or "static" values across all types.
+
+	// Check for "Static Spoofer" (Everything is the same)
+	vals := []string{}
+	for k, v := range data.ShaderPrecision {
+		vals = append(vals, fmt.Sprintf("%s:%d,%d,%d", k, v.RangeMin, v.RangeMax, v.Precision))
+	}
+	sort.Strings(vals)
+	
+	// If it's a very short list (fewer than 6 - Low/Med/High for Vert/Frag), it's likely synthetic.
+	if len(data.ShaderPrecision) < 6 {
+		return 1.0
+	}
+
+	return 0
+}
+
+// checkWebGLContextAttributes validates parameters like antialias, depth, stencil, etc.
+func (wa *WebGLAnalyzer) checkWebGLContextAttributes(data *WebGLData) float64 {
+	if data.ContextAttributes == nil || len(data.ContextAttributes) == 0 {
+		return 0.5 // Missing attributes is suspicious
+	}
+
+	attrs := data.ContextAttributes
+
+	// Common defaults and patterns
+	// antialias is usually true on real hardware (Windows/Mac)
+	antialias, hasAntialias := attrs["antialias"].(bool)
+	depth, hasDepth := attrs["depth"].(bool)
+	stencil, hasStencil := attrs["stencil"].(bool)
+
+	score := 0.0
+
+	if hasAntialias && !antialias {
+		// Headless/SwiftShader sometimes has antialias false by default
+		if !strings.Contains(strings.ToLower(data.Renderer), "intel") {
+			score += 0.3
+		}
+	}
+
+	// depth and stencil are almost always true in real browsers
+	if hasDepth && !depth {
+		score += 0.4
+	}
+	if hasStencil && !stencil {
+		score += 0.3
+	}
+
+	// desynchronized is a modern performance attribute, missing or false is okay but
+	// if it exists and is true on a very old reported renderer, it's a mismatch.
+	if desync, ok := attrs["desynchronized"].(bool); ok && desync {
+		if strings.Contains(strings.ToLower(data.Renderer), "gtx 6") || 
+		   strings.Contains(strings.ToLower(data.Renderer), "radeon hd") {
+			score += 0.5
+		}
+	}
+
+	return math.Min(1.0, score)
 }

@@ -1,6 +1,9 @@
 package semantic
 
-import "sync/atomic"
+import (
+	"context"
+	"sync/atomic"
+)
 
 // CompressionStats tracks pipeline compression metrics.
 type CompressionStats struct {
@@ -38,6 +41,7 @@ type pipelineStats struct {
 	cacheHits        uint32
 	llmCalls         uint32
 	llmSemaphore     chan struct{}
+	workSemaphore    chan struct{}
 	maxConcurrentLLM int
 }
 
@@ -56,5 +60,26 @@ func (s *pipelineStats) acquireLLMSlot() {
 func (s *pipelineStats) releaseLLMSlot() {
 	if s.llmSemaphore != nil {
 		<-s.llmSemaphore
+	}
+}
+
+func (s *pipelineStats) tryAcquireWorkSlot(ctx context.Context) bool {
+	if s.workSemaphore == nil {
+		return true
+	}
+
+	select {
+	case s.workSemaphore <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	default:
+		return false
+	}
+}
+
+func (s *pipelineStats) releaseWorkSlot() {
+	if s.workSemaphore != nil {
+		<-s.workSemaphore
 	}
 }

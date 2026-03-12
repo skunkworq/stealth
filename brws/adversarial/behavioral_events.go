@@ -33,6 +33,9 @@ type EnhancedBehavioralEvents struct {
 	// Phase 10: Scroll directions — positive=down, negative=up
 	ScrollDirections []float64
 
+	// Phase 46: Error stack trace
+	ErrorStack string
+
 	// Metrics from header (fallback)
 	EventTimingStdDev float64
 	MouseStraightness float64
@@ -166,6 +169,9 @@ func NewEnhancedBehavioralEventsFromMap(behav map[string]interface{}) *EnhancedB
 	}
 	if v, ok := behav["mouseStraightness"].(float64); ok {
 		events.MouseStraightness = v
+	}
+	if v, ok := behav["errorStack"].(string); ok {
+		events.ErrorStack = v
 	}
 
 	return events

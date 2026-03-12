@@ -38,11 +38,14 @@ type CloudflareChallenge struct {
 
 // CloudflareSolution represents a solved challenge.
 type CloudflareSolution struct {
-	ClearanceCookie *http.Cookie `json:"clearance_cookie,omitempty"`
-	TurnstileToken  string       `json:"turnstile_token,omitempty"`
-	SolvedAt        time.Time    `json:"solved_at"`
-	SolveTimeMs     int64        `json:"solve_time_ms"`
-	Method          string       `json:"method"`
+	ClearanceCookie *http.Cookie        `json:"clearance_cookie,omitempty"`
+	TurnstileToken  string              `json:"turnstile_token,omitempty"`
+	Turnstile       *LabTurnstileToken  `json:"turnstile,omitempty"`
+	Telemetry       *WidgetTelemetry    `json:"widget_telemetry,omitempty"`
+	Verification    *VerificationResult `json:"verification,omitempty"`
+	SolvedAt        time.Time           `json:"solved_at"`
+	SolveTimeMs     int64               `json:"solve_time_ms"`
+	Method          string              `json:"method"`
 }
 
 // CloudflareSolver is the interface for solving Cloudflare challenges.
@@ -176,9 +179,9 @@ func extractPoWParams(body string) *PoWChallenge {
 	}
 
 	return &PoWChallenge{
-		Prefix:    opts.PoW.Prefix,
+		Prefix:     opts.PoW.Prefix,
 		Difficulty: opts.PoW.Difficulty,
-		Algorithm: opts.PoW.Algorithm,
+		Algorithm:  opts.PoW.Algorithm,
 	}
 }
 

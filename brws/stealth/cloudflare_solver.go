@@ -10,6 +10,10 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/cookiejar"
+	"net/netip"
+	"net/url"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/skunkworq/stealth/brws/adversarial"
@@ -20,27 +24,30 @@ import (
 // The fingerprint is pinned on first generation and reused for the lifetime
 // of the client, ensuring session consistency (P7.2).
 type CloudflareSolverClient struct {
-	httpClient         *http.Client
-	eventGen           *CaptchaSolver
-	rng                *rand.Rand
-	maxIterations      int64
-	pinnedFingerprint  *adversarial.FingerprintPayload
-	pinnedProfile      *behavior.BrowserProfile
+	httpClient        *http.Client
+	eventGen          *CaptchaSolver
+	rng               *rand.Rand
+	maxIterations     int64
+	pinnedFingerprint *adversarial.FingerprintPayload
+	pinnedProfile     *behavior.BrowserProfile
 }
 
 // CloudflareSolveResult holds the outcome of a Cloudflare challenge solve attempt.
 type CloudflareSolveResult struct {
-	SessionID        string       `json:"session_id"`
-	ChallengeType    string       `json:"challenge_type"`
-	Passed           bool         `json:"passed"`
-	ClearanceCookie  *http.Cookie `json:"clearance_cookie,omitempty"`
-	TurnstileToken   string       `json:"turnstile_token,omitempty"`
-	PoWTimeMs        int64        `json:"pow_time_ms"`
-	TotalTimeMs      int64        `json:"total_time_ms"`
-	PoWIterations    int64        `json:"pow_iterations"`
-	PoWDifficulty    int          `json:"pow_difficulty"`
-	BehavioralScore  float64      `json:"behavioral_score"`
-	FingerprintScore float64      `json:"fingerprint_score"`
+	SessionID        string                          `json:"session_id"`
+	ChallengeType    string                          `json:"challenge_type"`
+	Passed           bool                            `json:"passed"`
+	ClearanceCookie  *http.Cookie                    `json:"clearance_cookie,omitempty"`
+	TurnstileToken   string                          `json:"turnstile_token,omitempty"`
+	Turnstile        *adversarial.LabTurnstileToken  `json:"turnstile,omitempty"`
+	WidgetTelemetry  *adversarial.WidgetTelemetry    `json:"widget_telemetry,omitempty"`
+	Verification     *adversarial.VerificationResult `json:"verification,omitempty"`
+	PoWTimeMs        int64                           `json:"pow_time_ms"`
+	TotalTimeMs      int64                           `json:"total_time_ms"`
+	PoWIterations    int64                           `json:"pow_iterations"`
+	PoWDifficulty    int                             `json:"pow_difficulty"`
+	BehavioralScore  float64                         `json:"behavioral_score"`
+	FingerprintScore float64                         `json:"fingerprint_score"`
 }
 
 // NewCloudflareSolverClient creates a new solver client.
@@ -60,27 +67,33 @@ func NewCloudflareSolverClient() *CloudflareSolverClient {
 
 // cfInitResp mirrors the server's init response.
 type cfInitResp struct {
-	SessionID           string                   `json:"session_id"`
-	Type                string                   `json:"type"`
-	RayID               string                   `json:"ray_id"`
-	PoW                 *adversarial.PoWChallenge `json:"pow"`
-	RequiresFingerprint bool                     `json:"requires_fingerprint"`
-	RequiresBehavioral  bool                     `json:"requires_behavioral"`
-	SiteKey             string                   `json:"site_key,omitempty"`
+	SessionID           string                             `json:"session_id"`
+	Type                string                             `json:"type"`
+	RayID               string                             `json:"ray_id"`
+	PoW                 *adversarial.PoWChallenge          `json:"pow"`
+	RequiresFingerprint bool                               `json:"requires_fingerprint"`
+	RequiresBehavioral  bool                               `json:"requires_behavioral"`
+	SiteKey             string                             `json:"site_key,omitempty"`
+	Turnstile           *adversarial.TurnstileWidgetConfig `json:"turnstile,omitempty"`
 }
 
 // cfSolveResp mirrors the server's solve response.
 type cfSolveResp struct {
-	Success        bool   `json:"success"`
-	Error          string `json:"error,omitempty"`
-	Method         string `json:"method,omitempty"`
-	SolveMs        int64  `json:"solve_ms,omitempty"`
-	CfClearance    string `json:"cf_clearance,omitempty"`
-	TurnstileToken string `json:"turnstile_token,omitempty"`
+	Success         bool                           `json:"success"`
+	Error           string                         `json:"error,omitempty"`
+	Method          string                         `json:"method,omitempty"`
+	SolveMs         int64                          `json:"solve_ms,omitempty"`
+	CfClearance     string                         `json:"cf_clearance,omitempty"`
+	TurnstileToken  string                         `json:"turnstile_token,omitempty"`
+	Turnstile       *adversarial.LabTurnstileToken `json:"turnstile,omitempty"`
+	WidgetTelemetry *adversarial.WidgetTelemetry   `json:"widget_telemetry,omitempty"`
 }
 
 // SolveJSChallenge performs the full init→solvePoW→submit flow for a JS challenge.
 func (cs *CloudflareSolverClient) SolveJSChallenge(baseURL string) (*CloudflareSolveResult, error) {
+	if err := ensureCloudflareLabHostAllowed(baseURL); err != nil {
+		return nil, err
+	}
 	totalStart := time.Now()
 
 	// Step 1: Init
@@ -132,6 +145,9 @@ func (cs *CloudflareSolverClient) SolveJSChallenge(baseURL string) (*CloudflareS
 // SolveManagedChallenge performs the full managed challenge flow:
 // init → solvePoW + generateFingerprint + generateEvents → human delay → submit
 func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*CloudflareSolveResult, error) {
+	if err := ensureCloudflareLabHostAllowed(baseURL); err != nil {
+		return nil, err
+	}
 	totalStart := time.Now()
 
 	// Step 1: Init
@@ -195,8 +211,11 @@ func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*Cloudf
 	return result, nil
 }
 
-// SolveTurnstile performs the full Turnstile challenge flow.
-func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSolveResult, error) {
+// HandleTurnstileLab performs the full local Turnstile challenge flow against owned environments only.
+func (cs *CloudflareSolverClient) HandleTurnstileLab(baseURL string) (*CloudflareSolveResult, error) {
+	if err := ensureCloudflareLabHostAllowed(baseURL); err != nil {
+		return nil, err
+	}
 	totalStart := time.Now()
 
 	// Step 1: Init
@@ -233,14 +252,16 @@ func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSol
 	}
 
 	result := &CloudflareSolveResult{
-		SessionID:      initResp.SessionID,
-		ChallengeType:  "cloudflare_turnstile",
-		Passed:         solveResp.Success,
-		TurnstileToken: solveResp.TurnstileToken,
-		PoWTimeMs:      powSolution.TimeMs,
-		TotalTimeMs:    time.Since(totalStart).Milliseconds(),
-		PoWIterations:  powSolution.Iterations,
-		PoWDifficulty:  initResp.PoW.Difficulty,
+		SessionID:       initResp.SessionID,
+		ChallengeType:   "cloudflare_turnstile",
+		Passed:          solveResp.Success,
+		TurnstileToken:  solveResp.TurnstileToken,
+		Turnstile:       solveResp.Turnstile,
+		WidgetTelemetry: solveResp.WidgetTelemetry,
+		PoWTimeMs:       powSolution.TimeMs,
+		TotalTimeMs:     time.Since(totalStart).Milliseconds(),
+		PoWIterations:   powSolution.Iterations,
+		PoWDifficulty:   initResp.PoW.Difficulty,
 	}
 
 	if solveResp.Success {
@@ -248,6 +269,11 @@ func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSol
 	}
 
 	return result, nil
+}
+
+// SolveTurnstile is kept as a compatibility wrapper around the lab-only handler.
+func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSolveResult, error) {
+	return cs.HandleTurnstileLab(baseURL)
 }
 
 // initChallenge sends a POST to /api/cloudflare/init and returns the session.
@@ -389,8 +415,8 @@ func (cs *CloudflareSolverClient) generateFingerprint() *adversarial.Fingerprint
 		0x49, 0x48, 0x44, 0x52, // "IHDR"
 		0x00, 0x00, 0x00, 0x01, // width = 1
 		0x00, 0x00, 0x00, 0x01, // height = 1
-		0x08, 0x02,             // bit depth 8, color type RGB
-		0x00, 0x00, 0x00,       // compression, filter, interlace
+		0x08, 0x02, // bit depth 8, color type RGB
+		0x00, 0x00, 0x00, // compression, filter, interlace
 		0x90, 0x77, 0x53, 0xDE, // IHDR CRC
 	}
 	pixelByte := byte(cs.rng.Intn(256))
@@ -508,4 +534,43 @@ func extractCfClearanceCookie(resp *http.Response) *http.Cookie {
 		}
 	}
 	return nil
+}
+
+func ensureCloudflareLabHostAllowed(baseURL string) error {
+	parsed, err := url.Parse(baseURL)
+	if err != nil {
+		return fmt.Errorf("parse base URL: %w", err)
+	}
+
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" {
+		return fmt.Errorf("cloudflare lab flow requires a hostname")
+	}
+
+	if adversarialHostAllowed(host) {
+		return nil
+	}
+
+	return fmt.Errorf("cloudflare lab flow is restricted to localhost, loopback, or explicitly allowlisted owned hosts: %s", host)
+}
+
+func adversarialHostAllowed(host string) bool {
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+
+	if ip, err := netip.ParseAddr(host); err == nil && ip.IsLoopback() {
+		return true
+	}
+
+	for _, envKey := range []string{"STEALTH_CLOUDFLARE_ALLOWED_HOSTS", "STEALTH_TURNSTILE_ALLOWED_HOSTS"} {
+		for _, candidate := range strings.Split(os.Getenv(envKey), ",") {
+			candidate = strings.TrimSpace(strings.ToLower(candidate))
+			if candidate != "" && candidate == host {
+				return true
+			}
+		}
+	}
+
+	return false
 }

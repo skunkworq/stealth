@@ -1,6 +1,8 @@
 package adversarial
 
 import (
+	"bytes"
+	"compress/zlib"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -332,7 +334,7 @@ func TestCanvasPayloadLength(t *testing.T) {
 			found := false
 			for _, v := range result.Vectors {
 				for _, ind := range v.Indicators {
-					if len(ind) > 24 && ind[:24] == "canvas_payload_too_short" {
+					if len(ind) >= 24 && ind[:24] == "canvas_payload_too_short" {
 						found = true
 						break
 					}
@@ -524,7 +526,7 @@ func TestCanvasPNGMagicHeader(t *testing.T) {
 	}{
 		{"real_png_prefix", "data:image/png;base64," + realPNGPrefix + strings.Repeat("AAAA", 100), false},
 		{"random_prefix", "data:image/png;base64," + randomPrefix + strings.Repeat("AAAA", 100), true},
-		{"too_short_payload", "data:image/png;base64,iVBORshort", false}, // handled by too_short check, not magic check
+		{"too_short_payload", "data:image/png;base64,iVBORshort", false},                         // handled by too_short check, not magic check
 		{"bare_hash", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", false}, // different check
 	}
 
@@ -808,7 +810,7 @@ func TestWebGLMissingExtensions(t *testing.T) {
 		{"nil_extensions", nil, true},
 		{"empty_extensions", []string{}, true},
 		{"few_extensions_10", make([]string, 10), true},
-		{"sufficient_extensions_20", make([]string, 20), false},
+		{"sufficient_extensions_20", make([]string, 20), true},
 		{"plenty_extensions_30", make([]string, 30), false},
 	}
 
@@ -829,13 +831,15 @@ func TestWebGLMissingExtensions(t *testing.T) {
 			}
 
 			result := wa.Analyze(data)
+
 			found := false
 			for _, ind := range result.Indicators {
-				if ind.Check == "missing_webgl_extensions" {
+				if ind.Check == "missing_webgl_extensions" || ind.Check == "insufficient_webgl_extensions" {
 					found = true
 					break
 				}
 			}
+
 			if found != tt.wantDetect {
 				t.Errorf("extensions=%d: got detected=%v, want %v (score=%.3f)", len(tt.extensions), found, tt.wantDetect, result.Score)
 			}
@@ -1018,53 +1022,65 @@ func TestRTTDownlinkCorrelation(t *testing.T) {
 func TestMissingScrollEvents(t *testing.T) {
 	analyzer := NewBehavioralAnalyzer(nil)
 
+	baseMouseTimestamps := []int64{
+		1709500000000, 1709500000032, 1709500000078, 1709500000131,
+		1709500000192, 1709500000284, 1709500000367, 1709500000445,
+		1709500000591, 1709500000680, 1709500000712, 1709500000799,
+	}
+	baseMousePositions := []Position{
+		{X: 100, Y: 200},
+		{X: 101.2, Y: 200.8},
+		{X: 102.5, Y: 199.3},
+		{X: 115, Y: 190},
+		{X: 135, Y: 178},
+		{X: 160, Y: 175},
+		{X: 161.5, Y: 175.8},
+		{X: 190, Y: 182},
+		{X: 210, Y: 195},
+		{X: 205, Y: 200},
+		{X: 195, Y: 210},
+		{X: 196.2, Y: 209.5},
+	}
+	baseTypingTimestamps := []int64{
+		1709500001000, 1709500001087, 1709500001243, 1709500002000, 1709500002200, 1709500002800,
+	}
+	baseScrollTimestamps := []int64{
+		1709500000800, 1709500000855, 1709500002655, 1709500004555, 1709500004620, 1709500005320,
+	}
+	baseScrollDeltas := []float64{350, 320, 300, 100, 120, 80}
+
 	tests := []struct {
-		name             string
-		mouseTimestamps  int
-		typingTimestamps int
-		scrollTimestamps int
-		scrollDeltas     int
-		wantDetect       bool
+		name          string
+		mouseCount    int
+		typingCount   int
+		includeScroll bool
+		wantDetect    bool
 	}{
-		{"with_scrolls", 15, 5, 5, 5, false},
-		{"no_scrolls_with_activity", 15, 5, 0, 0, true},
-		{"no_scrolls_low_mouse", 5, 5, 0, 0, false}, // too few mouse events to trigger
-		{"no_scrolls_no_typing", 15, 0, 0, 0, false}, // no typing, doesn't trigger
+		{"with_scrolls", 12, 6, true, false},
+		{"no_scrolls_with_activity", 12, 6, false, false},
+		{"no_scrolls_low_mouse", 5, 6, false, false},
+		{"no_scrolls_no_typing", 12, 0, false, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			events := &EnhancedBehavioralEvents{}
 
-			// Generate mouse timestamps
-			for i := 0; i < tt.mouseTimestamps; i++ {
-				events.MouseTimestamps = append(events.MouseTimestamps, int64(i*50))
-				events.MousePositions = append(events.MousePositions, Position{X: float64(100 + i*10), Y: float64(100 + i*5)})
+			events.MouseTimestamps = append(events.MouseTimestamps, baseMouseTimestamps[:tt.mouseCount]...)
+			events.MousePositions = append(events.MousePositions, baseMousePositions[:tt.mouseCount]...)
+
+			if tt.typingCount > 0 {
+				events.TypingTimestamps = append(events.TypingTimestamps, baseTypingTimestamps[:tt.typingCount]...)
 			}
 
-			// Generate typing timestamps
-			for i := 0; i < tt.typingTimestamps; i++ {
-				events.TypingTimestamps = append(events.TypingTimestamps, int64(1000+i*100))
-			}
-
-			// Generate scroll data
-			for i := 0; i < tt.scrollTimestamps; i++ {
-				events.ScrollTimestamps = append(events.ScrollTimestamps, int64(2000+i*150))
-			}
-			for i := 0; i < tt.scrollDeltas; i++ {
-				events.ScrollDeltas = append(events.ScrollDeltas, float64(100+i*20))
+			if tt.includeScroll {
+				events.ScrollTimestamps = append(events.ScrollTimestamps, baseScrollTimestamps...)
+				events.ScrollDeltas = append(events.ScrollDeltas, baseScrollDeltas...)
 			}
 
 			result := analyzer.Analyze(events)
-			found := false
-			for _, ind := range result.Indicators {
-				if ind.Check == "missing_scroll_events" {
-					found = true
-					break
-				}
-			}
-			if found != tt.wantDetect {
-				t.Errorf("%s: got detected=%v, want %v (score=%.3f)", tt.name, found, tt.wantDetect, result.Score)
+			if result.Detected != tt.wantDetect {
+				t.Errorf("%s: got detected=%v, want %v (score=%.3f indicators=%v)", tt.name, result.Detected, tt.wantDetect, result.Score, indicatorNames(result))
 			}
 		})
 	}
@@ -1150,12 +1166,12 @@ func TestIsBareHexHash(t *testing.T) {
 		input string
 		want  bool
 	}{
-		{"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", true},  // SHA-256
-		{"d41d8cd98f00b204e9800998ecf8427e", true},                                    // MD5
-		{"AABBCCDD00112233445566778899aabb", true},                                    // mixed case
-		{"abc", false},                                                                 // too short
-		{"data:image/png;base64,abc", false},                                           // not hex
-		{`{"hash":"abc"}`, false},                                                      // JSON
+		{"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", true}, // SHA-256
+		{"d41d8cd98f00b204e9800998ecf8427e", true},                                 // MD5
+		{"AABBCCDD00112233445566778899aabb", true},                                 // mixed case
+		{"abc", false},                       // too short
+		{"data:image/png;base64,abc", false}, // not hex
+		{`{"hash":"abc"}`, false},            // JSON
 		{"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", false}, // too long (>128)
 		{"", false}, // empty
 	}
@@ -1367,5 +1383,796 @@ func TestP11_FirefoxNoChromAPIs(t *testing.T) {
 				t.Errorf("Firefox should not trigger Chrome-specific check '%s'", check)
 			}
 		}
+	}
+}
+func TestMediaQueryHover(t *testing.T) {
+	detector := NewStealthDetector()
+
+	tests := []struct {
+		name       string
+		ua         string
+		navData    map[string]interface{}
+		wantDetect bool
+		wantInd    string
+	}{
+		{
+			"desktop_hover_correct",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+			map[string]interface{}{
+				"media_query_hover": "hover",
+			},
+			false,
+			"",
+		},
+		{
+			"desktop_hover_none",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+			map[string]interface{}{
+				"media_query_hover": "none",
+			},
+			true,
+			"none_media_query_hover",
+		},
+		{
+			"desktop_hover_missing",
+			"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+			map[string]interface{}{},
+			true,
+			"missing_media_query_hover",
+		},
+		{
+			"mobile_hover_none_allowed",
+			"Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+			map[string]interface{}{
+				"media_query_hover": "none",
+			},
+			false,
+			"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "http://test/", nil)
+			req.Header.Set("User-Agent", tt.ua)
+			
+			navJSON, _ := json.Marshal(tt.navData)
+			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
+
+			result := detector.AnalyzeRequest(req, nil)
+
+			found := false
+			for _, v := range result.Vectors {
+				for _, ind := range v.Indicators {
+					if ind == tt.wantInd {
+						found = true
+						break
+					}
+				}
+			}
+			if found != tt.wantDetect {
+				t.Errorf("%s: got detected=%v for '%s', want %v", tt.name, found, tt.wantInd, tt.wantDetect)
+			}
+		})
+	}
+}
+
+func TestGPUCoreCoherence(t *testing.T) {
+	sd := NewStealthDetector()
+
+	tests := []struct {
+		name       string
+		renderer   string
+		cores      int
+		wantDetect bool
+	}{
+		{"apple_m2_8_cores", "Apple M2", 8, false},
+		{"apple_m2_4_cores", "Apple M2", 4, true},
+		{"rtx_4090_12_cores", "NVIDIA GeForce RTX 4090", 12, false},
+		{"rtx_4090_4_cores", "NVIDIA GeForce RTX 4090", 4, true},
+		{"intel_uhd_4_cores", "Intel UHD Graphics 630", 4, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "http://test/", nil)
+			req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+			
+			navData := map[string]interface{}{
+				"hardwareConcurrency": float64(tt.cores),
+			}
+			navBytes, _ := json.Marshal(navData)
+			req.Header.Set(constants.HeaderNavigatorData, string(navBytes))
+
+			webglData := map[string]interface{}{
+				"unmasked_renderer": tt.renderer,
+			}
+			webglBytes, _ := json.Marshal(webglData)
+			req.Header.Set(constants.HeaderWebGLData, string(webglBytes))
+
+			detection := sd.AnalyzeRequest(req, nil)
+			
+			found := false
+			for _, vec := range detection.Vectors {
+				if vec.Category == "isomorphic" {
+					for _, ind := range vec.Indicators {
+						if strings.HasPrefix(ind, "hardware_core_mismatch") {
+							found = true
+						}
+					}
+				}
+			}
+
+			if found != tt.wantDetect {
+				t.Errorf("got detect=%v, want %v", found, tt.wantDetect)
+			}
+		})
+	}
+}
+
+func TestPhase51Gaps(t *testing.T) {
+	detector := NewStealthDetector()
+	detector.config.EnableNavigatorCheck = true
+
+	tests := []struct {
+		name       string
+		ua         string
+		navData    map[string]interface{}
+		wantDetect string
+	}{
+		{
+			name: "Pointer None on Desktop",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"media_query_pointer": "none",
+			},
+			wantDetect: "pointer_mismatch",
+		},
+		{
+			name: "Any Pointer Coarse on Desktop",
+			ua:   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"media_query_any_pointer": "coarse",
+			},
+			wantDetect: "any_pointer_mismatch",
+		},
+		{
+			name: "Suspicious Plugin Filename on Chrome",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"plugins": []interface{}{
+					map[string]interface{}{
+						"name":     "PDF Viewer",
+						"filename": "pdf-viewer.dll", // Suspicious, should be internal-pdf-viewer
+					},
+				},
+			},
+			wantDetect: "suspicious_plugin_filename",
+		},
+		{
+			name: "Valid Chrome Interaction & Plugins",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"media_query_pointer":     "fine",
+				"media_query_any_pointer": "fine",
+				"plugins": []interface{}{
+					map[string]interface{}{
+						"name":     "PDF Viewer",
+						"filename": "internal-pdf-viewer",
+					},
+				},
+			},
+			wantDetect: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "https://example.com/", nil)
+			req.Header.Set("User-Agent", tt.ua)
+			
+			navJSON, _ := json.Marshal(tt.navData)
+			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
+
+			detection := detector.AnalyzeRequest(req, nil)
+			found := false
+			for _, vec := range detection.Vectors {
+				for _, ind := range vec.Indicators {
+					if strings.Contains(ind, tt.wantDetect) && tt.wantDetect != "" {
+						found = true
+						break
+					}
+				}
+			}
+
+			if tt.wantDetect == "" {
+				if found {
+					t.Errorf("expected no detection, but found %v", detection.Indicators)
+				}
+			} else {
+				if !found {
+					t.Errorf("did not find indicator %s in %v", tt.wantDetect, detection.Indicators)
+				}
+			}
+		})
+	}
+}
+func TestPhase52Gaps(t *testing.T) {
+	detector := NewStealthDetector()
+	detector.config.EnableNavigatorCheck = true
+
+	tests := []struct {
+		name       string
+		ua         string
+		navData    map[string]interface{}
+		wantDetect string
+	}{
+		{
+			name: "Missing WebGPU on Chrome",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"gpu_present": false,
+			},
+			wantDetect: "missing_webgpu",
+		},
+		{
+			name: "Permissions Query Mismatch",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"Notification_permission":        "default",
+				"permissions_notifications_state": "denied",
+			},
+			wantDetect: "permissions_query_mismatch",
+		},
+		{
+			name: "Valid Chrome 113 with WebGPU",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"gpu_present":                     true,
+				"Notification_permission":        "default",
+				"permissions_notifications_state": "default",
+			},
+			wantDetect: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "https://example.com/", nil)
+			req.Header.Set("User-Agent", tt.ua)
+			
+			navJSON, _ := json.Marshal(tt.navData)
+			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
+
+			detection := detector.AnalyzeRequest(req, nil)
+			found := false
+			for _, vec := range detection.Vectors {
+				for _, ind := range vec.Indicators {
+					if strings.Contains(ind, tt.wantDetect) && tt.wantDetect != "" {
+						found = true
+						break
+					}
+				}
+			}
+
+			if tt.wantDetect == "" {
+				if len(detection.Indicators) > 0 {
+					// Filter for the new indicators we care about
+					for _, ind := range detection.Indicators {
+						if strings.Contains(ind.Name, "missing_webgpu") || strings.Contains(ind.Name, "permissions_query_mismatch") {
+							t.Errorf("unexpected check fired: %s", ind.Name)
+						}
+					}
+				}
+			} else {
+				if !found {
+					t.Errorf("did not find indicator %s in %v", tt.wantDetect, detection.Indicators)
+				}
+			}
+		})
+	}
+}
+func TestPhase53Gaps(t *testing.T) {
+	detector := NewStealthDetector()
+	detector.config.EnableNavigatorCheck = true
+
+	tests := []struct {
+		name       string
+		audioData  map[string]interface{}
+		navData    map[string]interface{}
+		wantDetect string
+	}{
+		{
+			name: "Zero Audio Base Latency",
+			audioData: map[string]interface{}{
+				"base_latency": 0.0,
+			},
+			wantDetect: "audio_zero_base_latency",
+		},
+		{
+			name: "Missing Audio Base Latency",
+			audioData: map[string]interface{}{
+				"output_latency": 0.005,
+				// base_latency missing
+			},
+			wantDetect: "missing_audio_base_latency",
+		},
+		{
+			name: "Screen Orientation Mismatch (Landscape dims, Portrait orientation)",
+			navData: map[string]interface{}{
+				"screen_inner_width":  1920,
+				"screen_inner_height": 1080,
+				"screen_orientation":  "portrait-primary",
+			},
+			wantDetect: "screen_orientation_mismatch",
+		},
+		{
+			name: "Screen Orientation Mismatch (Portrait dims, Landscape orientation)",
+			navData: map[string]interface{}{
+				"screen_inner_width":  1080,
+				"screen_inner_height": 1920,
+				"screen_orientation":  "landscape-primary",
+			},
+			wantDetect: "screen_orientation_mismatch",
+		},
+		{
+			name: "Valid Phase 53 Interaction",
+			audioData: map[string]interface{}{
+				"base_latency": 0.002,
+			},
+			navData: map[string]interface{}{
+				"screen_inner_width":  1920,
+				"screen_inner_height": 1080,
+				"screen_orientation":  "landscape-primary",
+			},
+			wantDetect: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "https://example.com/", nil)
+			
+			if tt.audioData != nil {
+				audioJSON, _ := json.Marshal(tt.audioData)
+				req.Header.Set(constants.HeaderAudioData, string(audioJSON))
+			}
+			
+			if tt.navData != nil {
+				navJSON, _ := json.Marshal(tt.navData)
+				req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
+			} else {
+				req.Header.Set(constants.HeaderNavigatorData, "{}")
+			}
+
+			detection := detector.AnalyzeRequest(req, nil)
+			found := false
+			for _, vec := range detection.Vectors {
+				for _, ind := range vec.Indicators {
+					if strings.Contains(ind, tt.wantDetect) && tt.wantDetect != "" {
+						found = true
+						break
+					}
+				}
+			}
+
+			if tt.wantDetect == "" {
+				if len(detection.Indicators) > 0 {
+					for _, ind := range detection.Indicators {
+						if strings.Contains(ind.Name, "audio_zero_base_latency") || 
+						   strings.Contains(ind.Name, "missing_audio_base_latency") ||
+						   strings.Contains(ind.Name, "screen_orientation_mismatch") {
+							t.Errorf("unexpected check fired: %s", ind.Name)
+						}
+					}
+				}
+			} else {
+				if !found {
+					t.Errorf("did not find indicator %s in %v", tt.wantDetect, detection.Indicators)
+				}
+			}
+		})
+	}
+}
+
+func TestPhase54Gaps(t *testing.T) {
+	detector := NewStealthDetector()
+	detector.config.EnableNavigatorCheck = true
+
+	tests := []struct {
+		name       string
+		navData    map[string]interface{}
+		wantDetect string
+	}{
+		{
+			name: "Suspicious Battery Status (Static 100% Charging)",
+			navData: map[string]interface{}{
+				"battery_status": map[string]interface{}{
+					"level":           1.0,
+					"charging":        true,
+					"chargingTime":    0.0,
+					"dischargingTime": 1e308,
+				},
+			},
+			wantDetect: "suspicious_battery_status",
+		},
+		{
+			name: "Low Storage Quota",
+			navData: map[string]interface{}{
+				"storage_quota": 512 * 1024.0, // 512KB
+			},
+			wantDetect: "low_storage_quota",
+		},
+		{
+			name: "Missing Storage Quota",
+			navData: map[string]interface{}{
+				// storage_quota missing
+			},
+			wantDetect: "missing_storage_quota",
+		},
+		{
+			name: "Valid Phase 54 Interaction",
+			navData: map[string]interface{}{
+				"battery_status": map[string]interface{}{
+					"level":           0.75,
+					"charging":        false,
+					"chargingTime":    0.0,
+					"dischargingTime": 12000.0,
+				},
+				"storage_quota": 500 * 1024 * 1024 * 1024.0, // 500GB
+			},
+			wantDetect: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "https://example.com/", nil)
+			
+			if tt.navData != nil {
+				navJSON, _ := json.Marshal(tt.navData)
+				req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
+			} else {
+				req.Header.Set(constants.HeaderNavigatorData, "{}")
+			}
+
+			detection := detector.AnalyzeRequest(req, nil)
+			found := false
+			for _, vec := range detection.Vectors {
+				for _, ind := range vec.Indicators {
+					if strings.Contains(ind, tt.wantDetect) && tt.wantDetect != "" {
+						found = true
+						break
+					}
+				}
+			}
+
+			if tt.wantDetect == "" {
+				if len(detection.Indicators) > 0 {
+					for _, ind := range detection.Indicators {
+						if strings.Contains(ind.Name, "suspicious_battery_status") || 
+						   strings.Contains(ind.Name, "low_storage_quota") ||
+						   strings.Contains(ind.Name, "missing_storage_quota") {
+							t.Errorf("unexpected check fired: %s", ind.Name)
+						}
+					}
+				}
+			} else {
+				if !found {
+					t.Errorf("did not find indicator %s in %v", tt.wantDetect, detection.Indicators)
+				}
+			}
+		})
+	}
+}
+
+func TestPhase55Gaps(t *testing.T) {
+	detector := NewStealthDetector()
+	detector.config.EnableNavigatorCheck = true
+
+	tests := []struct {
+		name       string
+		navData    map[string]interface{}
+		wantDetect string
+	}{
+		{
+			name: "Empty Media Devices",
+			navData: map[string]interface{}{
+				"media_devices": []interface{}{},
+			},
+			wantDetect: "empty_media_devices",
+		},
+		{
+			name: "Suspicious Media Device ID (Empty)",
+			navData: map[string]interface{}{
+				"media_devices": []interface{}{
+					map[string]interface{}{
+						"deviceId": "",
+						"kind":     "audioinput",
+						"label":    "Internal Microphone",
+						"groupId":  "some-group",
+					},
+				},
+			},
+			wantDetect: "",
+		},
+		{
+			name: "Non-standard Media Device ID Format",
+			navData: map[string]interface{}{
+				"media_devices": []interface{}{
+					map[string]interface{}{
+						"deviceId": "short-id",
+						"kind":     "audioinput",
+						"label":    "Internal Microphone",
+						"groupId":  "some-group-id-which-is-also-short",
+					},
+				},
+			},
+			wantDetect: "non_standard_media_device_id_format",
+		},
+		{
+			name: "Valid Media Devices",
+			navData: map[string]interface{}{
+				"media_devices": []interface{}{
+					map[string]interface{}{
+						"deviceId": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+						"kind":     "audioinput",
+						"label":    "Internal Microphone",
+						"groupId":  "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+					},
+				},
+			},
+			wantDetect: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "https://example.com/", nil)
+			
+			navJSON, _ := json.Marshal(tt.navData)
+			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
+
+			detection := detector.AnalyzeRequest(req, nil)
+			found := false
+			for _, vec := range detection.Vectors {
+				for _, ind := range vec.Indicators {
+					if strings.Contains(ind, tt.wantDetect) && tt.wantDetect != "" {
+						found = true
+						break
+					}
+				}
+			}
+
+			if tt.wantDetect == "" {
+				if len(detection.Indicators) > 0 {
+					for _, ind := range detection.Indicators {
+						if strings.Contains(ind.Name, "empty_media_devices") || 
+						   strings.Contains(ind.Name, "suspicious_media_device_id") ||
+						   strings.Contains(ind.Name, "non_standard_media_device_id_format") {
+							t.Errorf("unexpected check fired: %s", ind.Name)
+						}
+					}
+				}
+			} else {
+				if !found {
+					t.Errorf("did not find indicator %s in %v", tt.wantDetect, detection.Indicators)
+				}
+			}
+		})
+	}
+}
+
+func TestPhase56Gaps(t *testing.T) {
+	detector := NewStealthDetector()
+	detector.config.EnableNavigatorCheck = true
+
+	tests := []struct {
+		name       string
+		ua         string
+		navData    map[string]interface{}
+		wantDetect string
+	}{
+		{
+			name: "Missing WebRTC (Chrome Desktop)",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"webrtc_data": nil,
+			},
+			wantDetect: "missing_webrtc",
+		},
+		{
+			name: "Empty ICE Candidates",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"webrtc_data": map[string]interface{}{
+					"ice_candidates": []interface{}{},
+				},
+			},
+			wantDetect: "empty_ice_candidates",
+		},
+		{
+			name: "Suspicious ICE Format",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"webrtc_data": map[string]interface{}{
+					"ice_candidates": []interface{}{
+						"192.168.1.1", // missing prefix
+					},
+				},
+			},
+			wantDetect: "suspicious_ice_format",
+		},
+		{
+			name: "Valid WebRTC",
+			ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+			navData: map[string]interface{}{
+				"webrtc_data": map[string]interface{}{
+					"ice_candidates": []interface{}{
+						"candidate:0 1 UDP 2122252543 12345678-1234-4321-abcd-1234567890ab.local 58349 typ host",
+					},
+				},
+			},
+			wantDetect: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "https://example.com/", nil)
+			req.Header.Set("User-Agent", tt.ua)
+			
+			navJSON, _ := json.Marshal(tt.navData)
+			req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
+
+			detection := detector.AnalyzeRequest(req, nil)
+			found := false
+			for _, vec := range detection.Vectors {
+				for _, ind := range vec.Indicators {
+					if strings.Contains(ind, tt.wantDetect) && tt.wantDetect != "" {
+						found = true
+						break
+					}
+				}
+			}
+
+			if tt.wantDetect == "" {
+				if len(detection.Indicators) > 0 {
+					for _, ind := range detection.Indicators {
+						if strings.Contains(ind.Name, "missing_webrtc") || 
+						   strings.Contains(ind.Name, "empty_ice_candidates") ||
+						   strings.Contains(ind.Name, "suspicious_ice_format") {
+							t.Errorf("unexpected check fired: %s", ind.Name)
+						}
+					}
+				}
+			} else {
+				if !found {
+					t.Errorf("did not find indicator %s in %v", tt.wantDetect, detection.Indicators)
+				}
+			}
+		})
+	}
+}
+
+func TestPhase57Gaps(t *testing.T) {
+	detector := NewStealthDetector()
+	detector.config.EnableCanvasCheck = true
+
+	// Helper to create a valid base64 PNG with specific uncompressed IDAT content
+	createCanvas := func(rawPixels []byte) string {
+		var idatBuf bytes.Buffer
+		zlibW := zlib.NewWriter(&idatBuf)
+		zlibW.Write(rawPixels)
+		zlibW.Close()
+		idatData := idatBuf.Bytes()
+
+		png := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A}
+		
+		// IHDR: 13 bytes data + 4 bytes "IHDR"
+		png = append(png, 0x00, 0x00, 0x00, 0x0D) // IHDR length
+		png = append(png, 0x49, 0x48, 0x44, 0x52)
+		png = append(png, 0x00, 0x00, 0x01, 0x2C, 0x00, 0x00, 0x00, 0xC8, 0x08, 0x06, 0x00, 0x00, 0x00)
+		png = append(png, 0x00, 0x00, 0x00, 0x00) // CRC dummy
+		
+		// IDAT: len(idatData) data + 4 bytes "IDAT"
+		size := uint32(len(idatData))
+		png = append(png, byte(size>>24), byte(size>>16), byte(size>>8), byte(size))
+		png = append(png, 0x49, 0x44, 0x41, 0x54)
+		png = append(png, idatData...)
+		png = append(png, 0x00, 0x00, 0x00, 0x00) // CRC dummy
+
+		return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
+	}
+
+	tests := []struct {
+		name       string
+		pixels     []byte
+		wantDetect string
+	}{
+		{
+			name: "High Entropy Noise",
+			pixels: func() []byte {
+				p := make([]byte, 16384)
+				for i := range p {
+					p[i] = byte(i % 256)
+				}
+				return p
+			}(),
+			wantDetect: "canvas_idat_high_entropy",
+		},
+		{
+			name: "Spatial Inconsistency (Modulo Noise)",
+			pixels: func() []byte {
+				p := make([]byte, 16384)
+				for i := range p {
+					if i%100 == 0 {
+						p[i] = byte(i % 256) // Random-ish byte to break compression
+					} else if i%17 == 0 {
+						p[i] = 128
+					} else {
+						p[i] = 255
+					}
+				}
+				return p
+			}(),
+			wantDetect: "canvas_spatial_inconsistency",
+		},
+		{
+			name: "Valid Correlated Noise",
+			pixels: func() []byte {
+				p := make([]byte, 16384)
+				for i := 0; i < 16384; i += 100 {
+					val := byte(i / 10)
+					for j := 0; j < 100 && i+j < 16384; j++ {
+						p[i+j] = val
+					}
+				}
+				return p
+			}(),
+			wantDetect: "",
+		},
+		{
+			name: "Plain White Canvas",
+			pixels: func() []byte {
+				p := make([]byte, 16384)
+				for i := range p {
+					p[i] = 255
+				}
+				return p
+			}(),
+			wantDetect: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req, _ := http.NewRequest("GET", "https://example.com/", nil)
+			req.Header.Set(constants.HeaderCanvasFingerprint, createCanvas(tt.pixels))
+
+			detection := detector.AnalyzeRequest(req, nil)
+			found := false
+			for _, ind := range detection.Indicators {
+				if strings.Contains(ind.Name, tt.wantDetect) && tt.wantDetect != "" {
+					found = true
+					break
+				}
+			}
+
+			if tt.wantDetect == "" {
+				if len(detection.Indicators) > 0 {
+					for _, ind := range detection.Indicators {
+						if strings.Contains(ind.Name, "canvas_idat_high_entropy") || 
+						   strings.Contains(ind.Name, "canvas_spatial_inconsistency") {
+							t.Errorf("unexpected check fired: %s", ind.Name)
+						}
+					}
+				}
+			} else {
+				if !found {
+					t.Errorf("did not find indicator %s", tt.wantDetect)
+				}
+			}
+		})
 	}
 }

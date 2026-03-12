@@ -310,6 +310,9 @@ func (s *EnhancedServer) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/cloudflare/solve/js", cf.HandleSolveJS)
 	mux.HandleFunc("/api/cloudflare/solve/managed", cf.HandleSolveManaged)
 	mux.HandleFunc("/api/cloudflare/solve/turnstile", cf.HandleSolveTurnstile)
+	mux.HandleFunc("/api/cloudflare/turnstile/widget", cf.HandleTurnstileWidgetPage)
+	mux.HandleFunc("/api/cloudflare/turnstile/siteverify", cf.HandleTurnstileSiteVerify)
+	mux.HandleFunc("/turnstile/v0/siteverify", cf.HandleTurnstileSiteVerify)
 	mux.HandleFunc("/api/cloudflare/verify", cf.HandleVerifyClearance)
 	mux.HandleFunc("/api/cloudflare/status", cf.HandleStatus)
 
@@ -1073,4 +1076,3 @@ func (s *EnhancedServer) GetProxyAddr() string {
 	}
 	return ""
 }
-

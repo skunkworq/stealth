@@ -18,6 +18,22 @@ func compressChunksParallel(ctx context.Context, chunks []DomChunk, url string, 
 	errors := make([]error, len(chunks))
 	var firstErr atomic.Pointer[error]
 
+	processChunk := func(idx int, c DomChunk) {
+		node, err := compressChunkRecursive(ctx, c, url, "", idx, config, stats)
+		if err != nil {
+			var zero error
+			if firstErr.CompareAndSwap(&zero, &err) {
+				cancel()
+			}
+
+			errors[idx] = err
+
+			return
+		}
+
+		nodes[idx] = *node
+	}
+
 	for i, chunk := range chunks {
 		select {
 		case <-ctx.Done():
@@ -25,21 +41,24 @@ func compressChunksParallel(ctx context.Context, chunks []DomChunk, url string, 
 		default:
 		}
 
-		wg.Add(1)
-		go func(idx int, c DomChunk) {
-			defer wg.Done()
+		if stats != nil && stats.tryAcquireWorkSlot(ctx) {
+			wg.Add(1)
 
-			node, err := compressChunkRecursive(ctx, c, url, "", idx, config, stats)
-			if err != nil {
-				var zero error
-				if firstErr.CompareAndSwap(&zero, &err) {
-					cancel()
-				}
-				errors[idx] = err
-				return
-			}
-			nodes[idx] = *node
-		}(i, chunk)
+			go func(idx int, c DomChunk) {
+				defer wg.Done()
+				defer stats.releaseWorkSlot()
+
+				processChunk(idx, c)
+			}(i, chunk)
+
+			continue
+		}
+
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		processChunk(i, chunk)
 	}
 	wg.Wait()
 
@@ -70,13 +89,31 @@ func compressChunkRecursive(ctx context.Context, chunk DomChunk, url string, idP
 		return compressLeafChunk(ctx, chunk, url, index, config, stats, contentKey)
 	}
 
-	var childNodes []SemanticNode
 	var wg sync.WaitGroup
-	var mu sync.Mutex
+
+	childNodesByIndex := make([]SemanticNode, len(chunk.Children))
+	childNodePresent := make([]bool, len(chunk.Children))
 	childErrors := make([]error, len(chunk.Children))
 	var firstErr atomic.Pointer[error]
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
+	processChild := func(idx int, c DomChunk) {
+		node, err := compressChunkRecursive(cancelCtx, c, url, "", idx, config, stats)
+		if err != nil {
+			var zero error
+			if firstErr.CompareAndSwap(&zero, &err) {
+				cancel()
+			}
+
+			childErrors[idx] = err
+
+			return
+		}
+
+		childNodesByIndex[idx] = *node
+		childNodePresent[idx] = true
+	}
 
 	for i, child := range chunk.Children {
 		select {
@@ -85,22 +122,24 @@ func compressChunkRecursive(ctx context.Context, chunk DomChunk, url string, idP
 		default:
 		}
 
-		wg.Add(1)
-		go func(idx int, c DomChunk) {
-			defer wg.Done()
-			node, err := compressChunkRecursive(cancelCtx, c, url, "", idx, config, stats)
-			mu.Lock()
-			if err != nil {
-				var zero error
-				if firstErr.CompareAndSwap(&zero, &err) {
-					cancel()
-				}
-				childErrors[idx] = err
-			} else {
-				childNodes = append(childNodes, *node)
-			}
-			mu.Unlock()
-		}(i, child)
+		if stats != nil && stats.tryAcquireWorkSlot(cancelCtx) {
+			wg.Add(1)
+
+			go func(idx int, c DomChunk) {
+				defer wg.Done()
+				defer stats.releaseWorkSlot()
+
+				processChild(idx, c)
+			}(i, child)
+
+			continue
+		}
+
+		if err := cancelCtx.Err(); err != nil {
+			return nil, err
+		}
+
+		processChild(i, child)
 	}
 	wg.Wait()
 
@@ -111,6 +150,14 @@ func compressChunkRecursive(ctx context.Context, chunk DomChunk, url string, idP
 	for _, err := range childErrors {
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	childNodes := make([]SemanticNode, 0, len(chunk.Children))
+
+	for i := range childNodesByIndex {
+		if childNodePresent[i] {
+			childNodes = append(childNodes, childNodesByIndex[i])
 		}
 	}
 
@@ -141,6 +188,12 @@ func compressChunkRecursive(ctx context.Context, chunk DomChunk, url string, idP
 
 // compressLeafChunk compresses a leaf chunk (no children).
 func compressLeafChunk(ctx context.Context, chunk DomChunk, url string, index int, config *PipelineConfig, stats *pipelineStats, contentKey string) (*SemanticNode, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	if config.Cache != nil {
 		if cachedNode, err := config.Cache.GetChunk(ctx, contentKey); err == nil && cachedNode != nil {
 			stats.recordCacheHit()
@@ -151,12 +204,18 @@ func compressLeafChunk(ctx context.Context, chunk DomChunk, url string, index in
 	}
 
 	if config.LLMClient == nil {
-		return buildNodeFromChunkNoLLM(chunk, index), nil
+		return buildNodeFromChunkNoLLMWithContext(ctx, &chunk), nil
 	}
 
 	stats.recordLLMCall()
 
 	matchedElements := matchInteractiveElements(chunk.HTML, extractInteractiveElements(chunk.HTML))
+
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
 
 	rawText := extractRawTextFromHTML(chunk.HTML)
 	rawTextTokens := EstimateTokens(rawText)

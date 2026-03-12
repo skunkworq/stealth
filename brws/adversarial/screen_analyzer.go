@@ -11,6 +11,8 @@ type ScreenData struct {
 	Height      int     `json:"height"`
 	AvailWidth  int     `json:"avail_width"`
 	AvailHeight int     `json:"avail_height"`
+	AvailLeft   int     `json:"avail_left"`
+	AvailTop    int     `json:"avail_top"`
 	ColorDepth  int     `json:"color_depth"`
 	PixelRatio  float64 `json:"pixel_ratio"`
 	OuterWidth  int     `json:"outer_width"`
@@ -21,6 +23,12 @@ type ScreenData struct {
 	// P11: Screen orientation API
 	OrientationType  string `json:"orientation_type,omitempty"`
 	OrientationAngle int    `json:"orientation_angle,omitempty"`
+
+	// Phase 64: Screen.isExtended API
+	IsExtended *bool `json:"is_extended,omitempty"`
+
+	// Phase 86: Screen orientation locking
+	HasOrientationLock *bool `json:"has_orientation_lock,omitempty"`
 }
 
 // ScreenAnalyzer validates screen geometry for headless/bot detection.
@@ -60,8 +68,19 @@ func (sa *ScreenAnalyzer) Analyze(data *ScreenData) *VectorResult {
 		return result
 	}
 
+	indicators := make([]string, 0)
+	indicators = sa.checkScreenIsExtended(data, result, indicators)
+	indicators = sa.checkAvailGeometryConsistency(data, result, indicators)
+	indicators = sa.checkOrientationLock(data, result, indicators)
+
 	// Check 1: No browser chrome (outerWidth == innerWidth or outerHeight == innerHeight)
-	if data.OuterWidth > 0 && data.InnerWidth > 0 && data.OuterWidth == data.InnerWidth {
+	// Ignore for mobile where full screen is standard.
+	isMobile := false
+	if data.Width < 1200 && data.Height < 1200 { // heuristic
+		isMobile = true
+	}
+	
+	if !isMobile && data.OuterWidth > 0 && data.InnerWidth > 0 && data.OuterWidth == data.InnerWidth {
 		weight := 0.40
 		result.Indicators = append(result.Indicators, VectorIndicator{
 			Check:   "no_browser_chrome",
@@ -113,11 +132,36 @@ func (sa *ScreenAnalyzer) Analyze(data *ScreenData) *VectorResult {
 		result.Score += weight
 	}
 
+	// Check 3b: Non-quantized DPR (Phase 36)
+	// Real OS scaling factors only use values from the standard set.
+	// An arbitrary float (e.g. 1.371) is a strong indicator of synthetic spoofing.
+	standardDPRs := []float64{1.0, 1.25, 1.5, 1.75, 2.0, 2.5, 2.625, 3.0, 3.5, 4.0}
+	if data.PixelRatio > 0 {
+		isStandard := false
+		for _, std := range standardDPRs {
+			if math.Abs(data.PixelRatio-std) < 0.01 {
+				isStandard = true
+				break
+			}
+		}
+		if !isStandard {
+			weight := 0.30
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "non_quantized_dpr",
+				Message: fmt.Sprintf("devicePixelRatio %.4f is not a standard OS scaling factor (expected 1.0/1.25/1.5/1.75/2.0/2.5/3.0)", data.PixelRatio),
+				Weight:  weight,
+				Field:   "pixel_ratio",
+				Value:   fmt.Sprintf("%.4f", data.PixelRatio),
+			})
+			result.Score += weight
+		}
+	}
+
 	// Check 4: Taskbar/OS Chrome gap (Phase 35)
 	// Real OS always has some chrome (taskbar, menu bar). Mac menu is ~25px,
 	// Windows taskbar is ~40px. A gap of 0 means full screen (rare for regular browsing)
 	// or headless browser. A gap > 150px is also improbable for standard desktops.
-	if data.Height > 0 && data.AvailHeight > 0 {
+	if !isMobile && data.Height > 0 && data.AvailHeight > 0 {
 		gap := data.Height - data.AvailHeight
 		if gap == 0 {
 			weight := 0.30
@@ -205,4 +249,75 @@ func (sa *ScreenAnalyzer) Analyze(data *ScreenData) *VectorResult {
 	result.Detected = result.Score > 0.3
 
 	return result
+}
+
+func (sa *ScreenAnalyzer) checkScreenIsExtended(data *ScreenData, result *VectorResult, indicators []string) []string {
+	// Modern desktop browsers always expose screen.isExtended.
+	// If it's missing (pointer is nil), it's a strong indicator of a synthetic/headless environment.
+	if data.IsExtended == nil {
+		weight := 0.25
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "screen_is_extended_missing",
+			Message: "window.screen.isExtended is missing — real modern browsers always expose it",
+			Weight:  weight,
+			Field:   "is_extended",
+			Value:   "undefined",
+		})
+		result.Score += weight
+	}
+	return indicators
+}
+func (sa *ScreenAnalyzer) checkAvailGeometryConsistency(data *ScreenData, result *VectorResult, indicators []string) []string {
+	// Phase 79: availLeft/availTop should be 0 if not extended, or reasonably consistent if it is.
+	// Many simple bots/headless environments report availLeft=0, availTop=0 regardless.
+	// Some bots might accidentally set availLeft/Top while isExtended is false.
+	isExt := false
+	if data.IsExtended != nil {
+		isExt = *data.IsExtended
+	}
+
+	if !isExt && (data.AvailLeft != 0 || data.AvailTop != 0) {
+		weight := 0.35
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "screen_avail_geometry_mismatch",
+			Message: fmt.Sprintf("Screen not extended but availLeft=%d, availTop=%d", data.AvailLeft, data.AvailTop),
+			Weight:  weight,
+			Field:   "avail_left",
+			Value:   fmt.Sprintf("%d,%d", data.AvailLeft, data.AvailTop),
+		})
+		result.Score += weight
+		indicators = append(indicators, "screen_avail_geometry_mismatch")
+	}
+	return indicators
+}
+
+func (sa *ScreenAnalyzer) checkOrientationLock(data *ScreenData, result *VectorResult, indicators []string) []string {
+	// Phase 86: Screen orientation locking is usually available on mobile but not desktop.
+	if data.HasOrientationLock == nil {
+		if data.OrientationType != "" {
+			weight := 0.20
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "missing_orientation_lock",
+				Message: "screen.orientation.lock/unlock are missing but orientation.type is present",
+				Weight:  weight,
+				Field:   "has_orientation_lock",
+				Value:   "undefined",
+			})
+			result.Score += weight
+			indicators = append(indicators, "missing_orientation_lock")
+		}
+	} else if !*data.HasOrientationLock {
+		weight := 0.25
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "missing_orientation_lock",
+			Message: "screen.orientation.lock/unlock explicitly false on mobile profile",
+			Weight:  weight,
+			Field:   "has_orientation_lock",
+			Value:   "false",
+		})
+		result.Score += weight
+		indicators = append(indicators, "missing_orientation_lock")
+	}
+
+	return indicators
 }

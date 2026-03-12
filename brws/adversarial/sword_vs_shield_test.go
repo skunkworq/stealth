@@ -66,6 +66,7 @@ func TestSwordVsShield(t *testing.T) {
 		req.Header.Set("Sec-Fetch-Mode", "navigate")
 		req.Header.Set("Sec-Fetch-Site", "none")
 		req.Header.Set("Sec-Fetch-User", "?1")
+		req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Accept-Language,Accept-Encoding,Connection,Upgrade-Insecure-Requests,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-User")
 
 		detection := detector.AnalyzeRequest(req, nil)
 

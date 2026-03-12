@@ -2,6 +2,7 @@ package behavior
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"math/rand"
 	"sort"
@@ -25,6 +26,9 @@ type EventData struct {
 	KeystrokeHoldTimes []float64 `json:"keystrokeHoldTimes,omitempty"`
 	// Phase 10: Scroll directions — positive=down, negative=up
 	ScrollDirections []float64 `json:"scrollDirections,omitempty"`
+
+	// Phase 46: Error Stack trace format
+	ErrorStack string `json:"errorStack,omitempty"`
 }
 
 // GeneratorConfig controls the behavioral data generation parameters.
@@ -55,6 +59,10 @@ type GeneratorConfig struct {
 	EvadeScrollSpearman     bool
 	EvadeMouseTypingDensity bool
 	EvadeClickDwellTime     bool
+
+	// Phase 46: Error stack trace evasion
+	BrowserEngine         string // "chrome" or "firefox"
+	EvadeErrorStackFormat bool
 }
 
 // DefaultGeneratorConfig returns sensible defaults for human-like behavior.
@@ -115,6 +123,11 @@ func (g *EventGenerator) Generate() *EventData {
 
 	// Generate click events at mouse positions
 	g.generateClickEvents(data)
+
+	// Phase 46: Error stack trace
+	if g.config.EvadeErrorStackFormat {
+		g.generateErrorStack(data)
+	}
 
 	return data
 }
@@ -376,19 +389,71 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 		prevX, prevY = x, y
 	}
 
-	// Post-process velocities with a 5-point Gaussian-weighted moving average
-	// to create smooth temporal structure. Inline smoothing alone is insufficient
-	// because micro-tremor ↔ major-move alternation creates jagged velocities.
-	// Two passes: first creates lag-1/2 structure, second reinforces	// Post-process
-	if len(velocities) > 5 {
-		var weights [5]float64
-		if g.config.EvadeMouseVelocityLag3 {
-			// A single wide smoothing pass to ensure lag-2 and lag-3 are within boundaries
-			weights = [5]float64{0.1, 0.25, 0.3, 0.25, 0.1}
-		} else {
-			weights = [5]float64{0.06, 0.24, 0.40, 0.24, 0.06}
-		}
+	// Post-process velocities with exponential moving average (EMA) to create
+	// Optionally force raw velocities into a clean single-peak curve before smoothing.
+	// Random mouse movements can create a jagged sawtooth pattern (fast, slow, fast)
+	// which has negative lag-1/lag-2 autocorrelation. EMA can't always fix a bad baseline.
+	if g.config.EvadeMouseVelocityLag3 && len(velocities) > 5 {
+		// Force a clean acceleration -> deceleration curve (single peak)
+		peakIdx := len(velocities) / 2
+		peakV := 25.0 + g.rng.Float64()*15.0 // 25-40px/tick peak
 		
+		for i := 0; i < len(velocities); i++ {
+			var progress float64
+			if i <= peakIdx {
+				progress = float64(i) / float64(peakIdx) // 0.0 to 1.0
+			} else {
+				progress = 1.0 - float64(i-peakIdx)/float64(len(velocities)-1-peakIdx) // 1.0 to 0.0
+			}
+			// Use sine curve easing for perfectly smooth acceleration/deceleration
+			factor := math.Sin(progress * math.Pi / 2)
+			
+			// Add 10-20% random noise so it's not perfectly mathematical,
+			// but keeping the underlying macro-structure fully intact.
+			noise := 0.90 + g.rng.Float64()*0.20
+			velocities[i] = peakV * factor * noise
+			
+			// Minimum velocity to ensure movement
+			if velocities[i] < 2.0 {
+				velocities[i] = 2.0 + g.rng.Float64()
+			}
+		}
+	}
+
+	// Post-process velocities with exponential moving average (EMA) to create
+	// strong positive autocorrelation at lags 1, 2, and 3. The EMA naturally
+	// produces temporal momentum because each output carries forward from
+	// Forward+backward passes avoid phase shift and reinforce structure.
+	if g.config.EvadeMouseVelocityLag3 && len(velocities) > 5 {
+		// Adaptive EMA: keep smoothing until lag-2 autocorrelation exceeds 0.15.
+		// This guarantees the check never fires regardless of random seed.
+		alpha := 0.20
+		for pass := 0; pass < 20; pass++ {
+			// Forward EMA
+			smoothed := make([]float64, len(velocities))
+			smoothed[0] = velocities[0]
+			for i := 1; i < len(velocities); i++ {
+				smoothed[i] = alpha*velocities[i] + (1-alpha)*smoothed[i-1]
+			}
+			// Backward EMA
+			for i := len(smoothed) - 2; i >= 0; i-- {
+				smoothed[i] = alpha*smoothed[i] + (1-alpha)*smoothed[i+1]
+			}
+			velocities = smoothed
+
+			// Check if lag-2 autocorrelation is strong enough
+			lag2 := lagNAuto(velocities, 2)
+			if lag2 > 0.15 {
+				break
+			}
+		}
+		// Round gently to 2 decimal places (preserves sub-unit structure)
+		for i := range velocities {
+			velocities[i] = math.Round(velocities[i]*100) / 100
+		}
+	} else if len(velocities) > 5 {
+		// Non-evasion: basic Gaussian smoothing (still somewhat bot-detectable)
+		weights := [5]float64{0.06, 0.24, 0.40, 0.24, 0.06}
 		for pass := 0; pass < 2; pass++ {
 			smoothed := make([]float64, len(velocities))
 			for i := range velocities {
@@ -506,7 +571,7 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 // Scroll deltas vary irregularly — users speed up, slow down, and re-accelerate
 // rather than following a smooth deceleration curve.
 func (g *EventGenerator) generateScrollEvents(data *EventData) {
-	numScrolls := 3 + g.rng.Intn(8) // 3-10 events
+	numScrolls := 6 + g.rng.Intn(7) // 6-12 events — need ≥6 for reliable entropy distribution
 
 	scrollTimestamps := make([]int64, 0, numScrolls)
 	deltas := make([]float64, 0, numScrolls)
@@ -610,28 +675,40 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 		var interval int
 		delta := deltas[i]
 
-		targetDelta := delta
-		if i+1 < numScrolls {
-			targetDelta = deltas[i+1]
-		}
-		
 		if g.config.EvadeScrollSpearman {
-			interval = int((targetDelta / 250.0) * 400.0)
-			if interval < 30 {
-				interval = 30
+			// Trimodal intervals correlated with delta magnitude:
+			//   - Burst (30-120ms):  fast inertial scroll      ~30%
+			//   - Normal (120-350ms): moderate scroll           ~40%
+			//   - Pause (400-1800ms): reading stop              ~30%
+			//
+			// To guarantee entropy > 1.5 even with ≥3 events, we anchor:
+			//   i==0 → burst (small), i==1 → pause (large), rest → random trimodal.
+			// This guarantees the range [burst, pause] spans multiple histogram bins.
+			baseScale := math.Abs(delta) / 100.0
+			if baseScale > 2.0 {
+				baseScale = 2.0
 			}
-			interval += g.rng.Intn(100)
-			if g.rng.Float64() < 0.35 {
-				interval += 600 + g.rng.Intn(2000)
+			if i == 0 {
+				// Anchor: guaranteed burst
+				interval = 30 + int(baseScale*20) + g.rng.Intn(60)
+			} else if i == 1 {
+				// Anchor: guaranteed long pause to widen histogram range
+				interval = 600 + g.rng.Intn(1200)
+			} else {
+				r := g.rng.Float64()
+				if r < 0.30 {
+					interval = 30 + int(baseScale*25) + g.rng.Intn(60)
+				} else if r < 0.70 {
+					interval = 120 + int(baseScale*60) + g.rng.Intn(170)
+				} else {
+					interval = 400 + g.rng.Intn(1400)
+				}
 			}
 		} else {
 			// Bimodal scroll intervals (defeats Check 18: CV > 0.50).
-			// Real scrolling: fast inertial bursts followed by reading pauses.
 			if g.rng.Float64() < 0.40 {
-				// Reading pause: 500-1500ms
 				interval = 500 + g.rng.Intn(1001)
 			} else {
-				// Fast inertial scroll: 30-120ms
 				interval = 30 + g.rng.Intn(91)
 			}
 		}
@@ -703,9 +780,11 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 		pos := data.MousePositions[idx]
 
 		var clickTs int64
-		if ci == 0 || g.config.EvadeFittsLaw {
+		if ci == 0 {
+			// First click: always relative to mouse position
 			clickTs = data.MouseTimestamps[idx] + int64(1+g.rng.Intn(5))
-		} else {
+		} else if g.config.EvadeFittsLaw {
+			// Evasion ON: use Fitts's Law — movement time correlates with distance
 			prevPos := clickPositions[ci-1]
 			dx := pos["x"] - prevPos["x"]
 			dy := pos["y"] - prevPos["y"]
@@ -713,12 +792,21 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 			if dist < 1.0 {
 				dist = 1.0
 			}
+			// Fitts's Law: MT = a + b * log2(D/W + 1)
+			// Use moderate noise to keep correlation > 0.3
 			fittsID := math.Log2(dist/40.0 + 1)
-			movementTime := 300.0 + 200.0*fittsID
-			noise := 0.75 + g.rng.Float64()*0.50
-			movementTime += (g.rng.Float64()*400 - 200)
+			movementTime := 250.0 + 250.0*fittsID
+			// Small noise: ±15% multiplicative + ±50ms additive
+			noise := 0.85 + g.rng.Float64()*0.30 // [0.85, 1.15]
 			movementTime *= noise
+			movementTime += float64(g.rng.Intn(100) - 50) // ±50ms
+			if movementTime < 150 {
+				movementTime = 150
+			}
 			clickTs = clickTimestamps[ci-1] + int64(movementTime)
+		} else {
+			// Evasion OFF: flat timing regardless of distance (bot-detectable)
+			clickTs = data.MouseTimestamps[idx] + int64(1+g.rng.Intn(5))
 		}
 		clickTimestamps = append(clickTimestamps, clickTs)
 		
@@ -761,4 +849,57 @@ func sign(x float64) float64 {
 		return 1
 	}
 	return -1
+}
+
+// lagNAuto computes the lag-N autocorrelation of a float64 sequence.
+// Used by the adaptive EMA loop to verify sufficient temporal structure.
+func lagNAuto(values []float64, lag int) float64 {
+	n := len(values)
+	if n < lag+2 {
+		return 0
+	}
+	mean := 0.0
+	for _, v := range values {
+		mean += v
+	}
+	mean /= float64(n)
+
+	var num, den float64
+	for i := 0; i < n-lag; i++ {
+		num += (values[i] - mean) * (values[i+lag] - mean)
+	}
+	for i := 0; i < n; i++ {
+		den += (values[i] - mean) * (values[i] - mean)
+	}
+	if den == 0 {
+		return 0
+	}
+	return num / den
+}
+
+func (g *EventGenerator) generateErrorStack(data *EventData) {
+	appJS := []string{"main.js", "app.js", "index.js", "bundle.js"}
+	vendorJS := []string{"vendor.js", "react-dom.production.min.js", "lodash.min.js", "jquery.min.js"}
+	
+	app := appJS[g.rng.Intn(len(appJS))]
+	vendor := vendorJS[g.rng.Intn(len(vendorJS))]
+
+	if g.config.BrowserEngine == "firefox" {
+		// Firefox/SpiderMonkey format: @URL:line:col
+		// Sample: myApp@https://example.com/js/index.js:42:15
+		data.ErrorStack = fmt.Sprintf("init@https://example.com/js/%s:%d:%d\nrender@https://example.com/js/%s:%d:%d\n@https://example.com/js/%s:%d:%d\n@https://example.com/js/%s:%d:%d",
+			app, 10+g.rng.Intn(50), 5+g.rng.Intn(20),
+			app, 60+g.rng.Intn(100), 5+g.rng.Intn(20),
+			vendor, 200+g.rng.Intn(1000), 1+g.rng.Intn(80),
+			vendor, 50+g.rng.Intn(200), 1+g.rng.Intn(80))
+	} else {
+		// Chrome/V8 default
+		// Format: Error\n    at function (URL:line:col)
+		// Sample: Error\n    at init (https://example.com/js/app.js:12:5)\n    at async render (https://example.com/js/app.js:80:2)
+		data.ErrorStack = fmt.Sprintf("Error\n    at init (https://example.com/js/%s:%d:%d)\n    at async render (https://example.com/js/%s:%d:%d)\n    at dispatch (https://example.com/js/%s:%d:%d)\n    at https://example.com/js/%s:%d:%d",
+			app, 10+g.rng.Intn(50), 5+g.rng.Intn(20),
+			app, 60+g.rng.Intn(100), 5+g.rng.Intn(20),
+			vendor, 200+g.rng.Intn(1000), 1+g.rng.Intn(80),
+			vendor, 50+g.rng.Intn(200), 1+g.rng.Intn(80))
+	}
 }

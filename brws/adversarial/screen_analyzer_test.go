@@ -2,6 +2,10 @@ package adversarial
 
 import "testing"
 
+func ptr[T any](v T) *T {
+	return &v
+}
+
 func TestScreenAnalyzer_NoBrowserChrome(t *testing.T) {
 	sa := NewScreenAnalyzer()
 	result := sa.Analyze(&ScreenData{
@@ -74,7 +78,7 @@ func TestScreenAnalyzer_NoTaskbar(t *testing.T) {
 		InnerHeight: 1000,
 	})
 
-	assertIndicatorPresent(t, result, "no_taskbar")
+	assertIndicatorPresent(t, result, "no_taskbar_gap")
 }
 
 func TestScreenAnalyzer_ValidGeometry(t *testing.T) {
@@ -88,8 +92,12 @@ func TestScreenAnalyzer_ValidGeometry(t *testing.T) {
 		PixelRatio:  1.0,
 		OuterWidth:  1920,
 		OuterHeight: 1040,
-		InnerWidth:  1900,
-		InnerHeight: 950,
+		InnerWidth:         1900,
+		InnerHeight:        950,
+		OrientationType:    "landscape-primary",
+		OrientationAngle:   0,
+		IsExtended:         ptr(false),
+		HasOrientationLock: ptr(false),
 	})
 
 	if result.Detected {
@@ -103,13 +111,13 @@ func TestScreenAnalyzer_HeadlessCombined(t *testing.T) {
 		Width:       800,
 		Height:      600,
 		AvailWidth:  800,
-		AvailHeight: 600,      // No taskbar
+		AvailHeight: 600, // No taskbar
 		ColorDepth:  24,
 		PixelRatio:  1.0,
 		OuterWidth:  800,
 		OuterHeight: 600,
-		InnerWidth:  800,       // No browser chrome
-		InnerHeight: 600,       // No browser chrome
+		InnerWidth:  800, // No browser chrome
+		InnerHeight: 600, // No browser chrome
 	})
 
 	if !result.Detected {
@@ -187,7 +195,7 @@ func TestScreenAnalyzer_OrientationGeometryMismatch(t *testing.T) {
 		OrientationAngle: 0,
 	})
 
-	assertIndicatorPresent(t, result, "orientation_geometry_mismatch")
+	assertIndicatorPresent(t, result, "screen_orientation_mismatch")
 }
 
 func TestScreenAnalyzer_ValidOrientation(t *testing.T) {
@@ -201,14 +209,16 @@ func TestScreenAnalyzer_ValidOrientation(t *testing.T) {
 		PixelRatio:       1.0,
 		OuterWidth:       1920,
 		OuterHeight:      1040,
-		InnerWidth:       1900,
-		InnerHeight:      950,
-		OrientationType:  "landscape-primary",
-		OrientationAngle: 0,
+		InnerWidth:         1900,
+		InnerHeight:        950,
+		OrientationType:    "landscape-primary",
+		OrientationAngle:   0,
+		IsExtended:         ptr(false),
+		HasOrientationLock: ptr(false),
 	})
 
 	for _, ind := range result.Indicators {
-		if ind.Check == "missing_screen_orientation" || ind.Check == "invalid_screen_orientation" || ind.Check == "orientation_geometry_mismatch" {
+		if ind.Check == "missing_screen_orientation" || ind.Check == "invalid_screen_orientation" || ind.Check == "screen_orientation_mismatch" {
 			t.Errorf("valid orientation should not trigger %s", ind.Check)
 		}
 	}

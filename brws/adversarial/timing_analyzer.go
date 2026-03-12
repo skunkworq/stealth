@@ -43,16 +43,26 @@ func NewTimingAnalyzer(config *TimingAnalyzerConfig) *TimingAnalyzer {
 
 // RequestTimingEntry represents timing data for a single request.
 type RequestTimingEntry struct {
-	Timestamp   int64  `json:"timestamp_ms"`
-	URL         string `json:"url"`
-	ContentType string `json:"content_type"`
-	Referrer    string `json:"referrer"`
-	Duration    int64  `json:"duration_ms"`
+	Timestamp       int64   `json:"timestamp_ms"`
+	URL             string  `json:"url"`
+	ContentType     string  `json:"content_type"`
+	Referrer        string  `json:"referrer"`
+	Duration        int64   `json:"duration_ms"`
+	TransferSize    int64   `json:"transfer_size"`
+	EncodedBodySize int64   `json:"encoded_body_size"`
+	Protocol        string  `json:"next_hop_protocol"`
+}
+
+// PaintTimingEntry represents a performance paint entry.
+type PaintTimingEntry struct {
+	Name      string  `json:"name"`
+	StartTime float64 `json:"start_time"`
 }
 
 // RequestTimingSequence represents a sequence of requests for analysis.
 type RequestTimingSequence struct {
 	Entries         []RequestTimingEntry `json:"entries"`
+	PaintEntries    []PaintTimingEntry   `json:"paint_entries"`
 	TTFB            float64              `json:"ttfb"`
 	NavigationStart float64              `json:"navigationStart"`
 	LoadEventEnd    float64              `json:"loadEventEnd"`
@@ -82,6 +92,15 @@ func NewRequestTimingSequenceFromMap(timing map[string]interface{}) *RequestTimi
 				if dur, ok := em["duration_ms"].(float64); ok {
 					entry.Duration = int64(dur)
 				}
+				if ts, ok := em["transfer_size"].(float64); ok {
+					entry.TransferSize = int64(ts)
+				}
+				if ebs, ok := em["encoded_body_size"].(float64); ok {
+					entry.EncodedBodySize = int64(ebs)
+				}
+				if proto, ok := em["next_hop_protocol"].(string); ok {
+					entry.Protocol = proto
+				}
 				seq.Entries = append(seq.Entries, entry)
 			}
 		}
@@ -95,6 +114,22 @@ func NewRequestTimingSequenceFromMap(timing map[string]interface{}) *RequestTimi
 	}
 	if v, ok := timing["loadEventEnd"].(float64); ok {
 		seq.LoadEventEnd = v
+	}
+
+	if paintRaw, ok := timing["paint_entries"].([]interface{}); ok {
+		seq.PaintEntries = make([]PaintTimingEntry, 0, len(paintRaw))
+		for _, p := range paintRaw {
+			if pm, ok := p.(map[string]interface{}); ok {
+				entry := PaintTimingEntry{}
+				if name, ok := pm["name"].(string); ok {
+					entry.Name = name
+				}
+				if st, ok := pm["start_time"].(float64); ok {
+					entry.StartTime = st
+				}
+				seq.PaintEntries = append(seq.PaintEntries, entry)
+			}
+		}
 	}
 
 	return seq
@@ -212,6 +247,91 @@ func (ta *TimingAnalyzer) Analyze(seq *RequestTimingSequence) *VectorResult {
 			Value:   fmt.Sprintf("%.2f", float64(tooFastCount)/float64(len(intervals))),
 		})
 		result.Score += weight
+	}
+
+	// Check 6: Missing or suspicious byte counts (Phase 72)
+	byteScore := ta.validateByteCounts(seq.Entries)
+	if byteScore > 0 {
+		weight := 0.35
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "timing_missing_byte_counts",
+			Message: "Resource timing byte counts (transferSize/encodedBodySize) are zero or constant",
+			Weight:  weight,
+			Field:   "transfer_size",
+			Value:   fmt.Sprintf("%.2f", byteScore),
+		})
+		result.Score += weight * byteScore
+	}
+
+	// Check 7: Inconsistent protocols (Phase 72)
+	protoScore := ta.validateProtocols(seq.Entries)
+	if protoScore > 0 {
+		weight := 0.25
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "timing_inconsistent_protocols",
+			Message: "Resource timing protocols (nextHopProtocol) are missing or inconsistent",
+			Weight:  weight,
+			Field:   "next_hop_protocol",
+			Value:   fmt.Sprintf("%.2f", protoScore),
+		})
+		result.Score += weight * protoScore
+	}
+
+	// Phase 84: Navigation Timing Consistency
+	// Normalize to absolute timestamps if needed
+	firstEntryTS := float64(seq.Entries[0].Timestamp)
+	lastEntry := seq.Entries[len(seq.Entries)-1]
+	lastEntryEnd := float64(lastEntry.Timestamp + lastEntry.Duration)
+
+	navStart := seq.NavigationStart
+	loadEnd := seq.LoadEventEnd
+
+	// If timestamps are small, they are relative to navigationStart
+	if firstEntryTS < 1e11 && navStart > 1e11 {
+		firstEntryTS += navStart
+		lastEntryEnd += navStart
+	}
+
+	if navStart > 0 {
+		if navStart > firstEntryTS {
+			weight := 0.45
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "timing_navigation_start_inconsistent",
+				Message: fmt.Sprintf("navigationStart (%.0f) is after the first resource request (%.0f)", navStart, firstEntryTS),
+				Weight:  weight,
+				Field:   "navigationStart",
+				Value:   fmt.Sprintf("%.0f", navStart),
+			})
+			result.Score += weight
+		}
+	}
+
+	if loadEnd > 0 {
+		if loadEnd < lastEntryEnd {
+			weight := 0.40
+			result.Indicators = append(result.Indicators, VectorIndicator{
+				Check:   "timing_load_event_inconsistent",
+				Message: fmt.Sprintf("loadEventEnd (%.0f) is before the last resource finished (%.0f)", loadEnd, lastEntryEnd),
+				Weight:  weight,
+				Field:   "loadEventEnd",
+				Value:   fmt.Sprintf("%.0f", loadEnd),
+			})
+			result.Score += weight
+		}
+	}
+
+	// Check 8: Paint Timing Consistency (Phase 90)
+	paintScore := ta.checkPaintTiming(seq)
+	if paintScore > 0 {
+		weight := 0.40
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "timing_paint_mismatch",
+			Message: "Performance paint entries are missing or inconsistent with navigation lifecycle",
+			Weight:  weight,
+			Field:   "paint_entries",
+			Value:   "mismatch",
+		})
+		result.Score += weight * paintScore
 	}
 
 	result.Score = math.Min(1.0, result.Score)
@@ -334,4 +454,143 @@ func resourcePriority(contentType string) int {
 	default:
 		return -1
 	}
+}
+
+func (ta *TimingAnalyzer) validateByteCounts(entries []RequestTimingEntry) float64 {
+	if len(entries) < 5 {
+		return 0
+	}
+
+	var zeroCount int
+	var nonZeroEntries []int64
+	for _, e := range entries {
+		if e.TransferSize == 0 && e.EncodedBodySize == 0 {
+			zeroCount++
+		} else {
+			nonZeroEntries = append(nonZeroEntries, e.TransferSize)
+		}
+	}
+
+	// If ALL entries are zero byte, it's a huge signal.
+	if zeroCount == len(entries) {
+		return 1.0
+	}
+
+	// If majority are zero, it's also suspicious
+	if float64(zeroCount)/float64(len(entries)) > 0.8 {
+		return 0.7
+	}
+
+	// Check for "constant" sizes — a common lazy mock habit
+	if len(nonZeroEntries) > 3 {
+		allSame := true
+		first := nonZeroEntries[0]
+		for _, sz := range nonZeroEntries[1:] {
+			if sz != first {
+				allSame = false
+				break
+			}
+		}
+		if allSame {
+			return 0.8
+		}
+	}
+
+	return 0
+}
+
+func (ta *TimingAnalyzer) validateProtocols(entries []RequestTimingEntry) float64 {
+	if len(entries) < 5 {
+		return 0
+	}
+
+	var missingCount int
+	protos := make(map[string]int)
+	for _, e := range entries {
+		if e.Protocol == "" {
+			missingCount++
+		} else {
+			protos[e.Protocol]++
+		}
+	}
+
+	// If ALL entries are missing protocol, it's suspicious
+	if missingCount == len(entries) {
+		return 1.0
+	}
+
+	// If we are on a modern site (inferred from many entries), we expect h2 or h3.
+	// If it's all "http/1.1", it might be a simple proxy or tool.
+	if protos["http/1.1"] > 0 && len(protos) == 1 {
+		// Most browsers use h2/h3 for almost everything now.
+		return 0.5
+	}
+
+	return 0
+}
+
+// checkPaintTiming validates PerformancePaintTiming consistency.
+func (ta *TimingAnalyzer) checkPaintTiming(seq *RequestTimingSequence) float64 {
+	if len(seq.Entries) < 5 {
+		return 0 // Too few entries to judge paint markers
+	}
+
+	if len(seq.PaintEntries) == 0 {
+		// Real browsers on real pages almost always have fcp/fp
+		return 0.4
+	}
+
+	var fp, fcp float64
+	for _, p := range seq.PaintEntries {
+		if p.Name == "first-paint" {
+			fp = p.StartTime
+		} else if p.Name == "first-contentful-paint" {
+			fcp = p.StartTime
+		}
+	}
+
+	score := 0.0
+
+	// FP and FCP must be positive
+	if fp <= 0 || fcp <= 0 {
+		score += 0.5
+	}
+
+	// Navigation started at 0 (relative) or absolute
+	// Usually paint entries are relative to navigationStart
+	if fcp < fp {
+		score += 0.6 // FCP cannot be before FP
+	}
+
+	// Performance paint entries are typically > 10ms
+	if fp < 10 && fp > 0 {
+		score += 0.3
+	}
+
+	// Correlation with resources: FCP usually happens after the first 
+	// stylesheet or font finishes loading.
+	firstVisualResourceEnd := 0.0
+	for _, e := range seq.Entries {
+		ct := strings.ToLower(e.ContentType)
+		if strings.Contains(ct, "css") || strings.Contains(ct, "font") {
+			end := float64(e.Timestamp + e.Duration)
+			if firstVisualResourceEnd == 0 || end < firstVisualResourceEnd {
+				firstVisualResourceEnd = end
+			}
+		}
+	}
+
+	// If FCP is significantly before the first CSS load on a page that HAS CSS, it's suspicious.
+	if firstVisualResourceEnd > 0 && fcp > 0 {
+		// Normalise firstVisualResourceEnd if absolute
+		if firstVisualResourceEnd > 1e11 && seq.NavigationStart > 1e11 {
+			firstVisualResourceEnd -= seq.NavigationStart
+		}
+		
+		if fcp < firstVisualResourceEnd*0.5 {
+			score += 0.4
+		}
+	}
+
+	return math.Min(1.0, score)
 }

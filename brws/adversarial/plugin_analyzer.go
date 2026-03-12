@@ -146,6 +146,26 @@ func (pa *PluginAnalyzer) Analyze(data *PluginData) *VectorResult {
 		}
 	}
 
+	// Check 6: Plugin Filename Consistency (Chrome 87+)
+	// All Chrome PDF plugins use "internal-pdf-viewer" as the filename.
+	if isChrome {
+		for _, p := range data.Plugins {
+			if strings.Contains(strings.ToLower(p.Name), "pdf") {
+				if p.Filename != "internal-pdf-viewer" {
+					weight := 0.35
+					result.Indicators = append(result.Indicators, VectorIndicator{
+						Check:   "suspicious_plugin_filename",
+						Message: fmt.Sprintf("Chrome PDF plugin '%s' has non-standard filename '%s'", p.Name, p.Filename),
+						Weight:  weight,
+						Field:   "filename",
+						Value:   p.Filename,
+					})
+					result.Score += weight
+				}
+			}
+		}
+	}
+
 	result.Score = math.Min(1.0, result.Score)
 	result.Detected = result.Score > 0.3
 

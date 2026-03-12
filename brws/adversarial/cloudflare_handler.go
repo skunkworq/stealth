@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -136,13 +137,14 @@ type cfInitRequest struct {
 
 // cfInitResponse is the response from HandleInit.
 type cfInitResponse struct {
-	SessionID           string       `json:"session_id"`
-	Type                string       `json:"type"`
-	RayID               string       `json:"ray_id"`
-	PoW                 *PoWChallenge `json:"pow"`
-	RequiresFingerprint bool         `json:"requires_fingerprint"`
-	RequiresBehavioral  bool         `json:"requires_behavioral"`
-	SiteKey             string       `json:"site_key,omitempty"`
+	SessionID           string                 `json:"session_id"`
+	Type                string                 `json:"type"`
+	RayID               string                 `json:"ray_id"`
+	PoW                 *PoWChallenge          `json:"pow"`
+	RequiresFingerprint bool                   `json:"requires_fingerprint"`
+	RequiresBehavioral  bool                   `json:"requires_behavioral"`
+	SiteKey             string                 `json:"site_key,omitempty"`
+	Turnstile           *TurnstileWidgetConfig `json:"turnstile,omitempty"`
 }
 
 // HandleInit creates a new challenge session and returns PoW parameters.
@@ -177,6 +179,7 @@ func (cc *CloudflareChallenger) HandleInit(w http.ResponseWriter, r *http.Reques
 		// Default to managed challenge
 		session = cc.CreateManagedChallenge(req.SessionID, req.DetectionScore)
 	}
+	session.Hostname = r.Host
 
 	resp := cfInitResponse{
 		SessionID:           session.ID,
@@ -186,6 +189,10 @@ func (cc *CloudflareChallenger) HandleInit(w http.ResponseWriter, r *http.Reques
 		RequiresFingerprint: session.RequiresFingerprint,
 		RequiresBehavioral:  session.RequiresBehavioral,
 		SiteKey:             session.SiteKey,
+	}
+	if session.Type == ChallengeTurnstile {
+		cfg := session.TurnstileConfig
+		resp.Turnstile = &cfg
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -201,6 +208,109 @@ func (cc *CloudflareChallenger) HandleInit(w http.ResponseWriter, r *http.Reques
 		Expires:  time.Now().Add(30 * time.Minute),
 	})
 	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// HandleTurnstileWidgetPage serves a local Turnstile-style widget page for owned-environment testing.
+func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sessionID := r.URL.Query().Get("session_id")
+	if sessionID == "" {
+		sessionID = fmt.Sprintf("cf_ts_%d", time.Now().UnixNano())
+	}
+
+	siteKey := r.URL.Query().Get("site_key")
+	if siteKey == "" {
+		siteKey = "1x00000000000000000000AA"
+	}
+
+	session, ok := cc.GetSession(sessionID)
+	if !ok || session.Type != ChallengeTurnstile {
+		session = cc.CreateTurnstileChallenge(sessionID, siteKey)
+	}
+
+	cc.mu.Lock()
+	session.Hostname = r.Host
+	session.TurnstileTelemetry.recordCallback("before-interactive")
+	session.TurnstileConfig.CallbackState = session.TurnstileTelemetry.CallbackState
+	cc.mu.Unlock()
+
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Server", "cloudflare")
+	w.Header().Set("Cf-Ray", session.RayID)
+	w.WriteHeader(http.StatusForbidden)
+
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Just a moment...</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f7f7;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+    .cf-shell{width:min(420px,92vw);padding:28px;background:#fff;border:1px solid #e5e5e5;border-radius:16px;box-shadow:0 18px 60px rgba(0,0,0,.08)}
+    .cf-turnstile{min-height:65px;border:1px solid #d9d9d9;border-radius:12px;padding:12px;background:#fafafa}
+    .cf-meta{margin-top:14px;color:#6f6f6f;font-size:12px}
+  </style>
+</head>
+<body>
+  <main class="cf-shell">
+    <h1>Verify you are human</h1>
+    <p>This is a local Turnstile harness for owned-environment testing.</p>
+    <div class="cf-turnstile"
+      data-sitekey="%s"
+      data-action="%s"
+      data-cdata="%s"
+      data-theme="%s"
+      data-size="%s"
+      data-appearance="%s"
+      data-execution="%s"
+      data-retry="%s"
+      data-retry-interval="%d"
+      data-refresh-expired="%s"
+      data-refresh-timeout="%s"
+      data-before-interactive-callback="__tsBeforeInteractive"
+      data-after-interactive-callback="__tsAfterInteractive"
+      data-callback="__tsSuccess"
+      data-expired-callback="__tsExpired"
+      data-timeout-callback="__tsTimeout"
+      data-error-callback="__tsError"></div>
+    <div class="cf-meta">Ray ID: %s</div>
+  </main>
+  <script>
+    function __tsPost(callbackName){
+      navigator.sendBeacon('/cdn-cgi/challenge-platform/h/g/cv/result/%s', JSON.stringify({callback: callbackName, session_id: %q}));
+    }
+    function __tsBeforeInteractive(){ __tsPost('before-interactive'); }
+    function __tsAfterInteractive(){ __tsPost('after-interactive'); }
+    function __tsSuccess(token){ __tsPost('success'); return token; }
+    function __tsExpired(){ __tsPost('expired'); }
+    function __tsTimeout(){ __tsPost('timeout'); }
+    function __tsError(){ __tsPost('error'); }
+    setTimeout(__tsAfterInteractive, 10);
+  </script>
+</body>
+</html>`,
+		session.SiteKey,
+		session.TurnstileConfig.Action,
+		session.TurnstileConfig.CData,
+		session.TurnstileConfig.Theme,
+		session.TurnstileConfig.Size,
+		session.TurnstileConfig.Appearance,
+		session.TurnstileConfig.Execution,
+		session.TurnstileConfig.RetryPolicy.Mode,
+		session.TurnstileConfig.RetryPolicy.IntervalMs,
+		session.TurnstileConfig.RefreshPolicy.Expired,
+		session.TurnstileConfig.RefreshPolicy.Timeout,
+		session.RayID,
+		session.RayID,
+		session.ID,
+	)
+
+	_, _ = w.Write([]byte(html))
 }
 
 // cfSolveJSRequest is the request body for HandleSolveJS.
@@ -370,11 +480,13 @@ func (cc *CloudflareChallenger) HandleSolveTurnstile(w http.ResponseWriter, r *h
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Server", "cloudflare")
 	_ = json.NewEncoder(w).Encode(map[string]interface{}{
-		"success":         true,
-		"method":          result.Method,
-		"solve_ms":        result.SolveTimeMs,
-		"turnstile_token": result.TurnstileToken,
-		"cf_clearance":    result.ClearanceCookie.Value,
+		"success":          true,
+		"method":           result.Method,
+		"solve_ms":         result.SolveTimeMs,
+		"turnstile_token":  result.TurnstileToken,
+		"turnstile":        result.Turnstile,
+		"widget_telemetry": result.Telemetry,
+		"cf_clearance":     result.ClearanceCookie.Value,
 	})
 }
 
@@ -438,6 +550,48 @@ func (cc *CloudflareChallenger) HandleStatus(w http.ResponseWriter, r *http.Requ
 	_ = json.NewEncoder(w).Encode(stats)
 }
 
+// HandleTurnstileSiteVerify verifies locally issued Turnstile tokens using lab-only semantics.
+func (cc *CloudflareChallenger) HandleTurnstileSiteVerify(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	type verifyReq struct {
+		Secret   string `json:"secret"`
+		Response string `json:"response"`
+		RemoteIP string `json:"remoteip,omitempty"`
+	}
+
+	var req verifyReq
+	if strings.Contains(r.Header.Get("Content-Type"), "application/json") {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
+			return
+		}
+	} else {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, `{"error":"invalid form body"}`, http.StatusBadRequest)
+			return
+		}
+		req.Secret = r.FormValue("secret")
+		req.Response = r.FormValue("response")
+		req.RemoteIP = r.FormValue("remoteip")
+	}
+
+	result := cc.VerifyTurnstileToken(req.Secret, req.Response, r.Host)
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Server", "cloudflare")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"success":      result.Success,
+		"challenge_ts": result.ChallengeTS,
+		"hostname":     result.Hostname,
+		"action":       result.Action,
+		"cdata":        result.CData,
+		"error-codes":  result.ErrorCodes,
+	})
+}
+
 // HandleChallengeCallback accepts XHR callbacks from the challenge page JS.
 // Real CF challenge pages send fingerprint data, timing signals, and behavioral
 // events to /cdn-cgi/challenge-platform/h/g/cv/result/{rayID} before submitting
@@ -448,7 +602,32 @@ func (cc *CloudflareChallenger) HandleChallengeCallback(w http.ResponseWriter, r
 		return
 	}
 
-	// Accept the callback data (discard for now — logging only)
+	var payload struct {
+		SessionID string `json:"session_id"`
+		Callback  string `json:"callback"`
+		Type      string `json:"t"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&payload)
+
+	rayID := strings.TrimPrefix(r.URL.Path, "/cdn-cgi/challenge-platform/h/g/cv/result/")
+	cc.mu.Lock()
+	for _, session := range cc.sessions {
+		if session.RayID != rayID && payload.SessionID != session.ID {
+			continue
+		}
+		switch payload.Callback {
+		case "before-interactive", "after-interactive", "success", "expired", "timeout", "error":
+			session.TurnstileTelemetry.recordCallback(payload.Callback)
+		case "":
+			if payload.Type == "fp" {
+				session.TurnstileTelemetry.recordCallback("before-interactive")
+			}
+		}
+		session.TurnstileConfig.CallbackState = session.TurnstileTelemetry.CallbackState
+		break
+	}
+	cc.mu.Unlock()
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Server", "cloudflare")
 	w.WriteHeader(http.StatusOK)
@@ -483,6 +662,9 @@ func (cc *CloudflareChallenger) HandleManagedJS(w http.ResponseWriter, r *http.R
 func (cc *CloudflareChallenger) MountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/cloudflare/init", cc.HandleInit)
 	mux.HandleFunc("/api/cloudflare/challenge", cc.HandleChallengePage)
+	mux.HandleFunc("/api/cloudflare/turnstile/widget", cc.HandleTurnstileWidgetPage)
+	mux.HandleFunc("/api/cloudflare/turnstile/siteverify", cc.HandleTurnstileSiteVerify)
+	mux.HandleFunc("/turnstile/v0/siteverify", cc.HandleTurnstileSiteVerify)
 	mux.HandleFunc("/api/cloudflare/verify", cc.HandleVerifyClearance)
 	mux.HandleFunc("/api/cloudflare/status", cc.HandleStatus)
 

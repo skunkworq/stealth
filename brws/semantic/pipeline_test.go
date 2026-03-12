@@ -168,6 +168,71 @@ func TestCountChunks(t *testing.T) {
 	}
 }
 
+func TestLimitChunkTree(t *testing.T) {
+	chunks := []DomChunk{
+		{Selector: "body > header"},
+		{
+			Selector: "body > main",
+			Children: []DomChunk{
+				{Selector: "body > main > section"},
+				{Selector: "body > main > aside"},
+			},
+		},
+		{Selector: "body > footer"},
+	}
+
+	limited := limitChunkTree(chunks, 3)
+	if got := countChunks(limited); got != 3 {
+		t.Fatalf("expected 3 chunks after limit, got %d", got)
+	}
+
+	if len(limited) != 2 {
+		t.Fatalf("expected 2 top-level chunks after limit, got %d", len(limited))
+	}
+
+	if limited[0].Selector != "body > header" || limited[1].Selector != "body > main" {
+		t.Fatalf("unexpected top-level selector order: %q, %q", limited[0].Selector, limited[1].Selector)
+	}
+
+	if len(limited[1].Children) != 1 || limited[1].Children[0].Selector != "body > main > section" {
+		t.Fatalf("expected only first child of main to remain, got %+v", limited[1].Children)
+	}
+}
+
+func TestHTMLToSemanticTreeCached_RespectsMaxChunks(t *testing.T) {
+	htmlStr := `<!DOCTYPE html><html><body>
+<header><nav><a href="/">Home</a></nav></header>
+<main>
+	<section><p>One</p></section>
+	<section><p>Two</p></section>
+	<section><p>Three</p></section>
+</main>
+<footer><p>Footer</p></footer>
+</body></html>`
+
+	cfg := &PipelineConfig{
+		MaxChunks:        2,
+		MaxConcurrentLLM: 2,
+	}
+
+	tree, stats, err := HTMLToSemanticTreeCached(context.Background(), htmlStr, "https://example.com", cfg)
+	if err != nil {
+		t.Fatalf("HTMLToSemanticTreeCached failed: %v", err)
+	}
+
+	if tree == nil || len(tree.RootNodes) != 1 {
+		t.Fatalf("expected one root node, got %+v", tree)
+	}
+
+	if stats.TotalChunks > 2 {
+		t.Fatalf("expected TotalChunks <= 2, got %d", stats.TotalChunks)
+	}
+
+	if len(tree.RootNodes[0].Children) > 2 {
+		t.Fatalf("expected root children <= 2, got %d", len(tree.RootNodes[0].Children))
+	}
+}
+
 func TestExtractInteractiveElements(t *testing.T) {
 	htmlStr := `<!DOCTYPE html>
 <html>

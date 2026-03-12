@@ -1,14 +1,24 @@
 package semantic
 
 import (
+	"context"
 	"fmt"
 )
 
 func buildNodeFromChunkNoLLM(chunk DomChunk, index int) *SemanticNode {
+	_ = index
+
+	return buildNodeFromChunkNoLLMWithContext(context.Background(), &chunk)
+}
+
+func buildNodeFromChunkNoLLMWithContext(ctx context.Context, chunk *DomChunk) *SemanticNode {
 	nodeID := SelectorToID(chunk.Selector)
 	summary := fmt.Sprintf("%s section", chunk.Tag)
 
-	rawText := extractRawTextFromHTML(chunk.HTML)
+	rawText := ""
+	if ctx.Err() == nil {
+		rawText = extractRawTextFromHTML(chunk.HTML)
+	}
 	if len(rawText) > 20 && len(rawText) < 200 {
 		summary = rawText
 	} else if len(rawText) >= 200 {
@@ -36,8 +46,12 @@ func buildNodeFromChunkNoLLM(chunk DomChunk, index int) *SemanticNode {
 		node.Actions = append(node.Actions, action)
 	}
 
-	for i, child := range chunk.Children {
-		childNode := buildNodeFromChunkNoLLM(child, i)
+	for i := range chunk.Children {
+		if ctx.Err() != nil {
+			break
+		}
+
+		childNode := buildNodeFromChunkNoLLMWithContext(ctx, &chunk.Children[i])
 		node.Children = append(node.Children, *childNode)
 		node.SubtreeTokenCount += childNode.SubtreeTokenCount
 	}

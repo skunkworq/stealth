@@ -19,6 +19,8 @@ func mountCloudflareServer() (*httptest.Server, *adversarial.CloudflareChallenge
 	mux.HandleFunc("/api/cloudflare/solve/js", cc.HandleSolveJS)
 	mux.HandleFunc("/api/cloudflare/solve/managed", cc.HandleSolveManaged)
 	mux.HandleFunc("/api/cloudflare/solve/turnstile", cc.HandleSolveTurnstile)
+	mux.HandleFunc("/api/cloudflare/turnstile/widget", cc.HandleTurnstileWidgetPage)
+	mux.HandleFunc("/api/cloudflare/turnstile/siteverify", cc.HandleTurnstileSiteVerify)
 	mux.HandleFunc("/api/cloudflare/verify", cc.HandleVerifyClearance)
 	mux.HandleFunc("/api/cloudflare/challenge", cc.HandleChallengePage)
 	mux.HandleFunc("/api/cloudflare/status", cc.HandleStatus)
@@ -96,9 +98,9 @@ func TestSwordSolvesTurnstile(t *testing.T) {
 	defer ts.Close()
 
 	solver := NewCloudflareSolverClient()
-	result, err := solver.SolveTurnstile(ts.URL)
+	result, err := solver.HandleTurnstileLab(ts.URL)
 	if err != nil {
-		t.Fatalf("SolveTurnstile failed: %v", err)
+		t.Fatalf("HandleTurnstileLab failed: %v", err)
 	}
 
 	if !result.Passed {
@@ -106,6 +108,12 @@ func TestSwordSolvesTurnstile(t *testing.T) {
 	}
 	if result.TurnstileToken == "" {
 		t.Fatal("expected turnstile token")
+	}
+	if result.Turnstile == nil {
+		t.Fatal("expected structured turnstile token metadata")
+	}
+	if result.WidgetTelemetry == nil || !result.WidgetTelemetry.CallbackState.Success {
+		t.Fatal("expected widget telemetry with success callback")
 	}
 	if result.ClearanceCookie == nil {
 		t.Fatal("expected clearance cookie")
@@ -116,6 +124,13 @@ func TestSwordSolvesTurnstile(t *testing.T) {
 
 	t.Logf("Turnstile challenge: token=%s... pow_time=%dms total=%dms",
 		result.TurnstileToken[:20], result.PoWTimeMs, result.TotalTimeMs)
+}
+
+func TestHandleTurnstileLabRejectsUnallowlistedHost(t *testing.T) {
+	solver := NewCloudflareSolverClient()
+	if _, err := solver.HandleTurnstileLab("https://example.com"); err == nil {
+		t.Fatal("expected non-local host to be rejected")
+	}
 }
 
 func TestSwordClearanceCookieReuse(t *testing.T) {
@@ -307,4 +322,3 @@ func TestStatusEndpoint(t *testing.T) {
 	}
 	t.Logf("status: %+v", stats)
 }
-

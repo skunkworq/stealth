@@ -2,6 +2,7 @@ package semantic
 
 import (
 	"context"
+	"runtime"
 	"time"
 )
 
@@ -13,6 +14,10 @@ func HTMLToSemanticTree(ctx context.Context, htmlStr, url string, config *Pipeli
 
 // HTMLToSemanticTreeCached converts HTML to a semantic tree with caching support.
 func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *PipelineConfig) (*SemanticTree, *CompressionStats, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+
 	start := time.Now()
 	rawBytes := len(htmlStr)
 	domain := ExtractDomain(url)
@@ -24,14 +29,35 @@ func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *
 	}
 	stats.llmSemaphore = make(chan struct{}, maxConcurrent)
 
+	workLimit := maxConcurrent * 4
+	minWorkLimit := runtime.GOMAXPROCS(0) * 2
+
+	if workLimit < minWorkLimit {
+		workLimit = minWorkLimit
+	}
+
+	if workLimit > 0 {
+		stats.workSemaphore = make(chan struct{}, workLimit)
+	}
+
 	cleanedHTML, doc, title, err := cleanAndParseHTML(htmlStr)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+
 	structuralHash := computeStructuralHash(doc)
 	chunks := chunkDOM(doc, url)
+	chunks = limitChunkTree(chunks, config.MaxChunks)
+
 	totalChunks := countChunks(chunks)
+
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 
 	var nodes []SemanticNode
 	if len(chunks) > 0 {
@@ -64,11 +90,11 @@ func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *
 	}
 
 	tree := &SemanticTree{
-		RootNodes: []SemanticNode{rootNode},
+		RootNodes:      []SemanticNode{rootNode},
 		StructuralHash: structuralHash,
-		Domain:   domain,
-		URL:      url,
-		Title:    title,
+		Domain:         domain,
+		URL:            url,
+		Title:          title,
 	}
 
 	runStats := &CompressionStats{
@@ -123,4 +149,36 @@ func splitString(s string, sep byte) []string {
 	}
 	parts = append(parts, s[start:])
 	return parts
+}
+
+func limitChunkTree(chunks []DomChunk, maxChunks int) []DomChunk {
+	if maxChunks <= 0 || len(chunks) == 0 {
+		return chunks
+	}
+
+	remaining := maxChunks
+
+	var trim func(items []DomChunk) []DomChunk
+
+	trim = func(items []DomChunk) []DomChunk {
+		if remaining <= 0 || len(items) == 0 {
+			return nil
+		}
+
+		out := make([]DomChunk, 0, len(items))
+		for i := range items {
+			if remaining <= 0 {
+				break
+			}
+
+			remaining--
+			item := items[i]
+			item.Children = trim(item.Children)
+			out = append(out, item)
+		}
+
+		return out
+	}
+
+	return trim(chunks)
 }

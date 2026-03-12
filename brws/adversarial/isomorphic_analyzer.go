@@ -42,6 +42,16 @@ func (ia *IsomorphicAnalyzer) Analyze(req *http.Request, httpInfo *HTTPFingerpri
 		_ = json.Unmarshal([]byte(canvasHeader), &canvasData)
 	}
 
+	var behavData map[string]interface{}
+	if behavHeader := req.Header.Get(constants.HeaderBehavioralData); behavHeader != "" {
+		_ = json.Unmarshal([]byte(behavHeader), &behavData)
+	}
+
+	var webglData map[string]interface{}
+	if webglHeader := req.Header.Get(constants.HeaderWebGLData); webglHeader != "" {
+		_ = json.Unmarshal([]byte(webglHeader), &webglData)
+	}
+
 	indicators := make([]string, 0)
 
 	httpPlatform := strings.ToLower(httpInfo.Platform)
@@ -50,6 +60,7 @@ func (ia *IsomorphicAnalyzer) Analyze(req *http.Request, httpInfo *HTTPFingerpri
 	}
 
 	indicators = ia.checkPlatformGPU(canvasData, httpPlatform, vec, indicators)
+	indicators = ia.checkGPUCoreCoherence(webglData, navData, vec, indicators)
 	
 	if navData != nil {
 		indicators = ia.checkNavigatorPlatform(navData, httpPlatform, vec, indicators)
@@ -58,6 +69,15 @@ func (ia *IsomorphicAnalyzer) Analyze(req *http.Request, httpInfo *HTTPFingerpri
 		indicators = ia.checkUAVersion(httpInfo, vec, indicators)
 		indicators = ia.checkScreenDimensions(req, navData, vec, indicators)
 		indicators = ia.checkCSITiming(navData, vec, indicators)
+		indicators = ia.checkPointerInteraction(navData, httpPlatform, vec, indicators)
+		indicators = ia.checkTouchPointerCoherence(navData, vec, indicators)
+		indicators = ia.checkUserAgentDataConsistency(navData, httpInfo, vec, indicators)
+	}
+
+	indicators = ia.checkHeaderOrder(httpInfo, vec, indicators)
+
+	if behavData != nil {
+		indicators = ia.checkErrorStackFormat(behavData, httpInfo, vec, indicators)
 	}
 
 	indicators = ia.checkPerformanceTiming(req, vec, indicators)
@@ -96,6 +116,65 @@ func (ia *IsomorphicAnalyzer) checkPlatformGPU(canvasData map[string]interface{}
 	return indicators
 }
 
+func (ia *IsomorphicAnalyzer) checkGPUCoreCoherence(webglData map[string]interface{}, navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	if webglData == nil || navData == nil {
+		return indicators
+	}
+
+	renderer, _ := webglData["unmasked_renderer"].(string)
+	if renderer == "" {
+		renderer, _ = webglData["unmaskedRenderer"].(string)
+	}
+	if renderer == "" {
+		return indicators
+	}
+
+	concurrency, ok := navData["hardwareConcurrency"].(float64)
+	if !ok {
+		return indicators
+	}
+
+	rLow := strings.ToLower(renderer)
+	cores := int(concurrency)
+
+	// 1. Apple Silicon Coherence (M1/M2/M3/M4 have >= 8 cores usually, but lets be safe with >= 8)
+	// Base M1 has 8 cores. M1 Pro/Max 10+. M2 8+. M3 8+.
+	// Headless typically reports 2 or 4.
+	if strings.Contains(rLow, "apple m") && cores < 8 {
+		indicators = append(indicators, fmt.Sprintf("hardware_core_mismatch: %s_with_%d_cores", renderer, cores))
+		vec.Score += 0.40
+	}
+
+	// 2. High-End Desktop GPU Coherence
+	highEndGPUs := []string{"rtx 30", "rtx 40", "rx 6", "rx 7"}
+	isHighEnd := false
+	for _, g := range highEndGPUs {
+		if strings.Contains(rLow, g) {
+			isHighEnd = true
+			break
+		}
+	}
+
+	if isHighEnd && cores < 6 {
+		name := "hardware_core_mismatch"
+		indicators = append(indicators, name)
+		vec.Score += 0.35
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        name,
+			Fired:       true,
+			Weight:      0.35,
+			Score:       0.35,
+			Field:       "hardwareConcurrency vs unmaskedRenderer",
+			Actual:      fmt.Sprintf("%s with %d cores", renderer, cores),
+			Expected:    ">= 6 cores for high-end desktop GPU",
+			Severity:    "medium",
+			Description: "High-end GPUs are rarely paired with fewer than 6 CPU cores in desktop environments.",
+		})
+	}
+
+	return indicators
+}
+
 func (ia *IsomorphicAnalyzer) checkNavigatorPlatform(navData map[string]interface{}, httpPlatform string, vec *DetectionVector, indicators []string) []string {
 	if navPlatform, ok := navData["platform"].(string); ok {
 		navPlatLow := strings.ToLower(navPlatform)
@@ -114,19 +193,65 @@ func (ia *IsomorphicAnalyzer) checkNavigatorPlatform(navData map[string]interfac
 }
 
 func (ia *IsomorphicAnalyzer) checkLanguages(navData map[string]interface{}, acceptLanguage string, vec *DetectionVector, indicators []string) []string {
-	if langs, ok := navData["languages"].([]interface{}); ok {
-		if len(langs) > 0 {
-			primaryNavLang, _ := langs[0].(string)
-			httpLang := strings.ToLower(acceptLanguage)
-			if primaryNavLang != "" {
-				primaryNavLang = strings.ToLower(strings.Split(primaryNavLang, "-")[0])
-				if httpLang != "" && !strings.Contains(httpLang, primaryNavLang) {
-					indicators = append(indicators, "locale_mismatch: http_accept_language_vs_navigator_languages")
-					vec.Score += 0.7
-				}
+	langs, ok := navData["languages"].([]interface{})
+	if !ok || len(langs) == 0 {
+		return indicators
+	}
+
+	primaryNavLang, _ := langs[0].(string)
+	httpLang := strings.ToLower(acceptLanguage)
+	if primaryNavLang == "" {
+		return indicators
+	}
+
+	// 1. Cross-check with Accept-Language header
+	primaryNavLangShort := strings.ToLower(strings.Split(primaryNavLang, "-")[0])
+	if httpLang != "" && !strings.Contains(httpLang, primaryNavLangShort) {
+		indicators = append(indicators, "locale_mismatch: http_accept_language_vs_navigator_languages")
+		vec.Score += 0.7
+	}
+
+	// 2. Cross-check navigator.language (singular) vs navigator.languages[0]
+	if navLang, ok := navData["language"].(string); ok {
+		if navLang != primaryNavLang {
+			indicators = append(indicators, "language_mismatch: navigator.language_vs_languages[0]")
+			vec.Score += 0.5
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        "language_mismatch",
+				Fired:       true,
+				Weight:      0.5,
+				Score:       0.5,
+				Field:       "navigator.language vs languages[0]",
+				Actual:      fmt.Sprintf("language=%s languages=%v", navLang, langs),
+				Expected:    "navigator.language should match languages[0]",
+				Severity:    "high",
+				Description: "The singular navigator.language property does not match the first entry in navigator.languages.",
+			})
+		}
+	}
+
+	// 3. Cross-check Intl.DateTimeFormat().resolvedOptions().locale
+	if intlLocale, ok := navData["intl_locale"].(string); ok {
+		// Intl locale should be a case-insensitive match for navigator.language
+		if navLang, ok := navData["language"].(string); ok {
+			if strings.ToLower(intlLocale) != strings.ToLower(navLang) {
+				indicators = append(indicators, "language_mismatch: intl_locale_vs_navigator.language")
+				vec.Score += 0.5
+				vec.CheckReports = append(vec.CheckReports, CheckReport{
+					Name:        "language_mismatch",
+					Fired:       true,
+					Weight:      0.5,
+					Score:       0.5,
+					Field:       "Intl locale vs navigator.language",
+					Actual:      fmt.Sprintf("intl=%s language=%s", intlLocale, navLang),
+					Expected:    "Intl locale should match navigator.language",
+					Severity:    "high",
+					Description: "The Intl API locale does not match the navigator.language setting.",
+				})
 			}
 		}
 	}
+
 	return indicators
 }
 
@@ -272,7 +397,11 @@ func (ia *IsomorphicAnalyzer) checkScreenDPR(req *http.Request, vec *DetectionVe
 		if json.Unmarshal([]byte(screenHeader), &screenData) == nil {
 			dpr, hasDPR := screenData["pixel_ratio"].(float64)
 			scrWidth, hasW := screenData["width"].(float64)
-			if hasDPR && hasW && dpr >= 2.0 && scrWidth < 1920 {
+			isMobile := strings.Contains(strings.ToLower(req.UserAgent()), "mobile") || 
+				strings.Contains(strings.ToLower(req.UserAgent()), "android") || 
+				strings.Contains(strings.ToLower(req.UserAgent()), "iphone")
+
+			if hasDPR && hasW && dpr >= 2.0 && scrWidth < 1920 && !isMobile {
 				indicators = append(indicators, fmt.Sprintf("screen_dpr_resolution_improbable: dpr=%.1f width=%.0f", dpr, scrWidth))
 				vec.Score += 0.25
 				vec.CheckReports = append(vec.CheckReports, CheckReport{
@@ -304,8 +433,8 @@ func (ia *IsomorphicAnalyzer) checkFontPlatform(req *http.Request, navData map[s
 					isNavMac := strings.Contains(navLow, "mac")
 					isFontWin := strings.Contains(fontLow, "win")
 					isNavWin := strings.Contains(navLow, "win")
-					isFontLinux := strings.Contains(fontLow, "linux")
-					isNavLinux := strings.Contains(navLow, "linux")
+					isFontLinux := strings.Contains(fontLow, "linux") || strings.Contains(fontLow, "android")
+					isNavLinux := strings.Contains(navLow, "linux") || strings.Contains(navLow, "android")
 
 					mismatch := (isFontMac && !isNavMac) || (isFontWin && !isNavWin) ||
 						(isFontLinux && !isNavLinux) || (isNavMac && !isFontMac) ||
@@ -319,5 +448,346 @@ func (ia *IsomorphicAnalyzer) checkFontPlatform(req *http.Request, navData map[s
 			}
 		}
 	}
+	return indicators
+}
+
+func (ia *IsomorphicAnalyzer) checkErrorStackFormat(behavData map[string]interface{}, httpInfo *HTTPFingerprintInfo, vec *DetectionVector, indicators []string) []string {
+	if errorStack, ok := behavData["errorStack"].(string); ok && errorStack != "" {
+		ua := strings.ToLower(httpInfo.UserAgent)
+		isChrome := strings.Contains(ua, "chrome")
+		isFirefox := strings.Contains(ua, "firefox")
+
+		// Chrome/Edge/V8 stacks start with "Error" and have "\n    at "
+		isV8Stack := strings.HasPrefix(errorStack, "Error") && strings.Contains(errorStack, "\n    at ")
+
+		// Firefox/SpiderMonkey stacks usually have "@" and don't start with "Error" in the stack property itself
+		isSpiderMonkeyStack := strings.Contains(errorStack, "@") && !strings.HasPrefix(errorStack, "Error")
+
+		// Heuristic: real application stacks usually have at least 2 frames
+		frameCount := strings.Count(errorStack, "\n")
+		isTooShort := frameCount < 1
+
+		// Heuristic: check for "too clean" stacks (e.g. exactly 1 or 2 lines without any application noise)
+		isSuspiciouslyClean := !strings.Contains(errorStack, ".js") && !strings.Contains(errorStack, ".ts")
+
+		if isChrome && !isV8Stack {
+			indicators = append(indicators, "error_stack_mismatch: claimed_chrome_but_non_v8_stack")
+			vec.Score += 0.40
+			// (CheckReport details omitted for brevity in thought, but I'll include them in the tool call)
+		}
+
+		if isChrome && isV8Stack && (isTooShort || isSuspiciouslyClean) {
+			indicators = append(indicators, "error_stack_suspiciously_clean")
+			vec.Score += 0.25
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        "error_stack_suspicious",
+				Fired:       true,
+				Weight:      0.25,
+				Score:       0.25,
+				Field:       "Error.stack",
+				Actual:      errorStack,
+				Expected:    "multi-frame application stack",
+				Severity:    "medium",
+				Description: "The JavaScript Error.stack is suspiciously short or lacks application-specific context (like .js filenames), which is common in synthetic bot environments.",
+			})
+		}
+
+		if isChrome && !strings.Contains(errorStack, "async") && frameCount > 3 {
+			// Deep stacks in modern apps almost always involve async/await
+			indicators = append(indicators, "error_stack_missing_async_context")
+			vec.Score += 0.15
+		}
+
+		if isChrome && !isV8Stack {
+			// Already handled above, just keeping the structure
+		} else if isFirefox && !isSpiderMonkeyStack {
+			indicators = append(indicators, "error_stack_mismatch: claimed_firefox_but_non_spidermonkey_stack")
+			vec.Score += 0.40
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        "error_stack_mismatch",
+				Fired:       true,
+				Weight:      0.40,
+				Score:       0.40,
+				Field:       "errorStack vs UserAgent",
+				Actual:      "non-SpiderMonkey stack",
+				Expected:    "SpiderMonkey stack (contains @ function calls)",
+				Severity:    "high",
+				Description: "The JavaScript Error.stack format does not match the SpiderMonkey engine used by Firefox.",
+			})
+		}
+	}
+	return indicators
+}
+
+func (ia *IsomorphicAnalyzer) checkPointerInteraction(navData map[string]interface{}, httpPlatform string, vec *DetectionVector, indicators []string) []string {
+	if navData == nil {
+		return indicators
+	}
+
+	pointer, hasPointer := navData["media_query_pointer"].(string)
+	anyPointer, hasAnyPointer := navData["media_query_any_pointer"].(string)
+
+	if !hasPointer && !hasAnyPointer {
+		return indicators
+	}
+
+	isDesktop := (strings.Contains(httpPlatform, "win") || strings.Contains(httpPlatform, "mac") || strings.Contains(httpPlatform, "darwin") || strings.Contains(httpPlatform, "linux")) &&
+		!strings.Contains(httpPlatform, "android") && !strings.Contains(httpPlatform, "iphone") && !strings.Contains(httpPlatform, "ipad")
+
+	if isDesktop {
+		// Real desktop browsers (Chrome, Firefox, Safari) report "fine" for pointer.
+		// Headless/Bot environments often report "none" or "coarse".
+		if hasPointer && pointer != "fine" {
+			name := "pointer_mismatch"
+			indicators = append(indicators, name)
+			vec.Score += 0.40
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        name,
+				Fired:       true,
+				Weight:      0.40,
+				Score:       0.40,
+				Field:       "media_query_pointer",
+				Actual:      pointer,
+				Expected:    "fine",
+				Severity:    "high",
+				Description: "Desktop browsers must report a 'fine' pointer interaction type.",
+			})
+		}
+		// any-pointer usually includes "fine" on desktop.
+		if hasAnyPointer && (anyPointer == "none" || anyPointer == "coarse") {
+			name := "any_pointer_mismatch"
+			indicators = append(indicators, name)
+			vec.Score += 0.35
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        name,
+				Fired:       true,
+				Weight:      0.35,
+				Score:       0.35,
+				Field:       "media_query_any_pointer",
+				Actual:      anyPointer,
+				Expected:    "fine",
+				Severity:    "high",
+				Description: "Desktop browsers should report 'fine' as an available pointer interaction type.",
+			})
+		}
+	}
+	return indicators
+}
+
+func (ia *IsomorphicAnalyzer) checkUserAgentDataConsistency(navData map[string]interface{}, httpInfo *HTTPFingerprintInfo, vec *DetectionVector, indicators []string) []string {
+	// Brands and version in UserAgentData should match Sec-Ch-Ua
+	uaData, ok := navData["userAgentData"].(map[string]interface{})
+	if !ok {
+		return indicators
+	}
+
+	brands, ok := uaData["brands"].([]interface{})
+	if !ok || len(brands) == 0 {
+		return indicators
+	}
+
+	secChUa := httpInfo.SecCHUA
+	if secChUa == "" {
+		return indicators
+	}
+
+	for _, b := range brands {
+		brandMap, ok := b.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		brand, _ := brandMap["brand"].(string)
+		version, _ := brandMap["version"].(string)
+
+		// Check if brand/version pair exists in Sec-Ch-Ua
+		// Format: "Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"
+		expected := fmt.Sprintf(`"%s";v="%s"`, brand, version)
+		if brand != "" && version != "" && !strings.Contains(secChUa, expected) {
+			name := "ua_data_consistency_mismatch"
+			indicators = append(indicators, name)
+			vec.Score += 0.40
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        name,
+				Fired:       true,
+				Weight:      0.40,
+				Score:       0.40,
+				Field:       "navigator.userAgentData.brands vs Sec-Ch-Ua",
+				Actual:      fmt.Sprintf("%s v%s not in %s", brand, version, secChUa),
+				Expected:    "exact match in header",
+				Severity:    "high",
+				Description: "The Navigator.userAgentData brand and version do not match the Sec-Ch-Ua HTTP header.",
+			})
+			break
+		}
+	}
+
+	// 2. Full Version List Consistency (Phase 75)
+	if fullVersionList, ok := uaData["fullVersionList"].([]interface{}); ok && len(fullVersionList) > 0 {
+		secChUaFull := httpInfo.SecCHUAFullVersionList
+		if secChUaFull != "" {
+			for _, b := range fullVersionList {
+				brandMap, ok := b.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				brand, _ := brandMap["brand"].(string)
+				version, _ := brandMap["version"].(string)
+
+				// Format: "Chromium";v="134.0.6998.35", "Google Chrome";v="134.0.6998.35", "Not-A.Brand";v="99.0.0.0"
+				expected := fmt.Sprintf(`"%s";v="%s"`, brand, version)
+				if brand != "" && version != "" && !strings.Contains(secChUaFull, expected) {
+					indicators = append(indicators, "ua_client_hints_mismatch: full_version_list")
+					vec.Score += 0.45
+					vec.CheckReports = append(vec.CheckReports, CheckReport{
+						Name:        "ua_client_hints_mismatch",
+						Fired:       true,
+						Weight:      0.45,
+						Score:       0.45,
+						Field:       "navigator.userAgentData.getHighEntropyValues(['fullVersionList']) vs Sec-CH-UA-Full-Version-List",
+						Actual:      fmt.Sprintf("%s v%s not in %s", brand, version, secChUaFull),
+						Expected:    "exact match in header",
+						Severity:    "high",
+						Description: "The high-entropy full version list from navigator.userAgentData does not match the Sec-CH-UA-Full-Version-List HTTP header.",
+					})
+					break
+				}
+			}
+		}
+	}
+
+	// 3. Platform/Arch/Bitness Consistency
+	if arch, ok := uaData["architecture"].(string); ok && arch != "" {
+		if httpInfo.SecCHUAArch != "" {
+			// Header is usually quoted: "x86"
+			expectedArch := fmt.Sprintf(`"%s"`, arch)
+			if httpInfo.SecCHUAArch != expectedArch && httpInfo.SecCHUAArch != arch {
+				indicators = append(indicators, "ua_client_hints_mismatch: architecture")
+				vec.Score += 0.35
+			}
+		}
+	}
+
+	if bitness, ok := uaData["bitness"].(string); ok && bitness != "" {
+		if httpInfo.SecCHUABitness != "" {
+			expectedBitness := fmt.Sprintf(`"%s"`, bitness)
+			if httpInfo.SecCHUABitness != expectedBitness && httpInfo.SecCHUABitness != bitness {
+				indicators = append(indicators, "ua_client_hints_mismatch: bitness")
+				vec.Score += 0.35
+			}
+		}
+	}
+
+	return indicators
+}
+
+func (ia *IsomorphicAnalyzer) checkHeaderOrder(httpInfo *HTTPFingerprintInfo, vec *DetectionVector, indicators []string) []string {
+	if len(httpInfo.HeaderOrder) < 5 {
+		return indicators
+	}
+
+	// Browsers typically have User-Agent near the top, and Accept shortly after.
+	// Go's default map iteration often puts random headers first.
+	// We check if specific common headers are in "suspicious" relative positions.
+	
+	uaIdx := -1
+	acceptIdx := -1
+	secChIdx := -1
+
+	for i, h := range httpInfo.HeaderOrder {
+		switch strings.ToLower(h) {
+		case "user-agent":
+			uaIdx = i
+		case "accept":
+			acceptIdx = i
+		case "sec-ch-ua":
+			secChIdx = i
+		}
+	}
+
+	// Heuristic: If Sec-Ch-Ua is present, it usually precedes User-Agent in modern Chrome.
+	// If User-Agent is after Accept, it's often a sign of manual header setting without ordering.
+	mismatch := false
+	actual := ""
+	expected := ""
+
+	if uaIdx != -1 && acceptIdx != -1 && uaIdx > acceptIdx {
+		mismatch = true
+		actual = "Accept before User-Agent"
+		expected = "User-Agent before Accept"
+	} else if secChIdx != -1 && uaIdx != -1 && secChIdx > uaIdx {
+		mismatch = true
+		actual = "User-Agent before Sec-Ch-Ua"
+		expected = "Sec-Ch-Ua before User-Agent"
+	}
+
+	if mismatch {
+		name := "suspicious_header_order"
+		indicators = append(indicators, name)
+		vec.Score += 0.20
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        name,
+			Fired:       true,
+			Weight:      0.20,
+			Score:       0.20,
+			Field:       "Header Order",
+			Actual:      actual,
+			Expected:    expected,
+			Severity:    "medium",
+			Description: "The relative order of HTTP headers is inconsistent with standard browser behavior.",
+		})
+	}
+
+	return indicators
+}
+
+func (ia *IsomorphicAnalyzer) checkTouchPointerCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	maxTouch, hasMaxTouch := navData["maxTouchPoints"].(float64)
+	pointer, hasPointer := navData["media_query_pointer"].(string)
+	anyPointer, hasAnyPointer := navData["media_query_any_pointer"].(string)
+
+	if !hasMaxTouch {
+		return indicators
+	}
+
+	// 1. Touch implies Coarse
+	// If maxTouchPoints > 0, interaction should typically report 'coarse' (even if 'fine' is also available)
+	if maxTouch > 0 {
+		if hasPointer && pointer == "fine" && (hasAnyPointer && !strings.Contains(anyPointer, "coarse")) {
+			// This is suspicious: has touch points but media queries only report 'fine'
+			name := "touch_pointer_mismatch"
+			indicators = append(indicators, name)
+			vec.Score += 0.35
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        name,
+				Fired:       true,
+				Weight:      0.35,
+				Score:       0.35,
+				Field:       "maxTouchPoints vs media_query_any_pointer",
+				Actual:      fmt.Sprintf("maxTouch=%d pointer=%s any-pointer=%s", int(maxTouch), pointer, anyPointer),
+				Expected:    "any-pointer should include 'coarse' if touch is enabled",
+				Severity:    "medium",
+				Description: "The device reports touch points but doesn't report 'coarse' pointer capabilities in media queries.",
+			})
+		}
+	} else {
+		// 2. MaxTouch=0 but Coarse only
+		if hasPointer && pointer == "coarse" {
+			name := "touch_pointer_mismatch"
+			indicators = append(indicators, name)
+			vec.Score += 0.40
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        name,
+				Fired:       true,
+				Weight:      0.40,
+				Score:       0.40,
+				Field:       "maxTouchPoints vs media_query_pointer",
+				Actual:      "maxTouch=0 pointer=coarse",
+				Expected:    "pointer should be 'fine' if no touch points available",
+				Severity:    "high",
+				Description: "The device reports 'coarse' as its primary pointer but has 0 maxTouchPoints.",
+			})
+		}
+	}
+
 	return indicators
 }

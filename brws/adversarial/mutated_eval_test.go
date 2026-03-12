@@ -62,6 +62,7 @@ func TestMutatedShield(t *testing.T) {
 			EvadeHardwareConcurrency: true,
 			EvadeNetworkQuantization: true,
 			EvadeCanvasEntropy:       true,
+			EvadeDPRQuantization:     true,
 			EventConfig:             behavior.DefaultGeneratorConfig(),
 		}
 		genConfigMutated.EventConfig.EvadeMouseEaseIn = true

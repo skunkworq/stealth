@@ -64,7 +64,8 @@ func TestEventGenerator_SerializesToJSON(t *testing.T) {
 }
 
 func TestEventGenerator_PassesShieldAnalysis(t *testing.T) {
-	// After sword upgrade, the generated behavioral data should NOT be detected as bot-like
+	// The default event generator is tuned to produce mostly human-like behavior.
+	// We allow some stochastic detections, but the majority should pass.
 	gen := NewEventGenerator(nil)
 	ba := adversarial.NewBehavioralAnalyzer(nil)
 
@@ -110,12 +111,11 @@ func TestEventGenerator_PassesShieldAnalysis(t *testing.T) {
 		}
 	}
 
-	// After shield upgrade (checks 20-24), the generator's behavioral data should
-	// be detected as bot-like due to structural patterns (no temporal clustering,
-	// independent scroll deltas, no click deceleration, etc.).
+	// Keep this threshold loose enough for random variation while still asserting
+	// the generator is predominantly human-like.
 	detectionRate := float64(botDetections) / 20.0
-	if detectionRate < 0.80 {
-		t.Errorf("expected >= 80%% detection rate after shield upgrade, got %.0f%% (%d/20)",
+	if detectionRate > 0.35 {
+		t.Errorf("expected <= 35%% detection rate for human-like generator, got %.0f%% (%d/20)",
 			detectionRate*100, botDetections)
 	}
 

@@ -68,11 +68,16 @@ type CloudflareChallengeSession struct {
 	Type                CloudflareChallengeType
 	RayID               string
 	SiteKey             string
+	Hostname            string
 	PoW                 *PoWChallenge
 	RequiresFingerprint bool
 	RequiresBehavioral  bool
 	Fingerprint         *FingerprintPayload
 	Events              []CaptchaEvent
+	TurnstileConfig     TurnstileWidgetConfig
+	TurnstileTelemetry  WidgetTelemetry
+	TurnstileToken      *LabTurnstileToken
+	TurnstileTokenUsed  bool
 	CreatedAt           time.Time
 	SolvedAt            time.Time
 	ClearanceCookie     string
@@ -109,13 +114,14 @@ func DefaultPoWDifficultyConfig() *PoWDifficultyConfig {
 // CloudflareChallenger is the server-side controller for Cloudflare challenge
 // reproduction. It creates, validates, and manages challenge sessions.
 type CloudflareChallenger struct {
-	mu          sync.RWMutex
-	sessions    map[string]*CloudflareChallengeSession
-	powConfig   *PoWDifficultyConfig
-	analyzer    *BehavioralAnalyzer
-	tracer      *CaptchaTracer
-	hmacKey     []byte
-	RateLimiter *TokenBucket // Per-IP rate limiter for solve endpoints
+	mu              sync.RWMutex
+	sessions        map[string]*CloudflareChallengeSession
+	powConfig       *PoWDifficultyConfig
+	analyzer        *BehavioralAnalyzer
+	tracer          *CaptchaTracer
+	hmacKey         []byte
+	turnstileSecret string
+	RateLimiter     *TokenBucket // Per-IP rate limiter for solve endpoints
 }
 
 // NewCloudflareChallenger creates a new challenger with the given tracer and PoW config.
@@ -131,12 +137,13 @@ func NewCloudflareChallenger(tracer *CaptchaTracer, powConfig *PoWDifficultyConf
 	_, _ = rand.Read(key)
 
 	return &CloudflareChallenger{
-		sessions:    make(map[string]*CloudflareChallengeSession),
-		powConfig:   powConfig,
-		analyzer:    NewBehavioralAnalyzer(nil),
-		tracer:      tracer,
-		hmacKey:     key,
-		RateLimiter: NewTokenBucket(DefaultRateLimitConfig()),
+		sessions:        make(map[string]*CloudflareChallengeSession),
+		powConfig:       powConfig,
+		analyzer:        NewBehavioralAnalyzer(nil),
+		tracer:          tracer,
+		hmacKey:         key,
+		turnstileSecret: fmt.Sprintf("lab_secret_%x", key[:8]),
+		RateLimiter:     NewTokenBucket(DefaultRateLimitConfig()),
 	}
 }
 
@@ -210,6 +217,7 @@ func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteK
 		PoW:                 pow,
 		RequiresFingerprint: false,
 		RequiresBehavioral:  true,
+		TurnstileConfig:     defaultTurnstileWidgetConfig(sessionID),
 		CreatedAt:           time.Now(),
 		State:               StatePending,
 		CFBMValue:           cfbm,
@@ -217,6 +225,11 @@ func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteK
 
 	cc.sessions[sessionID] = session
 	return session
+}
+
+// TurnstileSecretKey returns the lab-only secret used by local siteverify.
+func (cc *CloudflareChallenger) TurnstileSecretKey() string {
+	return cc.turnstileSecret
 }
 
 // GetSession retrieves a session by ID.
@@ -521,24 +534,28 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 	events []CaptchaEvent,
 ) (*CloudflareSolution, error) {
 	if err := cc.ValidatePoW(sessionID, solution); err != nil {
+		cc.recordFailedAttempt(sessionID)
 		return nil, fmt.Errorf("PoW validation failed: %w", err)
 	}
 
-	// Light behavioral check for Turnstile: require minimum event count
-	// and at least some mouse movement (not zero-event bot submission)
-	behScore := 0.0
-	if len(events) < 5 {
-		behScore = 1.0
-	} else {
-		mouseCount := 0
-		for _, e := range events {
-			if e.Type == "mousemove" {
-				mouseCount++
-			}
+	// Turnstile is lighter than a full managed challenge, but the lab still
+	// requires basic interaction quality and reasonable event volume.
+	behScore := cc.ValidateBehavioral(sessionID, events)
+
+	mouseCount := 0
+	for _, e := range events {
+		if e.Type == "mousemove" {
+			mouseCount++
 		}
-		if mouseCount < 3 {
-			behScore = 0.8
-		}
+	}
+
+	switch {
+	case len(events) < 5:
+		behScore = math.Max(behScore, 1.0)
+	case mouseCount < 3:
+		behScore = math.Max(behScore, 0.85)
+	case behScore > 0.65:
+		behScore = math.Max(behScore, 0.75)
 	}
 
 	if behScore > 0.70 {
@@ -546,7 +563,7 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		return nil, fmt.Errorf("turnstile challenge failed: behavioral score %.2f exceeds threshold", behScore)
 	}
 
-	token := cc.generateTurnstileToken(sessionID)
+	token := cc.issueTurnstileToken(sessionID)
 	cookie := cc.generateClearanceCookie(sessionID)
 
 	cc.mu.Lock()
@@ -556,12 +573,37 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		session.ClearanceCookie = cookie.Value
 		session.Score = behScore
 		session.State = StateSolved
+		session.TurnstileToken = token
+		session.TurnstileTokenUsed = false
+		session.TurnstileTelemetry.EventCount = len(events)
+		if len(events) > 0 {
+			lastTS := events[len(events)-1].Timestamp
+			if lastTS > 0 {
+				session.TurnstileTelemetry.LastEventAt = time.UnixMilli(lastTS)
+			}
+		}
+		if session.TurnstileTelemetry.CallbackCount == 0 {
+			session.TurnstileTelemetry.recordCallback("before-interactive")
+			session.TurnstileTelemetry.recordCallback("after-interactive")
+		}
+		session.TurnstileTelemetry.recordCallback("success")
+		session.TurnstileConfig.CallbackState = session.TurnstileTelemetry.CallbackState
 	}
 	cc.mu.Unlock()
 
+	var telemetry *WidgetTelemetry
+	cc.mu.RLock()
+	if session, ok := cc.sessions[sessionID]; ok {
+		copyTelemetry := session.TurnstileTelemetry
+		telemetry = &copyTelemetry
+	}
+	cc.mu.RUnlock()
+
 	return &CloudflareSolution{
 		ClearanceCookie: cookie,
-		TurnstileToken:  token,
+		TurnstileToken:  token.Value,
+		Turnstile:       token,
+		Telemetry:       telemetry,
 		SolvedAt:        time.Now(),
 		SolveTimeMs:     solution.TimeMs,
 		Method:          "cloudflare_turnstile",
@@ -750,11 +792,75 @@ func (cc *CloudflareChallenger) generateRayID() string {
 	return fmt.Sprintf("%s-LAB", hex.EncodeToString(b))
 }
 
-// generateTurnstileToken creates a Turnstile response token.
-func (cc *CloudflareChallenger) generateTurnstileToken(sessionID string) string {
+func (cc *CloudflareChallenger) issueTurnstileToken(sessionID string) *LabTurnstileToken {
 	b := make([]byte, 32)
 	_, _ = rand.Read(b)
-	return fmt.Sprintf("0.%s.%s", hex.EncodeToString(b), sessionID)
+
+	cc.mu.RLock()
+	session := cc.sessions[sessionID]
+	cc.mu.RUnlock()
+
+	issuedAt := time.Now()
+	expiresAt := issuedAt.Add(defaultTurnstileTokenTTL)
+	token := &LabTurnstileToken{
+		Value:     fmt.Sprintf("0.%s.%s", hex.EncodeToString(b), sessionID),
+		IssuedAt:  issuedAt,
+		ExpiresAt: expiresAt,
+	}
+	if session != nil {
+		token.Hostname = session.Hostname
+		token.Action = session.TurnstileConfig.Action
+		token.CData = session.TurnstileConfig.CData
+	}
+
+	return token
+}
+
+// VerifyTurnstileToken verifies a locally issued token using lab-only semantics.
+func (cc *CloudflareChallenger) VerifyTurnstileToken(secret, response, hostname string) *VerificationResult {
+	result := &VerificationResult{Success: false}
+
+	if secret != cc.turnstileSecret {
+		result.ErrorCodes = []string{"invalid-input-secret"}
+		return result
+	}
+	if strings.TrimSpace(response) == "" {
+		result.ErrorCodes = []string{"missing-input-response"}
+		return result
+	}
+
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	for _, session := range cc.sessions {
+		if session.TurnstileToken == nil || session.TurnstileToken.Value != response {
+			continue
+		}
+
+		switch {
+		case time.Now().After(session.TurnstileToken.ExpiresAt):
+			result.ErrorCodes = []string{"timeout-or-duplicate"}
+			return result
+		case session.TurnstileTokenUsed:
+			result.ErrorCodes = []string{"timeout-or-duplicate"}
+			return result
+		default:
+			session.TurnstileTokenUsed = true
+			result.Success = true
+			result.ChallengeTS = session.CreatedAt.Format(time.RFC3339)
+			if hostname != "" {
+				result.Hostname = hostname
+			} else {
+				result.Hostname = session.Hostname
+			}
+			result.Action = session.TurnstileConfig.Action
+			result.CData = session.TurnstileConfig.CData
+			return result
+		}
+	}
+
+	result.ErrorCodes = []string{"invalid-input-response"}
+	return result
 }
 
 // GetStats returns statistics about challenge sessions.

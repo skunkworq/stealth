@@ -88,13 +88,14 @@ func (ag *AdaptiveRequestGenerator) ApplyFeedback(report *adversarial.DetectionR
 	appliedNow := make([]string, 0)
 
 	for _, checkName := range firedChecks {
-		if ag.applied[checkName] {
+		baseName := strings.Split(checkName, ":")[0]
+		if ag.applied[baseName] {
 			continue
 		}
-		if mutation, ok := ag.mutations[checkName]; ok {
+		if mutation, ok := ag.mutations[baseName]; ok {
 			mutation(ag)
-			ag.applied[checkName] = true
-			appliedNow = append(appliedNow, checkName)
+			ag.applied[baseName] = true
+			appliedNow = append(appliedNow, baseName)
 		}
 	}
 
@@ -139,6 +140,13 @@ func (ag *AdaptiveRequestGenerator) LastReport() *adversarial.DetectionReport {
 	ag.mu.Lock()
 	defer ag.mu.Unlock()
 	return ag.lastReport
+}
+
+// GetConfig returns the underlying request generator configuration.
+func (ag *AdaptiveRequestGenerator) GetConfig() *RequestGeneratorConfig {
+	ag.mu.Lock()
+	defer ag.mu.Unlock()
+	return ag.config
 }
 
 // registerMutations registers fix functions for all known shield checks.
@@ -257,6 +265,197 @@ func (ag *AdaptiveRequestGenerator) registerMutations() {
 	// Phase 43: Non-Quantized Network Quality
 	ag.mutations["non_quantized_network_rtt"] = mutateFixNetworkQuantization
 	ag.mutations["non_quantized_network_downlink"] = mutateFixNetworkQuantization
+
+	// Phase 44: Non-Quantized DPR
+	ag.mutations["non_quantized_dpr"] = mutateFixDPRQuantization
+
+	// Phase 46: Error Stack Trace Consistency
+	ag.mutations["error_stack_mismatch"] = mutateFixErrorStackConsistency
+
+	// Phase 47: WebGL Parameter Consistency
+	ag.mutations["webgl_parameter_mismatch"] = mutateFixWebGLParameters
+
+	// Phase 48: Language Consistency
+	ag.mutations["language_mismatch"] = mutateFixLanguageConsistency
+	
+	// Phase 49: Media Query Hover
+	ag.mutations["none_media_query_hover"] = mutateFixMediaQueryHover
+	ag.mutations["missing_media_query_hover"] = mutateFixMediaQueryHover
+
+	// Phase 3: TLS Fingerprint Validation
+	ag.mutations["tls_go_fingerprint: browser_ua_with_go_tls"] = mutateFixTLSFingerprint
+
+	// Phase 50: Hardware-Renderer Coherence
+	ag.mutations["hardware_core_mismatch"] = mutateFixHardwareCoherence
+
+	// Phase 51: Isomorphic Interaction & Plugin Hardening
+	ag.mutations["pointer_mismatch"] = mutateFixPointerInteraction
+	ag.mutations["any_pointer_mismatch"] = mutateFixPointerInteraction
+	ag.mutations["suspicious_plugin_filename"] = mutateFixPluginFilenames
+	ag.mutations["missing_webgpu"] = mutateFixWebGPU
+	ag.mutations["permissions_query_mismatch"] = mutateFixPermissions
+
+	// Phase 53: Audio & Orientation Hardening
+	ag.mutations["audio_zero_base_latency"] = mutateFixAudioBaseLatency
+	ag.mutations["missing_audio_base_latency"] = mutateFixAudioBaseLatency
+	ag.mutations["screen_orientation_mismatch"] = mutateFixScreenOrientation
+	ag.mutations["suspicious_battery_status"] = mutateFixBatteryStatus
+	ag.mutations["missing_storage_quota"] = mutateFixStorageQuota
+	ag.mutations["low_storage_quota"] = mutateFixStorageQuota
+	ag.mutations["empty_media_devices"] = mutateFixMediaDevices
+	ag.mutations["suspicious_media_device_id"] = mutateFixMediaDevices
+	ag.mutations["non_standard_media_device_id_format"] = mutateFixMediaDevices
+	ag.mutations["missing_media_device_kind"] = mutateFixMediaDevices
+	ag.mutations["missing_webrtc"] = mutateFixWebRTC
+	ag.mutations["empty_ice_candidates"] = mutateFixWebRTC
+	ag.mutations["suspicious_ice_format"] = mutateFixWebRTC
+	ag.mutations["canvas_spatial_inconsistency"] = mutateFixCanvasNoise
+
+	// Phase 58: Modern Navigator
+	ag.mutations["missing_navigator_userAgentData"] = mutateFixModernNavigator
+	ag.mutations["inconsistent_userAgentData_platform"] = mutateFixModernNavigator
+	ag.mutations["inconsistent_mobile_max_touch_points"] = mutateFixModernNavigator
+	ag.mutations["missing_navigator_userActivation"] = mutateFixModernNavigator
+	ag.mutations["missing_navigator_keyboard"] = mutateFixModernNavigator
+
+	// Phase 59: Modern API Consistency
+	ag.mutations["missing_navigator_scheduling"] = mutateFixModernNavigator
+	ag.mutations["missing_navigator_locks"] = mutateFixModernNavigator
+	ag.mutations["intl_timezone_mismatch"] = mutateFixModernNavigator
+	
+	// Phase 60: Memory & Stack Hardening
+	ag.mutations["performance_memory_limit_too_low_for_ram"] = mutateFixMemoryAndStack
+	ag.mutations["automation_leak_detected"] = mutateFixMemoryAndStack
+	ag.mutations["error_stack_mismatch"] = mutateFixMemoryAndStack
+	ag.mutations["error_stack_suspiciously_clean"] = mutateFixMemoryAndStack
+	ag.mutations["error_stack_missing_async_context"] = mutateFixMemoryAndStack
+
+	// Phase 61: WebAudio & AudioWorklet Hardening
+	ag.mutations["missing_audio_worklet"] = mutateFixAudioAPIs
+	ag.mutations["audio_max_channel_count_anomaly"] = mutateFixAudioAPIs
+
+	// Phase 62: OffscreenCanvas & WebGL Hardening
+	ag.mutations["missing_offscreen_canvas"] = mutateFixGraphicsAPIs
+	ag.mutations["missing_webgl_draft_extensions"] = mutateFixGraphicsAPIs
+
+	// Phase 63: Storage & Quota Management Hardening
+	ag.mutations["missing_storage_usage"] = mutateFixStorageAPIs
+	ag.mutations["low_storage_quota"] = mutateFixStorageAPIs
+	ag.mutations["missing_storage_persistence"] = mutateFixStorageAPIs
+	ag.mutations["zero_storage_usage"] = mutateFixStorageAPIs
+
+	// Phase 64: Screen.isExtended Detection
+	ag.mutations["missing_navigator_vibrate"] = mutateFixNavigatorConnectivity
+	ag.mutations["missing_navigator_onLine"] = mutateFixNavigatorConnectivity
+	ag.mutations["missing_navigator_bluetooth"] = mutateFixNavigatorHardware
+	ag.mutations["missing_navigator_usb"] = mutateFixNavigatorHardware
+	ag.mutations["missing_navigator_clipboard"] = mutateFixNavigatorModernAPIs
+	ag.mutations["missing_navigator_credentials"] = mutateFixNavigatorModernAPIs
+	ag.mutations["screen_is_extended_missing"] = mutateFixScreenIsExtended
+
+	// Phase 68: Navigator Media APIs (Capabilities, Session)
+	ag.mutations["missing_navigator_mediaCapabilities"] = mutateFixNavigatorMediaAPIs
+	ag.mutations["missing_navigator_mediaSession"] = mutateFixNavigatorMediaAPIs
+
+	// Phase 69: Crawlee Parity (UserAgentData & Header Order)
+	ag.mutations["ua_data_consistency_mismatch"] = mutateFixUADataConsistency
+	ag.mutations["suspicious_header_order"] = mutateFixHeaderOrder
+
+	// Phase 70: Navigator Worker APIs (ServiceWorker, SharedWorker)
+	ag.mutations["missing_navigator_serviceWorker"] = mutateFixNavigatorWorkers
+	ag.mutations["missing_navigator_sharedWorker"] = mutateFixNavigatorWorkers
+
+	// Phase 71: WebGL Shader Precision & Deep Extensions
+	ag.mutations["webgl_shader_precision_mismatch"] = mutateFixWebGLShaderPrecision
+
+	// Phase 72: Performance Timing Deep Analysis
+	ag.mutations["timing_missing_byte_counts"] = mutateFixTimingDeepAnalysis
+	ag.mutations["timing_inconsistent_protocols"] = mutateFixTimingDeepAnalysis
+
+	// Phase 73: Navigator Plugins & MimeTypes Consistency
+	ag.mutations["missing_navigator_plugins"] = mutateFixPlugins
+	ag.mutations["empty_plugins"] = mutateFixPlugins
+	ag.mutations["plugins_mimetype_mismatch"] = mutateFixPlugins
+
+	// Phase 74: Permissions API Deep Consistency
+	ag.mutations["permissions_query_mismatch"] = mutateFixPermissionsDeep
+	ag.mutations["permissions_metadata_leak"] = mutateFixPermissionsDeep
+	ag.mutations["permissions_media_mismatch"] = mutateFixPermissionsDeep
+
+	// Phase 75: Client Hints Deep Consistency
+	ag.mutations["ua_client_hints_mismatch"] = mutateFixClientHintsDeep
+
+	// Phase 76: Graphics API Hardening (OffscreenCanvas)
+	ag.mutations["offscreen_canvas_metrics_mismatch"] = mutateFixOffscreenCanvasDeep
+
+	// Phase 77: Gamepad API Consistency
+	ag.mutations["missing_navigator_getGamepads"] = mutateFixGamepadAPI
+	ag.mutations["gamepad_api_stubbed"] = mutateFixGamepadAPI
+
+	// Phase 78: Hardware API Hardening
+	ag.mutations["bluetooth_api_stubbed"] = mutateFixHardwareHardening
+	ag.mutations["usb_api_stubbed"] = mutateFixHardwareHardening
+	ag.mutations["missing_navigator_bluetooth"] = mutateFixHardwareHardening
+	ag.mutations["missing_navigator_usb"] = mutateFixHardwareHardening
+
+	// Phase 79: Screen Geometry Consistency
+	ag.mutations["screen_avail_geometry_mismatch"] = mutateFixScreenGeometryDeep
+
+	// Phase 80: Navigator Prototype Hardening
+	ag.mutations["navigator_prototype_mismatch"] = mutateFixNavigatorPrototype
+
+	// Phase 81: WebGL Renderer Deep Consistency
+	ag.mutations["renderer_platform_mismatch"] = mutateFixWebGLRendererDeep
+
+	// Phase 82: AudioContext Hardening
+	ag.mutations["audio_context_static_state"] = mutateFixAudioContextDeep
+	ag.mutations["audio_latency_improbable"] = mutateFixAudioContextDeep
+
+	// Phase 83: Performance.memory/navigation Hardening
+	ag.mutations["performance_memory_limit_mismatch"] = mutateFixPerformanceDeep
+	ag.mutations["performance_navigation_type_mismatch"] = mutateFixPerformanceDeep
+
+	// Phase 84: Timing Consistency
+	ag.mutations["timing_navigation_start_inconsistent"] = mutateFixTimingDeep
+	ag.mutations["timing_load_event_inconsistent"] = mutateFixTimingDeep
+
+	// Phase 85: Touch & Orientation Hardening
+	ag.mutations["touch_pointer_mismatch"] = mutateFixTouchDeep
+	ag.mutations["missing_orientation_lock"] = mutateFixOrientationDeep
+	ag.mutations["network_high_downlink_low_efftype"] = mutateFixNetworkInfoDeep
+	ag.mutations["suspicious_desktop_savedata"] = mutateFixNetworkInfoDeep
+	ag.mutations["storage_quota_memory_mismatch"] = mutateFixStorageDeep
+	ag.mutations["low_storage_quota"] = mutateFixStorageDeep
+
+	// Phase 89: WebGL Advanced Context Attributes
+	ag.mutations["webgl_context_attributes_mismatch"] = mutateFixWebGLAttributesDeep
+
+	// Phase 90: Paint Timing
+	ag.mutations["timing_paint_mismatch"] = mutateFixPaintTimingDeep
+
+	// Phase 91: Worker Coherence
+	ag.mutations["worker_userAgent_mismatch"] = mutateFixWorkerCoherence
+	ag.mutations["worker_platform_mismatch"] = mutateFixWorkerCoherence
+	ag.mutations["worker_hardwareConcurrency_mismatch"] = mutateFixWorkerCoherence
+
+	// Phase 92: Runtime Introspection
+	ag.mutations["navigator_proxy_detected"] = mutateFixIntrospectionDeep
+	ag.mutations["native_function_toString_leak"] = mutateFixIntrospectionDeep
+
+	// Phase 93: Audio Graph
+	ag.mutations["missing_offline_audio_context"] = mutateFixAudioGraphDeep
+	ag.mutations["suspicious_audio_compressor_params"] = mutateFixAudioGraphDeep
+
+	// Phase 94: Canvas Geometry
+	ag.mutations["canvas_measureText_fixed_width_stub"] = mutateFixCanvasGeometryDeep
+
+	// Phase 95: Math Precision
+	ag.mutations["math_precision_stubbed"] = mutateFixMathPrecision
+
+	// Phase 96: UserAgentData
+	ag.mutations["inconsistent_userAgentData_arch"] = mutateFixUADataDeep
+	ag.mutations["inconsistent_userAgentData_bitness"] = mutateFixUADataDeep
+	ag.mutations["inconsistent_userAgentData_fullVersionList"] = mutateFixUADataDeep
 }
 
 // rebuild reconstructs the base generator from the current config.
@@ -378,6 +577,8 @@ func mutateFixPdfViewer(ag *AdaptiveRequestGenerator) {
 }
 
 func mutateFixHardwareCoherence(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeHardwareCoherence = true
+	ag.config.EvadeHardwareConcurrency = true
 	// generateNavigator now uses correlated hardware pairs; rebuild
 	ag.rebuild()
 }
@@ -543,6 +744,16 @@ func mutateFixScreenOrientation(ag *AdaptiveRequestGenerator) {
 	ag.rebuild()
 }
 
+func mutateFixBatteryStatus(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeBatteryStatus = true
+	ag.rebuild()
+}
+
+func mutateFixStorageQuota(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeStorageQuota = true
+	ag.rebuild()
+}
+
 func mutateFixNavigatorKeyboard(ag *AdaptiveRequestGenerator) {
 	ag.config.EvadeNavigatorKeyboard = true
 	ag.rebuild()
@@ -553,8 +764,230 @@ func mutateFixHardwareConcurrency(ag *AdaptiveRequestGenerator) {
 	ag.rebuild()
 }
 
+func mutateFixPointerInteraction(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadePointerInteraction = true
+	ag.rebuild()
+}
+
+func mutateFixPluginFilenames(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadePluginFilenames = true
+	ag.rebuild()
+}
+
 func mutateFixNetworkQuantization(ag *AdaptiveRequestGenerator) {
 	ag.config.EvadeNetworkQuantization = true
+	ag.rebuild()
+}
+
+func mutateFixWebGPU(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWebGPU = true
+	ag.rebuild()
+}
+
+func mutateFixPermissions(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadePermissions = true
+	ag.rebuild()
+}
+
+func mutateFixAudioBaseLatency(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeAudioBaseLatency = true
+	ag.rebuild()
+}
+
+func mutateFixMediaDevices(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeMediaDevices = true
+	ag.rebuild()
+}
+
+func mutateFixWebRTC(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWebRTC = true
+	ag.rebuild()
+}
+
+func mutateFixCanvasNoise(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeCanvasEntropy = true
+	ag.config.EvadeCanvasNoise = true
+	ag.rebuild()
+}
+
+func mutateFixModernNavigator(ag *AdaptiveRequestGenerator) {
+	// These are currently always-on in generateNavigator once implemented.
+	// We call rebuild just to ensure the RequestGenerator is refreshed if needed,
+	// though it's technically redundant for always-on features.
+	ag.rebuild()
+}
+
+func mutateFixDPRQuantization(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeDPRQuantization = true
+	ag.rebuild()
+}
+
+func mutateFixMemoryAndStack(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeErrorStackFormat = true
+	// Memory plausibility is currently handled by always scaling in addPerformanceMemory,
+	// but we call rebuild to ensure any config changes are picked up.
+	ag.rebuild()
+}
+
+func mutateFixAudioAPIs(ag *AdaptiveRequestGenerator) {
+	// These are currently always-on in generateAudio/generateNavigator once implemented.
+	// We call rebuild just to ensure the RequestGenerator is refreshed.
+	ag.rebuild()
+}
+
+func mutateFixGraphicsAPIs(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWebGLCount = true
+	ag.rebuild()
+}
+
+func mutateFixStorageAPIs(ag *AdaptiveRequestGenerator) {
+	// These are currently always-on in generateNavigator once implemented.
+	ag.rebuild()
+}
+
+func mutateFixScreenIsExtended(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeScreenIsExtended = true
+	ag.rebuild()
+}
+
+func mutateFixNavigatorConnectivity(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeNavigatorConnectivity = true
+	ag.rebuild()
+}
+
+func mutateFixNavigatorHardware(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeNavigatorHardware = true
+	ag.rebuild()
+}
+
+func mutateFixNavigatorModernAPIs(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeNavigatorModernAPIs = true
+	ag.rebuild()
+}
+
+func mutateFixNavigatorMediaAPIs(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeNavigatorMediaAPIs = true
+	ag.rebuild()
+}
+
+func mutateFixUADataConsistency(ag *AdaptiveRequestGenerator) {
+	// rebuilding is enough since generateUserAgentData is now dynamic
+	ag.rebuild()
+}
+
+func mutateFixHeaderOrder(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeHeaderOrder = true
+	ag.rebuild()
+}
+
+func mutateFixNavigatorWorkers(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeNavigatorWorkers = true
+	ag.rebuild()
+}
+
+func mutateFixWebGLShaderPrecision(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWebGLShaderPrecision = true
+	ag.rebuild()
+}
+
+func mutateFixTimingDeepAnalysis(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeTimingDeepAnalysis = true
+	ag.rebuild()
+}
+
+func mutateFixPlugins(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadePlugins = true
+	ag.rebuild()
+}
+
+func mutateFixPermissionsDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadePermissionsDeep = true
+	ag.rebuild()
+}
+
+func mutateFixClientHintsDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeClientHintsDeep = true
+	ag.rebuild()
+}
+
+func mutateFixOffscreenCanvasDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeOffscreenCanvasDeep = true
+	ag.rebuild()
+}
+
+func mutateFixGamepadAPI(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeGamepadAPI = true
+	ag.rebuild()
+}
+
+func mutateFixHardwareHardening(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeHardwareHardening = true
+	ag.config.EvadeNavigatorHardware = true // Phase 66
+	ag.rebuild()
+}
+
+func mutateFixScreenGeometryDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeScreenGeometryDeep = true
+	ag.rebuild()
+}
+
+func mutateFixNavigatorPrototype(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeNavigatorPrototype = true
+	ag.rebuild()
+}
+
+func mutateFixWebGLRendererDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWebGLRendererDeep = true
+	ag.rebuild()
+}
+
+func mutateFixAudioContextDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeAudioContextDeep = true
+	ag.rebuild()
+}
+
+func mutateFixPerformanceDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadePerformanceDeep = true
+	ag.rebuild()
+}
+
+func mutateFixTimingDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeTimingDeep = true
+	ag.rebuild()
+}
+
+func mutateFixTouchDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeTouchDeep = true
+	ag.rebuild()
+}
+
+func mutateFixOrientationDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeOrientationDeep = true
+	ag.rebuild()
+}
+
+func mutateFixErrorStackConsistency(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeErrorStackFormat = true
+	ag.rebuild()
+}
+
+func mutateFixWebGLParameters(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWebGLParameters = true
+	ag.rebuild()
+}
+
+func mutateFixLanguageConsistency(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeLanguageConsistency = true
+	ag.rebuild()
+}
+
+func mutateFixMediaQueryHover(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeMediaQueryHover = true
+	ag.rebuild()
+}
+
+func mutateFixTLSFingerprint(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeTLSFingerprint = true
 	ag.rebuild()
 }
 
@@ -614,7 +1047,7 @@ func (bg *BrokenRequestGenerator) GenerateRequest(targetURL string) *http.Reques
 		req.Header.Set("Sec-Ch-Ua-Mobile", p.SecChUaMobile)
 	}
 
-	// BROKEN: WebGL without max_texture_size and without extensions
+	// BROKEN: WebGL with mismatching max_texture_size (4096 for high-end GPU) and without extensions
 	renderer := p.WebGLRenderers[bg.rng.Intn(len(p.WebGLRenderers))]
 	webgl := map[string]interface{}{
 		"vendor":            p.WebGLVendor,
@@ -625,7 +1058,7 @@ func (bg *BrokenRequestGenerator) GenerateRequest(targetURL string) *http.Reques
 		"shading_version":   p.WebGLShadingVersion,
 		"platform":          p.WebGLPlatform,
 		"webgl2_supported":  true,
-		// max_texture_size intentionally omitted
+		"max_texture_size":  4096, // BROKEN: Low texture size for high-end renderer
 		// extensions intentionally omitted
 	}
 	webglJSON, _ := json.Marshal(webgl)
@@ -652,17 +1085,27 @@ func (bg *BrokenRequestGenerator) GenerateRequest(targetURL string) *http.Reques
 		},
 		// appVersion intentionally omitted
 		"languages":          p.Languages,
+		"language":               "fr-FR", // BROKEN: mismatch with languages[0] (which is en-US)
+		"intl_locale":            "fr-FR",
 		"screen_color_depth": 24,
 		"screen_inner_width": dims[0] - scrollW,
 		"screen_outer_width": dims[0],
 		"productSub":         p.ProductSub,
 		"maxTouchPoints":     0,
+		// onLine and vibrate intentionally omitted for Phase 65 detection
 	}
 	if p.Browser == "chrome" {
 		nav["chrome"] = map[string]interface{}{}
 	}
-	navJSON, _ := json.Marshal(nav)
-	req.Header.Set(constants.HeaderNavigatorData, string(navJSON))
+	// P11 signals
+	nav["orientation_type"] = "landscape-primary"
+	nav["orientation_angle"] = 0
+
+	// Phase 64: Omit screen.isExtended to trigger the sword
+	// (Already omitted by default in this broken generator)
+
+	b, _ := json.Marshal(nav)
+	req.Header.Set(constants.HeaderNavigatorData, string(b))
 
 	// BROKEN: Canvas with random bytes (no PNG magic)
 	canvasBytes := make([]byte, 8192)
@@ -688,11 +1131,19 @@ func (bg *BrokenRequestGenerator) GenerateRequest(targetURL string) *http.Reques
 	timingJSON, _ := json.Marshal(map[string]interface{}{"entries": entries})
 	req.Header.Set(constants.HeaderTimingData, string(timingJSON))
 
-	// BROKEN: Behavioral data without scroll events
+	// BROKEN: Behavioral data without scroll events AND with inconsistent error stack
 	eventGen := NewEventGenerator(nil)
 	eventData := eventGen.Generate()
 	eventData.ScrollTimestamps = nil // intentionally stripped
-	eventData.ScrollDeltas = nil    // intentionally stripped
+	eventData.ScrollDeltas = nil     // intentionally stripped
+
+	// BROKEN: Error stack mismatch (Firefox format on Chrome UA or vice-versa)
+	if p.Browser == "chrome" {
+		eventData.ErrorStack = "myApp@https://example.com/js/main.js:10:5" // Firefox format
+	} else {
+		eventData.ErrorStack = "Error\n    at myApp (https://example.com/js/main.js:10:5)" // Chrome format
+	}
+
 	behavJSON, _ := eventGen.ToJSON(eventData)
 	req.Header.Set(constants.HeaderBehavioralData, behavJSON)
 
@@ -781,6 +1232,51 @@ func newBrokenBaseGenerator(config *RequestGeneratorConfig, rng *rand.Rand) *Req
 		rng:        rng,
 		canvasHash: canvasHash,
 	}
+}
+
+func mutateFixNetworkInfoDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeNetworkInfoDeep = true
+}
+
+func mutateFixStorageDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeStorageDeep = true
+}
+
+func mutateFixWebGLAttributesDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWebGLAttributesDeep = true
+}
+
+func mutateFixPaintTimingDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadePaintTimingDeep = true
+}
+
+func mutateFixWorkerCoherence(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeWorkerCoherence = true
+}
+
+func mutateFixIntrospectionDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeIntrospectionDeep = true
+	ag.rebuild()
+}
+
+func mutateFixAudioGraphDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeAudioGraphDeep = true
+	ag.rebuild()
+}
+
+func mutateFixCanvasGeometryDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeCanvasGeometryDeep = true
+	ag.rebuild()
+}
+
+func mutateFixMathPrecision(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeMathPrecision = true
+	ag.rebuild()
+}
+
+func mutateFixUADataDeep(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeUADataDeep = true
+	ag.rebuild()
 }
 
 // unusedImportGuard prevents "imported and not used" errors.

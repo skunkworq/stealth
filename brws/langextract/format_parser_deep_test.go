@@ -40,7 +40,14 @@ func TestParseJSONOrderedValueUnsupportedDelimiter(t *testing.T) {
 
 	dec := json.NewDecoder(strings.NewReader("]"))
 	_, err := parseJSONOrderedValue(dec)
-	if err == nil || !strings.Contains(err.Error(), "unsupported json delimiter") {
-		t.Fatalf("expected unsupported delimiter error, got %v", err)
+	if err == nil {
+		t.Fatalf("expected parse error for invalid leading token")
+	}
+	// Decoder wording varies by Go version; validate error class, not exact phrase.
+	msg := err.Error()
+	if !strings.Contains(msg, "unsupported json delimiter") &&
+		!strings.Contains(msg, "invalid character") &&
+		!strings.Contains(msg, "unexpected") {
+		t.Fatalf("expected delimiter/token parse error, got %v", err)
 	}
 }

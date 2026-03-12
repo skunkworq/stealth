@@ -18,6 +18,9 @@ type BrowserProfile struct {
 	SecChUa         string
 	SecChUaPlatform string
 	SecChUaMobile   string
+	SecChUaFullVersionList string // Phase 96: high-entropy version list
+	SecChUaArch     string        // Phase 96: high-entropy architecture
+	SecChUaBitness  string        // Phase 96: high-entropy bitness
 
 	// Sec-Fetch headers
 	SecFetchDest string
@@ -70,6 +73,9 @@ type BrowserProfile struct {
 
 	// Timezone (IANA timezone string, e.g. "America/New_York")
 	Timezone string
+
+	// Phase 58: MaxTouchPoints
+	MaxTouchPoints int
 }
 
 // PluginInfo represents a browser plugin entry.
@@ -199,6 +205,9 @@ func ChromeWindowsProfile() *BrowserProfile {
 		SecChUa:         `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`,
 		SecChUaPlatform: `"Windows"`,
 		SecChUaMobile:   "?0",
+		SecChUaFullVersionList: `"Chromium";v="134.0.6998.35", "Google Chrome";v="134.0.6998.35", "Not-A.Brand";v="99.0.0.0"`,
+		SecChUaArch:     `"x86"`,
+		SecChUaBitness:  `"64"`,
 
 		SecFetchDest: "document",
 		SecFetchMode: "navigate",
@@ -269,6 +278,9 @@ func ChromeMacOSProfile() *BrowserProfile {
 		SecChUa:         `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`,
 		SecChUaPlatform: `"macOS"`,
 		SecChUaMobile:   "?0",
+		SecChUaFullVersionList: `"Chromium";v="134.0.6998.35", "Google Chrome";v="134.0.6998.35", "Not-A.Brand";v="99.0.0.0"`,
+		SecChUaArch:     `"arm"`,
+		SecChUaBitness:  `"64"`,
 
 		SecFetchDest: "document",
 		SecFetchMode: "navigate",
@@ -321,6 +333,7 @@ func ChromeMacOSProfile() *BrowserProfile {
 		AudioState:           "suspended",
 
 		Timezone: "America/Los_Angeles",
+		MaxTouchPoints: 0,
 	}
 }
 
@@ -339,6 +352,9 @@ func ChromeLinuxProfile() *BrowserProfile {
 		SecChUa:         `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`,
 		SecChUaPlatform: `"Linux"`,
 		SecChUaMobile:   "?0",
+		SecChUaFullVersionList: `"Chromium";v="134.0.6998.35", "Google Chrome";v="134.0.6998.35", "Not-A.Brand";v="99.0.0.0"`,
+		SecChUaArch:     `"x86"`,
+		SecChUaBitness:  `"64"`,
 
 		SecFetchDest: "document",
 		SecFetchMode: "navigate",
@@ -390,6 +406,7 @@ func ChromeLinuxProfile() *BrowserProfile {
 		AudioState:           "suspended",
 
 		Timezone: "America/Chicago",
+		MaxTouchPoints: 0,
 	}
 }
 
@@ -461,5 +478,61 @@ func FirefoxWindowsProfile() *BrowserProfile {
 		AudioState:           "suspended",
 
 		Timezone: "America/New_York",
+	}
+}
+
+func AndroidPixelProfile() *BrowserProfile {
+	return &BrowserProfile{
+		Name:     "Android Pixel 7",
+		Platform: "android",
+		Browser:  "chrome",
+		UserAgent:      "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Mobile Safari/537.36",
+		Accept:         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+		AcceptLanguage: "en-US,en;q=0.9",
+		AcceptEncoding: "gzip, deflate, br",
+		SecChUa:         `"Chromium";v="116", "Not)A;Brand";v="24", "Google Chrome";v="116"`,
+		SecChUaPlatform: `"Android"`,
+		SecChUaMobile:   "?1",
+		SecChUaFullVersionList: `"Chromium";v="116.0.5845.163", "Not)A;Brand";v="24.0.0.0", "Google Chrome";v="116.0.5845.163"`,
+		SecChUaArch:     `""`,
+		SecChUaBitness:  `""`,
+		SecFetchDest: "document",
+		SecFetchMode: "navigate",
+		SecFetchSite: "none",
+		SecFetchUser: "?1",
+		WebGLVendor:         "Google Inc. (Google)",
+		WebGLUnmaskedVendor: "Google Inc. (Google)",
+		WebGLVersion:        "WebGL 2.0",
+		WebGLPlatform:       "linux",
+		WebGLRenderers: []string{
+			"Adreno (TM) 730",
+		},
+		Fonts: []string{
+			"Roboto", "Droid Sans", "Droid Serif", "monospace",
+			"Noto Sans", "Noto Serif", "Inter", "sans-serif-thin",
+			"sans-serif-light", "sans-serif-medium", "sans-serif-black",
+			"sans-serif-condensed", "sans-serif-condensed-light",
+		},
+		FontPlatform: "android",
+		Resolutions: [][2]int{
+			{412, 915}, // Pixel 7 logical resolution
+		},
+		ColorDepths: []int{24},
+		PixelRatios: []float64{2.625},
+		NavPlatform:         "Linux armv8l",
+		NavVendor:           "Google Inc.",
+		Languages:           []string{"en-US", "en"},
+		HardwareConcurrency: []int{8},
+		DeviceMemory:        []int{8},
+		ProductSub:          "20030107",
+		WebGLShadingVersion: "WebGL GLSL ES 3.00",
+		WebGLMaxTextureSize: 16384,
+		WebGLExtensions:        chromeLinuxExtensions(),
+		AudioSampleRate:      48000,
+		AudioBaseLatency:     0.012,
+		AudioChannelCount:    2,
+		AudioMaxChannelCount: 2,
+		AudioState:           "suspended",
+		Timezone: "America/Los_Angeles",
 	}
 }

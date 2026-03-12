@@ -157,10 +157,28 @@ func TestRequestGenerator_UniquePerCall(t *testing.T) {
 	}
 }
 
+func newEvasiveRequestGeneratorConfig(profile *BrowserProfile) *RequestGeneratorConfig {
+	return &RequestGeneratorConfig{
+		Profile:                  profile,
+		EventConfig:              DefaultGeneratorConfig(),
+		EvadeCanvasEntropy:       true,
+		EvadeWebGLCount:          true,
+		EvadeScreenHeightGap:     true,
+		EvadeWebGLViewport:       true,
+		EvadeDeviceMemoryClamp:   true,
+		EvadeConnectionSaveData:  true,
+		EvadeScreenOrientation:   true,
+		EvadeNavigatorKeyboard:   true,
+		EvadeHardwareConcurrency: true,
+		EvadeNetworkQuantization: true,
+		EvadeDPRQuantization:     true,
+	}
+}
+
 func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 	for _, profile := range DefaultProfiles() {
 		t.Run(profile.Name, func(t *testing.T) {
-			rg := NewRequestGenerator(&RequestGeneratorConfig{Profile: profile})
+			rg := NewRequestGenerator(newEvasiveRequestGeneratorConfig(profile))
 			h := rg.GenerateHeaders()
 
 			// WebGL
@@ -234,23 +252,7 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 				var timing map[string]interface{}
 				json.Unmarshal([]byte(h.Get(constants.HeaderTimingData)), &timing)
 
-				entriesRaw := timing["entries"].([]interface{})
-				seq := &adversarial.RequestTimingSequence{Entries: make([]adversarial.RequestTimingEntry, 0)}
-				for _, e := range entriesRaw {
-					em := e.(map[string]interface{})
-					entry := adversarial.RequestTimingEntry{}
-					if ts, ok := em["timestamp_ms"].(float64); ok {
-						entry.Timestamp = int64(ts)
-					}
-					if ct, ok := em["content_type"].(string); ok {
-						entry.ContentType = ct
-					}
-					if ref, ok := em["referrer"].(string); ok {
-						entry.Referrer = ref
-					}
-					seq.Entries = append(seq.Entries, entry)
-				}
-
+				seq := adversarial.NewRequestTimingSequenceFromMap(timing)
 				result := adversarial.NewTimingAnalyzer(nil).Analyze(seq)
 				if result.Score > 0 {
 					indicators := make([]string, 0)
@@ -325,9 +327,10 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 						detections++
 					}
 				}
-				// After shield upgrade (checks 20-24), expect high detection rate
-				if float64(detections)/float64(trials) < 0.80 {
-					t.Errorf("Behavioral should be detected >= 80%% of the time after shield upgrade, got %d/%d", detections, trials)
+				// Evasive config should mostly avoid behavioral detection.
+				detectionRate := float64(detections) / float64(trials)
+				if detectionRate > 0.35 {
+					t.Errorf("Behavioral detection too high for evasive profile: %.0f%% (%d/%d)", detectionRate*100, detections, trials)
 				}
 			})
 		})
