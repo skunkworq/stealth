@@ -26,6 +26,8 @@ type CloudflareSolverClient struct {
 	maxIterations      int64
 	pinnedFingerprint  *adversarial.FingerprintPayload
 	pinnedProfile      *behavior.BrowserProfile
+	turnstileVerifier  TurnstileVerificationAdapter
+	turnstileAllowlist map[string]struct{}
 }
 
 // CloudflareSolveResult holds the outcome of a Cloudflare challenge solve attempt.
@@ -53,30 +55,39 @@ func NewCloudflareSolverClient() *CloudflareSolverClient {
 		},
 		eventGen: NewCaptchaSolver(),
 		//nolint:gosec
-		rng:           rand.New(rand.NewSource(time.Now().UnixNano())),
-		maxIterations: 50_000_000,
+		rng:                rand.New(rand.NewSource(time.Now().UnixNano())),
+		maxIterations:      50_000_000,
+		turnstileAllowlist: defaultTurnstileAllowlist(),
 	}
 }
 
 // cfInitResp mirrors the server's init response.
 type cfInitResp struct {
-	SessionID           string                   `json:"session_id"`
-	Type                string                   `json:"type"`
-	RayID               string                   `json:"ray_id"`
-	PoW                 *adversarial.PoWChallenge `json:"pow"`
-	RequiresFingerprint bool                     `json:"requires_fingerprint"`
-	RequiresBehavioral  bool                     `json:"requires_behavioral"`
-	SiteKey             string                   `json:"site_key,omitempty"`
+	SessionID           string                             `json:"session_id"`
+	Type                string                             `json:"type"`
+	RayID               string                             `json:"ray_id"`
+	PoW                 *adversarial.PoWChallenge          `json:"pow"`
+	RequiresFingerprint bool                               `json:"requires_fingerprint"`
+	RequiresBehavioral  bool                               `json:"requires_behavioral"`
+	SiteKey             string                             `json:"site_key,omitempty"`
+	Widget              *adversarial.TurnstileWidgetConfig `json:"widget,omitempty"`
+	CallbackState       *adversarial.WidgetCallbackState   `json:"callback_state,omitempty"`
+	WidgetURL           string                             `json:"widget_url,omitempty"`
+	CallbackURL         string                             `json:"callback_url,omitempty"`
+	SiteverifyURL       string                             `json:"siteverify_url,omitempty"`
 }
 
 // cfSolveResp mirrors the server's solve response.
 type cfSolveResp struct {
-	Success        bool   `json:"success"`
-	Error          string `json:"error,omitempty"`
-	Method         string `json:"method,omitempty"`
-	SolveMs        int64  `json:"solve_ms,omitempty"`
-	CfClearance    string `json:"cf_clearance,omitempty"`
-	TurnstileToken string `json:"turnstile_token,omitempty"`
+	Success           bool                           `json:"success"`
+	Error             string                         `json:"error,omitempty"`
+	Method            string                         `json:"method,omitempty"`
+	SolveMs           int64                          `json:"solve_ms,omitempty"`
+	CfClearance       string                         `json:"cf_clearance,omitempty"`
+	TurnstileToken    string                         `json:"turnstile_token,omitempty"`
+	LabTurnstileToken *adversarial.LabTurnstileToken `json:"lab_turnstile_token,omitempty"`
+	WidgetTelemetry   *adversarial.WidgetTelemetry   `json:"widget_telemetry,omitempty"`
+	SiteverifyURL     string                         `json:"siteverify_url,omitempty"`
 }
 
 // SolveJSChallenge performs the full init→solvePoW→submit flow for a JS challenge.
@@ -195,58 +206,26 @@ func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*Cloudf
 	return result, nil
 }
 
-// SolveTurnstile performs the full Turnstile challenge flow.
+// SolveTurnstile is kept for compatibility and delegates to HandleTurnstileLab.
 func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSolveResult, error) {
-	totalStart := time.Now()
-
-	// Step 1: Init
-	initResp, err := cs.initChallenge(baseURL, "cloudflare_turnstile", 0.3, "")
+	flow, err := cs.HandleTurnstileLab(baseURL)
 	if err != nil {
-		return nil, fmt.Errorf("init failed: %w", err)
-	}
-
-	// Step 2: Solve PoW
-	powSolution, err := cs.solvePoW(initResp.PoW.Prefix, initResp.PoW.Difficulty)
-	if err != nil {
-		return nil, fmt.Errorf("PoW failed: %w", err)
-	}
-
-	// Step 3: Generate behavioral events
-	events := cs.eventGen.GenerateHumanEvents(5000)
-
-	// Step 4: Submit
-	body, _ := json.Marshal(map[string]interface{}{
-		"session_id": initResp.SessionID,
-		"solution":   powSolution,
-		"events":     events,
-	})
-
-	resp, err := cs.httpClient.Post(baseURL+"/api/cloudflare/solve/turnstile", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return nil, fmt.Errorf("solve request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var solveResp cfSolveResp
-	if err := json.NewDecoder(resp.Body).Decode(&solveResp); err != nil {
-		return nil, fmt.Errorf("decode solve response: %w", err)
+		return nil, err
 	}
 
 	result := &CloudflareSolveResult{
-		SessionID:      initResp.SessionID,
-		ChallengeType:  "cloudflare_turnstile",
-		Passed:         solveResp.Success,
-		TurnstileToken: solveResp.TurnstileToken,
-		PoWTimeMs:      powSolution.TimeMs,
-		TotalTimeMs:    time.Since(totalStart).Milliseconds(),
-		PoWIterations:  powSolution.Iterations,
-		PoWDifficulty:  initResp.PoW.Difficulty,
+		SessionID:       flow.SessionID,
+		ChallengeType:   "cloudflare_turnstile",
+		Passed:          flow.Passed,
+		ClearanceCookie: flow.ClearanceCookie,
+		PoWTimeMs:       flow.PoWTimeMs,
+		TotalTimeMs:     flow.TotalTimeMs,
+		PoWIterations:   flow.PoWIterations,
+		PoWDifficulty:   flow.PoWDifficulty,
 	}
-
-	if solveResp.Success {
-		result.ClearanceCookie = extractCfClearanceCookie(resp)
+	if flow.Token != nil {
+		result.TurnstileToken = flow.Token.Token
 	}
-
 	return result, nil
 }
 
@@ -389,8 +368,8 @@ func (cs *CloudflareSolverClient) generateFingerprint() *adversarial.Fingerprint
 		0x49, 0x48, 0x44, 0x52, // "IHDR"
 		0x00, 0x00, 0x00, 0x01, // width = 1
 		0x00, 0x00, 0x00, 0x01, // height = 1
-		0x08, 0x02,             // bit depth 8, color type RGB
-		0x00, 0x00, 0x00,       // compression, filter, interlace
+		0x08, 0x02, // bit depth 8, color type RGB
+		0x00, 0x00, 0x00, // compression, filter, interlace
 		0x90, 0x77, 0x53, 0xDE, // IHDR CRC
 	}
 	pixelByte := byte(cs.rng.Intn(256))

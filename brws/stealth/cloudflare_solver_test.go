@@ -15,13 +15,7 @@ func mountCloudflareServer() (*httptest.Server, *adversarial.CloudflareChallenge
 	cc := adversarial.NewCloudflareChallenger(nil, nil)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/cloudflare/init", cc.HandleInit)
-	mux.HandleFunc("/api/cloudflare/solve/js", cc.HandleSolveJS)
-	mux.HandleFunc("/api/cloudflare/solve/managed", cc.HandleSolveManaged)
-	mux.HandleFunc("/api/cloudflare/solve/turnstile", cc.HandleSolveTurnstile)
-	mux.HandleFunc("/api/cloudflare/verify", cc.HandleVerifyClearance)
-	mux.HandleFunc("/api/cloudflare/challenge", cc.HandleChallengePage)
-	mux.HandleFunc("/api/cloudflare/status", cc.HandleStatus)
+	cc.MountRoutes(mux)
 
 	ts := httptest.NewServer(mux)
 	return ts, cc
@@ -307,4 +301,3 @@ func TestStatusEndpoint(t *testing.T) {
 	}
 	t.Logf("status: %+v", stats)
 }
-

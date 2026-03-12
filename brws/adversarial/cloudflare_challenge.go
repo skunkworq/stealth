@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math"
 	"math/big"
@@ -68,6 +69,10 @@ type CloudflareChallengeSession struct {
 	Type                CloudflareChallengeType
 	RayID               string
 	SiteKey             string
+	TurnstileWidget     *TurnstileWidgetConfig
+	CallbackState       *WidgetCallbackState
+	WidgetTelemetry     *WidgetTelemetry
+	TurnstileToken      *LabTurnstileToken
 	PoW                 *PoWChallenge
 	RequiresFingerprint bool
 	RequiresBehavioral  bool
@@ -109,13 +114,14 @@ func DefaultPoWDifficultyConfig() *PoWDifficultyConfig {
 // CloudflareChallenger is the server-side controller for Cloudflare challenge
 // reproduction. It creates, validates, and manages challenge sessions.
 type CloudflareChallenger struct {
-	mu          sync.RWMutex
-	sessions    map[string]*CloudflareChallengeSession
-	powConfig   *PoWDifficultyConfig
-	analyzer    *BehavioralAnalyzer
-	tracer      *CaptchaTracer
-	hmacKey     []byte
-	RateLimiter *TokenBucket // Per-IP rate limiter for solve endpoints
+	mu                 sync.RWMutex
+	sessions           map[string]*CloudflareChallengeSession
+	powConfig          *PoWDifficultyConfig
+	analyzer           *BehavioralAnalyzer
+	tracer             *CaptchaTracer
+	hmacKey            []byte
+	turnstileSecretKey string
+	RateLimiter        *TokenBucket // Per-IP rate limiter for solve endpoints
 }
 
 // NewCloudflareChallenger creates a new challenger with the given tracer and PoW config.
@@ -131,12 +137,13 @@ func NewCloudflareChallenger(tracer *CaptchaTracer, powConfig *PoWDifficultyConf
 	_, _ = rand.Read(key)
 
 	return &CloudflareChallenger{
-		sessions:    make(map[string]*CloudflareChallengeSession),
-		powConfig:   powConfig,
-		analyzer:    NewBehavioralAnalyzer(nil),
-		tracer:      tracer,
-		hmacKey:     key,
-		RateLimiter: NewTokenBucket(DefaultRateLimitConfig()),
+		sessions:           make(map[string]*CloudflareChallengeSession),
+		powConfig:          powConfig,
+		analyzer:           NewBehavioralAnalyzer(nil),
+		tracer:             tracer,
+		hmacKey:            key,
+		turnstileSecretKey: fmt.Sprintf("ts_%s", hex.EncodeToString(key[:16])),
+		RateLimiter:        NewTokenBucket(DefaultRateLimitConfig()),
 	}
 }
 
@@ -195,9 +202,16 @@ func (cc *CloudflareChallenger) CreateManagedChallenge(sessionID string, detecti
 
 // CreateTurnstileChallenge creates a Turnstile widget challenge with light PoW + behavioral.
 func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteKey string) *CloudflareChallengeSession {
+	return cc.CreateTurnstileChallengeWithConfig(sessionID, DefaultTurnstileWidgetConfig(siteKey))
+}
+
+// CreateTurnstileChallengeWithConfig creates a Turnstile widget challenge using
+// the provided public widget configuration.
+func (cc *CloudflareChallenger) CreateTurnstileChallengeWithConfig(sessionID string, cfg *TurnstileWidgetConfig) *CloudflareChallengeSession {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
+	widget := cfg.Normalize()
 	pow := cc.generatePoW(cc.powConfig.MinBits)
 	rayID := cc.generateRayID()
 
@@ -206,7 +220,9 @@ func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteK
 		ID:                  sessionID,
 		Type:                ChallengeTurnstile,
 		RayID:               rayID,
-		SiteKey:             siteKey,
+		SiteKey:             widget.SiteKey,
+		TurnstileWidget:     widget,
+		CallbackState:       &WidgetCallbackState{Ready: true},
 		PoW:                 pow,
 		RequiresFingerprint: false,
 		RequiresBehavioral:  true,
@@ -217,6 +233,14 @@ func (cc *CloudflareChallenger) CreateTurnstileChallenge(sessionID string, siteK
 
 	cc.sessions[sessionID] = session
 	return session
+}
+
+// GetTurnstileSecretKey returns the local lab secret used by the siteverify
+// endpoint. It is only for owned-environment testing.
+func (cc *CloudflareChallenger) GetTurnstileSecretKey() string {
+	cc.mu.RLock()
+	defer cc.mu.RUnlock()
+	return cc.turnstileSecretKey
 }
 
 // GetSession retrieves a session by ID.
@@ -520,15 +544,38 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 	solution *PoWSolution,
 	events []CaptchaEvent,
 ) (*CloudflareSolution, error) {
+	return cc.CompleteTurnstileInteraction(sessionID, solution, events, nil, "")
+}
+
+// CompleteTurnstileInteraction validates a Turnstile challenge and records the
+// widget lifecycle summary for later verification.
+func (cc *CloudflareChallenger) CompleteTurnstileInteraction(
+	sessionID string,
+	solution *PoWSolution,
+	events []CaptchaEvent,
+	telemetry *WidgetTelemetry,
+	hostname string,
+) (*CloudflareSolution, error) {
 	if err := cc.ValidatePoW(sessionID, solution); err != nil {
 		return nil, fmt.Errorf("PoW validation failed: %w", err)
+	}
+
+	cc.mu.RLock()
+	session, exists := cc.sessions[sessionID]
+	cc.mu.RUnlock()
+	if !exists {
+		return nil, fmt.Errorf("session not found: %s", sessionID)
 	}
 
 	// Light behavioral check for Turnstile: require minimum event count
 	// and at least some mouse movement (not zero-event bot submission)
 	behScore := 0.0
 	if len(events) < 5 {
-		behScore = 1.0
+		if telemetry != nil && telemetry.WidgetFound && telemetry.Clicks > 0 {
+			behScore = 0.25
+		} else {
+			behScore = 1.0
+		}
 	} else {
 		mouseCount := 0
 		for _, e := range events {
@@ -537,8 +584,16 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 			}
 		}
 		if mouseCount < 3 {
-			behScore = 0.8
+			if telemetry != nil && telemetry.WidgetFound && telemetry.Clicks > 0 {
+				behScore = 0.3
+			} else {
+				behScore = 0.8
+			}
 		}
+	}
+
+	if telemetry != nil && telemetry.WidgetFound && telemetry.EventCount >= 3 && telemetry.Clicks > 0 && behScore > 0.3 {
+		behScore = 0.3
 	}
 
 	if behScore > 0.70 {
@@ -546,7 +601,11 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		return nil, fmt.Errorf("turnstile challenge failed: behavioral score %.2f exceeds threshold", behScore)
 	}
 
-	token := cc.generateTurnstileToken(sessionID)
+	if telemetry == nil {
+		telemetry = BuildTurnstileTelemetry(events, session.TurnstileWidget, "", 0, 0)
+	}
+
+	token := cc.generateTurnstileToken(sessionID, hostname)
 	cookie := cc.generateClearanceCookie(sessionID)
 
 	cc.mu.Lock()
@@ -556,12 +615,24 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		session.ClearanceCookie = cookie.Value
 		session.Score = behScore
 		session.State = StateSolved
+		session.WidgetTelemetry = telemetry
+		session.TurnstileToken = token
+		if session.CallbackState == nil {
+			session.CallbackState = &WidgetCallbackState{}
+		}
+		session.CallbackState.Executed = true
+		session.CallbackState.Succeeded = true
+		session.CallbackState.LastCallback = "success"
+		session.CallbackState.LastExecutedAt = time.Now()
+		session.CallbackState.LastSucceededAt = time.Now()
 	}
 	cc.mu.Unlock()
 
 	return &CloudflareSolution{
 		ClearanceCookie: cookie,
-		TurnstileToken:  token,
+		TurnstileToken:  token.Token,
+		LabToken:        token,
+		WidgetTelemetry: telemetry,
 		SolvedAt:        time.Now(),
 		SolveTimeMs:     solution.TimeMs,
 		Method:          "cloudflare_turnstile",
@@ -750,11 +821,157 @@ func (cc *CloudflareChallenger) generateRayID() string {
 	return fmt.Sprintf("%s-LAB", hex.EncodeToString(b))
 }
 
-// generateTurnstileToken creates a Turnstile response token.
-func (cc *CloudflareChallenger) generateTurnstileToken(sessionID string) string {
-	b := make([]byte, 32)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("0.%s.%s", hex.EncodeToString(b), sessionID)
+// generateTurnstileToken creates a lab-signed Turnstile response token.
+func (cc *CloudflareChallenger) generateTurnstileToken(sessionID, hostname string) *LabTurnstileToken {
+	cc.mu.RLock()
+	session := cc.sessions[sessionID]
+	cc.mu.RUnlock()
+
+	cfg := DefaultTurnstileWidgetConfig("")
+	if session != nil && session.TurnstileWidget != nil {
+		cfg = session.TurnstileWidget.Normalize()
+	}
+
+	issuedAt := time.Now()
+	expiresAt := issuedAt.Add(time.Duration(cfg.TokenTTLSeconds) * time.Second)
+	nonce := make([]byte, 16)
+	_, _ = rand.Read(nonce)
+
+	claims := map[string]interface{}{
+		"session_id": sessionID,
+		"site_key":   cfg.SiteKey,
+		"hostname":   hostname,
+		"action":     cfg.Action,
+		"cdata":      cfg.CData,
+		"issued_at":  issuedAt.Unix(),
+		"expires_at": expiresAt.Unix(),
+		"nonce":      hex.EncodeToString(nonce),
+	}
+	payload, _ := json.Marshal(claims)
+	mac := hmac.New(sha256.New, cc.hmacKey)
+	mac.Write(payload)
+	sig := hex.EncodeToString(mac.Sum(nil))
+	token := fmt.Sprintf("0.%s.%s", base64.RawURLEncoding.EncodeToString(payload), sig)
+
+	return &LabTurnstileToken{
+		Token:     token,
+		SessionID: sessionID,
+		SiteKey:   cfg.SiteKey,
+		Hostname:  hostname,
+		Action:    cfg.Action,
+		CData:     cfg.CData,
+		IssuedAt:  issuedAt,
+		ExpiresAt: expiresAt,
+		SingleUse: true,
+		Source:    "lab",
+	}
+}
+
+// RecordTurnstileCallback updates the recorded widget lifecycle state for a
+// specific session.
+func (cc *CloudflareChallenger) RecordTurnstileCallback(sessionID, callbackName, errorCode string) {
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	session, ok := cc.sessions[sessionID]
+	if !ok {
+		return
+	}
+	if session.CallbackState == nil {
+		session.CallbackState = &WidgetCallbackState{Ready: true}
+	}
+
+	now := time.Now()
+	state := session.CallbackState
+	state.LastCallback = callbackName
+
+	switch callbackName {
+	case "render":
+		state.Rendered = true
+		state.RenderCount++
+		state.LastRenderedAt = now
+	case "execute":
+		state.Executed = true
+		state.LastExecutedAt = now
+	case "success":
+		state.Succeeded = true
+		state.LastSucceededAt = now
+		state.Expired = false
+		state.TimedOut = false
+		state.ErrorCode = ""
+	case "expired":
+		state.Expired = true
+		state.LastExpiredAt = now
+	case "timeout":
+		state.TimedOut = true
+	case "reset":
+		state.ResetCount++
+		state.Succeeded = false
+		state.Expired = false
+		state.TimedOut = false
+		state.ErrorCode = ""
+	case "error":
+		state.ErrorCode = errorCode
+	}
+}
+
+// VerifyTurnstileToken validates the locally issued Turnstile token and mirrors
+// Cloudflare's Siteverify response shape.
+func (cc *CloudflareChallenger) VerifyTurnstileToken(secret, response, hostname string) *VerificationResult {
+	if secret == "" {
+		return &VerificationResult{Success: false, ErrorCodes: []string{"missing-input-secret"}}
+	}
+	if secret != cc.GetTurnstileSecretKey() {
+		return &VerificationResult{Success: false, ErrorCodes: []string{"invalid-input-secret"}}
+	}
+	if response == "" {
+		return &VerificationResult{Success: false, ErrorCodes: []string{"missing-input-response"}}
+	}
+
+	cc.mu.Lock()
+	defer cc.mu.Unlock()
+
+	for _, session := range cc.sessions {
+		if session.TurnstileToken == nil || session.TurnstileToken.Token != response {
+			continue
+		}
+		token := session.TurnstileToken
+		if time.Now().After(token.ExpiresAt) || token.Used {
+			token.Used = true
+			return &VerificationResult{
+				Success:     false,
+				ChallengeTS: token.IssuedAt.Format(time.RFC3339),
+				Hostname:    token.Hostname,
+				Action:      token.Action,
+				CData:       token.CData,
+				ErrorCodes:  []string{"timeout-or-duplicate"},
+				Token:       token,
+			}
+		}
+		if hostname != "" && token.Hostname != "" && token.Hostname != hostname {
+			return &VerificationResult{
+				Success:     false,
+				ChallengeTS: token.IssuedAt.Format(time.RFC3339),
+				Hostname:    token.Hostname,
+				Action:      token.Action,
+				CData:       token.CData,
+				ErrorCodes:  []string{"invalid-input-response"},
+				Token:       token,
+			}
+		}
+
+		token.Used = true
+		return &VerificationResult{
+			Success:     true,
+			ChallengeTS: token.IssuedAt.Format(time.RFC3339),
+			Hostname:    token.Hostname,
+			Action:      token.Action,
+			CData:       token.CData,
+			Token:       token,
+		}
+	}
+
+	return &VerificationResult{Success: false, ErrorCodes: []string{"invalid-input-response"}}
 }
 
 // GetStats returns statistics about challenge sessions.

@@ -305,13 +305,7 @@ func (s *EnhancedServer) setupRoutes(mux *http.ServeMux) {
 
 	// Cloudflare challenge endpoints
 	cf := s.stealthServer.CloudflareChallenger
-	mux.HandleFunc("/api/cloudflare/challenge", cf.HandleChallengePage)
-	mux.HandleFunc("/api/cloudflare/init", cf.HandleInit)
-	mux.HandleFunc("/api/cloudflare/solve/js", cf.HandleSolveJS)
-	mux.HandleFunc("/api/cloudflare/solve/managed", cf.HandleSolveManaged)
-	mux.HandleFunc("/api/cloudflare/solve/turnstile", cf.HandleSolveTurnstile)
-	mux.HandleFunc("/api/cloudflare/verify", cf.HandleVerifyClearance)
-	mux.HandleFunc("/api/cloudflare/status", cf.HandleStatus)
+	cf.MountRoutes(mux)
 
 	// CAPTCHA API endpoints
 	mux.HandleFunc("/api/captcha/catalogue", s.handleCaptchaCatalogue)
@@ -1073,4 +1067,3 @@ func (s *EnhancedServer) GetProxyAddr() string {
 	}
 	return ""
 }
-

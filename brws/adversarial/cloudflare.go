@@ -31,6 +31,7 @@ type CloudflareChallenge struct {
 	StatusCode int                     `json:"status_code"`
 	RayID      string                  `json:"ray_id"`
 	SiteKey    string                  `json:"site_key,omitempty"`
+	Widget     *TurnstileWidgetConfig  `json:"widget,omitempty"`
 	URL        string                  `json:"url"`
 	DetectedAt time.Time               `json:"detected_at"`
 	PoWParams  *PoWChallenge           `json:"pow_params,omitempty"`
@@ -38,11 +39,13 @@ type CloudflareChallenge struct {
 
 // CloudflareSolution represents a solved challenge.
 type CloudflareSolution struct {
-	ClearanceCookie *http.Cookie `json:"clearance_cookie,omitempty"`
-	TurnstileToken  string       `json:"turnstile_token,omitempty"`
-	SolvedAt        time.Time    `json:"solved_at"`
-	SolveTimeMs     int64        `json:"solve_time_ms"`
-	Method          string       `json:"method"`
+	ClearanceCookie *http.Cookie       `json:"clearance_cookie,omitempty"`
+	TurnstileToken  string             `json:"turnstile_token,omitempty"`
+	LabToken        *LabTurnstileToken `json:"lab_turnstile_token,omitempty"`
+	WidgetTelemetry *WidgetTelemetry   `json:"widget_telemetry,omitempty"`
+	SolvedAt        time.Time          `json:"solved_at"`
+	SolveTimeMs     int64              `json:"solve_time_ms"`
+	Method          string             `json:"method"`
 }
 
 // CloudflareSolver is the interface for solving Cloudflare challenges.
@@ -91,8 +94,11 @@ func DetectChallenge(statusCode int, headers http.Header, body []byte) *Cloudfla
 	// 403 responses require further classification
 	if statusCode == http.StatusForbidden {
 		// Check for Turnstile widget
-		if strings.Contains(bodyStr, "cf-turnstile") || strings.Contains(bodyStr, "challenges.cloudflare.com/turnstile") {
+		if strings.Contains(bodyStr, "cf-turnstile") ||
+			strings.Contains(bodyStr, "challenges.cloudflare.com/turnstile") ||
+			strings.Contains(bodyStr, "/turnstile/v0/api.js") {
 			challenge.Type = ChallengeTurnstile
+			challenge.Widget = ParseTurnstileWidgetConfigFromHTML(bodyStr)
 			challenge.SiteKey = extractTurnstileSiteKey(bodyStr)
 			return challenge
 		}
@@ -116,6 +122,9 @@ func DetectChallenge(statusCode int, headers http.Header, body []byte) *Cloudfla
 
 // extractTurnstileSiteKey attempts to extract a Turnstile sitekey from HTML content.
 func extractTurnstileSiteKey(body string) string {
+	if widget := ParseTurnstileWidgetConfigFromHTML(body); widget != nil && widget.SiteKey != "" {
+		return widget.SiteKey
+	}
 	matches := turnstileSiteKeyRe.FindStringSubmatch(body)
 	if len(matches) >= 2 {
 		return matches[1]
@@ -176,9 +185,9 @@ func extractPoWParams(body string) *PoWChallenge {
 	}
 
 	return &PoWChallenge{
-		Prefix:    opts.PoW.Prefix,
+		Prefix:     opts.PoW.Prefix,
 		Difficulty: opts.PoW.Difficulty,
-		Algorithm: opts.PoW.Algorithm,
+		Algorithm:  opts.PoW.Algorithm,
 	}
 }
 

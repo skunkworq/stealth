@@ -12,12 +12,12 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/semantic"
 	"github.com/skunkworq/stealth/brws/behavior"
 	"github.com/skunkworq/stealth/brws/challenge"
 	"github.com/skunkworq/stealth/brws/engine"
 	"github.com/skunkworq/stealth/brws/instrumentation"
 	"github.com/skunkworq/stealth/brws/ml"
+	"github.com/skunkworq/stealth/brws/semantic"
 	"github.com/skunkworq/stealth/brws/session"
 	"github.com/skunkworq/stealth/brws/solver"
 	"github.com/skunkworq/stealth/brws/stealth/challengefsm"
@@ -674,6 +674,25 @@ func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *e
 			Timeout: c.options.Timeout,
 			ExtraHeaders: map[string]string{
 				"Cookie": fmt.Sprintf("cf_clearance=%s", clearanceCookie.Value),
+			},
+		}
+		return c.engine.Do(ctx, retryReq)
+
+	case adversarial.ChallengeTurnstile:
+		baseURL := deriveBaseURL(targetURL)
+		flow, err := c.cfSolver.HandleTurnstileLab(baseURL)
+		if err != nil {
+			return nil, err
+		}
+		if flow.ClearanceCookie == nil {
+			return nil, fmt.Errorf("turnstile flow completed without cf_clearance cookie")
+		}
+
+		retryReq := &engine.Request{
+			URL:     targetURL,
+			Timeout: c.options.Timeout,
+			ExtraHeaders: map[string]string{
+				"Cookie": fmt.Sprintf("cf_clearance=%s", flow.ClearanceCookie.Value),
 			},
 		}
 		return c.engine.Do(ctx, retryReq)
