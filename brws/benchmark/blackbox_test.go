@@ -1,0 +1,123 @@
+package benchmark
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os/exec"
+	"strings"
+	"testing"
+
+	"github.com/skunkworq/stealth/brws/types"
+)
+
+func TestFilterBlackboxTools(t *testing.T) {
+	tools := DefaultBlackboxToolSpecs("python3")
+	filtered := FilterBlackboxTools(tools, []string{"nodriver", "scrapy_default"})
+
+	if len(filtered) != 2 {
+		t.Fatalf("expected 2 filtered tools, got %d", len(filtered))
+	}
+	if filtered[0].Name != "nodriver" || filtered[1].Name != "scrapy_default" {
+		t.Fatalf("unexpected tool order: %s, %s", filtered[0].Name, filtered[1].Name)
+	}
+}
+
+func TestRunBlackboxBenchmarkWithCurl(t *testing.T) {
+	if _, err := exec.LookPath("curl"); err != nil {
+		t.Skip("curl not installed")
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/capture/json":
+			fp := types.CompleteFingerprint{
+				ID: "cap-1",
+				HTTP: &types.HTTPFingerprint{
+					Method:    r.Method,
+					Path:      r.URL.Path,
+					Protocol:  r.Proto,
+					UserAgent: r.Header.Get("User-Agent"),
+					Headers: []types.HeaderInfo{
+						{Name: "User-Agent", Value: r.Header.Get("User-Agent"), Position: 1},
+						{Name: "Accept", Value: r.Header.Get("Accept"), Position: 2},
+					},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(fp)
+		case "/api/stealth-test":
+			resp := map[string]any{
+				"request_id": "req-1",
+				"is_bot":     strings.Contains(strings.ToLower(r.Header.Get("User-Agent")), "curl"),
+				"is_stealth": false,
+				"score":      0.91,
+				"confidence": 0.97,
+				"vectors": []map[string]any{
+					{"category": "http", "score": 0.91},
+				},
+				"indicators": []map[string]any{
+					{"name": "suspicious_ua_curl"},
+				},
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(resp)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	tool := BlackboxToolSpec{
+		Name:        "curl_probe",
+		Description: "curl-based blackbox probe for e2e testing",
+		Phases: []BlackboxPhaseSpec{
+			{
+				Name:    "capture",
+				Kind:    PhaseCapture,
+				URLPath: "/capture/json",
+				Command: []string{"curl", "-sS", "-H", "User-Agent: curl/8.5.0", urlPlaceholder},
+			},
+			{
+				Name:    "shield",
+				Kind:    PhaseShield,
+				URLPath: "/api/stealth-test",
+				Command: []string{"curl", "-sS", "-H", "User-Agent: curl/8.5.0", urlPlaceholder},
+			},
+		},
+	}
+
+	report, err := RunBlackboxBenchmark(context.Background(), &BlackboxConfig{
+		BaseURL:      server.URL,
+		Tools:        []BlackboxToolSpec{tool},
+		AllowMissing: false,
+	})
+	if err != nil {
+		t.Fatalf("RunBlackboxBenchmark failed: %v", err)
+	}
+
+	if report.ExecutedCount != 1 {
+		t.Fatalf("expected 1 executed tool, got %d", report.ExecutedCount)
+	}
+
+	result := report.Results[0]
+	if result.Capture == nil || result.Capture.Summary == nil {
+		t.Fatal("expected capture result summary")
+	}
+	if got := result.Capture.Summary.UserAgent; !strings.Contains(got, "curl/8.5.0") {
+		t.Fatalf("unexpected capture user agent: %q", got)
+	}
+	if result.Shield == nil || !result.Shield.Executed {
+		t.Fatal("expected shield phase to execute")
+	}
+	if !result.Shield.IsBot {
+		t.Fatal("expected curl shield result to be bot")
+	}
+	if result.Shield.Confidence < 0.90 {
+		t.Fatalf("expected shield confidence >= 0.90, got %.3f", result.Shield.Confidence)
+	}
+	if _, ok := result.Shield.VectorScores["http"]; !ok {
+		t.Fatal("expected http vector score")
+	}
+}
