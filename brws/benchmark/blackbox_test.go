@@ -121,3 +121,50 @@ func TestRunBlackboxBenchmarkWithCurl(t *testing.T) {
 		t.Fatal("expected http vector score")
 	}
 }
+
+func TestParseCompleteFingerprintIgnoresTrailingLogs(t *testing.T) {
+	stdout := `{"id":"cap-1","http":{"protocol":"HTTP/1.1","user_agent":"HeadlessChrome","headers":[]}}
+successfully removed temp profile /tmp/foo`
+
+	fp, err := parseCompleteFingerprint(stdout)
+	if err != nil {
+		t.Fatalf("parseCompleteFingerprint failed: %v", err)
+	}
+	if fp.ID != "cap-1" {
+		t.Fatalf("expected fingerprint id cap-1, got %q", fp.ID)
+	}
+}
+
+func TestParseShieldResponseFromEnvelope(t *testing.T) {
+	body := `{"request_id":"req-1","is_bot":true,"is_stealth":false,"score":0.91,"confidence":0.97,"vectors":[{"category":"http","score":0.91}],"indicators":[{"name":"too_few_headers"}]}`
+	stdout := `{"success":true,"status_code":403,"body":"` + strings.ReplaceAll(body, `"`, `\"`) + `"}`
+
+	result, err := parseShieldResponse(stdout)
+	if err != nil {
+		t.Fatalf("parseShieldResponse failed: %v", err)
+	}
+	if !result.IsBot {
+		t.Fatal("expected shield result to be bot")
+	}
+	if result.RequestID != "req-1" {
+		t.Fatalf("expected request id req-1, got %q", result.RequestID)
+	}
+	if got := result.VectorScores["http"]; got != 0.91 {
+		t.Fatalf("expected http vector score 0.91, got %.2f", got)
+	}
+}
+
+func TestParseAvailabilityJSONIgnoresNoise(t *testing.T) {
+	stdout := "probe log line\n{\"available\":false,\"reason\":\"missing playwright\"}\n"
+
+	payload := parseAvailabilityJSON(stdout)
+	if payload == nil {
+		t.Fatal("expected availability payload")
+	}
+	if payload.Available {
+		t.Fatal("expected unavailable payload")
+	}
+	if payload.Reason != "missing playwright" {
+		t.Fatalf("unexpected reason: %q", payload.Reason)
+	}
+}

@@ -19,17 +19,25 @@ def run_scrapy(url: str) -> int:
 
     class ProbeSpider(scrapy.Spider):
         name = "blackbox_probe"
+        handle_httpstatus_all = True
         custom_settings = {
             "LOG_ENABLED": False,
             "TELNETCONSOLE_ENABLED": False,
             "RETRY_ENABLED": False,
+            "HTTPERROR_ALLOW_ALL": True,
         }
         start_urls = [url]
 
         def parse(self, response):
             sys.stdout.write(response.text)
 
-    process = CrawlerProcess(settings={"LOG_ENABLED": False, "TELNETCONSOLE_ENABLED": False})
+    process = CrawlerProcess(
+        settings={
+            "LOG_ENABLED": False,
+            "TELNETCONSOLE_ENABLED": False,
+            "HTTPERROR_ALLOW_ALL": True,
+        }
+    )
     process.crawl(ProbeSpider)
     process.start()
     return 0
@@ -65,20 +73,30 @@ async def run_nodriver(url: str, wait_ms: int) -> int:
 
 def run_scrapling(url: str, tool: str) -> int:
     try:
+        import curl_cffi  # noqa: F401
         from scrapling.fetchers import DynamicFetcher, StealthyFetcher
     except Exception as exc:  # pragma: no cover - depends on local env
         return emit_availability(False, f"scrapling unavailable: {exc}")
 
-    fetcher = StealthyFetcher if tool == "scrapling_stealthy" else DynamicFetcher
-    page = fetcher.fetch(url)
+    fetcher_cls = StealthyFetcher if tool == "scrapling_stealthy" else DynamicFetcher
+    try:
+        page = fetcher_cls.fetch(url)
+    except TypeError:
+        page = fetcher_cls().fetch(url)
 
-    for attr in ("text", "html", "content"):
+    for attr in ("json", "body", "text", "html", "content"):
         value = getattr(page, attr, None)
         if callable(value):
             try:
                 value = value()
             except TypeError:
                 value = None
+        if attr == "json" and value is not None:
+            sys.stdout.write(json.dumps(value))
+            return 0
+        if isinstance(value, bytes):
+            sys.stdout.write(value.decode("utf-8", errors="replace"))
+            return 0
         if value:
             sys.stdout.write(str(value))
             return 0
@@ -104,7 +122,11 @@ def check_tool(tool: str) -> int:
 
     if tool in {"scrapling_stealthy", "scrapling_playwright"}:
         try:
-            import scrapling  # noqa: F401
+            import curl_cffi  # noqa: F401
+            if tool == "scrapling_stealthy":
+                from scrapling.fetchers import StealthyFetcher  # noqa: F401
+            else:
+                from scrapling.fetchers import DynamicFetcher  # noqa: F401
         except Exception as exc:  # pragma: no cover - depends on local env
             return emit_availability(False, f"scrapling unavailable: {exc}")
         return emit_availability(True)

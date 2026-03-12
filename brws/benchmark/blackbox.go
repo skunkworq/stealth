@@ -475,7 +475,7 @@ func parseAvailabilityJSON(stdout string) *BlackboxAvailability {
 		Available bool   `json:"available"`
 		Reason    string `json:"reason"`
 	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
+	if err := decodeFirstJSON(stdout, &payload); err != nil {
 		return nil
 	}
 	return &BlackboxAvailability{Available: payload.Available, Reason: payload.Reason}
@@ -483,10 +483,16 @@ func parseAvailabilityJSON(stdout string) *BlackboxAvailability {
 
 func parseCompleteFingerprint(stdout string) (*types.CompleteFingerprint, error) {
 	var fp types.CompleteFingerprint
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &fp); err != nil {
+	if err := decodeFirstJSON(stdout, &fp); err != nil {
 		return nil, fmt.Errorf("decode capture fingerprint: %w", err)
 	}
 	if fp.ID == "" {
+		var envelope struct {
+			Body string `json:"body"`
+		}
+		if err := decodeFirstJSON(stdout, &envelope); err == nil && strings.TrimSpace(envelope.Body) != "" {
+			return parseCompleteFingerprint(envelope.Body)
+		}
 		return nil, errors.New("capture response missing fingerprint id")
 	}
 	return &fp, nil
@@ -506,9 +512,13 @@ func parseShieldResponse(stdout string) (*BlackboxShieldResult, error) {
 		Indicators []struct {
 			Name string `json:"name"`
 		} `json:"indicators"`
+		Body string `json:"body"`
 	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
+	if err := decodeFirstJSON(stdout, &payload); err != nil {
 		return nil, fmt.Errorf("decode shield response: %w", err)
+	}
+	if payload.RequestID == "" && strings.TrimSpace(payload.Body) != "" {
+		return parseShieldResponse(payload.Body)
 	}
 
 	result := &BlackboxShieldResult{
@@ -527,6 +537,21 @@ func parseShieldResponse(stdout string) (*BlackboxShieldResult, error) {
 		result.Indicators = append(result.Indicators, indicator.Name)
 	}
 	return result, nil
+}
+
+func decodeFirstJSON(stdout string, dst any) error {
+	trimmed := strings.TrimSpace(stdout)
+	if trimmed == "" {
+		return errors.New("empty output")
+	}
+
+	start := strings.IndexAny(trimmed, "{[")
+	if start < 0 {
+		return errors.New("no JSON payload found")
+	}
+
+	decoder := json.NewDecoder(strings.NewReader(trimmed[start:]))
+	return decoder.Decode(dst)
 }
 
 func summarizeFingerprint(fp *types.CompleteFingerprint) *BlackboxCaptureSummary {
