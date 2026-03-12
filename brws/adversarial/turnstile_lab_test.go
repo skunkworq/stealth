@@ -68,6 +68,71 @@ func dragTurnstileEvents(requiredDistance int) []CaptchaEvent {
 	}
 }
 
+func precisionDragTurnstileEvents(requiredDistance, requiredOvershoot, settleMs int) []CaptchaEvent {
+	base := time.Now().UnixMilli()
+	if requiredDistance <= 0 {
+		requiredDistance = 162
+	}
+	if requiredOvershoot <= 0 {
+		requiredOvershoot = 18
+	}
+	if settleMs <= 0 {
+		settleMs = 180
+	}
+	startX := 122.0
+	releaseX := startX + float64(requiredDistance) + 8
+	maxX := releaseX + float64(requiredOvershoot) + 6
+
+	return []CaptchaEvent{
+		{Type: "mousemove", Timestamp: base + 0, X: 104, Y: 262},
+		{Type: "mousemove", Timestamp: base + 88, X: 117, Y: 252},
+		{Type: "mousemove", Timestamp: base + 179, X: 121, Y: 246},
+		{Type: "wheel", Timestamp: base + 256, Delta: 72},
+		{Type: "mousemove", Timestamp: base + 344, X: 122, Y: 244},
+		{Type: "mousedown", Timestamp: base + 458, X: startX, Y: 244},
+		{Type: "mousemove", Timestamp: base + 602, X: 168, Y: 243},
+		{Type: "mousemove", Timestamp: base + 739, X: 214, Y: 242},
+		{Type: "mousemove", Timestamp: base + 861, X: 256, Y: 243},
+		{Type: "mousemove", Timestamp: base + 984, X: maxX, Y: 244},
+		{Type: "mousemove", Timestamp: base + 1131, X: releaseX + 4, Y: 245},
+		{Type: "mousemove", Timestamp: base + 1247, X: releaseX, Y: 244},
+		{Type: "mouseup", Timestamp: base + 1247 + int64(settleMs) + 220, X: releaseX, Y: 244},
+		{Type: "click", Timestamp: base + 1254 + int64(settleMs) + 220, X: releaseX, Y: 244},
+	}
+}
+
+func precisionDragNoApproachEvents(requiredDistance, requiredOvershoot, settleMs int) []CaptchaEvent {
+	base := time.Now().UnixMilli()
+	if requiredDistance <= 0 {
+		requiredDistance = 162
+	}
+	if requiredOvershoot <= 0 {
+		requiredOvershoot = 18
+	}
+	if settleMs <= 0 {
+		settleMs = 180
+	}
+	startX := 122.0
+	releaseX := startX + float64(requiredDistance) + 7
+	maxX := releaseX + float64(requiredOvershoot) + 5
+
+	return []CaptchaEvent{
+		{Type: "mousemove", Timestamp: base + 0, X: 48, Y: 286},
+		{Type: "mousemove", Timestamp: base + 91, X: 68, Y: 279},
+		{Type: "mousemove", Timestamp: base + 194, X: 81, Y: 271},
+		{Type: "wheel", Timestamp: base + 266, Delta: 84},
+		{Type: "mousedown", Timestamp: base + 458, X: startX, Y: 244},
+		{Type: "mousemove", Timestamp: base + 612, X: 171, Y: 244},
+		{Type: "mousemove", Timestamp: base + 755, X: 218, Y: 244},
+		{Type: "mousemove", Timestamp: base + 898, X: 263, Y: 243},
+		{Type: "mousemove", Timestamp: base + 1045, X: maxX, Y: 244},
+		{Type: "mousemove", Timestamp: base + 1189, X: releaseX + 3, Y: 244},
+		{Type: "mousemove", Timestamp: base + 1308, X: releaseX, Y: 244},
+		{Type: "mouseup", Timestamp: base + 1308 + int64(settleMs) + 220, X: releaseX, Y: 244},
+		{Type: "click", Timestamp: base + 1315 + int64(settleMs) + 220, X: releaseX, Y: 244},
+	}
+}
+
 func straightLineTurnstileEvents() []CaptchaEvent {
 	base := time.Now().UnixMilli()
 	return []CaptchaEvent{
@@ -138,6 +203,40 @@ func dragTurnstileProof(requiredDistance, requiredEvents int) *TurnstileInteract
 	}
 }
 
+func precisionDragTurnstileProof(requiredDistance, requiredEvents, requiredOvershoot, settleMs, targetZoneWidth, directionChanges int) *TurnstileInteractionProof {
+	if requiredDistance <= 0 {
+		requiredDistance = 162
+	}
+	if requiredEvents <= 0 {
+		requiredEvents = 8
+	}
+	if requiredOvershoot <= 0 {
+		requiredOvershoot = 18
+	}
+	if settleMs <= 0 {
+		settleMs = 180
+	}
+	if targetZoneWidth <= 0 {
+		targetZoneWidth = 24
+	}
+	if directionChanges <= 0 {
+		directionChanges = 1
+	}
+	return &TurnstileInteractionProof{
+		Type:              turnstileInteractionPrecision,
+		Completed:         true,
+		DragDistancePx:    requiredDistance + requiredOvershoot + 6,
+		DragEventCount:    requiredEvents + 1,
+		ApproachHoverMs:   256,
+		ApproachMoveCount: 4,
+		ApproachSettleMs:  114,
+		OvershootPx:       requiredOvershoot + 6,
+		SettleDurationMs:  settleMs + 220,
+		DirectionChanges:  directionChanges,
+		FinalDragOffsetPx: requiredDistance + targetZoneWidth/3,
+	}
+}
+
 func TestTurnstileInitExposesWidgetConfig(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 
@@ -193,6 +292,7 @@ func TestTurnstileInitEscalatesInteractionByRisk(t *testing.T) {
 		{name: "low", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.20}`, wantRisk: "low", wantVariant: turnstileInteractionCheckbox},
 		{name: "medium", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.55}`, wantRisk: "medium", wantVariant: turnstileInteractionHold},
 		{name: "high", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.85}`, wantRisk: "high", wantVariant: turnstileInteractionDrag},
+		{name: "critical", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.95}`, wantRisk: "critical", wantVariant: turnstileInteractionPrecision},
 	}
 
 	for _, tc := range testCases {
@@ -268,6 +368,7 @@ func TestTurnstileWidgetPageRendersRiskVariants(t *testing.T) {
 		wantInteraction string
 		wantLabel       string
 		wantSubtitle    string
+		extraMarkers    []string
 	}{
 		{
 			name:            "low checkbox",
@@ -296,6 +397,24 @@ func TestTurnstileWidgetPageRendersRiskVariants(t *testing.T) {
 			wantLabel:       `aria-label="Local Turnstile harness drag handle"`,
 			wantSubtitle:    "Drag the handle to the end",
 		},
+		{
+			name:            "critical precision drag",
+			sessionID:       "widget-critical",
+			detectionScore:  "0.95",
+			wantRisk:        "critical",
+			wantInteraction: turnstileInteractionPrecision,
+			wantLabel:       `aria-label="Local Turnstile harness precision drag handle"`,
+			wantSubtitle:    "Drag past the marker and release in the zone",
+			extraMarkers: []string{
+				`data-required-approach-hover-ms="220"`,
+				`data-required-approach-moves="3"`,
+				`data-required-approach-settle-ms="90"`,
+				`data-required-overshoot="18"`,
+				`data-required-settle-ms="180"`,
+				`data-required-direction-changes="1"`,
+				`data-target-zone-width="24"`,
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -315,6 +434,7 @@ func TestTurnstileWidgetPageRendersRiskVariants(t *testing.T) {
 				tc.wantLabel,
 				tc.wantSubtitle,
 			}
+			checks = append(checks, tc.extraMarkers...)
 			for _, marker := range checks {
 				if !strings.Contains(body, marker) {
 					t.Fatalf("widget page missing %q", marker)
@@ -445,6 +565,93 @@ func TestTurnstileDragVariantRequiresDragProof(t *testing.T) {
 	}
 }
 
+func TestTurnstilePrecisionVariantRequiresOvershootAndSettle(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallengeWithRisk("widget-precision", "1x00000000000000000000AA", 0.95)
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW failed: %v", err)
+	}
+
+	cc.RecordTurnstileInteractionProof(session.ID, &TurnstileInteractionProof{
+		Type:              turnstileInteractionPrecision,
+		Completed:         true,
+		DragDistancePx:    session.TurnstileConfig.Interaction.RequiredDragDistancePx + 4,
+		DragEventCount:    session.TurnstileConfig.Interaction.RequiredDragEventCount,
+		FinalDragOffsetPx: session.TurnstileConfig.Interaction.RequiredDragDistancePx + 4,
+	})
+	if _, err := cc.CompleteTurnstile(session.ID, solution, dragTurnstileEvents(session.TurnstileConfig.Interaction.RequiredDragDistancePx)); err == nil {
+		t.Fatal("expected straight drag proof to be rejected for precision variant")
+	}
+
+	session = cc.CreateTurnstileChallengeWithRisk("widget-precision-pass", "1x00000000000000000000AA", 0.95)
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+	cc.RecordTurnstileInteractionProof(session.ID, precisionDragTurnstileProof(
+		session.TurnstileConfig.Interaction.RequiredDragDistancePx,
+		session.TurnstileConfig.Interaction.RequiredDragEventCount,
+		session.TurnstileConfig.Interaction.RequiredOvershootPx,
+		session.TurnstileConfig.Interaction.RequiredSettleMs,
+		session.TurnstileConfig.Interaction.TargetZoneWidthPx,
+		session.TurnstileConfig.Interaction.RequiredDirectionChanges,
+	))
+	solution, err = SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW precision pass failed: %v", err)
+	}
+	if _, err := cc.CompleteTurnstile(session.ID, solution, precisionDragTurnstileEvents(
+		session.TurnstileConfig.Interaction.RequiredDragDistancePx,
+		session.TurnstileConfig.Interaction.RequiredOvershootPx,
+		session.TurnstileConfig.Interaction.RequiredSettleMs,
+	)); err != nil {
+		t.Fatalf("expected precision drag proof to pass: %v", err)
+	}
+}
+
+func TestTurnstilePrecisionVariantRequiresApproachHover(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+
+	session := cc.CreateTurnstileChallengeWithRisk("widget-precision-approach", "1x00000000000000000000AA", 0.95)
+	cc.PresentTurnstileWidget(session.ID, "localhost")
+	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
+	cc.RecordTurnstileCallback(session.ID, "before-interactive")
+	cc.RecordTurnstileCallback(session.ID, "after-interactive")
+
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("SolvePoW failed: %v", err)
+	}
+
+	cc.RecordTurnstileInteractionProof(session.ID, &TurnstileInteractionProof{
+		Type:              turnstileInteractionPrecision,
+		Completed:         true,
+		DragDistancePx:    session.TurnstileConfig.Interaction.RequiredDragDistancePx + session.TurnstileConfig.Interaction.RequiredOvershootPx + 5,
+		DragEventCount:    session.TurnstileConfig.Interaction.RequiredDragEventCount,
+		ApproachHoverMs:   0,
+		ApproachMoveCount: 0,
+		ApproachSettleMs:  0,
+		OvershootPx:       session.TurnstileConfig.Interaction.RequiredOvershootPx + 5,
+		SettleDurationMs:  session.TurnstileConfig.Interaction.RequiredSettleMs + 220,
+		DirectionChanges:  session.TurnstileConfig.Interaction.RequiredDirectionChanges,
+		FinalDragOffsetPx: session.TurnstileConfig.Interaction.RequiredDragDistancePx + session.TurnstileConfig.Interaction.TargetZoneWidthPx/3,
+	})
+	if _, err := cc.CompleteTurnstile(session.ID, solution, precisionDragNoApproachEvents(
+		session.TurnstileConfig.Interaction.RequiredDragDistancePx,
+		session.TurnstileConfig.Interaction.RequiredOvershootPx,
+		session.TurnstileConfig.Interaction.RequiredSettleMs,
+	)); err == nil {
+		t.Fatal("expected precision drag without approach hover to be rejected")
+	}
+}
+
 func TestTurnstileSiteVerifySingleUseAndExpiry(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 
@@ -564,6 +771,20 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 			},
 		},
 		{
+			Name:               "precision-human-like",
+			DetectionScore:     0.95,
+			ExpectPass:         true,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
+			BuildEvents: func() []CaptchaEvent {
+				return precisionDragTurnstileEvents(162, 18, 180)
+			},
+			BuildSnapshot: humanLikeTurnstileSnapshot,
+			BuildInteractionProof: func() *TurnstileInteractionProof {
+				return precisionDragTurnstileProof(162, 8, 18, 180, 24, 1)
+			},
+		},
+		{
 			Name:               "straight-line-bot",
 			ExpectPass:         false,
 			PresentWidget:      true,
@@ -616,6 +837,52 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 			},
 		},
 		{
+			Name:               "precision-no-settle",
+			DetectionScore:     0.95,
+			ExpectPass:         false,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
+			BuildEvents: func() []CaptchaEvent {
+				return dragTurnstileEvents(170)
+			},
+			BuildSnapshot: humanLikeTurnstileSnapshot,
+			BuildInteractionProof: func() *TurnstileInteractionProof {
+				return &TurnstileInteractionProof{
+					Type:              turnstileInteractionPrecision,
+					Completed:         true,
+					DragDistancePx:    170,
+					DragEventCount:    8,
+					FinalDragOffsetPx: 170,
+				}
+			},
+		},
+		{
+			Name:               "precision-no-approach",
+			DetectionScore:     0.95,
+			ExpectPass:         false,
+			PresentWidget:      true,
+			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
+			BuildEvents: func() []CaptchaEvent {
+				return precisionDragNoApproachEvents(162, 18, 180)
+			},
+			BuildSnapshot: humanLikeTurnstileSnapshot,
+			BuildInteractionProof: func() *TurnstileInteractionProof {
+				return &TurnstileInteractionProof{
+					Type:              turnstileInteractionPrecision,
+					Completed:         true,
+					DragDistancePx:    186,
+					DragEventCount:    9,
+					ApproachHoverMs:   0,
+					ApproachMoveCount: 0,
+					ApproachSettleMs:  0,
+					OvershootPx:       23,
+					SettleDurationMs:  400,
+					DirectionChanges:  1,
+					FinalDragOffsetPx: 170,
+				}
+			},
+		},
+		{
 			Name:       "empty-bot",
 			ExpectPass: false,
 			BuildEvents: func() []CaptchaEvent {
@@ -627,8 +894,8 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 		t.Fatalf("EvaluateTurnstileDefense failed: %v", err)
 	}
 
-	if len(report.Samples) != 8 {
-		t.Fatalf("expected 8 samples, got %d", len(report.Samples))
+	if len(report.Samples) != 11 {
+		t.Fatalf("expected 11 samples, got %d", len(report.Samples))
 	}
 
 	if report.Samples[0].PassRate <= 0 {
@@ -643,20 +910,29 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 	if report.Samples[2].PassRate <= 0 {
 		t.Fatalf("expected drag sample to pass at least once: %+v", report.Samples[2])
 	}
-	if report.Samples[3].RejectRate != 1 {
-		t.Fatalf("expected straight-line bot sample to reject every time: %+v", report.Samples[3])
+	if report.Samples[3].PassRate <= 0 {
+		t.Fatalf("expected precision sample to pass at least once: %+v", report.Samples[3])
 	}
 	if report.Samples[4].RejectRate != 1 {
-		t.Fatalf("expected timeout sample to reject every time: %+v", report.Samples[4])
+		t.Fatalf("expected straight-line bot sample to reject every time: %+v", report.Samples[4])
 	}
 	if report.Samples[5].RejectRate != 1 {
-		t.Fatalf("expected webdriver sample to reject every time: %+v", report.Samples[5])
+		t.Fatalf("expected timeout sample to reject every time: %+v", report.Samples[5])
 	}
 	if report.Samples[6].RejectRate != 1 {
-		t.Fatalf("expected short drag sample to reject every time: %+v", report.Samples[6])
+		t.Fatalf("expected webdriver sample to reject every time: %+v", report.Samples[6])
 	}
 	if report.Samples[7].RejectRate != 1 {
-		t.Fatalf("expected empty bot sample to reject every time: %+v", report.Samples[7])
+		t.Fatalf("expected short drag sample to reject every time: %+v", report.Samples[7])
+	}
+	if report.Samples[8].RejectRate != 1 {
+		t.Fatalf("expected precision-no-settle sample to reject every time: %+v", report.Samples[8])
+	}
+	if report.Samples[9].RejectRate != 1 {
+		t.Fatalf("expected precision-no-approach sample to reject every time: %+v", report.Samples[9])
+	}
+	if report.Samples[10].RejectRate != 1 {
+		t.Fatalf("expected empty bot sample to reject every time: %+v", report.Samples[10])
 	}
 	if report.Accuracy < 0.75 {
 		t.Fatalf("expected aggregate accuracy >= 0.75, got %.2f", report.Accuracy)

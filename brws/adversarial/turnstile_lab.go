@@ -9,9 +9,10 @@ import (
 const defaultTurnstileTokenTTL = 5 * time.Minute
 
 const (
-	turnstileInteractionCheckbox = "checkbox"
-	turnstileInteractionHold     = "hold"
-	turnstileInteractionDrag     = "drag"
+	turnstileInteractionCheckbox  = "checkbox"
+	turnstileInteractionHold      = "hold"
+	turnstileInteractionDrag      = "drag"
+	turnstileInteractionPrecision = "drag_precision"
 )
 
 // TurnstileRetryPolicy models the widget retry behavior exposed to the client.
@@ -28,21 +29,35 @@ type TurnstileRefreshPolicy struct {
 
 // TurnstileInteractionConfig describes the specific interaction the local widget expects.
 type TurnstileInteractionConfig struct {
-	Type                   string `json:"type"`
-	RequiredHoldMs         int    `json:"required_hold_ms,omitempty"`
-	RequiredDragDistancePx int    `json:"required_drag_distance_px,omitempty"`
-	RequiredDragEventCount int    `json:"required_drag_event_count,omitempty"`
-	DragTrackLengthPx      int    `json:"drag_track_length_px,omitempty"`
+	Type                     string `json:"type"`
+	RequiredHoldMs           int    `json:"required_hold_ms,omitempty"`
+	RequiredDragDistancePx   int    `json:"required_drag_distance_px,omitempty"`
+	RequiredDragEventCount   int    `json:"required_drag_event_count,omitempty"`
+	DragTrackLengthPx        int    `json:"drag_track_length_px,omitempty"`
+	RequiredApproachHoverMs  int    `json:"required_approach_hover_ms,omitempty"`
+	RequiredApproachMoves    int    `json:"required_approach_moves,omitempty"`
+	RequiredApproachSettleMs int    `json:"required_approach_settle_ms,omitempty"`
+	RequiredOvershootPx      int    `json:"required_overshoot_px,omitempty"`
+	RequiredSettleMs         int    `json:"required_settle_ms,omitempty"`
+	RequiredDirectionChanges int    `json:"required_direction_changes,omitempty"`
+	TargetZoneWidthPx        int    `json:"target_zone_width_px,omitempty"`
 }
 
 // TurnstileInteractionProof captures the interaction performed against the widget.
 type TurnstileInteractionProof struct {
-	Type           string `json:"type"`
-	Completed      bool   `json:"completed"`
-	CheckboxClicks int    `json:"checkbox_clicks,omitempty"`
-	HoldDurationMs int    `json:"hold_duration_ms,omitempty"`
-	DragDistancePx int    `json:"drag_distance_px,omitempty"`
-	DragEventCount int    `json:"drag_event_count,omitempty"`
+	Type              string `json:"type"`
+	Completed         bool   `json:"completed"`
+	CheckboxClicks    int    `json:"checkbox_clicks,omitempty"`
+	HoldDurationMs    int    `json:"hold_duration_ms,omitempty"`
+	DragDistancePx    int    `json:"drag_distance_px,omitempty"`
+	DragEventCount    int    `json:"drag_event_count,omitempty"`
+	ApproachHoverMs   int    `json:"approach_hover_duration_ms,omitempty"`
+	ApproachMoveCount int    `json:"approach_move_count,omitempty"`
+	ApproachSettleMs  int    `json:"approach_settle_duration_ms,omitempty"`
+	OvershootPx       int    `json:"overshoot_px,omitempty"`
+	SettleDurationMs  int    `json:"settle_duration_ms,omitempty"`
+	DirectionChanges  int    `json:"direction_changes,omitempty"`
+	FinalDragOffsetPx int    `json:"final_drag_offset_px,omitempty"`
 }
 
 // TurnstileCallbackState tracks the current lifecycle callback state for a widget.
@@ -159,6 +174,21 @@ func defaultTurnstileWidgetConfig(sessionID string) TurnstileWidgetConfig {
 func turnstileWidgetConfigForRisk(sessionID string, detectionScore float64) TurnstileWidgetConfig {
 	cfg := defaultTurnstileWidgetConfig(sessionID)
 	switch {
+	case detectionScore >= 0.90:
+		cfg.RiskLevel = "critical"
+		cfg.Interaction = TurnstileInteractionConfig{
+			Type:                     turnstileInteractionPrecision,
+			RequiredDragDistancePx:   162,
+			RequiredDragEventCount:   8,
+			DragTrackLengthPx:        236,
+			RequiredApproachHoverMs:  220,
+			RequiredApproachMoves:    3,
+			RequiredApproachSettleMs: 90,
+			RequiredOvershootPx:      18,
+			RequiredSettleMs:         180,
+			RequiredDirectionChanges: 1,
+			TargetZoneWidthPx:        24,
+		}
 	case detectionScore >= 0.75:
 		cfg.RiskLevel = "high"
 		cfg.Interaction = TurnstileInteractionConfig{

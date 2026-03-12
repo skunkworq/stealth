@@ -723,6 +723,14 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 	if interactionScore >= 0.70 {
 		compositeScore = math.Max(compositeScore, 0.83)
 	}
+	if exists && session.TurnstileConfig.RiskLevel == "critical" {
+		if eventSpan > 0 && eventSpan < 1600 {
+			compositeScore = math.Max(compositeScore, 0.86)
+		}
+		if interactionScore >= 0.55 {
+			compositeScore = math.Max(compositeScore, 0.86)
+		}
+	}
 
 	if compositeScore > 0.70 {
 		cc.recordFailedAttempt(sessionID)
@@ -1261,12 +1269,19 @@ func evaluateTurnstileSnapshot(snapshot *TurnstileClientSnapshot) float64 {
 }
 
 type turnstileEventInteractionSummary struct {
-	HasMouseDown   bool
-	HasMouseUp     bool
-	HasClick       bool
-	MoveCount      int
-	HoldDurationMs int
-	DragDistancePx int
+	HasMouseDown      bool
+	HasMouseUp        bool
+	HasClick          bool
+	MoveCount         int
+	HoldDurationMs    int
+	DragDistancePx    int
+	ApproachHoverMs   int
+	ApproachMoveCount int
+	ApproachSettleMs  int
+	OvershootPx       int
+	SettleDurationMs  int
+	DirectionChanges  int
+	FinalDragOffsetPx int
 }
 
 func evaluateTurnstileInteraction(session *CloudflareChallengeSession, events []CaptchaEvent) float64 {
@@ -1287,6 +1302,7 @@ func evaluateTurnstileInteraction(session *CloudflareChallengeSession, events []
 
 	score := 0.0
 	weights := 0.0
+	precisionApproachFailed := false
 	addPenalty := func(condition bool, weight float64) {
 		if condition {
 			score += weight
@@ -1305,6 +1321,57 @@ func evaluateTurnstileInteraction(session *CloudflareChallengeSession, events []
 		addPenalty(summary.HoldDurationMs < config.RequiredHoldMs, 0.25)
 		addPenalty(!(summary.HasMouseDown && summary.HasMouseUp && summary.HasClick), 0.10)
 		addPenalty(summary.MoveCount < 2, 0.10)
+	case turnstileInteractionPrecision:
+		requiredDistance := config.RequiredDragDistancePx + config.RequiredOvershootPx
+		requiredDirectionChanges := config.RequiredDirectionChanges
+		if requiredDirectionChanges <= 0 {
+			requiredDirectionChanges = 1
+		}
+		targetZoneWidth := config.TargetZoneWidthPx
+		if targetZoneWidth <= 0 {
+			targetZoneWidth = 24
+		}
+		requiredApproachHoverMs := config.RequiredApproachHoverMs
+		if requiredApproachHoverMs <= 0 {
+			requiredApproachHoverMs = 220
+		}
+		requiredApproachMoves := config.RequiredApproachMoves
+		if requiredApproachMoves <= 0 {
+			requiredApproachMoves = 3
+		}
+		requiredApproachSettleMs := config.RequiredApproachSettleMs
+		if requiredApproachSettleMs <= 0 {
+			requiredApproachSettleMs = 90
+		}
+		precisionApproachFailed =
+			proof == nil ||
+				proof.ApproachHoverMs < requiredApproachHoverMs ||
+				proof.ApproachMoveCount < requiredApproachMoves ||
+				proof.ApproachSettleMs < requiredApproachSettleMs ||
+				summary.ApproachHoverMs < requiredApproachHoverMs ||
+				summary.ApproachMoveCount < requiredApproachMoves ||
+				summary.ApproachSettleMs < requiredApproachSettleMs
+
+		addPenalty(proof == nil || !proof.Completed, 0.18)
+		addPenalty(proof == nil || proof.ApproachHoverMs < requiredApproachHoverMs, 0.10)
+		addPenalty(proof == nil || proof.ApproachMoveCount < requiredApproachMoves, 0.08)
+		addPenalty(proof == nil || proof.ApproachSettleMs < requiredApproachSettleMs, 0.08)
+		addPenalty(proof == nil || proof.DragDistancePx < requiredDistance, 0.12)
+		addPenalty(proof == nil || proof.DragEventCount < config.RequiredDragEventCount, 0.08)
+		addPenalty(proof == nil || proof.OvershootPx < config.RequiredOvershootPx, 0.10)
+		addPenalty(proof == nil || proof.SettleDurationMs < config.RequiredSettleMs, 0.10)
+		addPenalty(proof == nil || proof.DirectionChanges < requiredDirectionChanges, 0.10)
+		addPenalty(proof == nil || !turnstileReleaseWithinZone(proof.FinalDragOffsetPx, config.RequiredDragDistancePx, targetZoneWidth), 0.10)
+		addPenalty(summary.ApproachHoverMs < requiredApproachHoverMs, 0.10)
+		addPenalty(summary.ApproachMoveCount < requiredApproachMoves, 0.08)
+		addPenalty(summary.ApproachSettleMs < requiredApproachSettleMs, 0.08)
+		addPenalty(summary.DragDistancePx < requiredDistance, 0.12)
+		addPenalty(summary.MoveCount < config.RequiredDragEventCount+2, 0.08)
+		addPenalty(summary.OvershootPx < config.RequiredOvershootPx, 0.10)
+		addPenalty(summary.SettleDurationMs < config.RequiredSettleMs, 0.10)
+		addPenalty(summary.DirectionChanges < requiredDirectionChanges, 0.10)
+		addPenalty(!turnstileReleaseWithinZone(summary.FinalDragOffsetPx, config.RequiredDragDistancePx, targetZoneWidth), 0.10)
+		addPenalty(!(summary.HasMouseDown && summary.HasMouseUp && summary.HasClick), 0.10)
 	case turnstileInteractionDrag:
 		addPenalty(proof == nil || !proof.Completed, 0.30)
 		addPenalty(proof == nil || proof.DragDistancePx < config.RequiredDragDistancePx, 0.20)
@@ -1321,7 +1388,11 @@ func evaluateTurnstileInteraction(session *CloudflareChallengeSession, events []
 	if weights == 0 {
 		return 0.0
 	}
-	return math.Min(1.0, score/weights)
+	result := math.Min(1.0, score/weights)
+	if config.Type == turnstileInteractionPrecision && precisionApproachFailed {
+		return math.Max(0.74, result)
+	}
+	return result
 }
 
 func summarizeTurnstileInteractionEvents(events []CaptchaEvent) turnstileEventInteractionSummary {
@@ -1329,49 +1400,117 @@ func summarizeTurnstileInteractionEvents(events []CaptchaEvent) turnstileEventIn
 	var downTS int64
 	minX := math.MaxFloat64
 	maxX := -math.MaxFloat64
+	var downX float64
+	var downY float64
+	firstDownIndex := -1
+	haveDown := false
+	lastDragX := 0.0
+	lastMoveTS := int64(0)
+	lastDirection := 0
 
-	for _, event := range events {
+	for idx, event := range events {
 		switch event.Type {
 		case "mousemove":
 			summary.MoveCount++
-			if event.X < minX {
-				minX = event.X
-			}
-			if event.X > maxX {
-				maxX = event.X
+			if haveDown {
+				if event.X < minX {
+					minX = event.X
+				}
+				if event.X > maxX {
+					maxX = event.X
+				}
+				delta := event.X - lastDragX
+				if math.Abs(delta) >= 3 {
+					direction := 1
+					if delta < 0 {
+						direction = -1
+					}
+					if lastDirection != 0 && direction != lastDirection {
+						summary.DirectionChanges++
+					}
+					lastDirection = direction
+				}
+				lastDragX = event.X
+				lastMoveTS = event.Timestamp
 			}
 		case "mousedown":
 			summary.HasMouseDown = true
 			if downTS == 0 {
 				downTS = event.Timestamp
+				firstDownIndex = idx
 			}
-			if event.X < minX {
-				minX = event.X
-			}
-			if event.X > maxX {
-				maxX = event.X
-			}
+			downX = event.X
+			downY = event.Y
+			haveDown = true
+			minX = event.X
+			maxX = event.X
+			lastDragX = event.X
 		case "mouseup":
 			summary.HasMouseUp = true
 			if downTS > 0 && event.Timestamp >= downTS {
 				summary.HoldDurationMs = int(event.Timestamp - downTS)
 			}
-			if event.X < minX {
-				minX = event.X
-			}
-			if event.X > maxX {
-				maxX = event.X
+			if haveDown {
+				if event.X < minX {
+					minX = event.X
+				}
+				if event.X > maxX {
+					maxX = event.X
+				}
+				summary.FinalDragOffsetPx = int(math.Round(event.X - downX))
+				if maxX > event.X {
+					summary.OvershootPx = int(math.Round(maxX - event.X))
+				}
+				if lastMoveTS > 0 && event.Timestamp >= lastMoveTS {
+					summary.SettleDurationMs = int(event.Timestamp - lastMoveTS)
+				}
 			}
 		case "click":
 			summary.HasClick = true
 		}
 	}
 
-	if minX != math.MaxFloat64 && maxX != -math.MaxFloat64 && maxX > minX {
-		summary.DragDistancePx = int(math.Round(maxX - minX))
+	if haveDown && maxX >= minX {
+		summary.DragDistancePx = int(math.Round(maxX - downX))
+	}
+	if firstDownIndex > 0 {
+		approachMoves := 0
+		firstApproachTS := int64(0)
+		lastApproachTS := int64(0)
+		for _, event := range events[:firstDownIndex] {
+			if event.Type != "mousemove" {
+				continue
+			}
+			if math.Abs(event.X-downX) > 28 || math.Abs(event.Y-downY) > 24 {
+				continue
+			}
+			approachMoves++
+			if firstApproachTS == 0 {
+				firstApproachTS = event.Timestamp
+			}
+			lastApproachTS = event.Timestamp
+		}
+		summary.ApproachMoveCount = approachMoves
+		if firstApproachTS > 0 && lastApproachTS >= firstApproachTS {
+			summary.ApproachHoverMs = int(lastApproachTS - firstApproachTS)
+			if downTS >= lastApproachTS {
+				summary.ApproachSettleMs = int(downTS - lastApproachTS)
+			}
+		}
 	}
 
 	return summary
+}
+
+func turnstileReleaseWithinZone(offset, requiredDistance, zoneWidth int) bool {
+	if requiredDistance <= 0 {
+		requiredDistance = 0
+	}
+	if zoneWidth <= 0 {
+		return offset >= requiredDistance
+	}
+
+	return offset >= requiredDistance && offset <= requiredDistance+zoneWidth
 }
 
 // eventsToEnhancedBehavioral converts CaptchaEvent slice to EnhancedBehavioralEvents

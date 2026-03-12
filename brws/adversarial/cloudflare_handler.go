@@ -244,6 +244,8 @@ func turnstileInitialSubtitle(cfg TurnstileWidgetConfig) string {
 		return "Press and hold to continue"
 	case turnstileInteractionDrag:
 		return "Drag the handle to the end"
+	case turnstileInteractionPrecision:
+		return "Drag past the marker and release in the zone"
 	default:
 		return "Local Turnstile harness ready"
 	}
@@ -253,6 +255,31 @@ func turnstileControlMarkup(cfg TurnstileWidgetConfig) string {
 	switch cfg.Interaction.Type {
 	case turnstileInteractionHold:
 		return `<button class="cf-ts-hold" type="button" data-primary-control="true" aria-label="Local Turnstile harness hold button" aria-pressed="false">Hold</button>`
+	case turnstileInteractionPrecision:
+		trackLength := cfg.Interaction.DragTrackLengthPx
+		if trackLength <= 0 {
+			trackLength = 236
+		}
+		targetWidth := cfg.Interaction.TargetZoneWidthPx
+		if targetWidth <= 0 {
+			targetWidth = 24
+		}
+		targetLeft := cfg.Interaction.RequiredDragDistancePx
+		if targetLeft < 0 {
+			targetLeft = 0
+		}
+		if targetLeft+targetWidth > trackLength {
+			targetLeft = trackLength - targetWidth
+		}
+		if targetLeft < 0 {
+			targetLeft = 0
+		}
+		return fmt.Sprintf(`<div class="cf-ts-slider cf-ts-slider-precision" style="width:%dpx">
+          <div class="cf-ts-slider-track"></div>
+          <div class="cf-ts-slider-target" style="left:%dpx;width:%dpx"></div>
+          <div class="cf-ts-slider-fill"></div>
+          <button class="cf-ts-slider-knob" type="button" data-primary-control="true" aria-label="Local Turnstile harness precision drag handle" aria-pressed="false"></button>
+        </div>`, trackLength, targetLeft, targetWidth)
 	case turnstileInteractionDrag:
 		trackLength := cfg.Interaction.DragTrackLengthPx
 		if trackLength <= 0 {
@@ -322,6 +349,7 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
     .cf-ts-hold:hover{border-color:#3b82f6}
     .cf-ts-slider{display:none;position:relative;height:32px;align-items:center}
     .cf-ts-slider-track{position:absolute;left:0;right:0;height:10px;border-radius:999px;background:#e5e7eb}
+    .cf-ts-slider-target{position:absolute;top:11px;height:10px;border:1px dashed #60a5fa;border-radius:999px;background:rgba(96,165,250,.18)}
     .cf-ts-slider-fill{position:absolute;left:0;width:18px;height:10px;border-radius:999px;background:#93c5fd;transition:width .08s linear}
     .cf-ts-slider-knob{position:absolute;left:0;top:50%%;width:28px;height:28px;border:1px solid #9ca3af;border-radius:999px;background:#fff;transform:translate(0px,-50%%);box-shadow:0 1px 4px rgba(0,0,0,.12);cursor:grab}
     .cf-ts-spinner,.cf-ts-check{display:none;font-size:16px;line-height:1}
@@ -331,25 +359,33 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
     .cf-ts-brand{font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.08em}
     .cf-turnstile[data-interaction="hold"] .cf-ts-hold{display:inline-flex;align-items:center;justify-content:center}
     .cf-turnstile[data-interaction="drag"] .cf-ts-slider{display:flex}
+    .cf-turnstile[data-interaction="drag_precision"] .cf-ts-slider{display:flex}
     .cf-turnstile[data-interaction="drag"] .cf-turnstile-shell{grid-template-columns:minmax(220px,1fr) 1fr auto}
+    .cf-turnstile[data-interaction="drag_precision"] .cf-turnstile-shell{grid-template-columns:minmax(220px,1fr) 1fr auto}
     .cf-turnstile[data-interaction="hold"] .cf-ts-checkbox,
-    .cf-turnstile[data-interaction="drag"] .cf-ts-checkbox{display:none}
+    .cf-turnstile[data-interaction="drag"] .cf-ts-checkbox,
+    .cf-turnstile[data-interaction="drag_precision"] .cf-ts-checkbox{display:none}
     .cf-turnstile[data-state="solving"] .cf-ts-spinner{display:block;animation:cf-ts-spin 1s linear infinite}
     .cf-turnstile[data-state="solving"] .cf-ts-checkbox{border-color:#2563eb}
     .cf-turnstile[data-state="solving"] .cf-ts-hold{border-color:#2563eb;background:#eff6ff}
+    .cf-turnstile[data-state="solving"][data-interaction="drag_precision"] .cf-ts-slider-target{background:rgba(96,165,250,.28);border-color:#2563eb}
     .cf-turnstile[data-state="complete"] .cf-ts-checkbox{border-color:#16a34a;background:#16a34a;color:#fff}
     .cf-turnstile[data-state="complete"] .cf-ts-check{display:block}
     .cf-turnstile[data-state="complete"] .cf-ts-spinner{display:none}
     .cf-turnstile[data-state="complete"] .cf-ts-hold{border-color:#16a34a;background:#16a34a;color:#fff}
     .cf-turnstile[data-state="complete"] .cf-ts-slider-fill{background:#16a34a}
     .cf-turnstile[data-state="complete"] .cf-ts-slider-knob{background:#16a34a;border-color:#16a34a}
+    .cf-turnstile[data-state="complete"][data-interaction="drag_precision"] .cf-ts-slider-target{border-color:#16a34a;background:rgba(34,197,94,.18)}
     @keyframes cf-ts-spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
     .cf-meta{margin-top:14px;color:#6f6f6f;font-size:12px}
     @media (max-width: 520px){
       .cf-shell{padding:24px}
       .cf-turnstile[data-interaction="drag"] .cf-turnstile-shell{grid-template-columns:1fr;gap:10px}
+      .cf-turnstile[data-interaction="drag_precision"] .cf-turnstile-shell{grid-template-columns:1fr;gap:10px}
       .cf-turnstile[data-interaction="drag"] .cf-ts-control{justify-content:flex-start}
+      .cf-turnstile[data-interaction="drag_precision"] .cf-ts-control{justify-content:flex-start}
       .cf-turnstile[data-interaction="drag"] .cf-ts-brand{justify-self:start}
+      .cf-turnstile[data-interaction="drag_precision"] .cf-ts-brand{justify-self:start}
     }
   </style>
 </head>
@@ -371,6 +407,13 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
       data-required-drag-distance="%d"
       data-required-drag-events="%d"
       data-drag-track-length="%d"
+      data-required-approach-hover-ms="%d"
+      data-required-approach-moves="%d"
+      data-required-approach-settle-ms="%d"
+      data-required-overshoot="%d"
+      data-required-settle-ms="%d"
+      data-required-direction-changes="%d"
+      data-target-zone-width="%d"
       data-retry="%s"
       data-retry-interval="%d"
       data-refresh-expired="%s"
@@ -407,6 +450,13 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
     const __tsRequiredDragDistance = parseInt((__tsWidget && __tsWidget.dataset.requiredDragDistance) || '160', 10);
     const __tsRequiredDragEvents = parseInt((__tsWidget && __tsWidget.dataset.requiredDragEvents) || '6', 10);
     const __tsDragTrackLength = parseInt((__tsWidget && __tsWidget.dataset.dragTrackLength) || '220', 10);
+    const __tsRequiredApproachHoverMs = parseInt((__tsWidget && __tsWidget.dataset.requiredApproachHoverMs) || '0', 10);
+    const __tsRequiredApproachMoves = parseInt((__tsWidget && __tsWidget.dataset.requiredApproachMoves) || '0', 10);
+    const __tsRequiredApproachSettleMs = parseInt((__tsWidget && __tsWidget.dataset.requiredApproachSettleMs) || '0', 10);
+    const __tsRequiredOvershoot = parseInt((__tsWidget && __tsWidget.dataset.requiredOvershoot) || '0', 10);
+    const __tsRequiredSettleMs = parseInt((__tsWidget && __tsWidget.dataset.requiredSettleMs) || '0', 10);
+    const __tsRequiredDirectionChanges = parseInt((__tsWidget && __tsWidget.dataset.requiredDirectionChanges) || '0', 10);
+    const __tsTargetZoneWidth = parseInt((__tsWidget && __tsWidget.dataset.targetZoneWidth) || '0', 10);
     function __tsSetState(state, subtitle){
       if (__tsWidget) {
         __tsWidget.dataset.state = state;
@@ -459,6 +509,8 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
       switch (__tsVariant) {
         case 'hold':
           return 'Press and hold to continue';
+        case 'drag_precision':
+          return 'Drag past the marker and release in the zone';
         case 'drag':
           return 'Drag the handle to the end';
         default:
@@ -512,9 +564,31 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
     let __tsDragOrigin = 0;
     let __tsDragOffset = 0;
     let __tsDragMoveCount = 0;
+    let __tsDragMaxOffset = 0;
+    let __tsDragDirectionChanges = 0;
+    let __tsDragLastDirection = 0;
+    let __tsDragLastMoveAt = 0;
+    let __tsApproachStartedAt = 0;
+    let __tsApproachMoveCount = 0;
+    let __tsApproachHoverMs = 0;
+    let __tsApproachSettleMs = 0;
+    let __tsApproachLastMoveAt = 0;
+    let __tsApproachMoveSnapshot = 0;
+    function __tsResetApproach(){
+      __tsApproachStartedAt = 0;
+      __tsApproachMoveCount = 0;
+      __tsApproachHoverMs = 0;
+      __tsApproachSettleMs = 0;
+      __tsApproachLastMoveAt = 0;
+      __tsApproachMoveSnapshot = 0;
+    }
     function __tsResetDrag(){
       __tsDragOffset = 0;
       __tsDragMoveCount = 0;
+      __tsDragMaxOffset = 0;
+      __tsDragDirectionChanges = 0;
+      __tsDragLastDirection = 0;
+      __tsDragLastMoveAt = 0;
       if (__tsSliderKnob) {
         __tsSliderKnob.style.transform = 'translate(0px, -50%%)';
       }
@@ -522,17 +596,56 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
         __tsSliderFill.style.width = '18px';
       }
     }
+    function __tsTrackApproach(){
+      if (__tsVariant !== 'drag_precision' || __tsDragging) {
+        return;
+      }
+      if (!__tsApproachStartedAt) {
+        __tsApproachStartedAt = Date.now();
+      }
+      __tsApproachMoveCount += 1;
+      __tsApproachLastMoveAt = Date.now();
+      __tsApproachHoverMs = Math.max(0, __tsApproachLastMoveAt - __tsApproachStartedAt);
+      if (__tsApproachHoverMs >= __tsRequiredApproachHoverMs && __tsApproachMoveCount >= __tsRequiredApproachMoves) {
+        __tsSetState('interactive', 'Handle armed. Overshoot, settle, then release in the zone.');
+      }
+    }
     if (__tsSlider && __tsSliderKnob) {
+      __tsSlider.addEventListener('pointerenter', function(){
+        __tsTrackApproach();
+      });
+      __tsSlider.addEventListener('pointermove', function(){
+        __tsTrackApproach();
+      });
+      __tsSlider.addEventListener('pointerleave', function(){
+        if (__tsVariant !== 'drag_precision' || __tsDragging) {
+          return;
+        }
+        __tsResetApproach();
+      });
       __tsSliderKnob.addEventListener('pointerdown', function(event){
         event.preventDefault();
         if (__tsWidget && __tsWidget.dataset.state === 'solving') {
           return;
         }
+        if (__tsVariant === 'drag_precision') {
+          __tsApproachHoverMs = __tsApproachStartedAt ? Math.max(0, Date.now() - __tsApproachStartedAt) : 0;
+          __tsApproachSettleMs = __tsApproachLastMoveAt ? Math.max(0, Date.now() - __tsApproachLastMoveAt) : 0;
+          if (__tsApproachHoverMs < __tsRequiredApproachHoverMs || __tsApproachMoveCount < __tsRequiredApproachMoves || __tsApproachSettleMs < __tsRequiredApproachSettleMs) {
+            __tsSetState('interactive', 'Pause on the handle briefly before dragging.');
+            return;
+          }
+          __tsApproachMoveSnapshot = __tsApproachMoveCount;
+        }
         __tsDragging = true;
         __tsDragOrigin = event.clientX;
         __tsDragOffset = 0;
         __tsDragMoveCount = 0;
-        __tsSetState('solving', 'Drag the handle to complete verification...');
+        __tsDragMaxOffset = 0;
+        __tsDragDirectionChanges = 0;
+        __tsDragLastDirection = 0;
+        __tsDragLastMoveAt = Date.now();
+        __tsSetState('solving', __tsVariant === 'drag_precision' ? 'Drag beyond the marker, settle, and release.' : 'Drag the handle to complete verification...');
       });
       window.addEventListener('pointermove', function(event){
         if (!__tsDragging) {
@@ -540,7 +653,17 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
         }
         __tsDragMoveCount += 1;
         const nextOffset = Math.max(0, Math.min(__tsDragTrackLength, event.clientX - __tsDragOrigin));
+        const delta = nextOffset - __tsDragOffset;
+        if (Math.abs(delta) >= 3) {
+          const direction = delta > 0 ? 1 : -1;
+          if (__tsDragLastDirection !== 0 && direction !== __tsDragLastDirection) {
+            __tsDragDirectionChanges += 1;
+          }
+          __tsDragLastDirection = direction;
+        }
         __tsDragOffset = nextOffset;
+        __tsDragMaxOffset = Math.max(__tsDragMaxOffset, nextOffset);
+        __tsDragLastMoveAt = Date.now();
         __tsSliderKnob.style.transform = 'translate(' + nextOffset + 'px, -50%%)';
         __tsSliderFill.style.width = (18 + nextOffset) + 'px';
       });
@@ -549,18 +672,44 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
           return;
         }
         __tsDragging = false;
-        const completed = __tsDragOffset >= __tsRequiredDragDistance && __tsDragMoveCount >= __tsRequiredDragEvents;
+        const finalOffset = __tsDragOffset;
+        const overshootPx = Math.max(0, __tsDragMaxOffset - finalOffset);
+        const settleDurationMs = __tsDragLastMoveAt ? Math.max(0, Date.now() - __tsDragLastMoveAt) : 0;
+        const zoneEnd = __tsRequiredDragDistance + __tsTargetZoneWidth;
+        const precisionComplete = __tsDragMaxOffset >= (__tsRequiredDragDistance + __tsRequiredOvershoot)
+          && finalOffset >= __tsRequiredDragDistance
+          && (__tsTargetZoneWidth <= 0 || finalOffset <= zoneEnd)
+          && __tsDragMoveCount >= __tsRequiredDragEvents
+          && overshootPx >= __tsRequiredOvershoot
+          && __tsDragDirectionChanges >= __tsRequiredDirectionChanges
+          && settleDurationMs >= __tsRequiredSettleMs;
+        const completed = __tsVariant === 'drag_precision'
+          ? precisionComplete
+          : (__tsDragOffset >= __tsRequiredDragDistance && __tsDragMoveCount >= __tsRequiredDragEvents);
         __tsPostInteraction({
           completed: completed,
-          drag_distance_px: Math.round(__tsDragOffset),
-          drag_event_count: __tsDragMoveCount
+          drag_distance_px: Math.round(__tsDragMaxOffset),
+          drag_event_count: __tsDragMoveCount,
+          approach_hover_duration_ms: __tsApproachHoverMs,
+          approach_move_count: __tsApproachMoveSnapshot,
+          approach_settle_duration_ms: __tsApproachSettleMs,
+          overshoot_px: Math.round(overshootPx),
+          settle_duration_ms: settleDurationMs,
+          direction_changes: __tsDragDirectionChanges,
+          final_drag_offset_px: Math.round(finalOffset)
         });
         if (completed) {
-          __tsSetState('complete', 'Drag interaction recorded. Submit via the lab flow to mint a token.');
+          __tsSetState('complete', __tsVariant === 'drag_precision'
+            ? 'Precision drag recorded. Submit via the lab flow to mint a token.'
+            : 'Drag interaction recorded. Submit via the lab flow to mint a token.');
+          __tsResetApproach();
           return;
         }
         __tsResetDrag();
-        __tsSetState('interactive', 'Drag the handle further to continue');
+        __tsSetState('interactive', __tsVariant === 'drag_precision'
+          ? 'Pause, drag past the marker, then settle in the zone.'
+          : 'Drag the handle further to continue');
+        __tsResetApproach();
       });
       window.addEventListener('pointercancel', function(){
         if (!__tsDragging) {
@@ -568,7 +717,10 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
         }
         __tsDragging = false;
         __tsResetDrag();
-        __tsSetState('interactive', 'Drag the handle to the end');
+        __tsSetState('interactive', __tsVariant === 'drag_precision'
+          ? 'Pause over the handle, then drag through the zone'
+          : 'Drag the handle to the end');
+        __tsResetApproach();
       });
     }
   </script>
@@ -587,6 +739,13 @@ func (cc *CloudflareChallenger) HandleTurnstileWidgetPage(w http.ResponseWriter,
 		session.TurnstileConfig.Interaction.RequiredDragDistancePx,
 		session.TurnstileConfig.Interaction.RequiredDragEventCount,
 		session.TurnstileConfig.Interaction.DragTrackLengthPx,
+		session.TurnstileConfig.Interaction.RequiredApproachHoverMs,
+		session.TurnstileConfig.Interaction.RequiredApproachMoves,
+		session.TurnstileConfig.Interaction.RequiredApproachSettleMs,
+		session.TurnstileConfig.Interaction.RequiredOvershootPx,
+		session.TurnstileConfig.Interaction.RequiredSettleMs,
+		session.TurnstileConfig.Interaction.RequiredDirectionChanges,
+		session.TurnstileConfig.Interaction.TargetZoneWidthPx,
 		session.TurnstileConfig.RetryPolicy.Mode,
 		session.TurnstileConfig.RetryPolicy.IntervalMs,
 		session.TurnstileConfig.RefreshPolicy.Expired,
