@@ -839,6 +839,99 @@ func TestSameOriginTelemetryPostWithThinBodyDetected(t *testing.T) {
 	}
 }
 
+func TestNoCORSTelemetryPostWithRuntimeHeadersDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1}`
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "no-cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2200))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2200))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected no-cors telemetry POST with runtime headers to be detected, got score %.3f", detection.Score)
+	}
+
+	foundRuntimeHeaders := false
+	foundNonSafelistedContentType := false
+	foundThinBody := false
+	foundMissingRuntime := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "nocors_custom_runtime_headers") {
+				foundRuntimeHeaders = true
+			}
+			if strings.HasPrefix(ind, "nocors_non_safelisted_content_type") {
+				foundNonSafelistedContentType = true
+			}
+			if strings.HasPrefix(ind, "nocors_body_too_small_for_claimed_runtime") {
+				foundThinBody = true
+			}
+			if ind == "nocors_body_missing_runtime_payload" {
+				foundMissingRuntime = true
+			}
+		}
+	}
+
+	if !foundRuntimeHeaders {
+		t.Fatal("expected nocors_custom_runtime_headers indicator")
+	}
+	if !foundNonSafelistedContentType {
+		t.Fatal("expected nocors_non_safelisted_content_type indicator")
+	}
+	if !foundThinBody {
+		t.Fatal("expected nocors_body_too_small_for_claimed_runtime indicator")
+	}
+	if !foundMissingRuntime {
+		t.Fatal("expected nocors_body_missing_runtime_payload indicator")
+	}
+}
+
+func TestNormalNoCORSBeaconDoesNotTriggerNoCORSIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "http://example.com/collect", strings.NewReader("sid=abc123&event=pagehide"))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "text/plain;charset=UTF-8")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "no-cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/dashboard")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "nocors_") {
+				t.Fatalf("did not expect no-cors telemetry indicator %q for a normal beacon", ind)
+			}
+		}
+	}
+}
+
 func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
 	detector := NewStealthDetector()
 

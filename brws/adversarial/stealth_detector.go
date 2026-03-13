@@ -1793,7 +1793,78 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		}
 	}
 
-	// Sub-check 5: Same-origin telemetry provenance.
+	// Sub-check 5: no-cors telemetry/beacon provenance.
+	// Browser no-cors beacons can be legitimate, but they cannot carry a dense
+	// runtime bundle in arbitrary custom X-* headers. When a POST claims to be a
+	// no-cors analytics/beacon request yet still ships many runtime surfaces in
+	// headers, optionally with a non-safelisted content type and a thin body, it
+	// is much more likely to be synthetic request generation than in-page JS.
+	if isNoCORSTelemetryFetch(req) {
+		runtimeHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderAudioData,
+			constants.HeaderCanvasFingerprint,
+		})
+		postLoadHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderCanvasFingerprint,
+			constants.HeaderAudioData,
+			constants.HeaderWebRTCData,
+		})
+		bodySnapshot, bodyErr := snapshotRequestBody(req)
+		bodyText := strings.TrimSpace(string(bodySnapshot))
+		bodyTooSmall := bodyErr == nil && len(bodySnapshot) > 0 && len(bodySnapshot) < 512
+		missingRuntimePayload := bodyErr == nil && len(bodySnapshot) > 0 && !bodyContainsRuntimePayload(bodyText)
+		contentType := req.Header.Get("Content-Type")
+
+		if req.Method == http.MethodPost && runtimeHeaderCount >= 6 {
+			vec.Score += 0.72
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"nocors_custom_runtime_headers: %d runtime/%d post_load headers",
+				runtimeHeaderCount, postLoadHeaderCount))
+
+			if postLoadHeaderCount >= 3 {
+				vec.Score += 0.18
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"nocors_postload_headers_present: %d runtime/%d post_load headers",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+
+			if !isNoCORSSafelistedContentType(contentType) {
+				vec.Score += 0.40
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"nocors_non_safelisted_content_type: %s", contentType))
+			}
+
+			if isOriginSameAsRequestURL(req) {
+				vec.Score += 0.12
+				vec.Indicators = append(vec.Indicators, "nocors_same_origin_beacon")
+			}
+
+			if bodyErr == nil && len(bodySnapshot) > 0 {
+				if bodyTooSmall {
+					vec.Score += 0.26
+					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+						"nocors_body_too_small_for_claimed_runtime: %d bytes", len(bodySnapshot)))
+				}
+
+				if missingRuntimePayload {
+					vec.Score += 0.22
+					vec.Indicators = append(vec.Indicators, "nocors_body_missing_runtime_payload")
+				}
+			}
+		}
+	}
+
+	// Sub-check 6: Same-origin telemetry provenance.
 	// A same-origin fetch/XHR can legitimately submit post-load telemetry, but if
 	// the payload is stuffed into headers on a GET request, points its Referer at
 	// the exact telemetry URL, and carries many runtime surfaces without a body,
@@ -1943,6 +2014,16 @@ func isSameOriginTelemetryFetch(req *http.Request) bool {
 		req.Header.Get("Referer") != ""
 }
 
+func isNoCORSTelemetryFetch(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+
+	return req.Header.Get("Sec-Fetch-Dest") == "empty" &&
+		req.Header.Get("Sec-Fetch-Mode") == "no-cors" &&
+		req.Header.Get("Referer") != ""
+}
+
 func isSameSiteTelemetryFetch(req *http.Request) bool {
 	if req == nil {
 		return false
@@ -2000,6 +2081,20 @@ func isOriginSameAsRequestURL(req *http.Request) bool {
 
 	return strings.EqualFold(originURL.Scheme, req.URL.Scheme) &&
 		strings.EqualFold(originURL.Host, req.URL.Host)
+}
+
+func isNoCORSSafelistedContentType(contentType string) bool {
+	baseContentType := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+	if baseContentType == "" {
+		return true
+	}
+
+	switch baseContentType {
+	case "application/x-www-form-urlencoded", "multipart/form-data", "text/plain":
+		return true
+	default:
+		return false
+	}
 }
 
 func urlsEqualSansFragment(a, b *url.URL) bool {
