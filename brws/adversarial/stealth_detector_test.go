@@ -860,12 +860,298 @@ func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
 	for _, vec := range detection.Vectors {
 		for _, ind := range vec.Indicators {
 			if strings.HasPrefix(ind, "telemetry_runtime_hidden_in_headers") ||
+				strings.HasPrefix(ind, "telemetry_postload_blob_in_headers") ||
+				strings.HasPrefix(ind, "telemetry_timing_blob_in_headers") ||
 				strings.HasPrefix(ind, "telemetry_bulk_payload_in_headers") ||
 				strings.HasPrefix(ind, "telemetry_header_body_imbalance") ||
+				ind == "telemetry_invalid_json_body" ||
 				strings.HasPrefix(ind, "telemetry_body_too_small_for_claimed_runtime") ||
 				ind == "telemetry_body_missing_runtime_payload" ||
 				ind == "telemetry_post_missing_body_payload" {
 				t.Fatalf("did not expect telemetry POST indicator %q for a normal same-origin POST", ind)
+			}
+		}
+	}
+}
+
+func TestSameSiteTelemetryPostWithSameOriginClaimDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1,` +
+		`"runtime":{"navigator":{"lang":"en-US","cores":8,"mem":8,"ua_blob":"` + strings.Repeat("n", 900) + `"},` +
+		`"timing":{"ttfb":120,"fcp":340,"lcp":810,"trace":"` + strings.Repeat("t", 900) + `"},` +
+		`"canvas":"abcdef1234567890","audio":"fedcba0987654321",` +
+		`"webgl":{"vendor":"Google Inc.","renderer":"ANGLE"},` +
+		`"behavior":{"moves":42,"clicks":3,"scrolls":5}}}`
+	req := httptest.NewRequest("POST", "http://example.com/", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Referer", "http://example.com/")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected same-site telemetry POST with same-origin claim to be detected, got score %.3f", detection.Score)
+	}
+
+	foundSameOriginClaim := false
+	foundSelfReferer := false
+	foundDuplicatedRuntime := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "same_site_claim_on_same_origin_post" {
+				foundSameOriginClaim = true
+			}
+			if ind == "same_site_telemetry_self_referer" {
+				foundSelfReferer = true
+			}
+			if strings.HasPrefix(ind, "telemetry_runtime_duplicated_in_body_and_headers") {
+				foundDuplicatedRuntime = true
+			}
+		}
+	}
+
+	if !foundSameOriginClaim {
+		t.Fatal("expected same_site_claim_on_same_origin_post indicator")
+	}
+	if !foundSelfReferer {
+		t.Fatal("expected same_site_telemetry_self_referer indicator")
+	}
+	if !foundDuplicatedRuntime {
+		t.Fatal("expected telemetry_runtime_duplicated_in_body_and_headers indicator")
+	}
+}
+
+func TestCrossSubdomainSameSiteTelemetryDoesNotTriggerSameOriginClaim(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1,` +
+		`"runtime":{"navigator":{"lang":"en-US","cores":8,"mem":8,"ua_blob":"` + strings.Repeat("n", 900) + `"},` +
+		`"timing":{"ttfb":120,"fcp":340,"lcp":810,"trace":"` + strings.Repeat("t", 900) + `"},` +
+		`"canvas":"abcdef1234567890","audio":"fedcba0987654321"}}`
+	req := httptest.NewRequest("POST", "https://metrics.example.com/collect", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Referer", "https://app.example.com/dashboard")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "same_site_claim_on_same_origin_post" ||
+				ind == "same_site_telemetry_self_referer" ||
+				strings.HasPrefix(ind, "same_site_runtime_hidden_in_headers") ||
+				strings.HasPrefix(ind, "same_site_body_too_small_for_claimed_runtime") ||
+				ind == "same_site_body_missing_runtime_payload" ||
+				strings.HasPrefix(ind, "telemetry_runtime_duplicated_in_body_and_headers") {
+				t.Fatalf("did not expect same-site origin claim indicator %q for cross-subdomain telemetry", ind)
+			}
+		}
+	}
+}
+
+func TestSameSiteTelemetryPostWithThinAnalyticsBodyDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"2.1.0","seq":4,` +
+		`"perf":{"ttfb":332,"fcp":228,"lcp":418},` +
+		`"viewport":{"w":1337,"h":961},` +
+		`"session":{"referrer":"https://www.google.com/","entry":"/","depth":6}}`
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://www.example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Referer", "http://www.example.com/")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Screen-Data", strings.Repeat("s", 256))
+	req.Header.Set("X-Font-Data", strings.Repeat("f", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected same-site telemetry POST with thin analytics body to be detected, got score %.3f", detection.Score)
+	}
+
+	foundHiddenRuntime := false
+	foundThinBody := false
+	foundMissingRuntime := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "same_site_runtime_hidden_in_headers") {
+				foundHiddenRuntime = true
+			}
+			if strings.HasPrefix(ind, "same_site_body_too_small_for_claimed_runtime") {
+				foundThinBody = true
+			}
+			if ind == "same_site_body_missing_runtime_payload" {
+				foundMissingRuntime = true
+			}
+		}
+	}
+
+	if !foundHiddenRuntime {
+		t.Fatal("expected same_site_runtime_hidden_in_headers indicator")
+	}
+	if !foundThinBody {
+		t.Fatal("expected same_site_body_too_small_for_claimed_runtime indicator")
+	}
+	if !foundMissingRuntime {
+		t.Fatal("expected same_site_body_missing_runtime_payload indicator")
+	}
+}
+
+func TestCrossSiteTelemetryPostWithFirstPartyOriginDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"2.1.0","seq":4,` +
+		`"perf":{"ttfb":332,"fcp":228,"lcp":418},` +
+		`"viewport":{"w":1337,"h":961},` +
+		`"session":{"referrer":"https://www.google.com/","entry":"/","depth":6}}`
+	req := httptest.NewRequest("POST", "https://example.com/api/telemetry", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Referer", "https://example.com/")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Screen-Data", strings.Repeat("s", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected cross-site telemetry POST with first-party origin to be detected, got score %.3f", detection.Score)
+	}
+
+	foundOriginClaim := false
+	foundHiddenRuntime := false
+	foundThinBody := false
+	foundMissingRuntime := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "cross_site_claim_on_same_origin_post" {
+				foundOriginClaim = true
+			}
+			if strings.HasPrefix(ind, "cross_site_runtime_hidden_in_headers") {
+				foundHiddenRuntime = true
+			}
+			if strings.HasPrefix(ind, "cross_site_body_too_small_for_claimed_runtime") {
+				foundThinBody = true
+			}
+			if ind == "cross_site_body_missing_runtime_payload" {
+				foundMissingRuntime = true
+			}
+		}
+	}
+
+	if !foundOriginClaim {
+		t.Fatal("expected cross_site_claim_on_same_origin_post indicator")
+	}
+	if !foundHiddenRuntime {
+		t.Fatal("expected cross_site_runtime_hidden_in_headers indicator")
+	}
+	if !foundThinBody {
+		t.Fatal("expected cross_site_body_too_small_for_claimed_runtime indicator")
+	}
+	if !foundMissingRuntime {
+		t.Fatal("expected cross_site_body_missing_runtime_payload indicator")
+	}
+}
+
+func TestThirdPartyCrossSiteTelemetryDoesNotTriggerOriginClaim(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1,` +
+		`"runtime":{"navigator":{"lang":"en-US","cores":8,"mem":8,"ua_blob":"` + strings.Repeat("n", 900) + `"},` +
+		`"timing":{"ttfb":120,"fcp":340,"lcp":810,"trace":"` + strings.Repeat("t", 900) + `"},` +
+		`"canvas":"abcdef1234567890","audio":"fedcba0987654321"}}`
+	req := httptest.NewRequest("POST", "https://analytics.thirdparty.test/collect", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Referer", "https://app.example.com/dashboard")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "cross_site_claim_on_same_origin_post" ||
+				ind == "cross_site_telemetry_self_referer" ||
+				strings.HasPrefix(ind, "cross_site_runtime_with_first_party_origin") ||
+				strings.HasPrefix(ind, "cross_site_body_too_small_for_claimed_runtime") ||
+				ind == "cross_site_body_missing_runtime_payload" {
+				t.Fatalf("did not expect cross-site origin claim indicator %q for third-party telemetry", ind)
 			}
 		}
 	}
@@ -985,6 +1271,98 @@ func TestFirefoxStyleTelemetryPostWithBulkHeadersDetected(t *testing.T) {
 	}
 	if !foundHeaderBodyImbalanceIndicator {
 		t.Fatal("expected telemetry_header_body_imbalance indicator")
+	}
+}
+
+func TestFirefoxStyleTelemetryPostWithInvalidJSONBodyDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":2,` +
+		`"navigator":{"lang":"en-US","cores":[4 8 12 16],"mem":[8 16 32]},` +
+		`"timing":{"ttfb":92,"fcp":568,"lcp":1263}}`
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "same-origin")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/")
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2200))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected firefox-style telemetry POST with invalid JSON body to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBlobIndicator := false
+	foundTimingBlobIndicator := false
+	foundInvalidJSONIndicator := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_postload_blob_in_headers") {
+				foundBlobIndicator = true
+			}
+			if strings.HasPrefix(ind, "telemetry_timing_blob_in_headers") {
+				foundTimingBlobIndicator = true
+			}
+			if ind == "telemetry_invalid_json_body" {
+				foundInvalidJSONIndicator = true
+			}
+		}
+	}
+	if !foundBlobIndicator {
+		t.Fatal("expected telemetry_postload_blob_in_headers indicator")
+	}
+	if !foundTimingBlobIndicator {
+		t.Fatal("expected telemetry_timing_blob_in_headers indicator")
+	}
+	if !foundInvalidJSONIndicator {
+		t.Fatal("expected telemetry_invalid_json_body indicator")
+	}
+}
+
+func TestFirefoxStyleTelemetryPostWithTimingBlobHeaderDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":2,"timing":{"ttfb":92,"fcp":568,"lcp":1263}}`
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "same-origin")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/")
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected firefox-style telemetry POST with timing blob header to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBlobIndicator := false
+	foundTimingBlobIndicator := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_postload_blob_in_headers") {
+				foundBlobIndicator = true
+			}
+			if strings.HasPrefix(ind, "telemetry_timing_blob_in_headers") {
+				foundTimingBlobIndicator = true
+			}
+		}
+	}
+	if !foundBlobIndicator {
+		t.Fatal("expected telemetry_postload_blob_in_headers indicator")
+	}
+	if !foundTimingBlobIndicator {
+		t.Fatal("expected telemetry_timing_blob_in_headers indicator")
 	}
 }
 

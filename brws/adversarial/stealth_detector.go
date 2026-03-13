@@ -1642,7 +1642,158 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		}
 	}
 
-	// Sub-check 3: Same-origin telemetry provenance.
+	// Sub-check 3: Same-site telemetry provenance.
+	// A same-site analytics POST should target a sibling origin (for example
+	// app.example.com -> metrics.example.com). If the request claims same-site
+	// while Origin/Referer/URL all point at the exact same origin, that fetch
+	// metadata is internally inconsistent and much more likely to be generated
+	// by a request spoofer than a browser.
+	if isSameSiteTelemetryFetch(req) {
+		runtimeHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderAudioData,
+			constants.HeaderCanvasFingerprint,
+		})
+		postLoadHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderCanvasFingerprint,
+			constants.HeaderAudioData,
+			constants.HeaderWebRTCData,
+		})
+
+		bodySnapshot, bodyErr := snapshotRequestBody(req)
+		bodyText := strings.TrimSpace(string(bodySnapshot))
+		hasRuntimeBody := bodyErr == nil && len(bodySnapshot) >= 512 && bodyContainsRuntimePayload(bodyText)
+
+		if req.Method == http.MethodPost && runtimeHeaderCount >= 6 && hasRuntimeBody {
+			sameOriginClaim := false
+
+			if isOriginSameAsRequestURL(req) {
+				vec.Score += 0.70
+				vec.Indicators = append(vec.Indicators, "same_site_claim_on_same_origin_post")
+				sameOriginClaim = true
+			}
+
+			if isRefererSameAsRequestURL(req) {
+				vec.Score += 0.22
+				vec.Indicators = append(vec.Indicators, "same_site_telemetry_self_referer")
+				sameOriginClaim = true
+			}
+
+			if sameOriginClaim && postLoadHeaderCount >= 3 {
+				vec.Score += 0.30
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"telemetry_runtime_duplicated_in_body_and_headers: %d runtime/%d post_load headers",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+		}
+
+		if req.Method == http.MethodPost && runtimeHeaderCount >= 6 && bodyErr == nil && len(bodySnapshot) > 0 {
+			bodyTooSmall := len(bodySnapshot) < 512
+			missingRuntimePayload := !bodyContainsRuntimePayload(bodyText)
+
+			if postLoadHeaderCount >= 3 && (bodyTooSmall || missingRuntimePayload) {
+				vec.Score += 0.24
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"same_site_runtime_hidden_in_headers: %d runtime/%d post_load headers",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+
+			if bodyTooSmall {
+				vec.Score += 0.42
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"same_site_body_too_small_for_claimed_runtime: %d bytes", len(bodySnapshot)))
+			}
+
+			if missingRuntimePayload {
+				vec.Score += 0.34
+				vec.Indicators = append(vec.Indicators, "same_site_body_missing_runtime_payload")
+			}
+		}
+	}
+
+	// Sub-check 4: Cross-site telemetry provenance.
+	// Third-party analytics beacons should originate from a different origin than
+	// the request target. If a request claims cross-site while Origin/Referer
+	// still point at the same origin, or if it hides a dense runtime bundle in
+	// headers behind a tiny analytics body, the fetch metadata is inconsistent.
+	if isCrossSiteTelemetryFetch(req) {
+		runtimeHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderAudioData,
+			constants.HeaderCanvasFingerprint,
+		})
+		postLoadHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderCanvasFingerprint,
+			constants.HeaderAudioData,
+			constants.HeaderWebRTCData,
+		})
+
+		bodySnapshot, bodyErr := snapshotRequestBody(req)
+		bodyText := strings.TrimSpace(string(bodySnapshot))
+		bodyTooSmall := len(bodySnapshot) < 512
+		missingRuntimePayload := !bodyContainsRuntimePayload(bodyText)
+
+		if req.Method == http.MethodPost && runtimeHeaderCount >= 6 && bodyErr == nil && len(bodySnapshot) > 0 {
+			crossSiteClaim := false
+
+			if isOriginSameAsRequestURL(req) {
+				vec.Score += 0.72
+				vec.Indicators = append(vec.Indicators, "cross_site_claim_on_same_origin_post")
+				crossSiteClaim = true
+			}
+
+			if isRefererSameAsRequestURL(req) {
+				vec.Score += 0.22
+				vec.Indicators = append(vec.Indicators, "cross_site_telemetry_self_referer")
+				crossSiteClaim = true
+			}
+
+			if postLoadHeaderCount >= 3 && (bodyTooSmall || missingRuntimePayload) {
+				vec.Score += 0.28
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"cross_site_runtime_hidden_in_headers: %d runtime/%d post_load headers",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+
+			if bodyTooSmall {
+				vec.Score += 0.42
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"cross_site_body_too_small_for_claimed_runtime: %d bytes", len(bodySnapshot)))
+			}
+
+			if missingRuntimePayload {
+				vec.Score += 0.34
+				vec.Indicators = append(vec.Indicators, "cross_site_body_missing_runtime_payload")
+			}
+
+			if crossSiteClaim && postLoadHeaderCount >= 3 {
+				vec.Score += 0.20
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"cross_site_runtime_with_first_party_origin: %d runtime/%d post_load headers",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+		}
+	}
+
+	// Sub-check 5: Same-origin telemetry provenance.
 	// A same-origin fetch/XHR can legitimately submit post-load telemetry, but if
 	// the payload is stuffed into headers on a GET request, points its Referer at
 	// the exact telemetry URL, and carries many runtime surfaces without a body,
@@ -1674,25 +1825,46 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			constants.HeaderAudioData,
 			constants.HeaderWebRTCData,
 		})
+		behaviorHeaderBytes := len(req.Header.Get(constants.HeaderBehavioralData))
+		timingHeaderBytes := len(req.Header.Get(constants.HeaderTimingData))
+
+		if req.Method == http.MethodPost && postLoadHeaderBytes >= 1536 {
+			vec.Score += 0.36
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"telemetry_postload_blob_in_headers: %d bytes across %d post_load headers",
+				postLoadHeaderBytes, postLoadHeaderCount))
+
+			if timingHeaderBytes >= 1024 {
+				vec.Score += 0.22
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"telemetry_timing_blob_in_headers: %d bytes", timingHeaderBytes))
+			}
+
+			if behaviorHeaderBytes >= 1024 {
+				vec.Score += 0.10
+				vec.Indicators = append(vec.Indicators, "telemetry_behavioral_payload_in_headers")
+			}
+
+			bodySnapshot, bodyErr := snapshotRequestBody(req)
+			if bodyErr == nil && len(bodySnapshot) > 0 {
+				if strings.Contains(strings.ToLower(req.Header.Get("Content-Type")), "application/json") && !json.Valid(bodySnapshot) {
+					vec.Score += 0.55
+					vec.Indicators = append(vec.Indicators, "telemetry_invalid_json_body")
+				}
+				if postLoadHeaderBytes > len(bodySnapshot)*4 {
+					vec.Score += 0.18
+					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+						"telemetry_header_body_imbalance: %d header bytes vs %d body bytes",
+						postLoadHeaderBytes, len(bodySnapshot)))
+				}
+			}
+		}
 
 		if req.Method == http.MethodPost && postLoadHeaderCount >= 3 && postLoadHeaderBytes >= 2048 {
 			vec.Score += 0.44
 			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
 				"telemetry_bulk_payload_in_headers: %d bytes across %d post_load headers",
 				postLoadHeaderBytes, postLoadHeaderCount))
-
-			if req.Header.Get(constants.HeaderBehavioralData) != "" {
-				vec.Score += 0.10
-				vec.Indicators = append(vec.Indicators, "telemetry_behavioral_payload_in_headers")
-			}
-
-			bodySnapshot, bodyErr := snapshotRequestBody(req)
-			if bodyErr == nil && len(bodySnapshot) > 0 && postLoadHeaderBytes > len(bodySnapshot)*4 {
-				vec.Score += 0.18
-				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
-					"telemetry_header_body_imbalance: %d header bytes vs %d body bytes",
-					postLoadHeaderBytes, len(bodySnapshot)))
-			}
 		}
 
 		if runtimeHeaderCount >= 6 && postLoadHeaderCount >= 3 {
@@ -1771,6 +1943,28 @@ func isSameOriginTelemetryFetch(req *http.Request) bool {
 		req.Header.Get("Referer") != ""
 }
 
+func isSameSiteTelemetryFetch(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+
+	return req.Header.Get("Sec-Fetch-Dest") == "empty" &&
+		req.Header.Get("Sec-Fetch-Mode") == "cors" &&
+		req.Header.Get("Sec-Fetch-Site") == "same-site" &&
+		req.Header.Get("Referer") != ""
+}
+
+func isCrossSiteTelemetryFetch(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+
+	return req.Header.Get("Sec-Fetch-Dest") == "empty" &&
+		req.Header.Get("Sec-Fetch-Mode") == "cors" &&
+		req.Header.Get("Sec-Fetch-Site") == "cross-site" &&
+		req.Header.Get("Referer") != ""
+}
+
 func isRefererSameAsRequestURL(req *http.Request) bool {
 	if req == nil || req.URL == nil {
 		return false
@@ -1787,6 +1981,25 @@ func isRefererSameAsRequestURL(req *http.Request) bool {
 	}
 
 	return urlsEqualSansFragment(refURL, req.URL)
+}
+
+func isOriginSameAsRequestURL(req *http.Request) bool {
+	if req == nil || req.URL == nil {
+		return false
+	}
+
+	origin := req.Header.Get("Origin")
+	if origin == "" {
+		return false
+	}
+
+	originURL, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+
+	return strings.EqualFold(originURL.Scheme, req.URL.Scheme) &&
+		strings.EqualFold(originURL.Host, req.URL.Host)
 }
 
 func urlsEqualSansFragment(a, b *url.URL) bool {
