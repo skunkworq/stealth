@@ -1794,8 +1794,8 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 	}
 
 	// Sub-check 5: no-cors telemetry/beacon provenance.
-	// Browser no-cors beacons can be legitimate, but they cannot carry a dense
-	// runtime bundle in arbitrary custom X-* headers. When a POST claims to be a
+	// Browser no-cors beacons can be legitimate, but they cannot carry runtime
+	// bundles in arbitrary custom X-* headers. When a POST claims to be a
 	// no-cors analytics/beacon request yet still ships many runtime surfaces in
 	// headers, optionally with a non-safelisted content type and a thin body, it
 	// is much more likely to be synthetic request generation than in-page JS.
@@ -1825,10 +1825,10 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		missingRuntimePayload := bodyErr == nil && len(bodySnapshot) > 0 && !bodyContainsRuntimePayload(bodyText)
 		contentType := req.Header.Get("Content-Type")
 
-		if req.Method == http.MethodPost && runtimeHeaderCount >= 6 {
+		if req.Method == http.MethodPost && runtimeHeaderCount >= 5 {
 			vec.Score += 0.72
 			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
-				"nocors_custom_runtime_headers: %d runtime/%d post_load headers",
+				"nocors_impossible_custom_runtime_headers: %d runtime/%d post_load headers",
 				runtimeHeaderCount, postLoadHeaderCount))
 
 			if postLoadHeaderCount >= 3 {
@@ -2020,8 +2020,7 @@ func isNoCORSTelemetryFetch(req *http.Request) bool {
 	}
 
 	return req.Header.Get("Sec-Fetch-Dest") == "empty" &&
-		req.Header.Get("Sec-Fetch-Mode") == "no-cors" &&
-		req.Header.Get("Referer") != ""
+		req.Header.Get("Sec-Fetch-Mode") == "no-cors"
 }
 
 func isSameSiteTelemetryFetch(req *http.Request) bool {

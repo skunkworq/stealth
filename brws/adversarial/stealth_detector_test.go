@@ -852,7 +852,6 @@ func TestNoCORSTelemetryPostWithRuntimeHeadersDetected(t *testing.T) {
 	req.Header.Set("Sec-Fetch-Dest", "empty")
 	req.Header.Set("Sec-Fetch-Mode", "no-cors")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	req.Header.Set("Referer", "http://example.com/")
 	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
 	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
@@ -876,7 +875,7 @@ func TestNoCORSTelemetryPostWithRuntimeHeadersDetected(t *testing.T) {
 	foundMissingRuntime := false
 	for _, vec := range detection.Vectors {
 		for _, ind := range vec.Indicators {
-			if strings.HasPrefix(ind, "nocors_custom_runtime_headers") {
+			if strings.HasPrefix(ind, "nocors_impossible_custom_runtime_headers") {
 				foundRuntimeHeaders = true
 			}
 			if strings.HasPrefix(ind, "nocors_non_safelisted_content_type") {
@@ -892,7 +891,7 @@ func TestNoCORSTelemetryPostWithRuntimeHeadersDetected(t *testing.T) {
 	}
 
 	if !foundRuntimeHeaders {
-		t.Fatal("expected nocors_custom_runtime_headers indicator")
+		t.Fatal("expected nocors_impossible_custom_runtime_headers indicator")
 	}
 	if !foundNonSafelistedContentType {
 		t.Fatal("expected nocors_non_safelisted_content_type indicator")
@@ -902,6 +901,48 @@ func TestNoCORSTelemetryPostWithRuntimeHeadersDetected(t *testing.T) {
 	}
 	if !foundMissingRuntime {
 		t.Fatal("expected nocors_body_missing_runtime_payload indicator")
+	}
+}
+
+func TestNoCORSTelemetryPostWithReducedRuntimeHeadersDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1}`
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "no-cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2200))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2200))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected reduced no-cors runtime header bundle to be detected, got score %.3f", detection.Score)
+	}
+
+	foundRuntimeHeaders := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "nocors_impossible_custom_runtime_headers") {
+				foundRuntimeHeaders = true
+			}
+		}
+	}
+
+	if !foundRuntimeHeaders {
+		t.Fatal("expected nocors_impossible_custom_runtime_headers indicator")
 	}
 }
 
@@ -917,7 +958,6 @@ func TestNormalNoCORSBeaconDoesNotTriggerNoCORSIndicators(t *testing.T) {
 	req.Header.Set("Sec-Fetch-Dest", "empty")
 	req.Header.Set("Sec-Fetch-Mode", "no-cors")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	req.Header.Set("Referer", "http://example.com/dashboard")
 	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
 	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
