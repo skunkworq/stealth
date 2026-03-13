@@ -1,12 +1,14 @@
 package adversarial
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -1676,6 +1678,30 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 					"telemetry_stuffed_into_headers: %d runtime/%d post_load headers without body",
 					runtimeHeaderCount, postLoadHeaderCount))
 			}
+
+			if req.Method == http.MethodPost {
+				vec.Score += 0.20
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"telemetry_runtime_hidden_in_headers: %d runtime/%d post_load headers",
+					runtimeHeaderCount, postLoadHeaderCount))
+
+				bodySnapshot, bodyErr := snapshotRequestBody(req)
+				bodyText := strings.TrimSpace(string(bodySnapshot))
+				if bodyErr != nil || len(bodySnapshot) == 0 {
+					vec.Score += 0.30
+					vec.Indicators = append(vec.Indicators, "telemetry_post_missing_body_payload")
+				} else {
+					if len(bodySnapshot) < 256 {
+						vec.Score += 0.22
+						vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+							"telemetry_body_too_small_for_claimed_runtime: %d bytes", len(bodySnapshot)))
+					}
+					if !bodyContainsRuntimePayload(bodyText) {
+						vec.Score += 0.22
+						vec.Indicators = append(vec.Indicators, "telemetry_body_missing_runtime_payload")
+					}
+				}
+			}
 		}
 	}
 
@@ -1730,6 +1756,38 @@ func urlsEqualSansFragment(a, b *url.URL) bool {
 		strings.EqualFold(a.Host, b.Host) &&
 		strings.TrimRight(a.EscapedPath(), "/") == strings.TrimRight(b.EscapedPath(), "/") &&
 		a.RawQuery == b.RawQuery
+}
+
+func snapshotRequestBody(req *http.Request) ([]byte, error) {
+	if req == nil || req.Body == nil {
+		return nil, nil
+	}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+	return body, nil
+}
+
+func bodyContainsRuntimePayload(body string) bool {
+	if body == "" {
+		return false
+	}
+
+	lower := strings.ToLower(body)
+	for _, keyword := range []string{
+		"navigator", "webgl", "canvas", "timing", "behavior", "audio",
+		"webrtc", "plugins", "screen", "fonts",
+	} {
+		if strings.Contains(lower, keyword) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func hasJSFingerprintHeaders(req *http.Request) bool {

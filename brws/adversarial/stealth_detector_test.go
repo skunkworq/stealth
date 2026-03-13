@@ -760,6 +760,98 @@ func TestNormalSameOriginFetchDoesNotTriggerTelemetryIndicators(t *testing.T) {
 	}
 }
 
+func TestSameOriginTelemetryPostWithThinBodyDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(`{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "same-origin")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	for _, header := range []string{
+		"X-Navigator-Data",
+		"X-WebGL-Data",
+		"X-Plugin-Data",
+		"X-Behavioral-Data",
+		"X-Timing-Data",
+		"X-Audio-Data",
+		"X-Canvas-Fingerprint",
+	} {
+		req.Header.Set(header, "present")
+	}
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected same-origin telemetry POST with thin body to be detected, got score %.3f", detection.Score)
+	}
+
+	foundHeaderIndicator := false
+	foundThinBodyIndicator := false
+	foundMissingPayloadIndicator := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_runtime_hidden_in_headers") {
+				foundHeaderIndicator = true
+			}
+			if strings.HasPrefix(ind, "telemetry_body_too_small_for_claimed_runtime") {
+				foundThinBodyIndicator = true
+			}
+			if ind == "telemetry_body_missing_runtime_payload" {
+				foundMissingPayloadIndicator = true
+			}
+		}
+	}
+
+	if !foundHeaderIndicator {
+		t.Fatal("expected telemetry_runtime_hidden_in_headers indicator")
+	}
+	if !foundThinBodyIndicator {
+		t.Fatal("expected telemetry_body_too_small_for_claimed_runtime indicator")
+	}
+	if !foundMissingPayloadIndicator {
+		t.Fatal("expected telemetry_body_missing_runtime_payload indicator")
+	}
+}
+
+func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "http://example.com/api/data", strings.NewReader(`{"query":"status"}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "same-origin")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/dashboard")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_runtime_hidden_in_headers") ||
+				strings.HasPrefix(ind, "telemetry_body_too_small_for_claimed_runtime") ||
+				ind == "telemetry_body_missing_runtime_payload" ||
+				ind == "telemetry_post_missing_body_payload" {
+				t.Fatalf("did not expect telemetry POST indicator %q for a normal same-origin POST", ind)
+			}
+		}
+	}
+}
+
 func TestStandardChromiumHeadersDoNotTriggerRichRuntimeIndicator(t *testing.T) {
 	detector := NewStealthDetector()
 
