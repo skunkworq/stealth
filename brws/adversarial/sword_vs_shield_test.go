@@ -13,7 +13,7 @@ import (
 
 // TestSwordVsShield runs the actual Sword (behavior.RequestGenerator) against the
 // Shield (StealthDetector) across all 4 default profiles. After the shield upgrade
-// (checks 20-24), the sword should be detected >= 70% of the time across 20 trials.
+// (checks 20-24), the sword should be detected consistently across 20 trials.
 // Single-trial testing is too noisy due to stochastic behavioral generation.
 func TestSwordVsShield(t *testing.T) {
 	profiles := behavior.DefaultProfiles()
@@ -130,7 +130,7 @@ func TestSwordVsShield(t *testing.T) {
 		}
 
 		// Armed sword: even with all evasion phases enabled, the shield should
-		// still catch it reliably.
+		// still classify it as bot traffic.
 		armedResult, ok := resultMap["our_stealth_armed"]
 		if !ok {
 			t.Fatal("missing tool result for our_stealth_armed")
@@ -141,6 +141,9 @@ func TestSwordVsShield(t *testing.T) {
 		}
 		if armedResult.AvgBotScore < 0.50 {
 			t.Fatalf("expected armed sword avg score >= 0.50 in library matrix, got %.3f", armedResult.AvgBotScore)
+		}
+		if armedResult.AvgConfidence < 0.90 {
+			t.Fatalf("expected armed sword avg confidence >= 0.90 in library matrix, got %.3f", armedResult.AvgConfidence)
 		}
 	})
 
@@ -178,8 +181,8 @@ func TestSwordVsShield(t *testing.T) {
 	})
 }
 
-// TestArmedSwordEvasion verifies the shield still detects the armed sword even
-// when all evasion phases are enabled.
+// TestArmedSwordEvasion verifies the armed sword remains detected even after
+// the latest request-provenance changes.
 func TestArmedSwordEvasion(t *testing.T) {
 	profiles := behavior.DefaultProfiles()
 
@@ -259,5 +262,8 @@ func TestArmedSwordEvasion(t *testing.T) {
 		overallDetectionRate*100, overallAvgScore)
 	if overallDetectionRate < 0.95 {
 		t.Fatalf("expected overall armed sword detection >= 95%%, got %.0f%%", overallDetectionRate*100)
+	}
+	if overallAvgScore < 0.50 {
+		t.Fatalf("expected overall armed sword avg score >= 0.50, got %.3f", overallAvgScore)
 	}
 }

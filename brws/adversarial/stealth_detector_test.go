@@ -972,6 +972,185 @@ func TestNormalNoCORSBeaconDoesNotTriggerNoCORSIndicators(t *testing.T) {
 	}
 }
 
+func TestSameOriginTelemetryPostWithoutRefererDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(`{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected same-origin telemetry without referer to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBlob := false
+	foundMissingRuntime := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_postload_blob_in_headers") {
+				foundBlob = true
+			}
+			if ind == "telemetry_body_missing_runtime_payload" {
+				foundMissingRuntime = true
+			}
+		}
+	}
+
+	if !foundBlob {
+		t.Fatal("expected telemetry_postload_blob_in_headers indicator")
+	}
+	if !foundMissingRuntime {
+		t.Fatal("expected telemetry_body_missing_runtime_payload indicator")
+	}
+}
+
+func TestSameOriginTelemetryPostWithoutRefererReducedHeadersDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(`{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2200))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2200))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected reduced same-origin telemetry without referer to be detected, got score %.3f", detection.Score)
+	}
+}
+
+func TestNormalSameOriginPostWithoutRefererDoesNotTriggerTelemetryIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "http://example.com/api/data", strings.NewReader(`{"query":"status"}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_postload_blob_in_headers") ||
+				strings.HasPrefix(ind, "telemetry_timing_blob_in_headers") ||
+				strings.HasPrefix(ind, "telemetry_bulk_payload_in_headers") ||
+				strings.HasPrefix(ind, "telemetry_header_surface_overload") ||
+				strings.HasPrefix(ind, "telemetry_runtime_hidden_in_headers") ||
+				strings.HasPrefix(ind, "telemetry_body_too_small_for_claimed_runtime") ||
+				ind == "telemetry_body_missing_runtime_payload" {
+				t.Fatalf("did not expect same-origin no-referer telemetry indicator %q for a normal POST", ind)
+			}
+		}
+	}
+}
+
+func TestDocumentNavigationPostWithRuntimeHeadersDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "http://example.com/login", strings.NewReader("sid=abc123&step=submit"))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2200))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2200))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected document navigation with runtime headers to be detected, got score %.3f", detection.Score)
+	}
+
+	foundNavigationIndicator := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_impossible_runtime_headers") {
+				foundNavigationIndicator = true
+			}
+		}
+	}
+
+	if !foundNavigationIndicator {
+		t.Fatal("expected document_navigation_impossible_runtime_headers indicator")
+	}
+}
+
+func TestNormalDocumentNavigationPostDoesNotTriggerRuntimeIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "http://example.com/login", strings.NewReader("sid=abc123&step=submit"))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_") {
+				t.Fatalf("did not expect document navigation indicator %q for a normal form post", ind)
+			}
+		}
+	}
+}
+
 func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
 	detector := NewStealthDetector()
 

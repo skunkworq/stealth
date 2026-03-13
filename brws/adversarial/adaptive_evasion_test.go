@@ -9,8 +9,8 @@ import (
 )
 
 // TestAdaptiveEvasionFSM runs the finite state machine loop against the shield.
-// Once every strategy is caught, the FSM should exhaust the strategy ladder and
-// remain pinned to the lowest-fidelity fallback without converging.
+// With the hardened shield, the FSM should exhaust its strategy list without
+// finding an evasion path.
 func TestAdaptiveEvasionFSM(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profiles := []*behavior.BrowserProfile{
@@ -45,10 +45,10 @@ func TestAdaptiveEvasionFSM(t *testing.T) {
 			t.Logf("Ended on: %s (fidelity=%.0f%%)", strategy.Name(), strategy.Fidelity()*100)
 
 			if fsm.Converged() {
-				t.Errorf("FSM should not converge when every strategy is detected")
+				t.Errorf("FSM unexpectedly converged after %d trials", maxTrials)
 			}
-			if fsm.StateIndex() != len(behavior.DefaultStrategies())-1 {
-				t.Errorf("FSM ended at state %d, want final fallback state %d", fsm.StateIndex(), len(behavior.DefaultStrategies())-1)
+			if got, want := fsm.StateIndex(), len(behavior.DefaultStrategies())-1; got != want {
+				t.Errorf("FSM ended at state %d, want final fallback state %d", got, want)
 			}
 		})
 	}
@@ -97,8 +97,8 @@ func TestEvasionStrategyComparison(t *testing.T) {
 
 			avgScore := totalScore / float64(trials)
 			detRate := float64(detections) / float64(trials)
-			status := "EVADES"
-			if detRate > 0.5 {
+			status := "WEAK"
+			if detRate >= 0.95 {
 				status = "CAUGHT"
 			}
 
@@ -108,6 +108,9 @@ func TestEvasionStrategyComparison(t *testing.T) {
 
 			if detRate < 0.95 {
 				t.Errorf("%s/%s detection %.0f%% < 95%%", profile.Name, strategy.Name(), detRate*100)
+			}
+			if avgScore < 0.50 {
+				t.Errorf("%s/%s avg score %.3f < 0.50", profile.Name, strategy.Name(), avgScore)
 			}
 
 			// Show top indicators if any detection occurred
@@ -136,8 +139,8 @@ func TestEvasionStrategyComparison(t *testing.T) {
 	}
 }
 
-// TestFSMFallbackConvergence verifies the FSM exhausts the strategy ladder when
-// every strategy is still detected and the final fallback remains blocked.
+// TestFSMFallbackConvergence verifies the FSM exhausts every strategy and the
+// terminal fallback is still detected consistently.
 func TestFSMFallbackConvergence(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profile := behavior.ChromeWindowsProfile()
@@ -160,31 +163,35 @@ func TestFSMFallbackConvergence(t *testing.T) {
 	t.Logf("\n%s", fsm.Summary())
 
 	if fsm.Converged() {
-		t.Error("FSM should not converge when every strategy is blocked")
+		t.Error("FSM should not converge on an evasion strategy")
 	}
 
 	strategy := fsm.CurrentStrategy()
 	t.Logf("Final strategy: %s (fidelity=%.0f%%)", strategy.Name(), strategy.Fidelity()*100)
 
-	// Verify the final fallback still gets detected consistently.
+	if got, want := fsm.StateIndex(), len(behavior.DefaultStrategies())-1; got != want {
+		t.Fatalf("FSM ended at state %d, want final fallback state %d", got, want)
+	}
+
+	// Verify the terminal strategy is still caught consistently.
 	config := behavior.MaxEvasionConfig(profile)
 	config.EvasionStrategy = strategy
 
-	detections := 0
+	detectionCount := 0
 	for i := 0; i < 20; i++ {
 		rg := behavior.NewRequestGenerator(config)
 		req := rg.GenerateRequest("https://example.com/api/telemetry")
 		result := shield.AnalyzeRequest(req, nil)
 		if result.IsBot {
-			detections++
+			detectionCount++
 		}
 	}
 
-	detectionRate := float64(detections) / 20.0
+	detectionRate := float64(detectionCount) / 20.0
 	t.Logf("Verification: %s detected %.0f%%", strategy.Name(), detectionRate*100)
 
 	if detectionRate < 0.95 {
-		t.Errorf("final fallback strategy %q detected only %.0f%% (want >= 95%%)", strategy.Name(), detectionRate*100)
+		t.Errorf("terminal strategy %q detected only %.0f%% (want >= 95%%)", strategy.Name(), detectionRate*100)
 	}
 }
 
@@ -242,8 +249,8 @@ func TestFidelityPreservation(t *testing.T) {
 	}
 }
 
-// TestArmedSwordWithAdaptiveStrategy verifies the shield still blocks the
-// sword's adaptive strategy across all browser profiles.
+// TestArmedSwordWithAdaptiveStrategy verifies the sword's adaptive strategy is
+// still detected across all browser profiles.
 func TestArmedSwordWithAdaptiveStrategy(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profiles := []*behavior.BrowserProfile{
@@ -300,6 +307,9 @@ func TestArmedSwordWithAdaptiveStrategy(t *testing.T) {
 
 	if overallDetectionRate < 0.95 {
 		t.Errorf("expected overall detection >= 95%%, got %.0f%%", overallDetectionRate*100)
+	}
+	if overallAvgScore < 0.50 {
+		t.Errorf("expected overall avg score >= 0.50, got %.3f", overallAvgScore)
 	}
 }
 

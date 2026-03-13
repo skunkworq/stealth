@@ -1864,7 +1864,56 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		}
 	}
 
-	// Sub-check 6: Same-origin telemetry provenance.
+	// Sub-check 6: document navigation submissions with runtime telemetry.
+	// A browser form/navigation POST can legitimately carry Origin, cookies, and
+	// a form body, but it cannot attach client-side runtime telemetry in custom
+	// X-* headers. If a document navigation carries multiple runtime surfaces, it
+	// is almost certainly synthetic request generation rather than a real form
+	// submission.
+	if isDocumentNavigationSubmission(req) {
+		runtimeHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderAudioData,
+			constants.HeaderCanvasFingerprint,
+		})
+		postLoadHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderCanvasFingerprint,
+			constants.HeaderAudioData,
+			constants.HeaderWebRTCData,
+		})
+		bodySnapshot, bodyErr := snapshotRequestBody(req)
+		bodyText := strings.TrimSpace(string(bodySnapshot))
+
+		if runtimeHeaderCount >= 4 {
+			vec.Score += 0.78
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"document_navigation_impossible_runtime_headers: %d runtime/%d post_load headers",
+				runtimeHeaderCount, postLoadHeaderCount))
+
+			if postLoadHeaderCount >= 3 {
+				vec.Score += 0.20
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"document_navigation_postload_headers_present: %d runtime/%d post_load headers",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+
+			if bodyErr == nil && len(bodySnapshot) > 0 && !bodyContainsRuntimePayload(bodyText) {
+				vec.Score += 0.18
+				vec.Indicators = append(vec.Indicators, "document_navigation_body_missing_runtime_payload")
+			}
+		}
+	}
+
+	// Sub-check 7: Same-origin telemetry provenance.
 	// A same-origin fetch/XHR can legitimately submit post-load telemetry, but if
 	// the payload is stuffed into headers on a GET request, points its Referer at
 	// the exact telemetry URL, and carries many runtime surfaces without a body,
@@ -2010,8 +2059,7 @@ func isSameOriginTelemetryFetch(req *http.Request) bool {
 	mode := req.Header.Get("Sec-Fetch-Mode")
 	return req.Header.Get("Sec-Fetch-Dest") == "empty" &&
 		(mode == "cors" || mode == "same-origin") &&
-		req.Header.Get("Sec-Fetch-Site") == "same-origin" &&
-		req.Header.Get("Referer") != ""
+		req.Header.Get("Sec-Fetch-Site") == "same-origin"
 }
 
 func isNoCORSTelemetryFetch(req *http.Request) bool {
@@ -2021,6 +2069,18 @@ func isNoCORSTelemetryFetch(req *http.Request) bool {
 
 	return req.Header.Get("Sec-Fetch-Dest") == "empty" &&
 		req.Header.Get("Sec-Fetch-Mode") == "no-cors"
+}
+
+func isDocumentNavigationSubmission(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+
+	return req.Method == http.MethodPost &&
+		req.Header.Get("Sec-Fetch-Dest") == "document" &&
+		req.Header.Get("Sec-Fetch-Mode") == "navigate" &&
+		req.Header.Get("Sec-Fetch-Site") == "same-origin" &&
+		req.Header.Get("Sec-Fetch-User") == "?1"
 }
 
 func isSameSiteTelemetryFetch(req *http.Request) bool {
