@@ -1071,9 +1071,9 @@ func TestFullPipelineDetection(t *testing.T) {
 	fmt.Println()
 }
 
-// TestSwordDoesNotTrigger verifies that a perfect stealth request with all valid
-// X-* headers providing human-like data passes the shield (score < 0.35).
-func TestSwordDoesNotTrigger(t *testing.T) {
+// TestSyntheticFullRuntimeBundleTriggers verifies that a synthetic request that
+// front-loads a dense JS/runtime bundle on the initial navigation is rejected.
+func TestSyntheticFullRuntimeBundleTriggers(t *testing.T) {
 	detector := NewStealthDetector()
 
 	req, _ := http.NewRequest("GET", "http://test/", nil)
@@ -1141,8 +1141,8 @@ func TestSwordDoesNotTrigger(t *testing.T) {
 
 	detection := detector.AnalyzeRequest(req, nil)
 
-	if detection.Score >= 0.35 {
-		t.Errorf("perfect stealth request should pass (score < 0.35), got %.3f", detection.Score)
+	if !detection.IsBot {
+		t.Errorf("synthetic full runtime bundle should be classified as bot, got score %.3f", detection.Score)
 		fmt.Println("  Triggered vectors:")
 		for _, v := range detection.Vectors {
 			if v.Detected {
@@ -1151,7 +1151,16 @@ func TestSwordDoesNotTrigger(t *testing.T) {
 		}
 	}
 
-	if detection.IsBot {
-		t.Error("perfect stealth request should not be classified as bot")
+	foundBundleIndicator := false
+	for _, v := range detection.Vectors {
+		for _, ind := range v.Indicators {
+			if ind == "pre_request_full_runtime_bundle" {
+				foundBundleIndicator = true
+				break
+			}
+		}
+	}
+	if !foundBundleIndicator {
+		t.Error("expected pre_request_full_runtime_bundle indicator")
 	}
 }

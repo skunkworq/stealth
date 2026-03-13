@@ -1304,14 +1304,9 @@ func extractBrowserVersion(ua string) string {
 //   - 0 headers with Client Hints → 0.50 (HTTP impersonation, e.g., curl-impersonate)
 //   - 1-5 headers → 0.30 * (1 - ratio) (partial: cherry-picked headers)
 //   - 6-9 headers → 0.00 (normal partial coverage)
-//   - All 10 headers → 0.10 (suspiciously complete — real pages rarely collect all 10
-//     on first load; WebRTC needs permission, Audio needs AudioContext)
+//   - Dense 8-10 header bundle on initial navigation → strong detection
+//   - All 10 headers → 0.10 baseline suspicious completeness unless provenance is impossible
 func (sd *StealthDetector) analyzeFingerprintCoverage(req *http.Request) *DetectionVector {
-	secChUa := req.Header.Get("Sec-Ch-Ua")
-	if secChUa == "" {
-		return nil
-	}
-
 	allJSHeaders := []string{
 		constants.HeaderNavigatorData,
 		constants.HeaderWebGLData,
@@ -1330,6 +1325,11 @@ func (sd *StealthDetector) analyzeFingerprintCoverage(req *http.Request) *Detect
 		if req.Header.Get(h) != "" {
 			presentCount++
 		}
+	}
+
+	secChUa := req.Header.Get("Sec-Ch-Ua")
+	if secChUa == "" && presentCount < 8 {
+		return nil
 	}
 
 	totalHeaders := len(allJSHeaders)
@@ -1391,11 +1391,103 @@ func (sd *StealthDetector) analyzeFingerprintCoverage(req *http.Request) *Detect
 		vec.Indicators = append(vec.Indicators, "suspiciously_complete_js_coverage")
 
 	default:
-		// 6-9 headers = normal partial coverage
-		return nil
+		// 6-9 headers = normal partial coverage unless the bundle is impossibly dense
+		// for an initial top-level navigation.
+		if presentCount < 8 {
+			return nil
+		}
+		vec.Score = 0.08
+		vec.Detected = false
+		vec.Indicators = append(vec.Indicators, fmt.Sprintf("dense_js_coverage_%d_of_%d", presentCount, totalHeaders))
+	}
+
+	if isInitialNavigationDenseRuntimeBundle(req, presentCount) {
+		vec.Score = 0.82
+		vec.Detected = true
+		vec.Indicators = append(vec.Indicators, "pre_request_full_runtime_bundle")
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        "pre_request_full_runtime_bundle",
+			Fired:       true,
+			Weight:      constants.SeverityHigh,
+			Score:       vec.Score,
+			Field:       "X-*-Fingerprint-Headers",
+			Actual:      fmt.Sprintf("%d of %d runtime headers on initial navigation", presentCount, totalHeaders),
+			Expected:    "sparse or no JS/runtime headers before the page executes client-side probes",
+			Severity:    "high",
+			Description: "A first-party top-level navigation arrived with a dense runtime bundle that would normally require client-side execution after the document response.",
+		})
+
+		postLoadHeaders := countPresentHeaders(req, []string{
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderCanvasFingerprint,
+			constants.HeaderAudioData,
+			constants.HeaderWebRTCData,
+		})
+		if postLoadHeaders >= 3 {
+			vec.Indicators = append(vec.Indicators, "post_load_telemetry_on_initial_navigation")
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        "post_load_telemetry_on_initial_navigation",
+				Fired:       true,
+				Weight:      constants.SeverityHigh,
+				Score:       vec.Score,
+				Field:       "X-Behavioral-Data/X-Timing-Data/X-Canvas-Fingerprint/X-Audio-Data/X-WebRTC-Data",
+				Actual:      fmt.Sprintf("%d post-load telemetry surfaces attached to initial navigation", postLoadHeaders),
+				Expected:    "post-load telemetry should be submitted after the document has executed, not on the first navigation request",
+				Severity:    "high",
+				Description: "The request includes multiple telemetry surfaces that require user interaction, rendering, timing collection, or permission-gated APIs before they can exist.",
+			})
+		}
 	}
 
 	return vec
+}
+
+func isInitialNavigationDenseRuntimeBundle(req *http.Request, presentCount int) bool {
+	if req == nil || presentCount < 8 || !isInitialTopLevelNavigation(req) {
+		return false
+	}
+
+	postLoadHeaders := countPresentHeaders(req, []string{
+		constants.HeaderBehavioralData,
+		constants.HeaderTimingData,
+		constants.HeaderCanvasFingerprint,
+		constants.HeaderAudioData,
+		constants.HeaderWebRTCData,
+	})
+	if postLoadHeaders < 3 {
+		return false
+	}
+
+	permissionGatedHeaders := countPresentHeaders(req, []string{
+		constants.HeaderAudioData,
+		constants.HeaderWebRTCData,
+		constants.HeaderBehavioralData,
+	})
+
+	return permissionGatedHeaders >= 2 || req.Header.Get(constants.HeaderTimingData) != ""
+}
+
+func isInitialTopLevelNavigation(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+
+	return req.Header.Get("Sec-Fetch-Dest") == "document" &&
+		req.Header.Get("Sec-Fetch-Mode") == "navigate" &&
+		req.Header.Get("Sec-Fetch-Site") == "none" &&
+		req.Header.Get("Sec-Fetch-User") == "?1" &&
+		req.Header.Get("Referer") == ""
+}
+
+func countPresentHeaders(req *http.Request, headers []string) int {
+	count := 0
+	for _, header := range headers {
+		if req.Header.Get(header) != "" {
+			count++
+		}
+	}
+	return count
 }
 
 func isRichChromiumNavigationWithoutRuntimeState(req *http.Request) bool {

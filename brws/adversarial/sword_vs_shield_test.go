@@ -107,7 +107,7 @@ func TestSwordVsShield(t *testing.T) {
 		}
 
 		fmt.Println("  Library comparison against the current shield:")
-		for _, name := range []string{"our_stealth_sword", "playwright_default", "nodriver", "scrapling_stealthy", "curl_impersonate_ch116"} {
+		for _, name := range []string{"our_stealth_sword", "our_stealth_armed", "playwright_default", "nodriver", "scrapling_stealthy", "curl_impersonate_ch116", "nodriver_stealthified", "scrapling_stealthified", "playwright_stealth", "curl_impersonate_stealthified"} {
 			result, ok := resultMap[name]
 			if !ok {
 				t.Fatalf("missing tool result for %s", name)
@@ -116,6 +116,7 @@ func TestSwordVsShield(t *testing.T) {
 				name, result.DetectionRate*100, result.AvgBotScore, result.AvgConfidence)
 		}
 
+		// Naked sword: should be fully detected (no evasion phases)
 		swordResult, ok := resultMap["our_stealth_sword"]
 		if !ok {
 			t.Fatal("missing tool result for our_stealth_sword")
@@ -126,6 +127,22 @@ func TestSwordVsShield(t *testing.T) {
 		}
 		if swordResult.AvgConfidence < 0.95 {
 			t.Fatalf("expected high sword confidence in library matrix, got %.3f", swordResult.AvgConfidence)
+		}
+
+		// Armed sword: the shield should now catch the fully armed generator too.
+		armedResult, ok := resultMap["our_stealth_armed"]
+		if !ok {
+			t.Fatal("missing tool result for our_stealth_armed")
+		}
+		if armedResult.DetectionRate < 0.95 {
+			t.Fatalf("expected armed sword detection >= 95%% in library matrix, got %.0f%%",
+				armedResult.DetectionRate*100)
+		}
+		if armedResult.AvgBotScore < 0.58 {
+			t.Fatalf("expected armed sword avg score >= 0.58 in library matrix, got %.3f", armedResult.AvgBotScore)
+		}
+		if armedResult.AvgConfidence < 0.85 {
+			t.Fatalf("expected armed sword avg confidence >= 0.85 in library matrix, got %.3f", armedResult.AvgConfidence)
 		}
 	})
 
@@ -161,4 +178,94 @@ func TestSwordVsShield(t *testing.T) {
 			t.Error("real Firefox request should not be classified as bot")
 		}
 	})
+}
+
+// TestArmedSwordEvasion verifies the hardened shield still catches the fully
+// armed sword when all evasion phases are enabled.
+func TestArmedSwordEvasion(t *testing.T) {
+	profiles := behavior.DefaultProfiles()
+
+	totalDetections := 0
+	totalTrials := 0
+	totalScore := 0.0
+
+	for _, profile := range profiles {
+		t.Run("armed_"+profile.Name, func(t *testing.T) {
+			detector := adversarial.NewStealthDetector()
+
+			const trials = 20
+			detections := 0
+			score := 0.0
+			confidence := 0.0
+			indicatorCounts := make(map[string]int)
+
+			for i := 0; i < trials; i++ {
+				config := behavior.MaxEvasionConfig(profile)
+				gen := behavior.NewRequestGenerator(config)
+				req := gen.GenerateRequest("http://test/api/ml/trap")
+				detection := detector.AnalyzeRequest(req, nil)
+				score += detection.Score
+				confidence += detection.Confidence
+
+				if detection.IsBot {
+					detections++
+				}
+
+				for _, vec := range detection.Vectors {
+					for _, ind := range vec.Indicators {
+						indicatorCounts[ind]++
+					}
+				}
+			}
+
+			detectionRate := float64(detections) / float64(trials)
+			avgScore := score / float64(trials)
+			avgConfidence := confidence / float64(trials)
+			totalDetections += detections
+			totalTrials += trials
+			totalScore += score
+
+			t.Logf("Armed %s: detection=%.0f%% avg_score=%.3f avg_confidence=%.3f",
+				profile.Name, detectionRate*100, avgScore, avgConfidence)
+
+			// Print remaining indicators that still catch the armed sword
+			type indicatorHit struct {
+				name  string
+				count int
+			}
+			hits := make([]indicatorHit, 0, len(indicatorCounts))
+			for name, count := range indicatorCounts {
+				hits = append(hits, indicatorHit{name: name, count: count})
+			}
+			sort.Slice(hits, func(i, j int) bool {
+				return hits[i].count > hits[j].count
+			})
+			if len(hits) > 0 {
+				t.Logf("  Remaining indicators catching armed sword:")
+				for i := 0; i < len(hits) && i < 10; i++ {
+					t.Logf("    %s (%d/%d = %.0f%%)", hits[i].name, hits[i].count, trials, float64(hits[i].count)/float64(trials)*100)
+				}
+			}
+
+			if detectionRate < 0.95 {
+				t.Errorf("armed sword profile %q detection rate %.0f%% < 95%% (%d/%d)",
+					profile.Name, detectionRate*100, detections, trials)
+			}
+			if avgScore < 0.58 {
+				t.Errorf("armed sword profile %q avg score %.3f < 0.58", profile.Name, avgScore)
+			}
+			if avgConfidence < 0.85 {
+				t.Errorf("armed sword profile %q avg confidence %.3f < 0.85", profile.Name, avgConfidence)
+			}
+		})
+	}
+
+	overallDetectionRate := float64(totalDetections) / float64(totalTrials)
+	overallAvgScore := totalScore / float64(totalTrials)
+	t.Logf("\n=== ARMED SWORD DETECTION SUMMARY ===")
+	t.Logf("Overall: detection=%.0f%% avg_score=%.3f",
+		overallDetectionRate*100, overallAvgScore)
+	if overallDetectionRate < 0.95 {
+		t.Fatalf("expected overall armed sword detection >= 95%%, got %.0f%%", overallDetectionRate*100)
+	}
 }

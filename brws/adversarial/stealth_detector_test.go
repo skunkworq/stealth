@@ -517,6 +517,160 @@ func TestRichChromiumHeadersWithoutRuntimeStateDetected(t *testing.T) {
 	}
 }
 
+func TestInitialNavigationFullRuntimeBundleDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://example.com", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	for _, header := range []string{
+		"X-Navigator-Data",
+		"X-WebGL-Data",
+		"X-Plugin-Data",
+		"X-Screen-Data",
+		"X-Font-Data",
+		"X-WebRTC-Data",
+		"X-Behavioral-Data",
+		"X-Timing-Data",
+		"X-Audio-Data",
+		"X-Canvas-Fingerprint",
+	} {
+		req.Header.Set(header, "present")
+	}
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected initial navigation full runtime bundle to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBundleIndicator := false
+	foundPostLoadIndicator := false
+	var coverageVec *DetectionVector
+	for i := range detection.Vectors {
+		if detection.Vectors[i].Category == string(VectorFingerprintCoverage) {
+			coverageVec = &detection.Vectors[i]
+		}
+		for _, ind := range detection.Vectors[i].Indicators {
+			if ind == "pre_request_full_runtime_bundle" {
+				foundBundleIndicator = true
+			}
+			if ind == "post_load_telemetry_on_initial_navigation" {
+				foundPostLoadIndicator = true
+			}
+		}
+	}
+
+	if !foundBundleIndicator {
+		t.Fatal("expected pre_request_full_runtime_bundle indicator")
+	}
+	if !foundPostLoadIndicator {
+		t.Fatal("expected post_load_telemetry_on_initial_navigation indicator")
+	}
+	if coverageVec == nil {
+		t.Fatal("expected fingerprint coverage vector")
+	}
+	if coverageVec.Score < 0.80 {
+		t.Fatalf("expected fingerprint coverage score >= 0.80, got %.3f", coverageVec.Score)
+	}
+}
+
+func TestInitialNavigationDenseRuntimeBundleWithoutClientHintsDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://example.com", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+
+	for _, header := range []string{
+		"X-Navigator-Data",
+		"X-WebGL-Data",
+		"X-Plugin-Data",
+		"X-Screen-Data",
+		"X-Font-Data",
+		"X-WebRTC-Data",
+		"X-Behavioral-Data",
+		"X-Timing-Data",
+		"X-Audio-Data",
+		"X-Canvas-Fingerprint",
+	} {
+		req.Header.Set(header, "present")
+	}
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected dense Firefox runtime bundle on initial navigation to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBundleIndicator := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "pre_request_full_runtime_bundle" {
+				foundBundleIndicator = true
+			}
+		}
+	}
+	if !foundBundleIndicator {
+		t.Fatal("expected pre_request_full_runtime_bundle indicator for Firefox-style initial navigation")
+	}
+}
+
+func TestSubresourceRuntimeBundleDoesNotTriggerInitialNavigationIndicator(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://example.com/script.js", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "*/*")
+	req.Header.Set("Sec-Fetch-Dest", "script")
+	req.Header.Set("Sec-Fetch-Mode", "no-cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	for _, header := range []string{
+		"X-Navigator-Data",
+		"X-WebGL-Data",
+		"X-Plugin-Data",
+		"X-Screen-Data",
+		"X-Font-Data",
+		"X-WebRTC-Data",
+		"X-Behavioral-Data",
+		"X-Timing-Data",
+		"X-Audio-Data",
+		"X-Canvas-Fingerprint",
+	} {
+		req.Header.Set(header, "present")
+	}
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "pre_request_full_runtime_bundle" || ind == "post_load_telemetry_on_initial_navigation" {
+				t.Fatalf("did not expect %s for a subresource request", ind)
+			}
+		}
+	}
+}
+
 func TestStandardChromiumHeadersDoNotTriggerRichRuntimeIndicator(t *testing.T) {
 	detector := NewStealthDetector()
 
