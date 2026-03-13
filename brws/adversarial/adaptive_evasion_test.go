@@ -302,7 +302,7 @@ func TestArmedSwordWithAdaptiveStrategy(t *testing.T) {
 
 	overallDetectionRate := float64(totalDetections) / float64(totalTrials)
 	overallAvgScore := totalScore / float64(totalTrials)
-	t.Logf("\nOverall: detection=%.0f%% avg_score=%.3f fidelity=70%%",
+	t.Logf("\nOverall: detection=%.0f%% avg_score=%.3f",
 		overallDetectionRate*100, overallAvgScore)
 
 	if overallDetectionRate < 0.95 {
