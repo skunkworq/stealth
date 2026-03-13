@@ -1661,6 +1661,13 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		})
 
 		if runtimeHeaderCount >= 6 && postLoadHeaderCount >= 3 {
+			if req.Method == http.MethodPost {
+				vec.Score += 0.42
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"telemetry_header_surface_overload: %d runtime/%d post_load headers",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+
 			if req.Method == http.MethodGet {
 				vec.Score += 0.30
 				vec.Indicators = append(vec.Indicators, fmt.Sprintf(

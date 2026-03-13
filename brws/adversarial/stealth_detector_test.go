@@ -795,10 +795,14 @@ func TestSameOriginTelemetryPostWithThinBodyDetected(t *testing.T) {
 	}
 
 	foundHeaderIndicator := false
+	foundHeaderOverloadIndicator := false
 	foundThinBodyIndicator := false
 	foundMissingPayloadIndicator := false
 	for _, vec := range detection.Vectors {
 		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_header_surface_overload") {
+				foundHeaderOverloadIndicator = true
+			}
 			if strings.HasPrefix(ind, "telemetry_runtime_hidden_in_headers") {
 				foundHeaderIndicator = true
 			}
@@ -813,6 +817,9 @@ func TestSameOriginTelemetryPostWithThinBodyDetected(t *testing.T) {
 
 	if !foundHeaderIndicator {
 		t.Fatal("expected telemetry_runtime_hidden_in_headers indicator")
+	}
+	if !foundHeaderOverloadIndicator {
+		t.Fatal("expected telemetry_header_surface_overload indicator")
 	}
 	if !foundThinBodyIndicator {
 		t.Fatal("expected telemetry_body_too_small_for_claimed_runtime indicator")
@@ -849,6 +856,59 @@ func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
 				t.Fatalf("did not expect telemetry POST indicator %q for a normal same-origin POST", ind)
 			}
 		}
+	}
+}
+
+func TestSameOriginTelemetryPostWithRichBodyStillDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1,` +
+		`"navigator":{"lang":"en-US","cores":8,"mem":8},` +
+		`"timing":{"ttfb":120,"fcp":340,"lcp":810},` +
+		`"canvas":"abcdef1234567890","audio":"fedcba0987654321",` +
+		`"webgl":{"vendor":"Google Inc.","renderer":"ANGLE"},` +
+		`"behavior":{"moves":42,"clicks":3,"scrolls":5}}`
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "same-origin")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	for _, header := range []string{
+		"X-Navigator-Data",
+		"X-WebGL-Data",
+		"X-Plugin-Data",
+		"X-Behavioral-Data",
+		"X-Timing-Data",
+		"X-Audio-Data",
+		"X-Canvas-Fingerprint",
+	} {
+		req.Header.Set(header, strings.Repeat("x", 128))
+	}
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected rich-body telemetry POST with header overload to be detected, got score %.3f", detection.Score)
+	}
+
+	foundHeaderOverloadIndicator := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_header_surface_overload") {
+				foundHeaderOverloadIndicator = true
+			}
+		}
+	}
+	if !foundHeaderOverloadIndicator {
+		t.Fatal("expected telemetry_header_surface_overload indicator")
 	}
 }
 
