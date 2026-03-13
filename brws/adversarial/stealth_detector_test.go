@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/skunkworq/stealth/brws/engine"
@@ -666,6 +667,94 @@ func TestSubresourceRuntimeBundleDoesNotTriggerInitialNavigationIndicator(t *tes
 		for _, ind := range vec.Indicators {
 			if ind == "pre_request_full_runtime_bundle" || ind == "post_load_telemetry_on_initial_navigation" {
 				t.Fatalf("did not expect %s for a subresource request", ind)
+			}
+		}
+	}
+}
+
+func TestSameOriginTelemetryBundleDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://example.com/api/ml/trap", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/api/ml/trap")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	for _, header := range []string{
+		"X-Navigator-Data",
+		"X-WebGL-Data",
+		"X-Plugin-Data",
+		"X-WebRTC-Data",
+		"X-Behavioral-Data",
+		"X-Timing-Data",
+		"X-Audio-Data",
+		"X-Canvas-Fingerprint",
+	} {
+		req.Header.Set(header, "present")
+	}
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected same-origin telemetry bundle to be detected, got score %.3f", detection.Score)
+	}
+
+	foundGetIndicator := false
+	foundRefererIndicator := false
+	foundHeaderPayloadIndicator := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_payload_on_get_request") {
+				foundGetIndicator = true
+			}
+			if ind == "telemetry_self_referer" {
+				foundRefererIndicator = true
+			}
+			if strings.HasPrefix(ind, "telemetry_stuffed_into_headers") {
+				foundHeaderPayloadIndicator = true
+			}
+		}
+	}
+
+	if !foundGetIndicator {
+		t.Fatal("expected telemetry_payload_on_get_request indicator")
+	}
+	if !foundRefererIndicator {
+		t.Fatal("expected telemetry_self_referer indicator")
+	}
+	if !foundHeaderPayloadIndicator {
+		t.Fatal("expected telemetry_stuffed_into_headers indicator")
+	}
+}
+
+func TestNormalSameOriginFetchDoesNotTriggerTelemetryIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://example.com/api/data", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/dashboard")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_payload_on_get_request") ||
+				ind == "telemetry_self_referer" ||
+				strings.HasPrefix(ind, "telemetry_stuffed_into_headers") {
+				t.Fatalf("did not expect telemetry provenance indicator %q for a normal same-origin fetch", ind)
 			}
 		}
 	}

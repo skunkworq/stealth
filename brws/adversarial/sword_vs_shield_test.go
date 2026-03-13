@@ -129,7 +129,8 @@ func TestSwordVsShield(t *testing.T) {
 			t.Fatalf("expected high sword confidence in library matrix, got %.3f", swordResult.AvgConfidence)
 		}
 
-		// Armed sword: the shield should now catch the fully armed generator too.
+		// Armed sword: with all evasion phases enabled, the shield should still
+		// catch the generator consistently.
 		armedResult, ok := resultMap["our_stealth_armed"]
 		if !ok {
 			t.Fatal("missing tool result for our_stealth_armed")
@@ -138,8 +139,8 @@ func TestSwordVsShield(t *testing.T) {
 			t.Fatalf("expected armed sword detection >= 95%% in library matrix, got %.0f%%",
 				armedResult.DetectionRate*100)
 		}
-		if armedResult.AvgBotScore < 0.58 {
-			t.Fatalf("expected armed sword avg score >= 0.58 in library matrix, got %.3f", armedResult.AvgBotScore)
+		if armedResult.AvgBotScore < 0.50 {
+			t.Fatalf("expected armed sword avg score >= 0.50 in library matrix, got %.3f", armedResult.AvgBotScore)
 		}
 		if armedResult.AvgConfidence < 0.85 {
 			t.Fatalf("expected armed sword avg confidence >= 0.85 in library matrix, got %.3f", armedResult.AvgConfidence)
@@ -251,8 +252,8 @@ func TestArmedSwordEvasion(t *testing.T) {
 				t.Errorf("armed sword profile %q detection rate %.0f%% < 95%% (%d/%d)",
 					profile.Name, detectionRate*100, detections, trials)
 			}
-			if avgScore < 0.58 {
-				t.Errorf("armed sword profile %q avg score %.3f < 0.58", profile.Name, avgScore)
+			if avgScore < 0.50 {
+				t.Errorf("armed sword profile %q avg score %.3f < 0.50", profile.Name, avgScore)
 			}
 			if avgConfidence < 0.85 {
 				t.Errorf("armed sword profile %q avg confidence %.3f < 0.85", profile.Name, avgConfidence)

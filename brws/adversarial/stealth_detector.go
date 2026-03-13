@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"sync"
@@ -1527,6 +1528,7 @@ func isRichChromiumNavigationWithoutRuntimeState(req *http.Request) bool {
 // independently generated fingerprint vectors. Two sub-checks:
 // 1. Behavioral timestamps should start AFTER page load completion (from timing data).
 // 2. Mouse positions should be within the claimed screen dimensions.
+// 3. Same-origin telemetry submissions should have coherent request provenance.
 func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *DetectionVector {
 	vec := &DetectionVector{
 		Name:        "Cross-Vector Consistency",
@@ -1630,6 +1632,53 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		}
 	}
 
+	// Sub-check 3: Same-origin telemetry provenance.
+	// A same-origin fetch/XHR can legitimately submit post-load telemetry, but if
+	// the payload is stuffed into headers on a GET request, points its Referer at
+	// the exact telemetry URL, and carries many runtime surfaces without a body,
+	// it is much more likely to be synthetic request generation than in-page JS.
+	if isSameOriginTelemetryFetch(req) {
+		runtimeHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderAudioData,
+			constants.HeaderCanvasFingerprint,
+		})
+		postLoadHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderCanvasFingerprint,
+			constants.HeaderAudioData,
+			constants.HeaderWebRTCData,
+		})
+
+		if runtimeHeaderCount >= 6 && postLoadHeaderCount >= 3 {
+			if req.Method == http.MethodGet {
+				vec.Score += 0.30
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"telemetry_payload_on_get_request: %d runtime headers", runtimeHeaderCount))
+			}
+
+			if isRefererSameAsRequestURL(req) {
+				vec.Score += 0.40
+				vec.Indicators = append(vec.Indicators, "telemetry_self_referer")
+			}
+
+			if req.Header.Get("Content-Type") == "" && req.ContentLength <= 0 {
+				vec.Score += 0.30
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"telemetry_stuffed_into_headers: %d runtime/%d post_load headers without body",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+		}
+	}
+
 	if vec.Score == 0 {
 		return nil
 	}
@@ -1640,6 +1689,47 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 	vec.Detected = vec.Score > 0.25
 
 	return vec
+}
+
+func isSameOriginTelemetryFetch(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+
+	mode := req.Header.Get("Sec-Fetch-Mode")
+	return req.Header.Get("Sec-Fetch-Dest") == "empty" &&
+		(mode == "cors" || mode == "same-origin") &&
+		req.Header.Get("Sec-Fetch-Site") == "same-origin" &&
+		req.Header.Get("Referer") != ""
+}
+
+func isRefererSameAsRequestURL(req *http.Request) bool {
+	if req == nil || req.URL == nil {
+		return false
+	}
+
+	referer := req.Referer()
+	if referer == "" {
+		return false
+	}
+
+	refURL, err := url.Parse(referer)
+	if err != nil {
+		return false
+	}
+
+	return urlsEqualSansFragment(refURL, req.URL)
+}
+
+func urlsEqualSansFragment(a, b *url.URL) bool {
+	if a == nil || b == nil {
+		return false
+	}
+
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Host, b.Host) &&
+		strings.TrimRight(a.EscapedPath(), "/") == strings.TrimRight(b.EscapedPath(), "/") &&
+		a.RawQuery == b.RawQuery
 }
 
 func hasJSFingerprintHeaders(req *http.Request) bool {
