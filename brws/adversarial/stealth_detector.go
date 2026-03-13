@@ -1493,6 +1493,14 @@ func countPresentHeaders(req *http.Request, headers []string) int {
 	return count
 }
 
+func totalHeaderValueBytes(req *http.Request, headers []string) int {
+	total := 0
+	for _, header := range headers {
+		total += len(req.Header.Get(header))
+	}
+	return total
+}
+
 func isRichChromiumNavigationWithoutRuntimeState(req *http.Request) bool {
 	uaLower := strings.ToLower(req.Header.Get("User-Agent"))
 	secChLower := strings.ToLower(req.Header.Get("Sec-Ch-Ua"))
@@ -1659,6 +1667,33 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			constants.HeaderAudioData,
 			constants.HeaderWebRTCData,
 		})
+		postLoadHeaderBytes := totalHeaderValueBytes(req, []string{
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderCanvasFingerprint,
+			constants.HeaderAudioData,
+			constants.HeaderWebRTCData,
+		})
+
+		if req.Method == http.MethodPost && postLoadHeaderCount >= 3 && postLoadHeaderBytes >= 2048 {
+			vec.Score += 0.44
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"telemetry_bulk_payload_in_headers: %d bytes across %d post_load headers",
+				postLoadHeaderBytes, postLoadHeaderCount))
+
+			if req.Header.Get(constants.HeaderBehavioralData) != "" {
+				vec.Score += 0.10
+				vec.Indicators = append(vec.Indicators, "telemetry_behavioral_payload_in_headers")
+			}
+
+			bodySnapshot, bodyErr := snapshotRequestBody(req)
+			if bodyErr == nil && len(bodySnapshot) > 0 && postLoadHeaderBytes > len(bodySnapshot)*4 {
+				vec.Score += 0.18
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"telemetry_header_body_imbalance: %d header bytes vs %d body bytes",
+					postLoadHeaderBytes, len(bodySnapshot)))
+			}
+		}
 
 		if runtimeHeaderCount >= 6 && postLoadHeaderCount >= 3 {
 			if req.Method == http.MethodPost {

@@ -777,17 +777,13 @@ func TestSameOriginTelemetryPostWithThinBodyDetected(t *testing.T) {
 	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
 
-	for _, header := range []string{
-		"X-Navigator-Data",
-		"X-WebGL-Data",
-		"X-Plugin-Data",
-		"X-Behavioral-Data",
-		"X-Timing-Data",
-		"X-Audio-Data",
-		"X-Canvas-Fingerprint",
-	} {
-		req.Header.Set(header, "present")
-	}
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
 
 	detection := detector.AnalyzeRequest(req, nil)
 	if !detection.IsBot {
@@ -796,10 +792,18 @@ func TestSameOriginTelemetryPostWithThinBodyDetected(t *testing.T) {
 
 	foundHeaderIndicator := false
 	foundHeaderOverloadIndicator := false
+	foundBulkHeaderIndicator := false
+	foundBehavioralHeaderIndicator := false
 	foundThinBodyIndicator := false
 	foundMissingPayloadIndicator := false
 	for _, vec := range detection.Vectors {
 		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_bulk_payload_in_headers") {
+				foundBulkHeaderIndicator = true
+			}
+			if ind == "telemetry_behavioral_payload_in_headers" {
+				foundBehavioralHeaderIndicator = true
+			}
 			if strings.HasPrefix(ind, "telemetry_header_surface_overload") {
 				foundHeaderOverloadIndicator = true
 			}
@@ -820,6 +824,12 @@ func TestSameOriginTelemetryPostWithThinBodyDetected(t *testing.T) {
 	}
 	if !foundHeaderOverloadIndicator {
 		t.Fatal("expected telemetry_header_surface_overload indicator")
+	}
+	if !foundBulkHeaderIndicator {
+		t.Fatal("expected telemetry_bulk_payload_in_headers indicator")
+	}
+	if !foundBehavioralHeaderIndicator {
+		t.Fatal("expected telemetry_behavioral_payload_in_headers indicator")
 	}
 	if !foundThinBodyIndicator {
 		t.Fatal("expected telemetry_body_too_small_for_claimed_runtime indicator")
@@ -850,6 +860,8 @@ func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
 	for _, vec := range detection.Vectors {
 		for _, ind := range vec.Indicators {
 			if strings.HasPrefix(ind, "telemetry_runtime_hidden_in_headers") ||
+				strings.HasPrefix(ind, "telemetry_bulk_payload_in_headers") ||
+				strings.HasPrefix(ind, "telemetry_header_body_imbalance") ||
 				strings.HasPrefix(ind, "telemetry_body_too_small_for_claimed_runtime") ||
 				ind == "telemetry_body_missing_runtime_payload" ||
 				ind == "telemetry_post_missing_body_payload" {
@@ -882,17 +894,13 @@ func TestSameOriginTelemetryPostWithRichBodyStillDetected(t *testing.T) {
 	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
 
-	for _, header := range []string{
-		"X-Navigator-Data",
-		"X-WebGL-Data",
-		"X-Plugin-Data",
-		"X-Behavioral-Data",
-		"X-Timing-Data",
-		"X-Audio-Data",
-		"X-Canvas-Fingerprint",
-	} {
-		req.Header.Set(header, strings.Repeat("x", 128))
-	}
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
 
 	detection := detector.AnalyzeRequest(req, nil)
 	if !detection.IsBot {
@@ -900,15 +908,83 @@ func TestSameOriginTelemetryPostWithRichBodyStillDetected(t *testing.T) {
 	}
 
 	foundHeaderOverloadIndicator := false
+	foundBulkHeaderIndicator := false
+	foundBehavioralHeaderIndicator := false
+	foundHeaderBodyImbalanceIndicator := false
 	for _, vec := range detection.Vectors {
 		for _, ind := range vec.Indicators {
 			if strings.HasPrefix(ind, "telemetry_header_surface_overload") {
 				foundHeaderOverloadIndicator = true
 			}
+			if strings.HasPrefix(ind, "telemetry_bulk_payload_in_headers") {
+				foundBulkHeaderIndicator = true
+			}
+			if ind == "telemetry_behavioral_payload_in_headers" {
+				foundBehavioralHeaderIndicator = true
+			}
+			if strings.HasPrefix(ind, "telemetry_header_body_imbalance") {
+				foundHeaderBodyImbalanceIndicator = true
+			}
 		}
 	}
 	if !foundHeaderOverloadIndicator {
 		t.Fatal("expected telemetry_header_surface_overload indicator")
+	}
+	if !foundBulkHeaderIndicator {
+		t.Fatal("expected telemetry_bulk_payload_in_headers indicator")
+	}
+	if !foundBehavioralHeaderIndicator {
+		t.Fatal("expected telemetry_behavioral_payload_in_headers indicator")
+	}
+	if !foundHeaderBodyImbalanceIndicator {
+		t.Fatal("expected telemetry_header_body_imbalance indicator")
+	}
+}
+
+func TestFirefoxStyleTelemetryPostWithBulkHeadersDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"1.4.2","seq":1,` +
+		`"navigator":{"lang":"en-US","cores":8,"mem":8},` +
+		`"timing":{"ttfb":120,"fcp":340,"lcp":810},` +
+		`"canvas":"abcdef1234567890","audio":"fedcba0987654321"}`
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "same-origin")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Referer", "http://example.com/")
+
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected firefox-style telemetry POST with bulk headers to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBulkHeaderIndicator := false
+	foundHeaderBodyImbalanceIndicator := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "telemetry_bulk_payload_in_headers") {
+				foundBulkHeaderIndicator = true
+			}
+			if strings.HasPrefix(ind, "telemetry_header_body_imbalance") {
+				foundHeaderBodyImbalanceIndicator = true
+			}
+		}
+	}
+	if !foundBulkHeaderIndicator {
+		t.Fatal("expected telemetry_bulk_payload_in_headers indicator")
+	}
+	if !foundHeaderBodyImbalanceIndicator {
+		t.Fatal("expected telemetry_header_body_imbalance indicator")
 	}
 }
 
