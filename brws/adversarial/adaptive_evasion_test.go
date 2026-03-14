@@ -20,7 +20,7 @@ func TestAdaptiveEvasionFSM(t *testing.T) {
 		behavior.FirefoxWindowsProfile(),
 	}
 
-	maxTrials := 20
+	maxTrials := len(behavior.DefaultStrategies()) * 3
 
 	for _, profile := range profiles {
 		t.Run(profile.Name, func(t *testing.T) {

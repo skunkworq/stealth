@@ -129,8 +129,8 @@ func TestSwordVsShield(t *testing.T) {
 			t.Fatalf("expected high sword confidence in library matrix, got %.3f", swordResult.AvgConfidence)
 		}
 
-		// Armed sword: even with evasion phases enabled, the shield should still
-		// classify it as bot traffic.
+		// Armed sword: even with the latest provenance changes, the shield should
+		// still classify it as bot traffic.
 		armedResult, ok := resultMap["our_stealth_armed"]
 		if !ok {
 			t.Fatal("missing tool result for our_stealth_armed")
