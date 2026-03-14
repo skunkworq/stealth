@@ -1381,6 +1381,16 @@ func (rg *RequestGenerator) generateNavigator(dims sharedDimensions, renderer st
 		"usb":                        map[string]interface{}{"getDevices": true},
 	}
 
+	// Storage API availability flags (present in all modern browsers)
+	data["hasLocalStorage"] = true
+	data["hasSessionStorage"] = true
+	data["hasIndexedDB"] = true
+
+	// hasChrome flag for Chromium browsers
+	if p.Browser == "chrome" || p.Browser == "edge" {
+		data["hasChrome"] = true
+	}
+
 	rg.addMathPrecision(data)
 
 	if rg.config != nil && rg.config.EvadeOffscreenCanvasDeep {

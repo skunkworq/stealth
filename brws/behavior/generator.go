@@ -29,6 +29,18 @@ type EventData struct {
 
 	// Phase 46: Error Stack trace format
 	ErrorStack string `json:"errorStack,omitempty"`
+
+	// Canvas/Audio/WebGL fingerprints for platform-consistent evasion.
+	CanvasFingerprint *CanvasFingerprint `json:"canvasFingerprint,omitempty"`
+	AudioFingerprint  *AudioFingerprint  `json:"audioFingerprint,omitempty"`
+	WebGLFingerprint  *WebGLFingerprint  `json:"webglFingerprint,omitempty"`
+
+	// Timing coherence: CSI/LoadTimes and Performance API data
+	ChromeTiming      *ChromeTiming          `json:"chromeTiming,omitempty"`
+	PerformanceTiming *PerformanceTimingData `json:"performanceTiming,omitempty"`
+
+	// Navigator coherence data (cross-layer consistent fingerprint)
+	NavigatorData *NavigatorData `json:"navigatorData,omitempty"`
 }
 
 // GeneratorConfig controls the behavioral data generation parameters.
@@ -68,6 +80,20 @@ type GeneratorConfig struct {
 	// Phase 46: Error stack trace evasion
 	BrowserEngine         string // "chrome" or "firefox"
 	EvadeErrorStackFormat bool
+
+	// Canvas/Audio/WebGL fingerprint evasion
+	EvadeCanvasFingerprint bool   // Generate platform-consistent canvas data
+	EvadeAudioFingerprint  bool   // Generate platform-consistent audio data
+	Platform               string // Target platform for fingerprint consistency
+	Browser                string // Target browser for fingerprint consistency
+
+	// Timing coherence evasion
+	EvadeTimingCoherence bool   // Generate coherent CSI/LoadTimes data
+	PageURL              string // URL for performance timing entries
+
+	// Navigator coherence evasion
+	EvadeNavigatorCoherence bool
+	NavigatorProfile        *NavigatorProfile // Required when EvadeNavigatorCoherence is true
 }
 
 // DefaultGeneratorConfig returns sensible defaults for human-like behavior.
@@ -95,6 +121,7 @@ func DefaultGeneratorConfig() *GeneratorConfig {
 		EvadeTypingCorrection:   true,
 		EvadeThinkPause:         true,
 		EvadeClickDwellLogNorm:  true,
+		EvadeTimingCoherence:    true,
 	}
 }
 
@@ -141,6 +168,33 @@ func (g *EventGenerator) Generate() *EventData {
 	// Phase 46: Error stack trace
 	if g.config.EvadeErrorStackFormat {
 		g.generateErrorStack(data)
+	}
+
+	// Canvas/Audio/WebGL fingerprints
+	if g.config.EvadeCanvasFingerprint || g.config.EvadeAudioFingerprint {
+		fp := GeneratePlatformFingerprints(g.config.Platform, g.config.Browser, g.config.Seed)
+		if g.config.EvadeCanvasFingerprint {
+			data.CanvasFingerprint = &fp.Canvas
+			data.WebGLFingerprint = &fp.WebGL
+		}
+		if g.config.EvadeAudioFingerprint {
+			data.AudioFingerprint = &fp.Audio
+		}
+	}
+
+	// Timing coherence: CSI/LoadTimes and Performance API
+	if g.config.EvadeTimingCoherence {
+		data.ChromeTiming = GenerateChromeTiming(g.config.Seed)
+		pageURL := g.config.PageURL
+		if pageURL == "" {
+			pageURL = "https://example.com/"
+		}
+		data.PerformanceTiming = GeneratePerformanceTiming(pageURL, g.config.Seed)
+	}
+
+	// Navigator coherence
+	if g.config.EvadeNavigatorCoherence && g.config.NavigatorProfile != nil {
+		data.NavigatorData = GenerateNavigatorData(*g.config.NavigatorProfile, g.config.Seed)
 	}
 
 	return data

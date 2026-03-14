@@ -72,9 +72,12 @@ func (ia *IsomorphicAnalyzer) Analyze(req *http.Request, httpInfo *HTTPFingerpri
 		indicators = ia.checkPointerInteraction(navData, httpPlatform, vec, indicators)
 		indicators = ia.checkTouchPointerCoherence(navData, vec, indicators)
 		indicators = ia.checkUserAgentDataConsistency(navData, httpInfo, vec, indicators)
+		indicators = ia.checkJSEngineArtifacts(navData, httpInfo, vec, indicators)
+		indicators = ia.checkStorageCoherence(navData, vec, indicators)
 	}
 
 	indicators = ia.checkHeaderOrder(httpInfo, vec, indicators)
+	indicators = ia.checkConnectionTimingCoherence(req, vec, indicators)
 
 	if behavData != nil {
 		indicators = ia.checkErrorStackFormat(behavData, httpInfo, vec, indicators)
@@ -823,6 +826,149 @@ func (ia *IsomorphicAnalyzer) checkTouchPointerCoherence(navData map[string]inte
 				Severity:    "high",
 				Description: "The device reports 'coarse' as its primary pointer but has 0 maxTouchPoints.",
 			})
+		}
+	}
+
+	return indicators
+}
+
+// checkJSEngineArtifacts validates that JavaScript engine-specific properties
+// are consistent with the browser claimed in the User-Agent header.
+func (ia *IsomorphicAnalyzer) checkJSEngineArtifacts(navData map[string]interface{}, httpInfo *HTTPFingerprintInfo, vec *DetectionVector, indicators []string) []string {
+	ua := strings.ToLower(httpInfo.UserAgent)
+	isChrome := strings.Contains(ua, "chrome") && !strings.Contains(ua, "edg")
+	isFirefox := strings.Contains(ua, "firefox")
+	isSafari := strings.Contains(ua, "safari") && !strings.Contains(ua, "chrome")
+
+	if productSub, ok := navData["productSub"].(string); ok {
+		if isChrome && productSub != "20030107" {
+			indicators = append(indicators, "productsub_browser_mismatch")
+			vec.Score += 0.35
+		} else if isFirefox && productSub != "20100101" {
+			indicators = append(indicators, "productsub_browser_mismatch")
+			vec.Score += 0.35
+		} else if isSafari && productSub != "20030107" {
+			indicators = append(indicators, "productsub_browser_mismatch")
+			vec.Score += 0.35
+		}
+	}
+
+	if isChrome {
+		_, hasChromeObj := navData["chrome"]
+		_, hasChromeRuntime := navData["chrome_runtime"]
+		hasChrome, _ := navData["hasChrome"].(bool)
+		if !hasChromeObj && !hasChromeRuntime && !hasChrome {
+			if len(navData) > 10 {
+				indicators = append(indicators, "missing_window_chrome")
+				vec.Score += 0.30
+			}
+		}
+	}
+
+	pluginCount := -1.0
+	if pc, ok := navData["pluginCount"].(float64); ok {
+		pluginCount = pc
+	} else if pc, ok := navData["plugins_length"].(float64); ok {
+		pluginCount = pc
+	}
+	if pluginCount >= 0 {
+		if isChrome && int(pluginCount) == 0 {
+			indicators = append(indicators, "plugin_count_zero_chrome")
+			vec.Score += 0.30
+		}
+		if isFirefox && int(pluginCount) > 0 {
+			indicators = append(indicators, "plugin_count_nonzero_firefox")
+			vec.Score += 0.20
+		}
+	}
+
+	if webdriver, ok := navData["webdriver"].(bool); ok && webdriver {
+		indicators = append(indicators, "webdriver_true")
+		vec.Score += 0.90
+	}
+
+	if cookieEnabled, ok := navData["cookieEnabled"].(bool); ok && !cookieEnabled {
+		indicators = append(indicators, "cookies_disabled")
+		vec.Score += 0.25
+	}
+
+	if isChrome || isFirefox {
+		if pdfViewer, ok := navData["pdfViewerEnabled"].(bool); ok && !pdfViewer {
+			indicators = append(indicators, "pdf_viewer_disabled")
+			vec.Score += 0.20
+		}
+	}
+
+	return indicators
+}
+
+// checkStorageCoherence verifies that web storage APIs are available.
+func (ia *IsomorphicAnalyzer) checkStorageCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	if hasLocal, ok := navData["hasLocalStorage"].(bool); ok && !hasLocal {
+		indicators = append(indicators, "missing_local_storage")
+		vec.Score += 0.25
+	}
+	if hasSession, ok := navData["hasSessionStorage"].(bool); ok && !hasSession {
+		indicators = append(indicators, "missing_session_storage")
+		vec.Score += 0.25
+	}
+	if hasIDB, ok := navData["hasIndexedDB"].(bool); ok && !hasIDB {
+		indicators = append(indicators, "missing_indexed_db")
+		vec.Score += 0.30
+	}
+	return indicators
+}
+
+// checkConnectionTimingCoherence validates connection timing data for realistic
+// TLS handshake and DOM processing times.
+func (ia *IsomorphicAnalyzer) checkConnectionTimingCoherence(req *http.Request, vec *DetectionVector, indicators []string) []string {
+	timingHeader := req.Header.Get(constants.HeaderTimingData)
+	if timingHeader == "" {
+		return indicators
+	}
+
+	var timingData map[string]interface{}
+	if json.Unmarshal([]byte(timingHeader), &timingData) != nil {
+		return indicators
+	}
+
+	connectStart, okCS := timingData["connectStart"].(float64)
+	connectEnd, okCE := timingData["connectEnd"].(float64)
+	if okCS && okCE && connectStart > 0 && connectEnd > 0 {
+		if connectEnd-connectStart == 0 {
+			indicators = append(indicators, "connection_timing_zero_tls")
+			vec.Score += 0.20
+		}
+	}
+
+	responseEnd, okRE := timingData["responseEnd"].(float64)
+	domInteractive, okDI := timingData["domInteractive"].(float64)
+	if okRE && okDI && responseEnd > 0 && domInteractive > 0 {
+		parseTime := domInteractive - responseEnd
+		if parseTime >= 0 && parseTime < 5 {
+			indicators = append(indicators, "connection_timing_instant_parse")
+			vec.Score += 0.25
+		}
+	}
+
+	if entries, ok := timingData["entries"].([]interface{}); ok && len(entries) >= 3 {
+		connectTimes := make(map[float64]int)
+		for _, e := range entries {
+			if em, ok := e.(map[string]interface{}); ok {
+				cs, okCS2 := em["connectStart"].(float64)
+				ce, okCE2 := em["connectEnd"].(float64)
+				if okCS2 && okCE2 && cs > 0 {
+					connectTimes[ce-cs]++
+				}
+			}
+		}
+		if len(connectTimes) == 1 && len(entries) >= 3 {
+			for _, count := range connectTimes {
+				if count >= 3 {
+					indicators = append(indicators, "connection_timing_identical_durations")
+					vec.Score += 0.30
+				}
+			}
 		}
 	}
 

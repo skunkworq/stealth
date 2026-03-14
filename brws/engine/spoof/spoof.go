@@ -30,6 +30,9 @@ type SpoofEngine struct {
 	pseudoHeaders []string
 	windowSize    uint32
 
+	// Header ordering from the browser signature
+	headerOrder []string
+
 	// Statistics
 	requestsMade int
 }
@@ -70,6 +73,9 @@ func NewSpoofEngine(signatureKey string) (*SpoofEngine, error) {
 	// Build HTTP/2 settings from signature
 	e.buildHTTP2Settings()
 
+	// Build header order from signature
+	e.headerOrder = headerOrderFromSignature(sig.HTTP)
+
 	// Build transport
 	if err := e.buildTransport(); err != nil {
 		return nil, fmt.Errorf("building transport: %w", err)
@@ -98,6 +104,9 @@ func NewSpoofEngineFromSignature(name string, sig *BrowserSignature) (*SpoofEngi
 	}
 
 	e.buildHTTP2Settings()
+
+	// Build header order from signature
+	e.headerOrder = headerOrderFromSignature(sig.HTTP)
 
 	if err := e.buildTransport(); err != nil {
 		return nil, fmt.Errorf("building transport: %w", err)
@@ -371,8 +380,42 @@ func (e *SpoofEngine) Do(req *http.Request) (*http.Response, error) {
 		}
 	}
 
+	// Apply header ordering from the browser signature
+	e.applyHeaderOrder(req)
+
 	// Execute request
 	return e.transport.RoundTrip(req)
+}
+
+// applyHeaderOrder reorders the request headers to match the browser signature.
+func (e *SpoofEngine) applyHeaderOrder(req *http.Request) {
+	if len(e.headerOrder) == 0 {
+		return
+	}
+
+	oh := NewOrderedHeaders(e.headerOrder)
+
+	// First pass: add headers in signature order
+	for _, name := range oh.order {
+		if vals, ok := req.Header[name]; ok {
+			for _, v := range vals {
+				oh.Add(name, v)
+			}
+		}
+	}
+
+	// Second pass: add any remaining headers not in the signature order
+	for key, vals := range req.Header {
+		canonical := http.CanonicalHeaderKey(key)
+		if oh.hasKey(canonical) {
+			continue
+		}
+		for _, v := range vals {
+			oh.Add(canonical, v)
+		}
+	}
+
+	oh.ApplyTo(req)
 }
 
 // Fetch performs a GET request with the spoofed fingerprint
