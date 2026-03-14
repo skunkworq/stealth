@@ -99,8 +99,8 @@ func TestMergeTrainedProfiles(t *testing.T) {
 	trained := []TrainedProfile{
 		{
 			browserProfile: browserProfile{
-				Name: "chrome", Version: "146", Platform: "macos",
-				UserAgent: "Mozilla/5.0 Chrome/146.0.0.0",
+				Name: "chrome", Version: "150", Platform: "linux",
+				UserAgent: "Mozilla/5.0 Chrome/150.0.0.0",
 			},
 			HeaderOrder:   []string{"accept", "user-agent"},
 			SourceSession: "test-session",
@@ -117,7 +117,7 @@ func TestMergeTrainedProfiles(t *testing.T) {
 	}
 
 	// The new profile should be first (prepended)
-	if profileTable[0].Name != "chrome" || profileTable[0].Version != "146" {
+	if profileTable[0].Name != "chrome" || profileTable[0].Version != "150" {
 		t.Error("trained profile should be prepended to table")
 	}
 }

@@ -99,6 +99,15 @@ var profileTable = []browserProfile{
 		ViewportWidth:   2560, ViewportHeight: 1440,
 		TLSFingerprint: "chrome_120",
 	},
+	{
+		Name: "chrome", Version: "146", Platform: "macos",
+		UserAgent:       "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+		SecCHUA:         `"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"`,
+		SecCHUAPlatform: `"macOS"`,
+		AcceptLang:      "en-GB,en-US;q=0.9,en;q=0.8",
+		ViewportWidth:   1440, ViewportHeight: 900,
+		TLSFingerprint: "chrome_146",
+	},
 }
 
 // GenerateFingerprint derives a stable CompleteFingerprint from a session ID.

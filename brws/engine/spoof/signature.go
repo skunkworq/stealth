@@ -407,10 +407,124 @@ func GetFirefox109() *BrowserSignature {
 	}
 }
 
+// GetChrome146 returns the Chrome 146 signature (macOS, captured from training data)
+func GetChrome146() *BrowserSignature {
+	return &BrowserSignature{
+		Name:        "chrome",
+		Version:     "146",
+		OS:          "macos",
+		Description: "Chrome 146 on macOS",
+
+		TLS: &TLSSignature{
+			Version: 0x0303, // TLS 1.2 in hello, actual version in supported_versions
+			CipherSuites: []CipherEntry{
+				{Value: 0x1301, Name: "TLS_AES_128_GCM_SHA256"},
+				{Value: 0x1302, Name: "TLS_AES_256_GCM_SHA384"},
+				{Value: 0x1303, Name: "TLS_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xc02b, Name: "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xc02f, Name: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xc02c, Name: "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xc030, Name: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xcca9, Name: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xcca8, Name: "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xc013, Name: "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0xc014, Name: "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"},
+				{Value: 0x009c, Name: "TLS_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0x009d, Name: "TLS_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0x002f, Name: "TLS_RSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0x0035, Name: "TLS_RSA_WITH_AES_256_CBC_SHA"},
+			},
+			Extensions: []ExtensionEntry{
+				{Type: 0x5a5a, IsGREASE: true},
+				{Type: 0x0000, Name: "server_name"},
+				{Type: 0x0017, Name: "extended_master_secret"},
+				{Type: 0xff01, Name: "renegotiation_info"},
+				{Type: 0x000a, Name: "supported_groups"},
+				{Type: 0x000b, Name: "ec_point_formats"},
+				{Type: 0x0023, Name: "signed_certificate_timestamp"},
+				{Type: 0x0010, Name: "application_layer_protocol_negotiation"},
+				{Type: 0x0005, Name: "status_request"},
+				{Type: 0x0a0a, IsGREASE: true},
+				{Type: 0x0012, Name: "signed_certificate_timestamp"},
+				{Type: 0x0033, Name: "key_share"},
+				{Type: 0x002d, Name: "psk_key_exchange_modes"},
+				{Type: 0x002b, Name: "supported_versions"},
+				{Type: 0x001d, Name: "compress_certificate"},
+				{Type: 0x0011, Name: "application_settings"}, // ALPS
+				{Type: 0xfe0d, Name: "encrypted_client_hello"}, // ECH (standard in Chrome 146)
+				{Type: 0x0d0d, IsGREASE: true},
+				{Type: 0x002b, Name: "supported_versions"},
+				{Type: 0x0015, Name: "padding"},
+				{Type: 0x0f0f, IsGREASE: true},
+			},
+			SupportedGroups: []uint16{0x5a5a, 0x001d, 0x0017, 0x0018, 0x001e, 0x0a0a},
+			ALPN:            []string{"h2", "http/1.1"},
+			ALPS:            "h2",
+			CertCompression: []string{"brotli"},
+			KeyShareGroups:  []uint16{0x5a5a, 0x001d, 0x0a0a},
+		},
+
+		HTTP2: &HTTP2Signature{
+			Settings: []HTTP2SettingEntry{
+				{ID: 1, Name: "HEADER_TABLE_SIZE", Value: 65536},
+				{ID: 2, Name: "ENABLE_PUSH", Value: 0},
+				{ID: 3, Name: "MAX_CONCURRENT_STREAMS", Value: 1000},
+				{ID: 4, Name: "INITIAL_WINDOW_SIZE", Value: 6291456},
+				{ID: 6, Name: "MAX_HEADER_LIST_SIZE", Value: 262144},
+			},
+			PseudoHeaders: []string{
+				":method",
+				":authority",
+				":scheme",
+				":path",
+			},
+			HeaderPriority: &HeaderPriority{
+				Weight:    255,
+				Exclusive: true,
+			},
+			EnablePush:        false,
+			InitialWindowSize: 6291456,
+		},
+
+		HTTP: &HTTPSignature{
+			UserAgent:      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+			Accept:         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+			AcceptLanguage: "en-GB,en-US;q=0.9,en;q=0.8",
+			AcceptEncoding: "gzip, deflate, br, zstd",
+			Headers: []HeaderEntry{
+				{Name: ":method", Value: "GET", Required: true},
+				{Name: ":authority", Value: "", Required: true},
+				{Name: ":scheme", Value: "https", Required: true},
+				{Name: ":path", Value: "/", Required: true},
+				{Name: "accept", Value: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7", Required: true},
+				{Name: "accept-encoding", Value: "gzip, deflate, br, zstd", Required: true},
+				{Name: "accept-language", Value: "en-GB,en-US;q=0.9,en;q=0.8", Required: true},
+				{Name: "priority", Value: "u=0, i", Required: true},
+				{Name: "sec-ch-ua", Value: `"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"`, Required: true},
+				{Name: "sec-ch-ua-mobile", Value: "?0", Required: true},
+				{Name: "sec-ch-ua-platform", Value: `"macOS"`, Required: true},
+				{Name: "sec-fetch-dest", Value: "document", Required: true},
+				{Name: "sec-fetch-mode", Value: "navigate", Required: true},
+				{Name: "sec-fetch-site", Value: "none", Required: true},
+				{Name: "sec-fetch-user", Value: "?1", Required: true},
+				{Name: "upgrade-insecure-requests", Value: "1", Required: true},
+				{Name: "user-agent", Value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36", Required: true},
+			},
+			ClientHints: &ClientHintsEntry{
+				SecCHUA:         `"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"`,
+				SecCHUAMobile:   "?0",
+				SecCHUAPlatform: `"macOS"`,
+			},
+			HTTPVersion: "2.0",
+		},
+	}
+}
+
 // LoadDefaultSignatures loads all built-in signatures
 func LoadDefaultSignatures() map[string]*BrowserSignature {
 	sigs := make(map[string]*BrowserSignature)
 	sigs["chrome-116"] = GetChrome116()
+	sigs["chrome-146"] = GetChrome146()
 	sigs["firefox-109"] = GetFirefox109()
 	return sigs
 }

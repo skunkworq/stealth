@@ -61,6 +61,9 @@ type GeneratorConfig struct {
 	EvadeScrollSpearman     bool
 	EvadeMouseTypingDensity bool
 	EvadeClickDwellTime     bool
+	EvadeTypingCorrection   bool // Inject corrective backspace+retype bursts (~5-8% of keystrokes)
+	EvadeThinkPause         bool // Inject bimodal think-pauses (200-800ms) in typing and mouse
+	EvadeClickDwellLogNorm  bool // Use log-normal distribution for click dwell times
 
 	// Phase 46: Error stack trace evasion
 	BrowserEngine         string // "chrome" or "firefox"
@@ -89,6 +92,9 @@ func DefaultGeneratorConfig() *GeneratorConfig {
 		EvadeScrollSpearman:     true,
 		EvadeMouseTypingDensity: true,
 		EvadeClickDwellTime:     true,
+		EvadeTypingCorrection:   true,
+		EvadeThinkPause:         true,
+		EvadeClickDwellLogNorm:  true,
 	}
 }
 
@@ -333,6 +339,12 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 				if globalT > 0.30 && globalT < 0.70 { // typing phase
 					baseInterval *= 4.0
 				}
+			}
+			// Think-pause: occasional 200-800ms gaps representing moments
+			// when a human pauses to read or think. Creates bimodal timing
+			// (fast action + occasional pause) instead of uniform intervals.
+			if g.config.EvadeThinkPause && g.rng.Float64() < 0.08 {
+				baseInterval += 200 + g.rng.Float64()*600
 			}
 			ts += int64(baseInterval)
 		}
@@ -580,11 +592,68 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 				interval = g.config.TypingSpeedMin * (0.5 + g.rng.Float64()*0.3)
 			}
 
+			// Think-pause: bimodal timing — most intervals are fast action,
+			// but ~6% are 200-800ms pauses where the human reads or thinks.
+			// This creates the bimodal distribution that defeats uniformity checks.
+			if g.config.EvadeThinkPause && g.rng.Float64() < 0.06 {
+				interval += 200 + g.rng.Float64()*600
+			}
+
 			// Clamp to reasonable range
-			interval = math.Max(25, math.Min(interval, 1200))
+			interval = math.Max(25, math.Min(interval, 1800))
 			ts += int64(interval)
 		}
 		timestamps = append(timestamps, ts)
+	}
+
+	// Corrective typing: inject backspace+retype bursts (~5-8% of keystrokes).
+	// Real humans make typos and correct them, producing a distinctive pattern:
+	// normal rhythm -> rapid backspace burst (1-3 keys at 30-60ms) -> short pause
+	// (100-300ms while re-reading) -> slightly varied retype rhythm.
+	// This creates natural cadence variance that defeats typing uniformity checks.
+	if g.config.EvadeTypingCorrection && len(timestamps) >= 6 {
+		// Determine how many correction events to inject (5-8% of keystrokes)
+		correctionCount := int(math.Max(1, math.Round(float64(len(timestamps))*0.05+g.rng.Float64()*0.03*float64(len(timestamps)))))
+		if correctionCount > len(timestamps)/4 {
+			correctionCount = len(timestamps) / 4
+		}
+
+		for c := 0; c < correctionCount; c++ {
+			// Pick a random insertion point (avoid first and last few keystrokes)
+			insertAt := 2 + g.rng.Intn(len(timestamps)-4)
+			baseTs := timestamps[insertAt]
+
+			// Generate 1-3 rapid backspace keystrokes (30-60ms intervals)
+			numBackspaces := 1 + g.rng.Intn(3)
+			correctionEvents := make([]int64, 0, numBackspaces+2)
+			bsTs := baseTs
+			for b := 0; b < numBackspaces; b++ {
+				bsTs += 30 + int64(g.rng.Intn(30)) // fast backspace: 30-60ms
+				correctionEvents = append(correctionEvents, bsTs)
+			}
+
+			// Short re-reading pause before retyping (100-300ms)
+			bsTs += 100 + int64(g.rng.Intn(200))
+
+			// 1-2 retype keystrokes with slightly different rhythm
+			numRetypes := 1 + g.rng.Intn(2)
+			for r := 0; r < numRetypes; r++ {
+				bsTs += 60 + int64(g.rng.Intn(80)) // retype: 60-140ms (slightly slower)
+				correctionEvents = append(correctionEvents, bsTs)
+			}
+
+			// Insert correction events into the timestamp stream
+			newTimestamps := make([]int64, 0, len(timestamps)+len(correctionEvents))
+			newTimestamps = append(newTimestamps, timestamps[:insertAt+1]...)
+			newTimestamps = append(newTimestamps, correctionEvents...)
+
+			// Shift all subsequent timestamps forward by the correction duration
+			correctionDuration := bsTs - baseTs
+			for j := insertAt + 1; j < len(timestamps); j++ {
+				newTimestamps = append(newTimestamps, timestamps[j]+correctionDuration)
+			}
+			timestamps = newTimestamps
+		}
 	}
 
 	// Post-generation CV verification for inter-key intervals.
@@ -622,8 +691,11 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 	// Human hold times vary by key type: short for common letters (60-120ms),
 	// longer for modifiers/space (100-200ms), with occasional long holds (200-350ms).
 	// CV should be > 0.30 to avoid mechanical-typing detection.
-	holdTimes := make([]float64, 0, numKeys)
-	for i := 0; i < numKeys; i++ {
+	// Use len(timestamps) instead of numKeys because correction events may have
+	// added extra keystrokes to the timestamp stream.
+	actualKeyCount := len(timestamps)
+	holdTimes := make([]float64, 0, actualKeyCount)
+	for i := 0; i < actualKeyCount; i++ {
 		var hold float64
 		r := g.rng.Float64()
 		switch {
@@ -925,7 +997,19 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 		pos := data.MousePositions[idx]
 
 		var dwellTime int64
-		if g.config.EvadeClickDwellTime {
+		if g.config.EvadeClickDwellLogNorm {
+			// Log-normal distribution for click dwell times: better matches
+			// human motor control than uniform. Most clicks cluster at 80-120ms
+			// with a long tail of deliberate slow clicks at 200-400ms.
+			// log-normal with mu=4.6 (~100ms median), sigma=0.4 gives:
+			//   - mode ~85ms, median ~100ms, mean ~108ms
+			//   - 95th percentile ~175ms, occasional values 200-400ms
+			logDwell := 4.6 + g.rng.NormFloat64()*0.4
+			dwell := math.Exp(logDwell)
+			// Clamp to reasonable range (40-500ms)
+			dwell = math.Max(40, math.Min(dwell, 500))
+			dwellTime = int64(math.Round(dwell))
+		} else if g.config.EvadeClickDwellTime {
 			dwellTime = 80 + int64(g.rng.Intn(120))
 		} else {
 			dwellTime = int64(g.rng.Intn(6))

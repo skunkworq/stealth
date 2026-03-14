@@ -283,9 +283,10 @@ func (e *SpoofEngine) buildHTTP2Settings() {
 	e.windowSize = h2.InitialWindowSize
 }
 
-// buildTransport creates HTTP transport
+// buildTransport creates HTTP transport with HTTP/2 support when the browser
+// signature advertises h2 in its ALPN list.
 func (e *SpoofEngine) buildTransport() error {
-	// Create custom TLS dialer
+	// Create custom TLS dialer using uTLS for fingerprint spoofing.
 	tlsDial := func(ctx context.Context, network, addr string) (net.Conn, error) {
 		plainConn, err := e.dialer.DialContext(ctx, network, addr)
 		if err != nil {
@@ -318,16 +319,25 @@ func (e *SpoofEngine) buildTransport() error {
 		return uconn, nil
 	}
 
-	// Create transport with HTTP/2 disabled (for compatibility)
-	// TODO: Implement custom HTTP/2 transport with signature-matching SETTINGS
-	e.transport = &http.Transport{
+	// HTTP/1.1 base transport -- used as fallback and for non-TLS requests.
+	// ForceAttemptHTTP2 is false because we handle HTTP/2 ourselves via the
+	// h2Transport wrapper when the signature includes h2 ALPN.
+	h1 := &http.Transport{
 		DialContext:           e.dialer.DialContext,
 		DialTLSContext:        tlsDial,
-		ForceAttemptHTTP2:     false, // Disabled until custom HTTP/2 implementation
+		ForceAttemptHTTP2:     false,
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	// When the signature advertises h2, build a combined transport that
+	// attempts HTTP/2 with browser-matching SETTINGS and falls back to h1.
+	if e.hasH2ALPN() && e.signature.HTTP2 != nil {
+		e.transport = e.buildH2Transport(tlsDial, h1)
+	} else {
+		e.transport = h1
 	}
 
 	return nil
