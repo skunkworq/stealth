@@ -972,6 +972,81 @@ func TestNormalNoCORSBeaconDoesNotTriggerNoCORSIndicators(t *testing.T) {
 	}
 }
 
+func TestNoneContextTelemetryPostWithRuntimeHeadersDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "http://example.com/api/ml/trap", strings.NewReader(`{"sid":"abc","ts":1700000000,"page":"/","v":"2.1.0","seq":1}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 1800))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 1800))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 512))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1024))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected site=none telemetry bundle to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBundle := false
+	foundMissingRuntime := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "none_context_runtime_bundle") {
+				foundBundle = true
+			}
+			if ind == "none_context_body_missing_runtime_payload" {
+				foundMissingRuntime = true
+			}
+		}
+	}
+
+	if !foundBundle {
+		t.Fatal("expected none_context_runtime_bundle indicator")
+	}
+	if !foundMissingRuntime {
+		t.Fatal("expected none_context_body_missing_runtime_payload indicator")
+	}
+}
+
+func TestNormalNoneContextNavigationDoesNotTriggerTelemetryIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://example.com/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "none_context_") {
+				t.Fatalf("did not expect none-context telemetry indicator %q for a normal navigation", ind)
+			}
+		}
+	}
+}
+
 func TestSameOriginTelemetryPostWithoutRefererDetected(t *testing.T) {
 	detector := NewStealthDetector()
 
@@ -1751,6 +1826,94 @@ func TestCrossSiteTelemetryPostWithoutRefererDetected(t *testing.T) {
 	}
 	if !foundMissingRuntime {
 		t.Fatal("expected cross_site_body_missing_runtime_payload indicator")
+	}
+}
+
+func TestCrossSiteSameOriginModeTelemetryDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "https://example.com/api/telemetry", strings.NewReader(`{"sid":"abc","ts":1700000000,"page":"/","v":"2.1.0","seq":1}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "same-origin")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 1800))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 1800))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 512))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1024))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected cross-site same-origin telemetry to be detected, got score %.3f", detection.Score)
+	}
+
+	foundMismatch := false
+	foundMissingRuntime := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "cross_site_same_origin_mode_mismatch") {
+				foundMismatch = true
+			}
+			if ind == "cross_site_body_missing_runtime_payload" {
+				foundMissingRuntime = true
+			}
+		}
+	}
+
+	if !foundMismatch {
+		t.Fatal("expected cross_site_same_origin_mode_mismatch indicator")
+	}
+	if !foundMissingRuntime {
+		t.Fatal("expected cross_site_body_missing_runtime_payload indicator")
+	}
+}
+
+func TestCrossSiteSameOriginModeReducedHeadersDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "https://example.com/api/telemetry", strings.NewReader(`{"sid":"abc","ts":1700000000,"page":"/","v":"2.1.0","seq":1}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "same-origin")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 1800))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 1800))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1024))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected reduced cross-site same-origin telemetry to be detected, got score %.3f", detection.Score)
+	}
+
+	foundMismatch := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "cross_site_same_origin_mode_mismatch") {
+				foundMismatch = true
+			}
+		}
+	}
+
+	if !foundMismatch {
+		t.Fatal("expected cross_site_same_origin_mode_mismatch indicator")
 	}
 }
 

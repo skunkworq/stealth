@@ -129,8 +129,7 @@ func TestSwordVsShield(t *testing.T) {
 			t.Fatalf("expected high sword confidence in library matrix, got %.3f", swordResult.AvgConfidence)
 		}
 
-		// Armed sword: even with the latest provenance changes, the shield should
-		// still classify it as bot traffic.
+		// Armed sword: the shield should now catch the enhanced transport path.
 		armedResult, ok := resultMap["our_stealth_armed"]
 		if !ok {
 			t.Fatal("missing tool result for our_stealth_armed")
@@ -181,8 +180,8 @@ func TestSwordVsShield(t *testing.T) {
 	})
 }
 
-// TestArmedSwordEvasion verifies the armed sword remains detected even after
-// the latest request-provenance changes.
+// TestArmedSwordEvasion verifies the shield catches the armed sword across
+// the current adaptive strategy set.
 func TestArmedSwordEvasion(t *testing.T) {
 	profiles := behavior.DefaultProfiles()
 
