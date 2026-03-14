@@ -1830,17 +1830,33 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			})
 
 			if isBrowserUA {
+				largeTelemetryBody := len(bodySnapshot) >= 1024
+				siblingOriginClaim := req.Header.Get("Origin") != "" && !isOriginSameAsRequestURL(req)
+				missingReferer := req.Referer() == ""
+
 				if runtimeHeaderCount == 0 && bodyErr == nil && len(bodySnapshot) > 0 {
 					if !bodyContainsRuntimePayload(bodyText) {
-						vec.Score += 0.35
+						vec.Score += 0.42
 						vec.Indicators = append(vec.Indicators, fmt.Sprintf(
 							"same_site_synthetic_beacon: browser_ua body_size=%d no_runtime_in_body_or_headers",
 							len(bodySnapshot)))
 					} else {
-						vec.Score += 0.35
+						vec.Score += 0.42
 						vec.Indicators = append(vec.Indicators, fmt.Sprintf(
 							"same_site_runtime_data_migration: browser_ua body_size=%d runtime_in_body_but_zero_headers",
 							len(bodySnapshot)))
+					}
+
+					if largeTelemetryBody && siblingOriginClaim {
+						vec.Score += 0.18
+						vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+							"same_site_sibling_origin_zero_header_post: body_size=%d",
+							len(bodySnapshot)))
+					}
+
+					if largeTelemetryBody && missingReferer {
+						vec.Score += 0.12
+						vec.Indicators = append(vec.Indicators, "same_site_zero_header_missing_referer")
 					}
 				} else if runtimeHeaderCount > 0 && runtimeHeaderCount <= 2 && jsFingerprintCount == 0 {
 					// Cherry-picked post-load headers without JS fingerprints.

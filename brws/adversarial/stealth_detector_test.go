@@ -1695,6 +1695,63 @@ func TestSameSiteSameOriginModeReducedHeadersDetected(t *testing.T) {
 	}
 }
 
+func TestSameSiteZeroHeaderRuntimeMigrationDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/","v":"2.1.0","seq":4,` +
+		`"navigator":{"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0","language":"en-US","platform":"Win32","hardwareConcurrency":8},` +
+		`"timing":{"fetchStart":1700000000000,"responseStart":1700000000100,"responseEnd":1700000000150,"domInteractive":1700000000400,"loadEventEnd":1700000000800},` +
+		`"canvas":"deadbeefcafebabe","perf":{"ttfb":145,"fcp":286,"lcp":633},` +
+		`"viewport":{"w":1440,"h":900,"dpr":2},` +
+		`"session":{"entry":"/","depth":3,"duration":14000},` +
+		`"sdk":{"name":"web-vitals","version":"3.5.2","integrations":["Replay"]},` +
+		`"env":{"release":"prod-2026.3.14","environment":"production","dist":"4f2ab6c1"},` +
+		`"breadcrumbs":[{"type":"navigation","timestamp":1699999999000,"data":{"from":"/","to":"/dashboard"}},` +
+		`{"type":"ui.click","timestamp":1699999999500,"message":"button.submit","data":{"nodeId":481,"target":"button[type=submit].primary","label":"Continue to dashboard"}}],` +
+		`"contexts":{"browser":{"name":"Firefox","version":"128.0"},"device":{"family":"Desktop"}}}`
+	req := httptest.NewRequest("POST", "https://api.example.com/api/telemetry", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected zero-header same-site runtime migration POST to be detected, got score %.3f", detection.Score)
+	}
+
+	foundRuntimeMigration := false
+	foundSiblingOrigin := false
+	foundMissingReferer := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "same_site_runtime_data_migration") {
+				foundRuntimeMigration = true
+			}
+			if strings.HasPrefix(ind, "same_site_sibling_origin_zero_header_post") {
+				foundSiblingOrigin = true
+			}
+			if ind == "same_site_zero_header_missing_referer" {
+				foundMissingReferer = true
+			}
+		}
+	}
+
+	if !foundRuntimeMigration {
+		t.Fatal("expected same_site_runtime_data_migration indicator")
+	}
+	if !foundSiblingOrigin {
+		t.Fatal("expected same_site_sibling_origin_zero_header_post indicator")
+	}
+	if !foundMissingReferer {
+		t.Fatal("expected same_site_zero_header_missing_referer indicator")
+	}
+}
+
 func TestCrossSiteTelemetryPostWithFirstPartyOriginDetected(t *testing.T) {
 	detector := NewStealthDetector()
 

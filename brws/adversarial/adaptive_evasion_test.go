@@ -109,8 +109,8 @@ func TestEvasionStrategyComparison(t *testing.T) {
 			if detRate < 0.95 {
 				t.Errorf("%s/%s detection %.0f%% < 95%%", profile.Name, strategy.Name(), detRate*100)
 			}
-			if avgScore < 0.36 {
-				t.Errorf("%s/%s avg score %.3f < 0.36", profile.Name, strategy.Name(), avgScore)
+			if avgScore < 0.50 {
+				t.Errorf("%s/%s avg score %.3f < 0.50", profile.Name, strategy.Name(), avgScore)
 			}
 
 			// Show top indicators if any detection occurred
@@ -295,8 +295,8 @@ func TestArmedSwordWithAdaptiveStrategy(t *testing.T) {
 			if detectionRate < 0.95 {
 				t.Errorf("adaptive strategy detected %.0f%% (want >= 95%%)", detectionRate*100)
 			}
-			if avgScore < 0.36 {
-				t.Errorf("adaptive strategy avg_score=%.3f (want >= 0.36)", avgScore)
+			if avgScore < 0.50 {
+				t.Errorf("adaptive strategy avg_score=%.3f (want >= 0.50)", avgScore)
 			}
 		})
 	}
@@ -309,8 +309,8 @@ func TestArmedSwordWithAdaptiveStrategy(t *testing.T) {
 	if overallDetectionRate < 0.95 {
 		t.Errorf("expected overall detection >= 95%%, got %.0f%%", overallDetectionRate*100)
 	}
-	if overallAvgScore < 0.36 {
-		t.Errorf("expected overall avg score >= 0.36, got %.3f", overallAvgScore)
+	if overallAvgScore < 0.50 {
+		t.Errorf("expected overall avg score >= 0.50, got %.3f", overallAvgScore)
 	}
 }
 
