@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/skunkworq/stealth/brws/types"
 	"golang.org/x/net/publicsuffix"
 )
 
@@ -30,17 +31,19 @@ func sanitizePath(path string) (string, error) {
 
 // Session represents a persistent session with cookie jar and optional cache.
 type Session struct {
-	ID         string            `json:"id"`
-	Name       string            `json:"name"`
-	Engine     string            `json:"engine"`
-	ProfileDir string            `json:"profile_dir"`
-	CreatedAt  time.Time         `json:"created_at"`
-	LastUsedAt time.Time         `json:"last_used_at"`
-	Metadata   map[string]string `json:"metadata,omitempty"`
+	ID            string            `json:"id"`
+	Name          string            `json:"name"`
+	Engine        string            `json:"engine"`
+	ProfileDir    string            `json:"profile_dir"`
+	FingerprintID string            `json:"fingerprint_id,omitempty"`
+	CreatedAt     time.Time         `json:"created_at"`
+	LastUsedAt    time.Time         `json:"last_used_at"`
+	Metadata      map[string]string `json:"metadata,omitempty"`
 
 	// Runtime fields (not serialized)
 	cookieJar   http.CookieJar
 	cookiesFile string
+	health      *HealthScore
 	mu          sync.RWMutex
 }
 
@@ -90,18 +93,24 @@ func (m *Manager) Create(name, engine string) (*Session, error) {
 		return nil, fmt.Errorf("creating cookie jar: %w", err)
 	}
 
+	// Generate and cache a stable fingerprint for this session
+	fp := GenerateFingerprint(sessionID)
+
 	session := &Session{
-		ID:          sessionID,
-		Name:        name,
-		Engine:      engine,
-		ProfileDir:  profileDir,
-		CreatedAt:   time.Now(),
-		LastUsedAt:  time.Now(),
-		Metadata:    make(map[string]string),
-		cookieJar:   jar,
-		cookiesFile: filepath.Join(m.sessionsDir, sessionID, "cookies.json"),
+		ID:            sessionID,
+		Name:          name,
+		Engine:        engine,
+		ProfileDir:    profileDir,
+		FingerprintID: fp.ID,
+		CreatedAt:     time.Now(),
+		LastUsedAt:    time.Now(),
+		Metadata:      make(map[string]string),
+		cookieJar:     jar,
+		cookiesFile:   filepath.Join(m.sessionsDir, sessionID, "cookies.json"),
+		health:        NewHealthScore(nil),
 	}
 
+	GlobalFingerprintCache().Store(sessionID, fp)
 	m.sessions[sessionID] = session
 
 	if err := m.saveSession(session); err != nil {
@@ -152,6 +161,7 @@ func (m *Manager) Delete(id string) error {
 		return fmt.Errorf("removing session dir: %w", err)
 	}
 
+	GlobalFingerprintCache().Delete(id)
 	delete(m.sessions, id)
 	return nil
 }
@@ -334,6 +344,42 @@ func (s *Session) UpdateLastUsed() {
 	s.LastUsedAt = time.Now()
 }
 
+// Health returns the session's health scorer. Initializes lazily if nil.
+func (s *Session) Health() *HealthScore {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.health == nil {
+		s.health = NewHealthScore(nil)
+	}
+	return s.health
+}
+
+// IsBlocked returns true when health score indicates this session is banned.
+func (s *Session) IsBlocked() bool {
+	return s.Health().IsBlocked()
+}
+
+// FingerprintFor returns the bound fingerprint for a session, or nil.
+func (m *Manager) FingerprintFor(sessionID string) *types.CompleteFingerprint {
+	return GlobalFingerprintCache().Load(sessionID)
+}
+
+// RetireBlocked returns all blocked sessions and removes them from the pool.
+func (m *Manager) RetireBlocked() []*Session {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var retired []*Session
+	for id, sess := range m.sessions {
+		if sess.IsBlocked() {
+			retired = append(retired, sess)
+			GlobalFingerprintCache().Delete(id)
+			delete(m.sessions, id)
+		}
+	}
+	return retired
+}
+
 // DomainStats tracks request statistics for a domain
 type DomainStats struct {
 	Domain        string    `json:"domain"`
@@ -455,7 +501,16 @@ func (s *Session) GetTrustScore(domain string) float64 {
 		}
 	}
 
-	return successRate * freshness
+	// Apply health penalty: as score approaches block threshold, trust drops to 0
+	healthPenalty := 0.0
+	if s.health != nil {
+		healthPenalty = s.health.Score() / s.health.cfg.BlockThreshold
+		if healthPenalty > 1.0 {
+			healthPenalty = 1.0
+		}
+	}
+
+	return successRate * freshness * (1.0 - healthPenalty)
 }
 
 // ShouldRetry determines if a request to the given domain should be retried.

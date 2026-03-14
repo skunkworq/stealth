@@ -704,6 +704,7 @@ func (ia *IsomorphicAnalyzer) checkHeaderOrder(httpInfo *HTTPFingerprintInfo, ve
 	uaIdx := -1
 	acceptIdx := -1
 	secChIdx := -1
+	contentTypeIdx := -1
 
 	for i, h := range httpInfo.HeaderOrder {
 		switch strings.ToLower(h) {
@@ -713,6 +714,8 @@ func (ia *IsomorphicAnalyzer) checkHeaderOrder(httpInfo *HTTPFingerprintInfo, ve
 			acceptIdx = i
 		case "sec-ch-ua":
 			secChIdx = i
+		case "content-type":
+			contentTypeIdx = i
 		}
 	}
 
@@ -746,6 +749,28 @@ func (ia *IsomorphicAnalyzer) checkHeaderOrder(httpInfo *HTTPFingerprintInfo, ve
 			Expected:    expected,
 			Severity:    "medium",
 			Description: "The relative order of HTTP headers is inconsistent with standard browser behavior.",
+		})
+	}
+
+	// Check Content-Type before Accept: Real browsers always send Accept before
+	// Content-Type in their header ordering for POST/PUT requests. Chrome and
+	// Firefox both place Accept in the standard navigation header block, while
+	// Content-Type comes later from the fetch/XHR options. Having Content-Type
+	// before Accept indicates manual header construction.
+	if contentTypeIdx != -1 && acceptIdx != -1 && contentTypeIdx < acceptIdx {
+		name := "content_type_before_accept"
+		indicators = append(indicators, name)
+		vec.Score += 0.35
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        name,
+			Fired:       true,
+			Weight:      0.25,
+			Score:       0.25,
+			Field:       "Header Order",
+			Actual:      "Content-Type before Accept",
+			Expected:    "Accept before Content-Type (browser standard)",
+			Severity:    "medium",
+			Description: "Real browsers place Accept in the standard header block before Content-Type from the request body options.",
 		})
 	}
 

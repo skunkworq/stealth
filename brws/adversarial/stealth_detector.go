@@ -1034,6 +1034,27 @@ func (sd *StealthDetector) analyzeHTTPHeaders(req *http.Request) *HTTPFingerprin
 		info.SuspiciousHeaders = append(info.SuspiciousHeaders, "webdriver_exposed")
 	}
 
+	// Check for proxy/CDN IP identification headers in a browser request.
+	// Real browsers NEVER send X-Forwarded-For, X-Real-IP, True-Client-IP,
+	// CF-Connecting-IP, or X-Client-IP — these are added by reverse proxies,
+	// CDNs, and load balancers. A request with a browser UA that also carries
+	// these headers is either coming through infrastructure (in which case
+	// a single header is normal) or is a spoofing tool stuffing multiple headers
+	// to impersonate infrastructure context. Multiple IP headers is a strong
+	// signal of synthetic generation.
+	if isChromeUA || isFirefoxUA {
+		ipSpoofHeaders := []string{"X-Forwarded-For", "X-Real-Ip", "X-Client-Ip", "True-Client-Ip", "Cf-Connecting-Ip"}
+		ipHeaderCount := 0
+		for _, h := range ipSpoofHeaders {
+			if req.Header.Get(h) != "" {
+				ipHeaderCount++
+			}
+		}
+		if ipHeaderCount >= 3 {
+			info.SuspiciousHeaders = append(info.SuspiciousHeaders, fmt.Sprintf("browser_with_multiple_proxy_ip_headers_%d", ipHeaderCount))
+		}
+	}
+
 	// Firefox should not present Chromium-style request priority metadata on a
 	// synthetic top-level HTTP/1.x navigation without deeper browser context.
 	if isFirefoxUA && req.Header.Get("Priority") != "" &&
@@ -1788,6 +1809,52 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 				vec.Indicators = append(vec.Indicators, "same_site_body_missing_runtime_payload")
 			}
 		}
+
+		// Sub-check 3b: Same-site POST with few runtime headers and browser UA.
+		// Catches both zero-header and cherry-picked header patterns:
+		//   - 0 headers: synthetic beacon (no runtime context at all)
+		//   - 1-2 headers: cherry-picked to dodge both zero-header and >= 3 gates
+		// For 1-2 headers: check if ONLY post-load headers (Behavioral, Timing)
+		// are present without any JS fingerprint headers (Navigator, WebGL, etc.).
+		// Real SDKs that collect behavioral/timing data also collect navigator.
+		if req.Method == http.MethodPost && runtimeHeaderCount <= 2 {
+			ua := strings.ToLower(req.Header.Get("User-Agent"))
+			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+			jsFingerprintCount := countPresentHeaders(req, []string{
+				constants.HeaderNavigatorData,
+				constants.HeaderWebGLData,
+				constants.HeaderPluginData,
+				constants.HeaderScreenData,
+				constants.HeaderFontData,
+				constants.HeaderWebRTCData,
+			})
+
+			if isBrowserUA {
+				if runtimeHeaderCount == 0 && bodyErr == nil && len(bodySnapshot) > 0 {
+					if !bodyContainsRuntimePayload(bodyText) {
+						vec.Score += 0.35
+						vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+							"same_site_synthetic_beacon: browser_ua body_size=%d no_runtime_in_body_or_headers",
+							len(bodySnapshot)))
+					} else {
+						vec.Score += 0.35
+						vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+							"same_site_runtime_data_migration: browser_ua body_size=%d runtime_in_body_but_zero_headers",
+							len(bodySnapshot)))
+					}
+				} else if runtimeHeaderCount > 0 && runtimeHeaderCount <= 2 && jsFingerprintCount == 0 {
+					// Cherry-picked post-load headers without JS fingerprints.
+					// Behavioral + Timing without Navigator = selective header
+					// evasion to dodge both zero-header and >= 3-header gates.
+					// Score 0.50 needed to survive adaptive scorer dilution
+					// (single-vector at 0.35 → final ≈ 0.28, below threshold).
+					vec.Score += 0.50
+					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+						"same_site_cherry_picked_postload_headers: %d runtime_headers but 0 js_fingerprint_headers",
+						runtimeHeaderCount))
+				}
+			}
+		}
 	}
 
 	// Sub-check 4: Cross-site telemetry provenance.
@@ -2121,6 +2188,90 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		}
 	}
 
+	// Sub-check 8: Fetch metadata provenance inconsistency.
+	// Real browsers set Sec-Fetch-Site automatically based on the relationship
+	// between the page origin and the request URL. If a request claims cross-site
+	// but Origin matches the request URL host, the provenance is fabricated —
+	// a real browser would have set same-origin instead.
+	// This check fires regardless of runtime header count because it's a pure
+	// logical impossibility, not a runtime data analysis.
+	if req.Header.Get("Sec-Fetch-Site") == "cross-site" && isOriginSameAsRequestURL(req) {
+		vec.Score += 0.50
+		vec.Indicators = append(vec.Indicators, "cross_site_provenance_lie: origin_matches_request_url")
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        "cross_site_provenance_lie",
+			Fired:       true,
+			Weight:      constants.SeverityHigh,
+			Score:       0.50,
+			Field:       "Sec-Fetch-Site + Origin",
+			Actual:      fmt.Sprintf("Sec-Fetch-Site=cross-site but Origin=%s matches request host", req.Header.Get("Origin")),
+			Expected:    "cross-site requests must originate from a different host",
+			Severity:    "high",
+			Description: "The request claims cross-site provenance but its Origin header matches the request URL host, which is impossible in a real browser.",
+		})
+	}
+
+	// Sub-check 9: Cross-site browser POST with zero runtime context.
+	// Real cross-site analytics beacons (Sentry, FullStory, GA) carry SDK metadata
+	// and runtime telemetry in their bodies. A cross-site POST with a browser UA,
+	// zero runtime headers, a small body (< 512 bytes), and a CORS-safe Content-Type
+	// matches the pattern of a synthetic beacon. The text/plain;charset=UTF-8
+	// Content-Type is a CORS "simple request" optimization that avoids preflights —
+	// commonly used by Sentry but always with a much larger envelope body.
+	if isCrossSiteTelemetryFetch(req) && req.Method == http.MethodPost {
+		runtimeHeaderCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+			constants.HeaderBehavioralData,
+			constants.HeaderTimingData,
+			constants.HeaderAudioData,
+			constants.HeaderCanvasFingerprint,
+		})
+
+		if runtimeHeaderCount <= 2 {
+			ua := strings.ToLower(req.Header.Get("User-Agent"))
+			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+			jsFingerprintCount := countPresentHeaders(req, []string{
+				constants.HeaderNavigatorData,
+				constants.HeaderWebGLData,
+				constants.HeaderPluginData,
+				constants.HeaderScreenData,
+				constants.HeaderFontData,
+				constants.HeaderWebRTCData,
+			})
+
+			if isBrowserUA {
+				if runtimeHeaderCount == 0 {
+					bodySnapshot, bodyErr := snapshotRequestBody(req)
+					bodyText := strings.TrimSpace(string(bodySnapshot))
+					if bodyErr == nil && len(bodySnapshot) > 0 {
+						if !bodyContainsRuntimePayload(bodyText) {
+							vec.Score += 0.35
+							vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+								"cross_site_synthetic_beacon: browser_ua body_size=%d no_runtime_in_body_or_headers",
+								len(bodySnapshot)))
+						} else {
+							vec.Score += 0.35
+							vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+								"cross_site_runtime_data_migration: browser_ua body_size=%d runtime_in_body_but_zero_headers",
+								len(bodySnapshot)))
+						}
+					}
+				} else if runtimeHeaderCount > 0 && jsFingerprintCount == 0 {
+					// Cherry-picked post-load headers on cross-site POST.
+					vec.Score += 0.50
+					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+						"cross_site_cherry_picked_postload_headers: %d runtime_headers but 0 js_fingerprint_headers",
+						runtimeHeaderCount))
+				}
+			}
+		}
+	}
+
 	if vec.Score == 0 {
 		return nil
 	}
@@ -2273,21 +2424,70 @@ func snapshotRequestBody(req *http.Request) ([]byte, error) {
 	return body, nil
 }
 
+// bodyContainsRuntimePayload checks whether the body contains genuine browser
+// runtime data, not just superficial keyword references. For JSON bodies, it
+// requires runtime keywords to appear as standalone JSON object keys (e.g.
+// "navigator": {...}) rather than as prefixes in compound measurement labels
+// (e.g. "navigator_entropy": {"value": 5.23}). This prevents keyword-stuffing
+// attacks where a synthetic beacon includes runtime words without actual data.
 func bodyContainsRuntimePayload(body string) bool {
 	if body == "" {
 		return false
 	}
 
-	lower := strings.ToLower(body)
-	for _, keyword := range []string{
+	runtimeKeywords := []string{
 		"navigator", "webgl", "canvas", "timing", "behavior", "audio",
 		"webrtc", "plugins", "screen", "fonts",
-	} {
+	}
+
+	// Try JSON-aware check first: parse the body and look for runtime keywords
+	// as exact JSON keys at any level of the object hierarchy.
+	body = strings.TrimSpace(body)
+	if len(body) > 0 && body[0] == '{' {
+		var parsed map[string]json.RawMessage
+		if json.Unmarshal([]byte(body), &parsed) == nil {
+			if jsonContainsRuntimeKeys(parsed, runtimeKeywords, 0) {
+				return true
+			}
+			// If we successfully parsed JSON but found no standalone runtime
+			// keys, the body is keyword-stuffing — return false.
+			return false
+		}
+	}
+
+	// Non-JSON body: fall back to substring matching.
+	lower := strings.ToLower(body)
+	for _, keyword := range runtimeKeywords {
 		if strings.Contains(lower, keyword) {
 			return true
 		}
 	}
 
+	return false
+}
+
+// jsonContainsRuntimeKeys recursively searches a JSON object for keys that
+// exactly match runtime keywords. Compound keys like "navigator_entropy" do
+// NOT match "navigator" — only exact key matches count.
+func jsonContainsRuntimeKeys(obj map[string]json.RawMessage, keywords []string, depth int) bool {
+	if depth > 3 {
+		return false // limit recursion
+	}
+	for key, val := range obj {
+		lowerKey := strings.ToLower(key)
+		for _, kw := range keywords {
+			if lowerKey == kw {
+				return true
+			}
+		}
+		// Recurse into nested objects
+		var nested map[string]json.RawMessage
+		if json.Unmarshal(val, &nested) == nil {
+			if jsonContainsRuntimeKeys(nested, keywords, depth+1) {
+				return true
+			}
+		}
+	}
 	return false
 }
 
@@ -2781,6 +2981,8 @@ func scoreForHTTPIndicator(indicator string) float64 {
 		return constants.SeverityHigh
 	case indicator == "Sec-Ch-Ua*":
 		return constants.SeverityHigh
+	case strings.HasPrefix(indicator, "browser_with_multiple_proxy_ip_headers"):
+		return 0.40 // Stronger than SeverityHigh — 3+ proxy IP headers from a browser is definitive
 	case indicator == "Sec-Fetch-*":
 		return constants.SeverityMedium
 	case indicator == "too_few_headers":

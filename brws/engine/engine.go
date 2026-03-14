@@ -49,7 +49,8 @@ type Request struct {
 	Timeout         time.Duration
 
 	// Session integration
-	SessionID string
+	SessionID     string
+	FingerprintID string // Links to a cached CompleteFingerprint for consistent identity
 
 	// Browser-specific options
 	WaitForNavigation bool              // Wait for page load complete (browser engines)

@@ -190,22 +190,22 @@ func DefaultProfiles() []*BrowserProfile {
 	}
 }
 
-// ChromeWindowsProfile returns a Chrome 134 on Windows 10 profile.
+// ChromeWindowsProfile returns a Chrome 146 on Windows 10 profile.
 func ChromeWindowsProfile() *BrowserProfile {
 	return &BrowserProfile{
-		Name:     "Chrome 134 Windows",
+		Name:     "Chrome 146 Windows",
 		Platform: "windows",
 		Browser:  "chrome",
 
-		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+		UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		Accept:         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
 		AcceptLanguage: "en-US,en;q=0.9",
 		AcceptEncoding: "gzip, deflate, br, zstd",
 
-		SecChUa:                `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`,
+		SecChUa:                `"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"`,
 		SecChUaPlatform:        `"Windows"`,
 		SecChUaMobile:          "?0",
-		SecChUaFullVersionList: `"Chromium";v="134.0.6998.35", "Google Chrome";v="134.0.6998.35", "Not-A.Brand";v="99.0.0.0"`,
+		SecChUaFullVersionList: `"Chromium";v="146.0.7735.6", "Not-A.Brand";v="24.0.0.0", "Google Chrome";v="146.0.7735.6"`,
 		SecChUaArch:            `"x86"`,
 		SecChUaBitness:         `"64"`,
 
@@ -263,22 +263,22 @@ func ChromeWindowsProfile() *BrowserProfile {
 	}
 }
 
-// ChromeMacOSProfile returns a Chrome 134 on macOS 14 profile.
+// ChromeMacOSProfile returns a Chrome 146 on macOS 14 profile.
 func ChromeMacOSProfile() *BrowserProfile {
 	return &BrowserProfile{
-		Name:     "Chrome 134 macOS",
+		Name:     "Chrome 146 macOS",
 		Platform: "macos",
 		Browser:  "chrome",
 
-		UserAgent:      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+		UserAgent:      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		Accept:         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
 		AcceptLanguage: "en-US,en;q=0.9",
 		AcceptEncoding: "gzip, deflate, br, zstd",
 
-		SecChUa:                `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`,
+		SecChUa:                `"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"`,
 		SecChUaPlatform:        `"macOS"`,
 		SecChUaMobile:          "?0",
-		SecChUaFullVersionList: `"Chromium";v="134.0.6998.35", "Google Chrome";v="134.0.6998.35", "Not-A.Brand";v="99.0.0.0"`,
+		SecChUaFullVersionList: `"Chromium";v="146.0.7735.6", "Not-A.Brand";v="24.0.0.0", "Google Chrome";v="146.0.7735.6"`,
 		SecChUaArch:            `"arm"`,
 		SecChUaBitness:         `"64"`,
 
@@ -337,22 +337,22 @@ func ChromeMacOSProfile() *BrowserProfile {
 	}
 }
 
-// ChromeLinuxProfile returns a Chrome 134 on Linux profile.
+// ChromeLinuxProfile returns a Chrome 146 on Linux profile.
 func ChromeLinuxProfile() *BrowserProfile {
 	return &BrowserProfile{
-		Name:     "Chrome 134 Linux",
+		Name:     "Chrome 146 Linux",
 		Platform: "linux",
 		Browser:  "chrome",
 
-		UserAgent:      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
+		UserAgent:      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
 		Accept:         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
 		AcceptLanguage: "en-US,en;q=0.9",
 		AcceptEncoding: "gzip, deflate, br, zstd",
 
-		SecChUa:                `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`,
+		SecChUa:                `"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"`,
 		SecChUaPlatform:        `"Linux"`,
 		SecChUaMobile:          "?0",
-		SecChUaFullVersionList: `"Chromium";v="134.0.6998.35", "Google Chrome";v="134.0.6998.35", "Not-A.Brand";v="99.0.0.0"`,
+		SecChUaFullVersionList: `"Chromium";v="146.0.7735.6", "Not-A.Brand";v="24.0.0.0", "Google Chrome";v="146.0.7735.6"`,
 		SecChUaArch:            `"x86"`,
 		SecChUaBitness:         `"64"`,
 

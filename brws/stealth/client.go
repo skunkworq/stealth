@@ -15,6 +15,8 @@ import (
 	"github.com/skunkworq/stealth/brws/behavior"
 	"github.com/skunkworq/stealth/brws/challenge"
 	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine/proxy"
+	wf "github.com/skunkworq/stealth/brws/engine/waterfall"
 	"github.com/skunkworq/stealth/brws/instrumentation"
 	"github.com/skunkworq/stealth/brws/ml"
 	"github.com/skunkworq/stealth/brws/semantic"
@@ -33,6 +35,12 @@ type Client struct {
 	behavTracker  *BehavioralTracker
 	captchaSolver *CaptchaSolver
 	cfSolver      *CloudflareSolverClient
+
+	// Anti-bot escalation
+	waterfall   *wf.Waterfall
+	tierTracker *proxy.TierTracker
+	escalation  *EscalationConfig
+	evasionFSM  *behavior.AdaptiveEvasionFSM
 
 	logger       *instrumentation.Logger
 	tracer       *instrumentation.Tracer
@@ -53,6 +61,12 @@ type Config struct {
 	Challenge       *ChallengeConfig
 	Session         *SessionConfig
 	Instrumentation *InstrumentationConfig
+
+	// Anti-bot escalation
+	Escalation      *EscalationConfig
+	WaterfallEngine *wf.Waterfall
+	TieredProxies   []proxy.TieredProxy
+	EvasionFSMEnabled bool
 }
 
 // StealthConfig configures stealth capabilities.
@@ -215,6 +229,27 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 
 	logger.Info("stealth client initialized")
 
+	// Set up anti-bot escalation components
+	var waterfallEng *wf.Waterfall
+	if cfg.WaterfallEngine != nil {
+		waterfallEng = cfg.WaterfallEngine
+	}
+	var tierTracker *proxy.TierTracker
+	if len(cfg.TieredProxies) > 0 {
+		tierTracker = proxy.NewTierTracker(cfg.TieredProxies)
+	}
+	escalation := cfg.Escalation
+	if escalation == nil {
+		escalation = DefaultEscalationConfig()
+	}
+
+	// Initialize evasion FSM if enabled
+	var evasionFSM *behavior.AdaptiveEvasionFSM
+	if cfg.EvasionFSMEnabled {
+		evasionFSM = behavior.NewAdaptiveEvasionFSM()
+		logger.Info("evasion FSM initialized")
+	}
+
 	c := &Client{
 		engine:        eng,
 		options:       &Options{Timeout: 30 * time.Second},
@@ -224,6 +259,10 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		behavTracker:  NewBehavioralTracker(),
 		captchaSolver: captchaSolver,
 		cfSolver:      cfSolver,
+		waterfall:     waterfallEng,
+		tierTracker:   tierTracker,
+		escalation:    escalation,
+		evasionFSM:    evasionFSM,
 		logger:        logger,
 		tracer:        tracer,
 		hooks:         hooks,
@@ -292,6 +331,48 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 
 		// Unblocked response received
 		break
+	}
+
+	// EVASION FSM: feed result and check for browser escalation
+	if c.evasionFSM != nil && resp != nil {
+		detected := isBanSignal(c.escalation, resp.Status)
+		score := 0.0
+		if detected {
+			score = 1.0
+		}
+		c.evasionFSM.RecordResult(score, detected)
+		if detected {
+			c.evasionFSM.RecordBanSignal(resp.Status)
+		}
+		if c.evasionFSM.ShouldEscalate() && c.waterfall != nil {
+			reason := c.evasionFSM.EscalationReason()
+			c.waterfall.PromoteTier("chromium")
+			c.logger.Info("evasion FSM escalation", "reason", reason, "promoting", "chromium")
+		}
+	}
+
+	// ANTI-BOT ESCALATION: on ban-signal status codes, escalate and retry
+	if resp != nil && c.escalation != nil && c.escalation.Enabled && isBanSignal(c.escalation, resp.Status) {
+		for escAttempt := 0; escAttempt < c.escalation.MaxEscalationRetries; escAttempt++ {
+			shouldRetry := c.escalate(ctx, resp, url, nil)
+			if !shouldRetry {
+				break
+			}
+			c.logger.Info("escalation retry", "attempt", escAttempt+1, "status", resp.Status)
+
+			// Use waterfall engine if available, otherwise original engine
+			activeEngine := c.engine
+			if c.waterfall != nil {
+				activeEngine = c.waterfall
+			}
+			resp, err = activeEngine.Do(ctx, &engine.Request{
+				URL:     url,
+				Timeout: c.options.Timeout,
+			})
+			if err != nil || !isBanSignal(c.escalation, resp.Status) {
+				break
+			}
+		}
 	}
 
 	// CHALLENGE HANDLING: delegate entirely to orchestrator
@@ -599,6 +680,13 @@ func WithSession(profileDir, name string) Option {
 		c.Session.Enabled = true
 		c.Session.ProfileDir = profileDir
 		c.Session.SessionName = name
+	}
+}
+
+// WithEvasionFSM enables the adaptive evasion FSM for browser mode escalation.
+func WithEvasionFSM() Option {
+	return func(c *Config) {
+		c.EvasionFSMEnabled = true
 	}
 }
 
