@@ -517,6 +517,44 @@ func (c *Client) Close() error {
 	return c.engine.Close()
 }
 
+// EscalationMetrics returns a snapshot of escalation-related metrics.
+func (c *Client) EscalationMetrics() *EscalationMetricsSnapshot {
+	snap := &EscalationMetricsSnapshot{}
+
+	if c.waterfall != nil {
+		wm := c.waterfall.Metrics()
+		snap.WaterfallWins = wm.Wins
+		snap.WaterfallErrors = wm.Errors
+	}
+
+	if c.tierTracker != nil {
+		snap.TierStats = c.tierTracker.Stats()
+	}
+
+	if c.evasionFSM != nil {
+		snap.FSMExhausted = c.evasionFSM.Exhausted()
+		snap.FSMEscalationReason = c.evasionFSM.EscalationReason()
+		snap.FSMSummary = c.evasionFSM.Summary()
+	}
+
+	return snap
+}
+
+// EscalationMetricsSnapshot is a read-only view of all escalation subsystem state.
+type EscalationMetricsSnapshot struct {
+	// Waterfall engine metrics
+	WaterfallWins   map[string]int64 `json:"waterfall_wins,omitempty"`
+	WaterfallErrors map[string]int64 `json:"waterfall_errors,omitempty"`
+
+	// Per-domain proxy tier state
+	TierStats map[string]proxy.DomainTierSnapshot `json:"tier_stats,omitempty"`
+
+	// Evasion FSM state
+	FSMExhausted        bool   `json:"fsm_exhausted"`
+	FSMEscalationReason string `json:"fsm_escalation_reason,omitempty"`
+	FSMSummary          string `json:"fsm_summary,omitempty"`
+}
+
 // Orchestrator returns the challenge orchestrator, if configured.
 func (c *Client) Orchestrator() *challengefsm.ChallengeOrchestrator {
 	return c.orchestrator
