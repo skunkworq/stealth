@@ -295,8 +295,11 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 	var err error
 	maxRetries := 3
 
+	// Use waterfall engine when available, otherwise raw engine
+	activeEngine := c.activeEngine()
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		resp, err = c.engine.Do(ctx, &engine.Request{
+		resp, err = activeEngine.Do(ctx, &engine.Request{
 			URL:     url,
 			Timeout: c.options.Timeout,
 		})
@@ -360,12 +363,7 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 			}
 			c.logger.Info("escalation retry", "attempt", escAttempt+1, "status", resp.Status)
 
-			// Use waterfall engine if available, otherwise original engine
-			activeEngine := c.engine
-			if c.waterfall != nil {
-				activeEngine = c.waterfall
-			}
-			resp, err = activeEngine.Do(ctx, &engine.Request{
+			resp, err = c.activeEngine().Do(ctx, &engine.Request{
 				URL:     url,
 				Timeout: c.options.Timeout,
 			})
@@ -502,6 +500,14 @@ func (c *Client) BehavioralSnapshot() *behavior.EventData {
 // ResetBehavioralTracker clears the accumulated behavioral data.
 func (c *Client) ResetBehavioralTracker() {
 	c.behavTracker = NewBehavioralTracker()
+}
+
+// activeEngine returns the waterfall engine if configured, otherwise the raw engine.
+func (c *Client) activeEngine() engine.Engine {
+	if c.waterfall != nil {
+		return c.waterfall
+	}
+	return c.engine
 }
 
 // Close closes the client and all associated resources.
