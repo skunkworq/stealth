@@ -972,6 +972,45 @@ func TestNormalNoCORSBeaconDoesNotTriggerNoCORSIndicators(t *testing.T) {
 	}
 }
 
+func TestNoCORSTelemetryGetRuntimeBundleDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://api.example.com/telemetry", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Referer", "https://www.example.com/")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "no-cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Font-Data", strings.Repeat("f", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 1400))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 1400))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 512))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 900))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected no-cors telemetry GET runtime bundle to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBundle := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "nocors_get_runtime_bundle") {
+				foundBundle = true
+			}
+		}
+	}
+
+	if !foundBundle {
+		t.Fatal("expected nocors_get_runtime_bundle indicator")
+	}
+}
+
 func TestNoneContextTelemetryPostWithRuntimeHeadersDetected(t *testing.T) {
 	detector := NewStealthDetector()
 
@@ -1834,6 +1873,44 @@ func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
 	}
 }
 
+func TestSameOriginTelemetryGetRuntimeBundleDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://api.example.com/telemetry", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Referer", "https://api.example.com/")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Font-Data", strings.Repeat("f", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 1400))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 1400))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 512))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected same-origin telemetry GET runtime bundle to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBundle := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "same_origin_get_runtime_bundle") {
+				foundBundle = true
+			}
+		}
+	}
+
+	if !foundBundle {
+		t.Fatal("expected same_origin_get_runtime_bundle indicator")
+	}
+}
+
 func TestSameSiteTelemetryPostWithSameOriginClaimDetected(t *testing.T) {
 	detector := NewStealthDetector()
 
@@ -2657,6 +2734,46 @@ func TestCrossSiteSameOriginModeReducedHeadersDetected(t *testing.T) {
 
 	if !foundMismatch {
 		t.Fatal("expected cross_site_same_origin_mode_mismatch indicator")
+	}
+}
+
+func TestCrossSiteTelemetryGetRuntimeBundleDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://api.example.com/telemetry", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Referer", "https://app.example.com/dashboard")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Font-Data", strings.Repeat("f", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 1400))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 1400))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 512))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 900))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected cross-site telemetry GET runtime bundle to be detected, got score %.3f", detection.Score)
+	}
+
+	foundBundle := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "cross_site_get_runtime_bundle") {
+				foundBundle = true
+			}
+		}
+	}
+
+	if !foundBundle {
+		t.Fatal("expected cross_site_get_runtime_bundle indicator")
 	}
 }
 

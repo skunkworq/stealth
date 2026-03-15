@@ -447,9 +447,9 @@ func TestExoticDestStrategiesEvadeOnPageURLs(t *testing.T) {
 	}
 }
 
-// TestChromeFetchStrategiesEvadeTelemetryURLs verifies the new Chrome
-// same-origin fetch strategies evade the shield on telemetry URLs.
-func TestChromeFetchStrategiesEvadeTelemetryURLs(t *testing.T) {
+// TestChromeFetchStrategiesBlockedOnTelemetryURLs verifies the Firefox-shaped
+// GET fetch family is now blocked on telemetry/API targets.
+func TestChromeFetchStrategiesBlockedOnTelemetryURLs(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profile := behavior.ChromeWindowsProfile()
 
@@ -491,20 +491,19 @@ func TestChromeFetchStrategiesEvadeTelemetryURLs(t *testing.T) {
 
 			t.Logf("%-30s detection=%.0f%% avg_score=%.3f", s.Name(), detRate*100, avgScore)
 
-			if detRate > 0.05 {
-				t.Errorf("Chrome fetch strategy %q detected %.0f%% (want < 5%%)", s.Name(), detRate*100)
+			if detRate < 0.95 {
+				t.Errorf("Chrome fetch strategy %q detected %.0f%% (want >= 95%%)", s.Name(), detRate*100)
 			}
-			// Bot threshold is 0.35 — strategies must stay below it
-			if avgScore > 0.35 {
-				t.Errorf("Chrome fetch strategy %q avg_score=%.3f (want < 0.35)", s.Name(), avgScore)
+			if avgScore < 0.50 {
+				t.Errorf("Chrome fetch strategy %q avg_score=%.3f (want >= 0.50)", s.Name(), avgScore)
 			}
 		})
 	}
 }
 
-// TestURLAwareFSMConvergesOnTelemetryURL verifies the URL-aware FSM converges
-// on an exotic dest strategy for telemetry URLs instead of exhausting.
-func TestURLAwareFSMConvergesOnTelemetryURL(t *testing.T) {
+// TestURLAwareFSMExhaustsOnTelemetryURL verifies the URL-aware FSM no longer
+// finds a surviving telemetry-target strategy and instead exhausts.
+func TestURLAwareFSMExhaustsOnTelemetryURL(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profile := behavior.ChromeWindowsProfile()
 	targetURL := "https://api.example.com/telemetry"
@@ -531,25 +530,13 @@ func TestURLAwareFSMConvergesOnTelemetryURL(t *testing.T) {
 	t.Logf("\n%s", fsm.Summary())
 
 	strategy := fsm.CurrentStrategy()
-	t.Logf("Converged on: %s (fidelity=%.0f%%)", strategy.Name(), strategy.Fidelity()*100)
+	t.Logf("Ended on: %s (fidelity=%.0f%%)", strategy.Name(), strategy.Fidelity()*100)
 
-	// The FSM should converge — NOT exhaust
-	if fsm.Exhausted() {
-		t.Error("URL-aware FSM should converge on an exotic dest strategy, not exhaust")
+	if !fsm.Exhausted() {
+		t.Error("URL-aware FSM should exhaust when telemetry-target strategies are all caught")
 	}
-	if !fsm.Converged() {
-		t.Error("URL-aware FSM should converge on one of the exotic dest strategies")
-	}
-
-	// The converged strategy should be one of the Chrome fetch strategies
-	// (these bypass catch-all via Sec-Ch-Ua and coverage via pre-load headers)
-	chromeNames := map[string]bool{
-		"chrome_same_origin_fetch": true,
-		"chrome_cross_site_fetch":  true,
-		"chrome_nocors_beacon":     true,
-	}
-	if !chromeNames[strategy.Name()] {
-		t.Errorf("expected convergence on a Chrome fetch strategy, got %q", strategy.Name())
+	if fsm.Converged() {
+		t.Error("URL-aware FSM should not converge on a telemetry-target bypass")
 	}
 }
 

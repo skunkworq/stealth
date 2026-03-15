@@ -2071,6 +2071,35 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		missingRuntimePayload := bodyErr == nil && len(bodySnapshot) > 0 && !bodyContainsRuntimePayload(bodyText)
 		crossSiteClaim := false
 		requiredRuntimeHeaders := 4
+		telemetryTarget := looksLikeTelemetryEndpointPath(req.URL)
+		apiLikeHost := looksLikeAPIHostname(req.URL)
+		jsFingerprintCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+		})
+
+		if req.Method == http.MethodGet && runtimeHeaderCount >= 5 && (telemetryTarget || apiLikeHost) {
+			vec.Score += 0.74
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"cross_site_get_runtime_bundle: %d runtime/%d post_load headers",
+				runtimeHeaderCount, postLoadHeaderCount))
+
+			if postLoadHeaderCount >= 2 {
+				vec.Score += 0.16
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"cross_site_get_postload_runtime_headers: %d post_load headers",
+					postLoadHeaderCount))
+			}
+
+			if jsFingerprintCount >= 2 && postLoadHeaderCount >= 2 {
+				vec.Score += 0.12
+				vec.Indicators = append(vec.Indicators, "cross_site_get_mixed_runtime_surfaces")
+			}
+		}
 
 		if req.Method == http.MethodPost && mode == "same-origin" && runtimeHeaderCount >= 3 {
 			requiredRuntimeHeaders = 3
@@ -2153,6 +2182,35 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		bodyTooSmall := bodyErr == nil && len(bodySnapshot) > 0 && len(bodySnapshot) < 512
 		missingRuntimePayload := bodyErr == nil && len(bodySnapshot) > 0 && !bodyContainsRuntimePayload(bodyText)
 		contentType := req.Header.Get("Content-Type")
+		telemetryTarget := looksLikeTelemetryEndpointPath(req.URL)
+		apiLikeHost := looksLikeAPIHostname(req.URL)
+		jsFingerprintCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+		})
+
+		if req.Method == http.MethodGet && runtimeHeaderCount >= 5 && (telemetryTarget || apiLikeHost) {
+			vec.Score += 0.76
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"nocors_get_runtime_bundle: %d runtime/%d post_load headers",
+				runtimeHeaderCount, postLoadHeaderCount))
+
+			if postLoadHeaderCount >= 2 {
+				vec.Score += 0.16
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"nocors_get_postload_runtime_headers: %d post_load headers",
+					postLoadHeaderCount))
+			}
+
+			if jsFingerprintCount >= 2 && postLoadHeaderCount >= 2 {
+				vec.Score += 0.12
+				vec.Indicators = append(vec.Indicators, "nocors_get_mixed_runtime_surfaces")
+			}
+		}
 
 		if req.Method == http.MethodPost && runtimeHeaderCount >= 5 {
 			vec.Score += 0.72
@@ -2497,6 +2555,35 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		})
 		behaviorHeaderBytes := len(req.Header.Get(constants.HeaderBehavioralData))
 		timingHeaderBytes := len(req.Header.Get(constants.HeaderTimingData))
+		telemetryTarget := looksLikeTelemetryEndpointPath(req.URL)
+		apiLikeHost := looksLikeAPIHostname(req.URL)
+		jsFingerprintCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+		})
+
+		if req.Method == http.MethodGet && runtimeHeaderCount >= 5 && (telemetryTarget || apiLikeHost) {
+			vec.Score += 0.70
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"same_origin_get_runtime_bundle: %d runtime/%d post_load headers",
+				runtimeHeaderCount, postLoadHeaderCount))
+
+			if postLoadHeaderCount >= 2 {
+				vec.Score += 0.16
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"same_origin_get_postload_runtime_headers: %d post_load headers",
+					postLoadHeaderCount))
+			}
+
+			if jsFingerprintCount >= 2 && postLoadHeaderCount >= 2 {
+				vec.Score += 0.10
+				vec.Indicators = append(vec.Indicators, "same_origin_get_mixed_runtime_surfaces")
+			}
+		}
 
 		if req.Method == http.MethodPost && postLoadHeaderBytes >= 1536 {
 			vec.Score += 0.36
