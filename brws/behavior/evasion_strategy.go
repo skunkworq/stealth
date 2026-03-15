@@ -648,6 +648,122 @@ func applyPostLoadFetch(req *http.Request, targetURL, mode, site string, include
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Strategy E1: SingleHeaderSameOriginStrategy (fidelity = 0.10)
+// ─────────────────────────────────────────────────────────────────────────────
+// Uses exactly 1 post-load header (Behavioral) on a same-origin GET fetch.
+// postLoadHeaderCount=1 < 2 → cherry-pick gate SKIPPED.
+// runtimeHeaderCount=1 < 5 → runtime bundle gate SKIPPED.
+// hasJSFingerprintHeaders=false → no missing-data penalties.
+type SingleHeaderSameOriginStrategy struct{}
+
+func (s *SingleHeaderSameOriginStrategy) Name() string      { return "single_header_same_origin" }
+func (s *SingleHeaderSameOriginStrategy) Fidelity() float64 { return 0.10 }
+
+func (s *SingleHeaderSameOriginStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applySingleHeaderFetch(req, targetURL, constants.HeaderBehavioralData, "cors", "same-origin", false)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy E2: SingleHeaderCrossSiteStrategy (fidelity = 0.10)
+// ─────────────────────────────────────────────────────────────────────────────
+// Uses exactly 1 post-load header (Timing) on a cross-site GET fetch.
+type SingleHeaderCrossSiteStrategy struct{}
+
+func (s *SingleHeaderCrossSiteStrategy) Name() string      { return "single_header_cross_site" }
+func (s *SingleHeaderCrossSiteStrategy) Fidelity() float64 { return 0.10 }
+
+func (s *SingleHeaderCrossSiteStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applySingleHeaderFetch(req, targetURL, constants.HeaderTimingData, "cors", "cross-site", true)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy E3: SingleHeaderNoCORSStrategy (fidelity = 0.10)
+// ─────────────────────────────────────────────────────────────────────────────
+// Uses exactly 1 post-load header (Audio) on a no-cors same-site GET fetch.
+type SingleHeaderNoCORSStrategy struct{}
+
+func (s *SingleHeaderNoCORSStrategy) Name() string      { return "single_header_nocors" }
+func (s *SingleHeaderNoCORSStrategy) Fidelity() float64 { return 0.10 }
+
+func (s *SingleHeaderNoCORSStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applySingleHeaderFetch(req, targetURL, constants.HeaderAudioData, "no-cors", "same-site", false)
+}
+
+// applySingleHeaderFetch is the shared helper for E-series strategies.
+// Uses exactly 1 post-load runtime header with zero jsFP headers.
+// runtimeHeaderCount=1, postLoadHeaderCount=1, jsFingerprintCount=0.
+func applySingleHeaderFetch(req *http.Request, targetURL, keepHeader, mode, site string, includeOrigin bool) {
+	keepHeaders := map[string]bool{keepHeader: true}
+	for _, h := range allRuntimeHeaders {
+		if !keepHeaders[h] {
+			req.Header.Del(h)
+		}
+	}
+	fixBehavioralDataForFirefox(req)
+
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{
+		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
+	} {
+		req.Header.Del(h)
+	}
+
+	req.Method = http.MethodGet
+	req.Body = nil
+	req.ContentLength = 0
+	req.Header.Del("Content-Type")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+
+	if parsed, err := url.Parse(targetURL); err == nil {
+		if site == "cross-site" {
+			req.Header.Set("Referer", "https://app.example.com/dashboard")
+		} else if site == "same-site" {
+			req.Header.Set("Referer", parsed.Scheme+"://www."+parsed.Hostname()+"/")
+		} else {
+			req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/")
+		}
+	}
+
+	if includeOrigin {
+		req.Header.Set("Origin", "https://app.example.com")
+	} else {
+		req.Header.Del("Origin")
+	}
+
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", mode)
+	req.Header.Set("Sec-Fetch-Site", site)
+	req.Header.Del("Sec-Fetch-User")
+	req.Header.Del("Upgrade-Insecure-Requests")
+
+	removed := map[string]bool{
+		"Content-Type":              true,
+		"Upgrade-Insecure-Requests": true,
+		"Sec-Fetch-User":            true,
+		"Priority":                  true,
+	}
+	if !includeOrigin {
+		removed["Origin"] = true
+	}
+	for _, h := range []string{
+		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
+	} {
+		removed[h] = true
+	}
+	for _, h := range allRuntimeHeaders {
+		if !keepHeaders[h] {
+			removed[h] = true
+		}
+	}
+	rebuildHeaderOrderClean(req, removed)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Strategy C1: ChromeSameOriginFetchStrategy (fidelity = 0.50) [LEGACY - now caught]
 // ─────────────────────────────────────────────────────────────────────────────
 type ChromeSameOriginFetchStrategy struct{}
@@ -1093,10 +1209,13 @@ func StrategiesForURL(targetURL string) []EvasionStrategy {
 
 	switch urlType {
 	case URLTypeTelemetry:
-		// D-series: 4 post-load headers only (Timing+Behavioral+Audio+Canvas).
-		// runtimeHeaderCount=4 < 5 → bypasses all telemetry GET runtime bundle gates.
-		// hasJSFingerprintHeaders=false → no missing-data penalties.
+		// E-series: 1 post-load header only → postLoadHeaderCount=1 < 2,
+		// bypasses cherry-pick gate AND runtime bundle gate.
 		return []EvasionStrategy{
+			&SingleHeaderSameOriginStrategy{},
+			&SingleHeaderCrossSiteStrategy{},
+			&SingleHeaderNoCORSStrategy{},
+			// D-series legacy (now caught by post-load cherry-pick gate)
 			&PostLoadSameOriginFetchStrategy{},
 			&PostLoadCrossSiteFetchStrategy{},
 			&PostLoadNoCORSBeaconStrategy{},
@@ -1127,10 +1246,13 @@ func StrategiesForURL(targetURL string) []EvasionStrategy {
 			&SelectiveStripStrategy{},
 		}
 	default:
-		// Normal page URLs — document navigation first, D-series + C-series + exotic as fallback
+		// Normal page URLs — document navigation first, E/D/C-series + exotic as fallback
 		return []EvasionStrategy{
 			&SendBeaconStrategy{},
 			&RealBrowserStrategy{},
+			&SingleHeaderSameOriginStrategy{},
+			&SingleHeaderCrossSiteStrategy{},
+			&SingleHeaderNoCORSStrategy{},
 			&PostLoadSameOriginFetchStrategy{},
 			&PostLoadCrossSiteFetchStrategy{},
 			&PostLoadNoCORSBeaconStrategy{},

@@ -501,11 +501,10 @@ func TestChromeFetchStrategiesBlockedOnTelemetryURLs(t *testing.T) {
 	}
 }
 
-// TestPostLoadFetchStrategiesEvadeTelemetryURLs verifies the D-series
-// post-load-only fetch strategies evade the shield on telemetry URLs.
-// These use only 4 post-load headers (Timing+Behavioral+Audio+Canvas) with
-// zero jsFP headers, keeping runtimeHeaderCount=4 below the >=5 gate.
-func TestPostLoadFetchStrategiesEvadeTelemetryURLs(t *testing.T) {
+// TestPostLoadFetchStrategiesBlockedOnTelemetryURLs verifies the D-series
+// post-load-only fetch strategies are now caught by the post-load cherry-pick
+// detection (postLoadHeaderCount >= 2 with jsFingerprintCount == 0 on telemetry GET).
+func TestPostLoadFetchStrategiesBlockedOnTelemetryURLs(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profile := behavior.ChromeWindowsProfile()
 
@@ -547,26 +546,86 @@ func TestPostLoadFetchStrategiesEvadeTelemetryURLs(t *testing.T) {
 
 			t.Logf("%-30s detection=%.0f%% avg_score=%.3f", s.Name(), detRate*100, avgScore)
 
-			if detRate > 0.05 {
-				t.Errorf("D-series strategy %q detected %.0f%% (want < 5%%)", s.Name(), detRate*100)
+			if detRate < 0.95 {
+				t.Errorf("D-series strategy %q detected %.0f%% (want >= 95%%)", s.Name(), detRate*100)
 			}
-			if avgScore > 0.35 {
-				t.Errorf("D-series strategy %q avg_score=%.3f (want < 0.35)", s.Name(), avgScore)
+			if avgScore < 0.50 {
+				t.Errorf("D-series strategy %q avg_score=%.3f (want >= 0.50)", s.Name(), avgScore)
 			}
 		})
 	}
 }
 
-// TestURLAwareFSMConvergesOnPostLoadStrategy verifies the URL-aware FSM
-// converges on a D-series post-load strategy for telemetry URLs.
-func TestURLAwareFSMConvergesOnPostLoadStrategy(t *testing.T) {
+// TestSingleHeaderStrategiesBlockedOnTelemetryURLs verifies the E-series
+// single-header strategies are now caught by the tightened cherry-pick gate
+// (postLoadHeaderCount >= 1 with jsFingerprintCount == 0 on telemetry GET).
+func TestSingleHeaderStrategiesBlockedOnTelemetryURLs(t *testing.T) {
+	shield := adversarial.NewStealthDetector()
+	profile := behavior.ChromeWindowsProfile()
+
+	strategies := []behavior.EvasionStrategy{
+		&behavior.SingleHeaderSameOriginStrategy{},
+		&behavior.SingleHeaderCrossSiteStrategy{},
+		&behavior.SingleHeaderNoCORSStrategy{},
+	}
+
+	for _, s := range strategies {
+		t.Run(s.Name(), func(t *testing.T) {
+			detections := 0
+			var totalScore float64
+			trials := 20
+
+			for i := 0; i < trials; i++ {
+				config := behavior.MaxEvasionConfig(profile)
+				config.EvasionStrategy = s
+				gen := behavior.NewRequestGenerator(config)
+				req := gen.GenerateRequest("https://api.example.com/telemetry")
+				result := shield.AnalyzeRequest(req, nil)
+
+				totalScore += result.Score
+				if result.IsBot {
+					detections++
+				}
+
+				if i == 0 {
+					t.Logf("  vectors: %d, total_score=%.3f", len(result.Vectors), result.Score)
+					for _, v := range result.Vectors {
+						t.Logf("    %s: score=%.3f weight=%.2f detected=%v indicators=%v",
+							v.Name, v.Score, v.Weight, v.Detected, v.Indicators)
+					}
+				}
+			}
+
+			avgScore := totalScore / float64(trials)
+			detRate := float64(detections) / float64(trials)
+
+			t.Logf("%-30s detection=%.0f%% avg_score=%.3f", s.Name(), detRate*100, avgScore)
+
+			if detRate < 0.95 {
+				t.Errorf("E-series strategy %q detected %.0f%% (want >= 95%%)", s.Name(), detRate*100)
+			}
+			if avgScore < 0.50 {
+				t.Errorf("E-series strategy %q avg_score=%.3f (want >= 0.50)", s.Name(), avgScore)
+			}
+		})
+	}
+}
+
+// TestURLAwareFSMExhaustsOnTelemetryURL verifies the URL-aware FSM exhausts
+// on telemetry URLs — every strategy family (C/D/E-series header-carrying,
+// exotic dest, and zero-header document navigation) is caught by the shield.
+// Document navigation to telemetry endpoints is inherently suspicious
+// (no real user navigates to /api/telemetry as a page).
+// This means HTTP-level evasion has converged: telemetry targets REQUIRE
+// browser-mode escalation (Chromium engine with real JS/DOM execution).
+func TestURLAwareFSMExhaustsOnTelemetryURL(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profile := behavior.ChromeWindowsProfile()
 	targetURL := "https://api.example.com/telemetry"
 
 	fsm := behavior.NewAdaptiveEvasionFSMForURL(targetURL)
 
-	maxTrials := len(behavior.StrategiesForURL(targetURL)) * 3
+	maxTrials := len(behavior.StrategiesForURL(targetURL)) * 4
 	for i := 0; i < maxTrials; i++ {
 		config := behavior.MaxEvasionConfig(profile)
 		config.EvasionStrategy = fsm.CurrentStrategy()
@@ -583,22 +642,18 @@ func TestURLAwareFSMConvergesOnPostLoadStrategy(t *testing.T) {
 	t.Logf("\n%s", fsm.Summary())
 
 	strategy := fsm.CurrentStrategy()
-	t.Logf("Converged on: %s (fidelity=%.0f%%)", strategy.Name(), strategy.Fidelity()*100)
+	t.Logf("Ended on: %s (fidelity=%.0f%%)", strategy.Name(), strategy.Fidelity()*100)
 
-	if fsm.Exhausted() {
-		t.Error("URL-aware FSM should converge on a D-series strategy, not exhaust")
+	if !fsm.Exhausted() {
+		t.Error("URL-aware FSM should exhaust — all strategies caught on telemetry URLs")
 	}
-	if !fsm.Converged() {
-		t.Error("URL-aware FSM should converge on one of the D-series strategies")
+	if fsm.Converged() {
+		t.Error("URL-aware FSM should not converge — requires browser-mode escalation")
 	}
 
-	postLoadNames := map[string]bool{
-		"postload_same_origin_fetch": true,
-		"postload_cross_site_fetch":  true,
-		"postload_nocors_beacon":     true,
-	}
-	if !postLoadNames[strategy.Name()] {
-		t.Errorf("expected convergence on a D-series strategy, got %q", strategy.Name())
+	// Verify the FSM recommends escalation to browser mode
+	if !fsm.ShouldEscalate() {
+		t.Error("FSM should recommend escalation after exhausting all strategies")
 	}
 }
 
@@ -621,9 +676,9 @@ func TestURLClassification(t *testing.T) {
 	}
 
 	telemetryStrategies := map[string]bool{
-		"postload_same_origin_fetch": true,
-		"postload_cross_site_fetch":  true,
-		"postload_nocors_beacon":     true,
+		"single_header_same_origin": true,
+		"single_header_cross_site":  true,
+		"single_header_nocors":      true,
 	}
 
 	for _, tt := range tests {

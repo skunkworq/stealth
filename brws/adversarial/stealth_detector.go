@@ -1890,6 +1890,24 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		hasRuntimeBody := bodyErr == nil && len(bodySnapshot) >= 512 && bodyContainsRuntimePayload(bodyText)
 		sameOriginClaim := false
 		requiredRuntimeHeaders := 4
+		telemetryTarget := looksLikeTelemetryEndpointPath(req.URL)
+		apiLikeHost := looksLikeAPIHostname(req.URL)
+		jsFingerprintCount := countPresentHeaders(req, []string{
+			constants.HeaderNavigatorData,
+			constants.HeaderWebGLData,
+			constants.HeaderPluginData,
+			constants.HeaderScreenData,
+			constants.HeaderFontData,
+			constants.HeaderWebRTCData,
+		})
+
+		// Post-load cherry-pick on same-site telemetry GET
+		if req.Method == http.MethodGet && jsFingerprintCount == 0 && postLoadHeaderCount >= 1 && (telemetryTarget || apiLikeHost) {
+			vec.Score += 0.68
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"same_site_postload_cherry_pick: %d post_load/%d jsFP headers on telemetry GET",
+				postLoadHeaderCount, jsFingerprintCount))
+		}
 
 		if req.Method == http.MethodGet && mode == "cors" && runtimeHeaderCount >= 6 {
 			vec.Score += 0.78
@@ -2101,6 +2119,16 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			}
 		}
 
+		// Post-load cherry-pick: telemetry GET with post-load headers but zero jsFP headers.
+		// Real in-page JS that collects Timing/Behavioral/Audio/Canvas would also collect
+		// Navigator/WebGL/Font — having ONLY post-load data is synthetic header selection.
+		if req.Method == http.MethodGet && jsFingerprintCount == 0 && postLoadHeaderCount >= 1 && (telemetryTarget || apiLikeHost) {
+			vec.Score += 0.68
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"cross_site_postload_cherry_pick: %d post_load/%d jsFP headers on telemetry GET",
+				postLoadHeaderCount, jsFingerprintCount))
+		}
+
 		if req.Method == http.MethodPost && mode == "same-origin" && runtimeHeaderCount >= 3 {
 			requiredRuntimeHeaders = 3
 			vec.Score += 0.80
@@ -2210,6 +2238,14 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 				vec.Score += 0.12
 				vec.Indicators = append(vec.Indicators, "nocors_get_mixed_runtime_surfaces")
 			}
+		}
+
+		// Post-load cherry-pick on no-cors telemetry GET
+		if req.Method == http.MethodGet && jsFingerprintCount == 0 && postLoadHeaderCount >= 1 && (telemetryTarget || apiLikeHost) {
+			vec.Score += 0.70
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"nocors_postload_cherry_pick: %d post_load/%d jsFP headers on telemetry GET",
+				postLoadHeaderCount, jsFingerprintCount))
 		}
 
 		if req.Method == http.MethodPost && runtimeHeaderCount >= 5 {
@@ -2583,6 +2619,14 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 				vec.Score += 0.10
 				vec.Indicators = append(vec.Indicators, "same_origin_get_mixed_runtime_surfaces")
 			}
+		}
+
+		// Post-load cherry-pick on same-origin telemetry GET
+		if req.Method == http.MethodGet && jsFingerprintCount == 0 && postLoadHeaderCount >= 1 && (telemetryTarget || apiLikeHost) {
+			vec.Score += 0.66
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"same_origin_postload_cherry_pick: %d post_load/%d jsFP headers on telemetry GET",
+				postLoadHeaderCount, jsFingerprintCount))
 		}
 
 		if req.Method == http.MethodPost && postLoadHeaderBytes >= 1536 {
