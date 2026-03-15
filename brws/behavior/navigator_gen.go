@@ -56,8 +56,8 @@ type UAData struct {
 	FullVersionList []UABrand `json:"fullVersionList,omitempty"`
 	Mobile          bool      `json:"mobile"`
 	Platform        string    `json:"platform"`     // "Windows", "macOS", "Linux"
-	Architecture    string    `json:"architecture"`  // "x86", "arm"
-	Bitness         string    `json:"bitness"`       // "64"
+	Architecture    string    `json:"architecture"` // "x86", "arm"
+	Bitness         string    `json:"bitness"`      // "64"
 }
 
 // UABrand is a single brand/version pair from navigator.userAgentData.brands.
@@ -68,13 +68,13 @@ type UABrand struct {
 
 // NavigatorProfile provides input parameters for generating a consistent navigator fingerprint.
 type NavigatorProfile struct {
-	Browser          string // "chrome", "firefox"
-	Version          string // e.g. "134"
-	Platform         string // "windows", "macos", "linux"
-	UserAgent        string // Full UA string
-	SecCHUA          string // Sec-Ch-Ua header value (empty for Firefox)
-	SecCHUAPlatform  string // e.g. `"Windows"`, `"macOS"`, `"Linux"`
-	AcceptLanguage   string // e.g. "en-US,en;q=0.9"
+	Browser         string // "chrome", "firefox"
+	Version         string // e.g. "134"
+	Platform        string // "windows", "macos", "linux"
+	UserAgent       string // Full UA string
+	SecCHUA         string // Sec-Ch-Ua header value (empty for Firefox)
+	SecCHUAPlatform string // e.g. `"Windows"`, `"macOS"`, `"Linux"`
+	AcceptLanguage  string // e.g. "en-US,en;q=0.9"
 
 	// Optional high-entropy client hints
 	SecCHUAFullVersionList string // e.g. `"Chromium";v="134.0.6998.35", ...`

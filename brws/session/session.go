@@ -16,8 +16,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/skunkworq/stealth/brws/types"
 	"golang.org/x/net/publicsuffix"
+
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 // sanitizePath validates and cleans a file path to prevent directory traversal

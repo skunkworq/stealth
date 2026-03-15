@@ -132,13 +132,13 @@ func TestCanvasFingerprint_PassesIsomorphicCheck(t *testing.T) {
 	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 
 	httpInfo := &adversarial.HTTPFingerprintInfo{
-		UserAgent:      req.Header.Get("User-Agent"),
-		Platform:       "Windows",
-		SecCHUA:        req.Header.Get("Sec-Ch-Ua"),
+		UserAgent:       req.Header.Get("User-Agent"),
+		Platform:        "Windows",
+		SecCHUA:         req.Header.Get("Sec-Ch-Ua"),
 		SecCHUAPlatform: `"Windows"`,
-		AcceptLanguage: req.Header.Get("Accept-Language"),
-		HeaderOrder:    []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Platform", "User-Agent", "Accept", "Accept-Language"},
-		HeaderCount:    5,
+		AcceptLanguage:  req.Header.Get("Accept-Language"),
+		HeaderOrder:     []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Platform", "User-Agent", "Accept", "Accept-Language"},
+		HeaderCount:     5,
 	}
 
 	analyzer := adversarial.NewIsomorphicAnalyzer()

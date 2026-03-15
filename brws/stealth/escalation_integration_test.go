@@ -16,9 +16,9 @@ type stubEngine struct {
 	err      error
 }
 
-func (s *stubEngine) Name() string                  { return s.name }
+func (s *stubEngine) Name() string                      { return s.name }
 func (s *stubEngine) Capabilities() engine.Capabilities { return engine.Capabilities{} }
-func (s *stubEngine) Close() error                   { return nil }
+func (s *stubEngine) Close() error                      { return nil }
 func (s *stubEngine) Do(_ context.Context, _ *engine.Request) (*engine.Response, error) {
 	return s.response, s.err
 }

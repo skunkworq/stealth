@@ -37,10 +37,10 @@ type Client struct {
 	cfSolver      *CloudflareSolverClient
 
 	// Anti-bot escalation
-	waterfall        *wf.Waterfall
-	tierTracker      *proxy.TierTracker
-	escalation       *EscalationConfig
-	evasionFSM       *behavior.AdaptiveEvasionFSM
+	waterfall         *wf.Waterfall
+	tierTracker       *proxy.TierTracker
+	escalation        *EscalationConfig
+	evasionFSM        *behavior.AdaptiveEvasionFSM
 	evasionFSMEnabled bool
 
 	logger       *instrumentation.Logger
@@ -64,9 +64,9 @@ type Config struct {
 	Instrumentation *InstrumentationConfig
 
 	// Anti-bot escalation
-	Escalation      *EscalationConfig
-	WaterfallEngine *wf.Waterfall
-	TieredProxies   []proxy.TieredProxy
+	Escalation         *EscalationConfig
+	WaterfallEngine    *wf.Waterfall
+	TieredProxies      []proxy.TieredProxy
 	EvasionFSMDisabled bool // Set true to disable the adaptive evasion FSM (enabled by default)
 }
 
@@ -254,24 +254,24 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 	var evasionFSM *behavior.AdaptiveEvasionFSM
 
 	c := &Client{
-		engine:        eng,
-		options:       &Options{Timeout: 30 * time.Second},
-		config:        cfg,
-		sessionMgr:    sessMgr,
-		policyLoader:  policyLoader,
-		behavTracker:  NewBehavioralTracker(),
-		captchaSolver: captchaSolver,
-		cfSolver:      cfSolver,
-		waterfall:     waterfallEng,
-		tierTracker:   tierTracker,
-		escalation:    escalation,
+		engine:            eng,
+		options:           &Options{Timeout: 30 * time.Second},
+		config:            cfg,
+		sessionMgr:        sessMgr,
+		policyLoader:      policyLoader,
+		behavTracker:      NewBehavioralTracker(),
+		captchaSolver:     captchaSolver,
+		cfSolver:          cfSolver,
+		waterfall:         waterfallEng,
+		tierTracker:       tierTracker,
+		escalation:        escalation,
 		evasionFSM:        evasionFSM,
 		evasionFSMEnabled: evasionFSMEnabled,
 		logger:            logger,
-		tracer:        tracer,
-		hooks:         hooks,
-		fsm:           fsm,
-		orchestrator:  orchestrator,
+		tracer:            tracer,
+		hooks:             hooks,
+		fsm:               fsm,
+		orchestrator:      orchestrator,
 	}
 
 	// Register solvers with the orchestrator (need client methods bound)

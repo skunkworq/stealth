@@ -351,9 +351,57 @@ func TestFSMExhaustionSignal(t *testing.T) {
 	}
 }
 
-// TestExoticDestStrategiesEvadeShield verifies the new exotic dest strategies
-// (iframe, script, image, style, worker) bypass all shield provenance gates.
-func TestExoticDestStrategiesEvadeShield(t *testing.T) {
+// TestExoticDestStrategiesBlockedOnTelemetryURLs verifies that after shield
+// hardening, exotic dest strategies are caught when targeting telemetry URLs.
+// The shield's exotic dest + telemetry URL gate blocks these.
+func TestExoticDestStrategiesBlockedOnTelemetryURLs(t *testing.T) {
+	shield := adversarial.NewStealthDetector()
+	profile := behavior.ChromeWindowsProfile()
+
+	strategies := []behavior.EvasionStrategy{
+		&behavior.IframeNavigationStrategy{},
+		&behavior.ScriptFetchStrategy{},
+		&behavior.ImagePixelStrategy{},
+		&behavior.StyleFetchStrategy{},
+		&behavior.WorkerImportStrategy{},
+	}
+
+	for _, s := range strategies {
+		t.Run(s.Name(), func(t *testing.T) {
+			detections := 0
+			var totalScore float64
+			trials := 10
+
+			for i := 0; i < trials; i++ {
+				config := behavior.MaxEvasionConfig(profile)
+				config.EvasionStrategy = s
+				gen := behavior.NewRequestGenerator(config)
+				req := gen.GenerateRequest("https://api.example.com/telemetry")
+				result := shield.AnalyzeRequest(req, nil)
+
+				totalScore += result.Score
+				if result.IsBot {
+					detections++
+				}
+			}
+
+			avgScore := totalScore / float64(trials)
+			detRate := float64(detections) / float64(trials)
+
+			t.Logf("%-20s detection=%.0f%% avg_score=%.3f", s.Name(), detRate*100, avgScore)
+
+			// Shield should now catch these on telemetry URLs
+			if detRate < 0.80 {
+				t.Errorf("exotic dest strategy %q should be caught on telemetry URLs: only %.0f%% detected", s.Name(), detRate*100)
+			}
+		})
+	}
+}
+
+// TestExoticDestStrategiesEvadeOnPageURLs verifies exotic dest strategies still
+// evade on normal page URLs (the exotic dest + telemetry URL gate only fires
+// for telemetry/API endpoints).
+func TestExoticDestStrategiesEvadeOnPageURLs(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profile := behavior.ChromeWindowsProfile()
 
@@ -375,7 +423,7 @@ func TestExoticDestStrategiesEvadeShield(t *testing.T) {
 				config := behavior.MaxEvasionConfig(profile)
 				config.EvasionStrategy = s
 				gen := behavior.NewRequestGenerator(config)
-				req := gen.GenerateRequest("https://api.example.com/telemetry")
+				req := gen.GenerateRequest("https://www.example.com/products/shoes")
 				result := shield.AnalyzeRequest(req, nil)
 
 				totalScore += result.Score
@@ -390,10 +438,65 @@ func TestExoticDestStrategiesEvadeShield(t *testing.T) {
 			t.Logf("%-20s detection=%.0f%% avg_score=%.3f", s.Name(), detRate*100, avgScore)
 
 			if detRate > 0.05 {
-				t.Errorf("exotic dest strategy %q detected %.0f%% (want < 5%%)", s.Name(), detRate*100)
+				t.Errorf("exotic dest strategy %q on page URL detected %.0f%% (want < 5%%)", s.Name(), detRate*100)
 			}
 			if avgScore > 0.30 {
-				t.Errorf("exotic dest strategy %q avg_score=%.3f (want < 0.30)", s.Name(), avgScore)
+				t.Errorf("exotic dest strategy %q on page URL avg_score=%.3f (want < 0.30)", s.Name(), avgScore)
+			}
+		})
+	}
+}
+
+// TestChromeFetchStrategiesEvadeTelemetryURLs verifies the new Chrome
+// same-origin fetch strategies evade the shield on telemetry URLs.
+func TestChromeFetchStrategiesEvadeTelemetryURLs(t *testing.T) {
+	shield := adversarial.NewStealthDetector()
+	profile := behavior.ChromeWindowsProfile()
+
+	strategies := []behavior.EvasionStrategy{
+		&behavior.ChromeSameOriginFetchStrategy{},
+		&behavior.ChromeCrossSiteFetchStrategy{},
+		&behavior.ChromeNoCORSBeaconStrategy{},
+	}
+
+	for _, s := range strategies {
+		t.Run(s.Name(), func(t *testing.T) {
+			detections := 0
+			var totalScore float64
+			trials := 20
+
+			for i := 0; i < trials; i++ {
+				config := behavior.MaxEvasionConfig(profile)
+				config.EvasionStrategy = s
+				gen := behavior.NewRequestGenerator(config)
+				req := gen.GenerateRequest("https://api.example.com/telemetry")
+				result := shield.AnalyzeRequest(req, nil)
+
+				totalScore += result.Score
+				if result.IsBot {
+					detections++
+				}
+
+				if i == 0 {
+					t.Logf("  vectors: %d, total_score=%.3f", len(result.Vectors), result.Score)
+					for _, v := range result.Vectors {
+						t.Logf("    %s: score=%.3f weight=%.2f detected=%v indicators=%v",
+							v.Name, v.Score, v.Weight, v.Detected, v.Indicators)
+					}
+				}
+			}
+
+			avgScore := totalScore / float64(trials)
+			detRate := float64(detections) / float64(trials)
+
+			t.Logf("%-30s detection=%.0f%% avg_score=%.3f", s.Name(), detRate*100, avgScore)
+
+			if detRate > 0.05 {
+				t.Errorf("Chrome fetch strategy %q detected %.0f%% (want < 5%%)", s.Name(), detRate*100)
+			}
+			// Bot threshold is 0.35 — strategies must stay below it
+			if avgScore > 0.35 {
+				t.Errorf("Chrome fetch strategy %q avg_score=%.3f (want < 0.35)", s.Name(), avgScore)
 			}
 		})
 	}
@@ -438,16 +541,15 @@ func TestURLAwareFSMConvergesOnTelemetryURL(t *testing.T) {
 		t.Error("URL-aware FSM should converge on one of the exotic dest strategies")
 	}
 
-	// The converged strategy should be one of the exotic dest strategies
-	exoticNames := map[string]bool{
-		"iframe_navigation": true,
-		"script_fetch":      true,
-		"image_pixel":       true,
-		"style_fetch":       true,
-		"worker_import":     true,
+	// The converged strategy should be one of the Chrome fetch strategies
+	// (these bypass catch-all via Sec-Ch-Ua and coverage via pre-load headers)
+	chromeNames := map[string]bool{
+		"chrome_same_origin_fetch": true,
+		"chrome_cross_site_fetch":  true,
+		"chrome_nocors_beacon":     true,
 	}
-	if !exoticNames[strategy.Name()] {
-		t.Errorf("expected convergence on an exotic dest strategy, got %q", strategy.Name())
+	if !chromeNames[strategy.Name()] {
+		t.Errorf("expected convergence on a Chrome fetch strategy, got %q", strategy.Name())
 	}
 }
 
@@ -469,15 +571,21 @@ func TestURLClassification(t *testing.T) {
 		{"https://data.example.com/ingest", behavior.URLTypePage}, // not in shield's pattern list
 	}
 
+	chromeStrategies := map[string]bool{
+		"chrome_same_origin_fetch": true,
+		"chrome_cross_site_fetch":  true,
+		"chrome_nocors_beacon":     true,
+	}
+
 	for _, tt := range tests {
 		t.Run(tt.url, func(t *testing.T) {
 			strategies := behavior.StrategiesForURL(tt.url)
 			gotType := behavior.URLTypePage
-			if strategies[0].Name() == "iframe_navigation" {
+			if chromeStrategies[strategies[0].Name()] {
 				gotType = behavior.URLTypeTelemetry
 			}
 			if gotType != tt.wantType {
-				t.Errorf("classifyURL(%q) = %d, want %d", tt.url, gotType, tt.wantType)
+				t.Errorf("classifyURL(%q) = %d, want %d (first strategy=%q)", tt.url, gotType, tt.wantType, strategies[0].Name())
 			}
 		})
 	}

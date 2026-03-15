@@ -105,7 +105,7 @@ type CDPRequest struct {
 	// HeaderOrder preserves the exact order Chrome sent headers
 	HeaderOrder []string `json:"header_order"`
 	// Response info
-	Status         int               `json:"status,omitempty"`
+	Status          int               `json:"status,omitempty"`
 	ResponseHeaders map[string]string `json:"response_headers,omitempty"`
 
 	// Timing

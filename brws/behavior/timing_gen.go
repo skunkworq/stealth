@@ -167,7 +167,7 @@ func GeneratePerformanceTiming(pageURL string, seed int64) *PerformanceTimingDat
 
 	navigationStart := float64(time.Now().UnixMilli()) - (500.0 + rng.Float64()*4500.0)
 
-	numEntries := 5 + rng.Intn(11) // 5-15 entries
+	numEntries := 5 + rng.Intn(11)                           // 5-15 entries
 	entries := make([]PerformanceEntryData, 0, numEntries+3) // +3 for nav + 2 paint entries
 
 	// First entry: navigation

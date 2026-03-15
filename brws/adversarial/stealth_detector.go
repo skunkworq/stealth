@@ -2673,6 +2673,75 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		}
 	}
 
+	// Sub-check 10: Exotic dest sub-resource to telemetry/API target.
+	// Real sub-resource loads (iframe, script, image, style, worker) fetch page
+	// assets — HTML pages, JS bundles, images, CSS files. They do NOT target
+	// telemetry/API endpoints (/collect, /beacon, /metrics, /track, /events, etc.)
+	// or API-prefixed hostnames (api.*, metrics.*, telemetry.*, etc.).
+	//
+	// A request with dest=iframe/script/image/style/worker targeting a telemetry
+	// endpoint is structurally impossible in normal browsing — it indicates the
+	// sword is using exotic dest values to bypass the dest=empty and dest=document
+	// gates.
+	{
+		dest := strings.ToLower(req.Header.Get("Sec-Fetch-Dest"))
+		// Any dest that is NOT "empty", "document", or "" is a sub-resource load.
+		// Real sub-resource loads fetch page assets, NOT telemetry/API endpoints.
+		isExoticDest := dest != "" && dest != "empty" && dest != "document"
+		if isExoticDest && req.URL != nil {
+			telemetryTarget := looksLikeTelemetryEndpointPath(req.URL)
+			apiLikeHost := looksLikeAPIHostname(req.URL)
+
+			if telemetryTarget || apiLikeHost {
+				vec.Score += 0.45
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"exotic_dest_to_telemetry_target: dest=%s url=%s",
+					dest, normalizedURLPath(req.URL)))
+
+				if telemetryTarget {
+					vec.Score += 0.10
+					vec.Indicators = append(vec.Indicators, "exotic_dest_telemetry_endpoint_path")
+				}
+
+				if apiLikeHost {
+					vec.Score += 0.15
+					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+						"exotic_dest_api_hostname: %s", normalizedURLHost(req.URL)))
+				}
+
+				// Amplifier: zero runtime headers — real sub-resource loads are
+				// triggered by browser parsing, not by telemetry JS. But the
+				// combination of exotic dest + telemetry target + zero runtime is
+				// a strong indicator of strategy rotation.
+				runtimeHeaderCount := countPresentHeaders(req, []string{
+					constants.HeaderNavigatorData,
+					constants.HeaderWebGLData,
+					constants.HeaderPluginData,
+					constants.HeaderScreenData,
+					constants.HeaderFontData,
+					constants.HeaderWebRTCData,
+					constants.HeaderBehavioralData,
+					constants.HeaderTimingData,
+					constants.HeaderAudioData,
+					constants.HeaderCanvasFingerprint,
+				})
+				if runtimeHeaderCount == 0 {
+					vec.Score += 0.10
+					vec.Indicators = append(vec.Indicators, "exotic_dest_zero_runtime_headers")
+				}
+
+				// Amplifier: no Sec-Ch-Ua — Chrome always sends it on sub-resource
+				// fetches. Its absence with a browser UA means identity stripping.
+				ua := strings.ToLower(req.Header.Get("User-Agent"))
+				hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
+				if !hasSecChUa && (strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox")) {
+					vec.Score += 0.08
+					vec.Indicators = append(vec.Indicators, "exotic_dest_no_sec_ch_ua")
+				}
+			}
+		}
+	}
+
 	// Sub-check 8: Unified zero-header fetch catch-all.
 	// After gate-specific checks, catch any fetch-like request (GET or POST) with
 	// browser UA, zero runtime headers, Sec-Fetch-Dest: empty, and no Sec-Ch-Ua.

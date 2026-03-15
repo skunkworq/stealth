@@ -450,7 +450,7 @@ func GetChrome146() *BrowserSignature {
 				{Type: 0x002d, Name: "psk_key_exchange_modes"},
 				{Type: 0x002b, Name: "supported_versions"},
 				{Type: 0x001d, Name: "compress_certificate"},
-				{Type: 0x0011, Name: "application_settings"}, // ALPS
+				{Type: 0x0011, Name: "application_settings"},   // ALPS
 				{Type: 0xfe0d, Name: "encrypted_client_hello"}, // ECH (standard in Chrome 146)
 				{Type: 0x0d0d, IsGREASE: true},
 				{Type: 0x002b, Name: "supported_versions"},

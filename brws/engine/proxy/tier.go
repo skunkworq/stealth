@@ -10,7 +10,7 @@ import (
 
 // TieredProxy groups a pool with its tier level.
 type TieredProxy struct {
-	Level int    // 0 = cheapest, ascending = more premium
+	Level int // 0 = cheapest, ascending = more premium
 	Pool  *Pool
 	Label string // e.g., "datacenter", "residential", "mobile"
 }

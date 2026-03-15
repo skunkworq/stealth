@@ -17,9 +17,9 @@ type stubEngine struct {
 	err      error
 }
 
-func (s *stubEngine) Name() string                { return s.name }
+func (s *stubEngine) Name() string                      { return s.name }
 func (s *stubEngine) Capabilities() engine.Capabilities { return engine.Capabilities{} }
-func (s *stubEngine) Close() error                 { return nil }
+func (s *stubEngine) Close() error                      { return nil }
 func (s *stubEngine) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
 	select {
 	case <-time.After(s.delay):

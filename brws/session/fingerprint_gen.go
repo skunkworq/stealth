@@ -11,16 +11,16 @@ import (
 
 // browserProfile is a static browser identity used for fingerprint generation.
 type browserProfile struct {
-	Name           string
-	Version        string
-	Platform       string
-	UserAgent      string
-	SecCHUA        string
+	Name            string
+	Version         string
+	Platform        string
+	UserAgent       string
+	SecCHUA         string
 	SecCHUAPlatform string
-	AcceptLang     string
-	ViewportWidth  int
-	ViewportHeight int
-	TLSFingerprint string
+	AcceptLang      string
+	ViewportWidth   int
+	ViewportHeight  int
+	TLSFingerprint  string
 }
 
 // profileTable contains 8 realistic browser profiles spanning Chrome, Firefox, and Edge

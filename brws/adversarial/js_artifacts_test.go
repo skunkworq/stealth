@@ -37,22 +37,22 @@ func firefoxUA() string {
 
 func TestJSArtifacts_Chrome_PassesDetection(t *testing.T) {
 	navData := map[string]interface{}{
-		"vendor":           "Google Inc.",
-		"productSub":       "20030107",
-		"hasChrome":        true,
-		"chrome":           map[string]interface{}{},
-		"pluginCount":      float64(5),
-		"cookieEnabled":    true,
-		"pdfViewerEnabled": true,
-		"webdriver":        false,
-		"hasLocalStorage":  true,
+		"vendor":            "Google Inc.",
+		"productSub":        "20030107",
+		"hasChrome":         true,
+		"chrome":            map[string]interface{}{},
+		"pluginCount":       float64(5),
+		"cookieEnabled":     true,
+		"pdfViewerEnabled":  true,
+		"webdriver":         false,
+		"hasLocalStorage":   true,
 		"hasSessionStorage": true,
-		"hasIndexedDB":     true,
-		"platform":         "Win32",
-		"userAgent":        chromeUA(),
-		"languages":        []interface{}{"en-US", "en"},
-		"language":         "en-US",
-		"maxTouchPoints":   float64(0),
+		"hasIndexedDB":      true,
+		"platform":          "Win32",
+		"userAgent":         chromeUA(),
+		"languages":         []interface{}{"en-US", "en"},
+		"language":          "en-US",
+		"maxTouchPoints":    float64(0),
 	}
 
 	req := buildNavRequest(t, chromeUA(), navData)
@@ -79,20 +79,20 @@ func TestJSArtifacts_Chrome_PassesDetection(t *testing.T) {
 
 func TestJSArtifacts_Firefox_PassesDetection(t *testing.T) {
 	navData := map[string]interface{}{
-		"vendor":           "",
-		"productSub":       "20100101",
-		"pluginCount":      float64(0),
-		"cookieEnabled":    true,
-		"pdfViewerEnabled": true,
-		"webdriver":        false,
-		"hasLocalStorage":  true,
+		"vendor":            "",
+		"productSub":        "20100101",
+		"pluginCount":       float64(0),
+		"cookieEnabled":     true,
+		"pdfViewerEnabled":  true,
+		"webdriver":         false,
+		"hasLocalStorage":   true,
 		"hasSessionStorage": true,
-		"hasIndexedDB":     true,
-		"platform":         "Win32",
-		"userAgent":        firefoxUA(),
-		"languages":        []interface{}{"en-US", "en"},
-		"language":         "en-US",
-		"maxTouchPoints":   float64(0),
+		"hasIndexedDB":      true,
+		"platform":          "Win32",
+		"userAgent":         firefoxUA(),
+		"languages":         []interface{}{"en-US", "en"},
+		"language":          "en-US",
+		"maxTouchPoints":    float64(0),
 	}
 
 	req := buildNavRequest(t, firefoxUA(), navData)
@@ -118,21 +118,21 @@ func TestJSArtifacts_Firefox_PassesDetection(t *testing.T) {
 func TestJSArtifacts_WrongVendor_Detected(t *testing.T) {
 	// Chrome UA with Firefox vendor (empty string)
 	navData := map[string]interface{}{
-		"vendor":           "",
-		"productSub":       "20030107",
-		"hasChrome":        true,
-		"chrome":           map[string]interface{}{},
-		"pluginCount":      float64(5),
-		"cookieEnabled":    true,
-		"webdriver":        false,
-		"platform":         "Win32",
-		"userAgent":        chromeUA(),
-		"languages":        []interface{}{"en-US", "en"},
-		"language":         "en-US",
-		"maxTouchPoints":   float64(0),
-		"hasLocalStorage":  true,
+		"vendor":            "",
+		"productSub":        "20030107",
+		"hasChrome":         true,
+		"chrome":            map[string]interface{}{},
+		"pluginCount":       float64(5),
+		"cookieEnabled":     true,
+		"webdriver":         false,
+		"platform":          "Win32",
+		"userAgent":         chromeUA(),
+		"languages":         []interface{}{"en-US", "en"},
+		"language":          "en-US",
+		"maxTouchPoints":    float64(0),
+		"hasLocalStorage":   true,
 		"hasSessionStorage": true,
-		"hasIndexedDB":     true,
+		"hasIndexedDB":      true,
 	}
 
 	req := buildNavRequest(t, chromeUA(), navData)
@@ -156,19 +156,19 @@ func TestJSArtifacts_WrongVendor_Detected(t *testing.T) {
 func TestJSArtifacts_MissingChrome_Detected(t *testing.T) {
 	// Chrome UA without window.chrome object
 	navData := map[string]interface{}{
-		"vendor":           "Google Inc.",
-		"productSub":       "20030107",
-		"pluginCount":      float64(5),
-		"cookieEnabled":    true,
-		"webdriver":        false,
-		"platform":         "Win32",
-		"userAgent":        chromeUA(),
-		"languages":        []interface{}{"en-US", "en"},
-		"language":         "en-US",
-		"maxTouchPoints":   float64(0),
-		"hasLocalStorage":  true,
+		"vendor":            "Google Inc.",
+		"productSub":        "20030107",
+		"pluginCount":       float64(5),
+		"cookieEnabled":     true,
+		"webdriver":         false,
+		"platform":          "Win32",
+		"userAgent":         chromeUA(),
+		"languages":         []interface{}{"en-US", "en"},
+		"language":          "en-US",
+		"maxTouchPoints":    float64(0),
+		"hasLocalStorage":   true,
 		"hasSessionStorage": true,
-		"hasIndexedDB":     true,
+		"hasIndexedDB":      true,
 	}
 
 	req := buildNavRequest(t, chromeUA(), navData)
@@ -191,21 +191,21 @@ func TestJSArtifacts_MissingChrome_Detected(t *testing.T) {
 
 func TestJSArtifacts_WebDriverTrue_Detected(t *testing.T) {
 	navData := map[string]interface{}{
-		"vendor":           "Google Inc.",
-		"productSub":       "20030107",
-		"hasChrome":        true,
-		"chrome":           map[string]interface{}{},
-		"pluginCount":      float64(5),
-		"cookieEnabled":    true,
-		"webdriver":        true, // CAUGHT
-		"platform":         "Win32",
-		"userAgent":        chromeUA(),
-		"languages":        []interface{}{"en-US", "en"},
-		"language":         "en-US",
-		"maxTouchPoints":   float64(0),
-		"hasLocalStorage":  true,
+		"vendor":            "Google Inc.",
+		"productSub":        "20030107",
+		"hasChrome":         true,
+		"chrome":            map[string]interface{}{},
+		"pluginCount":       float64(5),
+		"cookieEnabled":     true,
+		"webdriver":         true, // CAUGHT
+		"platform":          "Win32",
+		"userAgent":         chromeUA(),
+		"languages":         []interface{}{"en-US", "en"},
+		"language":          "en-US",
+		"maxTouchPoints":    float64(0),
+		"hasLocalStorage":   true,
 		"hasSessionStorage": true,
-		"hasIndexedDB":     true,
+		"hasIndexedDB":      true,
 	}
 
 	req := buildNavRequest(t, chromeUA(), navData)
@@ -228,20 +228,20 @@ func TestJSArtifacts_WebDriverTrue_Detected(t *testing.T) {
 
 func TestStorageCoherence_Normal_Passes(t *testing.T) {
 	navData := map[string]interface{}{
-		"vendor":           "Google Inc.",
-		"productSub":       "20030107",
-		"hasChrome":        true,
-		"chrome":           map[string]interface{}{},
-		"cookieEnabled":    true,
-		"webdriver":        false,
-		"hasLocalStorage":  true,
+		"vendor":            "Google Inc.",
+		"productSub":        "20030107",
+		"hasChrome":         true,
+		"chrome":            map[string]interface{}{},
+		"cookieEnabled":     true,
+		"webdriver":         false,
+		"hasLocalStorage":   true,
 		"hasSessionStorage": true,
-		"hasIndexedDB":     true,
-		"platform":         "Win32",
-		"userAgent":        chromeUA(),
-		"languages":        []interface{}{"en-US", "en"},
-		"language":         "en-US",
-		"maxTouchPoints":   float64(0),
+		"hasIndexedDB":      true,
+		"platform":          "Win32",
+		"userAgent":         chromeUA(),
+		"languages":         []interface{}{"en-US", "en"},
+		"language":          "en-US",
+		"maxTouchPoints":    float64(0),
 	}
 
 	req := buildNavRequest(t, chromeUA(), navData)
@@ -262,20 +262,20 @@ func TestStorageCoherence_Normal_Passes(t *testing.T) {
 
 func TestStorageCoherence_MissingIndexedDB_Detected(t *testing.T) {
 	navData := map[string]interface{}{
-		"vendor":           "Google Inc.",
-		"productSub":       "20030107",
-		"hasChrome":        true,
-		"chrome":           map[string]interface{}{},
-		"cookieEnabled":    true,
-		"webdriver":        false,
-		"hasLocalStorage":  true,
+		"vendor":            "Google Inc.",
+		"productSub":        "20030107",
+		"hasChrome":         true,
+		"chrome":            map[string]interface{}{},
+		"cookieEnabled":     true,
+		"webdriver":         false,
+		"hasLocalStorage":   true,
 		"hasSessionStorage": true,
-		"hasIndexedDB":     false, // CAUGHT
-		"platform":         "Win32",
-		"userAgent":        chromeUA(),
-		"languages":        []interface{}{"en-US", "en"},
-		"language":         "en-US",
-		"maxTouchPoints":   float64(0),
+		"hasIndexedDB":      false, // CAUGHT
+		"platform":          "Win32",
+		"userAgent":         chromeUA(),
+		"languages":         []interface{}{"en-US", "en"},
+		"language":          "en-US",
+		"maxTouchPoints":    float64(0),
 	}
 
 	req := buildNavRequest(t, chromeUA(), navData)
@@ -304,15 +304,15 @@ func TestSwordJSArtifacts_FullRequest(t *testing.T) {
 	for _, profile := range profiles {
 		t.Run(profile.Name, func(t *testing.T) {
 			gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
-				Profile:                  profile,
-				EvadeHeaderOrder:         true,
-				EvadePlugins:             true,
-				EvadePointerInteraction:  true,
-				EvadeMediaQueryHover:     true,
+				Profile:                    profile,
+				EvadeHeaderOrder:           true,
+				EvadePlugins:               true,
+				EvadePointerInteraction:    true,
+				EvadeMediaQueryHover:       true,
 				EvadeNavigatorConnectivity: true,
-				EvadeNavigatorHardware:   true,
-				EvadeNavigatorModernAPIs: true,
-				EvadeNavigatorMediaAPIs:  true,
+				EvadeNavigatorHardware:     true,
+				EvadeNavigatorModernAPIs:   true,
+				EvadeNavigatorMediaAPIs:    true,
 			})
 
 			req := gen.GenerateRequest("http://test/api/ml/trap")

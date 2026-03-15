@@ -3,7 +3,6 @@ package behavior
 import (
 	"math"
 	"testing"
-
 )
 
 func TestGenerateChromeTiming_CSILoadTimesCoherence(t *testing.T) {

@@ -464,16 +464,16 @@ func (rg *RequestGenerator) applyProvenanceEvasion(req *http.Request, targetURL 
 	if order := req.Header.Get("X-Stealth-Header-Order"); order != "" {
 		// Rebuild order without removed headers
 		removedHeaders := map[string]bool{
-			"Upgrade-Insecure-Requests":        true,
-			"Sec-Fetch-User":                   true,
-			constants.HeaderNavigatorData:      true,
-			constants.HeaderWebGLData:          true,
-			constants.HeaderPluginData:         true,
-			constants.HeaderFontData:           true,
-			constants.HeaderScreenData:         true,
-			constants.HeaderWebRTCData:         true,
-			constants.HeaderCanvasFingerprint:  true,
-			constants.HeaderAudioData:          true,
+			"Upgrade-Insecure-Requests":       true,
+			"Sec-Fetch-User":                  true,
+			constants.HeaderNavigatorData:     true,
+			constants.HeaderWebGLData:         true,
+			constants.HeaderPluginData:        true,
+			constants.HeaderFontData:          true,
+			constants.HeaderScreenData:        true,
+			constants.HeaderWebRTCData:        true,
+			constants.HeaderCanvasFingerprint: true,
+			constants.HeaderAudioData:         true,
 		}
 		parts := strings.Split(order, ",")
 		filtered := make([]string, 0, len(parts))

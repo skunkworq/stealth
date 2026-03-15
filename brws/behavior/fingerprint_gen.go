@@ -8,26 +8,26 @@ import (
 
 // CanvasFingerprint contains canvas rendering characteristics.
 type CanvasFingerprint struct {
-	Hash             string `json:"hash"`
-	UnmaskedRenderer string `json:"unmaskedRenderer"`
-	UnmaskedVendor   string `json:"unmaskedVendor"`
-	Renderer         string `json:"renderer"`
-	Vendor           string `json:"vendor"`
-	MaxTextureSize   int    `json:"maxTextureSize"`
-	MaxViewportDims  [2]int `json:"maxViewportDims"`
-	ShadingLanguage  string `json:"shadingLanguageVersion"`
-	Antialiasing     bool   `json:"antialiasing"`
+	Hash             string   `json:"hash"`
+	UnmaskedRenderer string   `json:"unmaskedRenderer"`
+	UnmaskedVendor   string   `json:"unmaskedVendor"`
+	Renderer         string   `json:"renderer"`
+	Vendor           string   `json:"vendor"`
+	MaxTextureSize   int      `json:"maxTextureSize"`
+	MaxViewportDims  [2]int   `json:"maxViewportDims"`
+	ShadingLanguage  string   `json:"shadingLanguageVersion"`
+	Antialiasing     bool     `json:"antialiasing"`
 	Extensions       []string `json:"extensions"`
 }
 
 // AudioFingerprint contains AudioContext characteristics.
 type AudioFingerprint struct {
-	SampleRate     float64 `json:"sampleRate"`
-	ChannelCount   int     `json:"channelCount"`
-	MaxChannelCount int    `json:"maxChannelCount"`
-	State          string  `json:"state"`
-	BaseLatency    float64 `json:"baseLatency"`
-	OutputLatency  float64 `json:"outputLatency"`
+	SampleRate      float64 `json:"sampleRate"`
+	ChannelCount    int     `json:"channelCount"`
+	MaxChannelCount int     `json:"maxChannelCount"`
+	State           string  `json:"state"`
+	BaseLatency     float64 `json:"baseLatency"`
+	OutputLatency   float64 `json:"outputLatency"`
 	// DynamicsCompressor output hash — key fingerprinting signal.
 	CompressorHash string `json:"compressorHash"`
 }
@@ -290,13 +290,13 @@ func generateAudioFingerprint(browser string, rng *rand.Rand) AudioFingerprint {
 	compHash := fmt.Sprintf("%x", sha256.Sum256([]byte(compInput)))[:16]
 
 	return AudioFingerprint{
-		SampleRate:     sampleRate,
-		ChannelCount:   2,
+		SampleRate:      sampleRate,
+		ChannelCount:    2,
 		MaxChannelCount: 2,
-		State:          "suspended",
-		BaseLatency:    roundFloat(baseLatency, 6),
-		OutputLatency:  roundFloat(outputLatency, 6),
-		CompressorHash: compHash,
+		State:           "suspended",
+		BaseLatency:     roundFloat(baseLatency, 6),
+		OutputLatency:   roundFloat(outputLatency, 6),
+		CompressorHash:  compHash,
 	}
 }
 

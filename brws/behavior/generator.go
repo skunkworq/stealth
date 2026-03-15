@@ -788,7 +788,7 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 		cv := math.Sqrt(variance) / mean
 		if cv < 0.20 {
 			// Inject a long hold and a short hold to force spread
-			holdTimes[0] = 55 + g.rng.Float64()*15           // very short: 55-70ms
+			holdTimes[0] = 55 + g.rng.Float64()*15                  // very short: 55-70ms
 			holdTimes[len(holdTimes)-1] = 300 + g.rng.Float64()*150 // long: 300-450ms
 		}
 	}

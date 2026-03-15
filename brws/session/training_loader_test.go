@@ -46,10 +46,10 @@ func TestLoadTrainingProfiles_SyntheticData(t *testing.T) {
 		NavigationHeaderOrder:  []string{"accept", "user-agent", "sec-ch-ua"},
 		SubresourceHeaderOrder: []string{"accept", "user-agent"},
 		CommonHeaders: map[string]string{
-			"user-agent":        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-			"sec-ch-ua":         `"Chromium";v="146", "Google Chrome";v="146"`,
+			"user-agent":         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+			"sec-ch-ua":          `"Chromium";v="146", "Google Chrome";v="146"`,
 			"sec-ch-ua-platform": `"Windows"`,
-			"accept-language":   "en-US,en;q=0.9",
+			"accept-language":    "en-US,en;q=0.9",
 		},
 		HeaderFrequency: map[string]int{
 			"user-agent": 2,
