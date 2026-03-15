@@ -1296,6 +1296,161 @@ func TestNormalCrossSiteDocumentNavigationPostDoesNotTriggerRuntimeIndicators(t 
 	}
 }
 
+func TestDocumentNavigationGetWithRuntimeHeadersDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://example.com/dashboard", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Referer", "https://example.com/home")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2200))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2200))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected document navigation GET with runtime headers to be detected, got score %.3f", detection.Score)
+	}
+
+	foundNavigationIndicator := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_impossible_runtime_headers") {
+				foundNavigationIndicator = true
+			}
+		}
+	}
+
+	if !foundNavigationIndicator {
+		t.Fatal("expected document_navigation_impossible_runtime_headers indicator")
+	}
+}
+
+func TestDocumentNavigationToTelemetryEndpointDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://example.com/api/telemetry", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Referer", "https://example.com/dashboard")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected document navigation to telemetry endpoint to be detected, got score %.3f", detection.Score)
+	}
+
+	foundEndpointIndicator := false
+	foundMissingUser := false
+	foundMissingUIR := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_to_telemetry_endpoint") {
+				foundEndpointIndicator = true
+			}
+			if ind == "document_navigation_missing_user_activation" {
+				foundMissingUser = true
+			}
+			if ind == "document_navigation_missing_upgrade_insecure_requests" {
+				foundMissingUIR = true
+			}
+		}
+	}
+
+	if !foundEndpointIndicator {
+		t.Fatal("expected document_navigation_to_telemetry_endpoint indicator")
+	}
+	if !foundMissingUser {
+		t.Fatal("expected document_navigation_missing_user_activation indicator")
+	}
+	if !foundMissingUIR {
+		t.Fatal("expected document_navigation_missing_upgrade_insecure_requests indicator")
+	}
+}
+
+func TestDocumentNavigationGhostHeaderOrderDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://test/", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	req.Header.Set("Referer", "http://test/dashboard")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Content-Type,Sec-Fetch-Site,Sec-Fetch-Mode,Sec-Fetch-Dest,Accept-Encoding,Accept-Language,Origin,Referer")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected document navigation with ghost header order to be detected, got score %.3f", detection.Score)
+	}
+
+	foundGhostOrder := false
+	foundMissingUser := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_header_order_ghost_headers") {
+				foundGhostOrder = true
+			}
+			if ind == "document_navigation_missing_user_activation" {
+				foundMissingUser = true
+			}
+		}
+	}
+
+	if !foundGhostOrder {
+		t.Fatal("expected document_navigation_header_order_ghost_headers indicator")
+	}
+	if !foundMissingUser {
+		t.Fatal("expected document_navigation_missing_user_activation indicator")
+	}
+}
+
+func TestNormalSameOriginDocumentNavigationGetDoesNotTriggerIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://example.com/dashboard", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Referer", "https://example.com/home")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Accept-Language,Accept-Encoding,Referer,Upgrade-Insecure-Requests,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-User")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_") {
+				t.Fatalf("did not expect document navigation indicator %q for a normal same-origin navigation", ind)
+			}
+		}
+	}
+}
+
 func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
 	detector := NewStealthDetector()
 

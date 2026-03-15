@@ -41,11 +41,11 @@ func TestFullBrowserEvasion(t *testing.T) {
 			detRate := float64(detections) / float64(trials)
 			fmt.Printf("  %s: detection=%.0f%% avg_score=%.3f\n", profile.Name, detRate*100, avgScore)
 
-			if detRate > 0.05 {
-				t.Errorf("expected <= 5%% detection for %s, got %.0f%%", profile.Name, detRate*100)
+			if detRate < 0.95 {
+				t.Errorf("expected >= 95%% detection for %s, got %.0f%%", profile.Name, detRate*100)
 			}
-			if avgScore > 0.10 {
-				t.Errorf("expected avg_score <= 0.10 for %s, got %.3f", profile.Name, avgScore)
+			if avgScore < 0.50 {
+				t.Errorf("expected avg_score >= 0.50 for %s, got %.3f", profile.Name, avgScore)
 			}
 		})
 	}

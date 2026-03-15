@@ -129,33 +129,32 @@ func TestSwordVsShield(t *testing.T) {
 			t.Fatalf("expected high sword confidence in library matrix, got %.3f", swordResult.AvgConfidence)
 		}
 
-		// Armed sword: navigation evasion (dest=document, mode=navigate) makes
-		// the request indistinguishable from a real Firefox page load. The sword
-		// wins this round — 0% detection at score 0.000.
+		// Armed sword: the shield should catch the current navigation evasion path.
 		armedResult, ok := resultMap["our_stealth_armed"]
 		if !ok {
 			t.Fatal("missing tool result for our_stealth_armed")
 		}
-		if armedResult.DetectionRate > 0.05 {
-			t.Fatalf("expected armed sword detection <= 5%% (sword wins), got %.0f%%",
+		if armedResult.DetectionRate < 0.95 {
+			t.Fatalf("expected armed sword detection >= 95%% in library matrix, got %.0f%%",
 				armedResult.DetectionRate*100)
 		}
-		if armedResult.AvgBotScore > 0.10 {
-			t.Fatalf("expected armed sword avg score <= 0.10 (sword wins), got %.3f", armedResult.AvgBotScore)
+		if armedResult.AvgBotScore < 0.50 {
+			t.Fatalf("expected armed sword avg score >= 0.50 in library matrix, got %.3f", armedResult.AvgBotScore)
 		}
 
 		// Full browser: same-origin navigation with ALL 10 runtime headers.
-		// Preserves full fingerprint context while evading all provenance gates.
+		// The shield should also catch impossible document navigations that carry
+		// dense runtime context.
 		browserResult, ok := resultMap["our_stealth_browser"]
 		if !ok {
 			t.Fatal("missing tool result for our_stealth_browser")
 		}
-		if browserResult.DetectionRate > 0.05 {
-			t.Fatalf("expected browser sword detection <= 5%% (sword wins), got %.0f%%",
+		if browserResult.DetectionRate < 0.95 {
+			t.Fatalf("expected browser sword detection >= 95%% in library matrix, got %.0f%%",
 				browserResult.DetectionRate*100)
 		}
-		if browserResult.AvgBotScore > 0.10 {
-			t.Fatalf("expected browser sword avg score <= 0.10 (sword wins), got %.3f", browserResult.AvgBotScore)
+		if browserResult.AvgBotScore < 0.50 {
+			t.Fatalf("expected browser sword avg score >= 0.50 in library matrix, got %.3f", browserResult.AvgBotScore)
 		}
 	})
 
@@ -257,13 +256,12 @@ func TestArmedSwordEvasion(t *testing.T) {
 				}
 			}
 
-			// Sword wins: navigation evasion bypasses all provenance gates.
-			if detectionRate > 0.05 {
-				t.Errorf("armed sword profile %q detection rate %.0f%% > 5%% (sword should evade) (%d/%d)",
+			if detectionRate < 0.95 {
+				t.Errorf("armed sword profile %q detection rate %.0f%% < 95%% (%d/%d)",
 					profile.Name, detectionRate*100, detections, trials)
 			}
-			if avgScore > 0.10 {
-				t.Errorf("armed sword profile %q avg score %.3f > 0.10 (sword should evade)", profile.Name, avgScore)
+			if avgScore < 0.50 {
+				t.Errorf("armed sword profile %q avg score %.3f < 0.50", profile.Name, avgScore)
 			}
 		})
 	}
@@ -273,11 +271,10 @@ func TestArmedSwordEvasion(t *testing.T) {
 	t.Logf("\n=== ARMED SWORD DETECTION SUMMARY ===")
 	t.Logf("Overall: detection=%.0f%% avg_score=%.3f",
 		overallDetectionRate*100, overallAvgScore)
-	// Sword wins: navigation evasion is indistinguishable from real Firefox.
-	if overallDetectionRate > 0.05 {
-		t.Fatalf("expected overall armed sword detection <= 5%% (sword wins), got %.0f%%", overallDetectionRate*100)
+	if overallDetectionRate < 0.95 {
+		t.Fatalf("expected overall armed sword detection >= 95%%, got %.0f%%", overallDetectionRate*100)
 	}
-	if overallAvgScore > 0.10 {
-		t.Fatalf("expected overall armed sword avg score <= 0.10 (sword wins), got %.3f", overallAvgScore)
+	if overallAvgScore < 0.50 {
+		t.Fatalf("expected overall armed sword avg score >= 0.50, got %.3f", overallAvgScore)
 	}
 }

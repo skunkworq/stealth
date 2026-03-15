@@ -2118,14 +2118,13 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		}
 	}
 
-	// Sub-check 6: document navigation submissions with runtime telemetry.
-	// A browser form/navigation POST can legitimately carry Origin, cookies, and
-	// a form body, but it cannot attach client-side runtime telemetry in custom
-	// X-* headers. If a document navigation carries multiple runtime surfaces, it
-	// is almost certainly synthetic request generation rather than a real form
-	// submission, regardless of whether the fetch metadata claims same-origin,
-	// same-site, or cross-site.
-	if isDocumentNavigationSubmission(req) {
+	// Sub-check 6: document navigations with synthetic telemetry context.
+	// Real top-level navigations can carry Referer, cookies, and normal browser
+	// navigation metadata, but they cannot attach client-side runtime telemetry in
+	// custom X-* headers. Separately, a same-origin document navigation to an
+	// API/telemetry endpoint without user activation is suspicious because it
+	// looks like a fetch/beacon request masquerading as a page load.
+	if isDocumentNavigation(req) {
 		runtimeHeaderCount := countPresentHeaders(req, []string{
 			constants.HeaderNavigatorData,
 			constants.HeaderWebGLData,
@@ -2147,6 +2146,8 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		})
 		bodySnapshot, bodyErr := snapshotRequestBody(req)
 		bodyText := strings.TrimSpace(string(bodySnapshot))
+		uaLower := strings.ToLower(req.Header.Get("User-Agent"))
+		isBrowserUA := strings.Contains(uaLower, "chrome") || strings.Contains(uaLower, "firefox") || strings.Contains(uaLower, "safari")
 
 		if runtimeHeaderCount >= 4 {
 			vec.Score += 0.78
@@ -2164,6 +2165,37 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			if bodyErr == nil && len(bodySnapshot) > 0 && !bodyContainsRuntimePayload(bodyText) {
 				vec.Score += 0.18
 				vec.Indicators = append(vec.Indicators, "document_navigation_body_missing_runtime_payload")
+			}
+		}
+
+		if req.Method == http.MethodGet &&
+			runtimeHeaderCount == 0 &&
+			isBrowserUA &&
+			req.Header.Get("Sec-Fetch-Site") == "same-origin" &&
+			req.Referer() != "" {
+			ghostHeaders := ghostHeadersInDeclaredOrder(req, []string{"Content-Type", "Origin"})
+			if len(ghostHeaders) > 0 {
+				vec.Score += 0.44
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"document_navigation_header_order_ghost_headers: %s",
+					strings.Join(ghostHeaders, ",")))
+			}
+
+			if looksLikeTelemetryEndpointPath(req.URL) {
+				vec.Score += 0.52
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"document_navigation_to_telemetry_endpoint: %s",
+					normalizedURLPath(req.URL)))
+			}
+
+			if req.Header.Get("Sec-Fetch-User") == "" {
+				vec.Score += 0.18
+				vec.Indicators = append(vec.Indicators, "document_navigation_missing_user_activation")
+			}
+
+			if req.Header.Get("Upgrade-Insecure-Requests") == "" {
+				vec.Score += 0.12
+				vec.Indicators = append(vec.Indicators, "document_navigation_missing_upgrade_insecure_requests")
 			}
 		}
 	}
@@ -2500,14 +2532,22 @@ func isNoCORSTelemetryFetch(req *http.Request) bool {
 		req.Header.Get("Sec-Fetch-Mode") == "no-cors"
 }
 
+func isDocumentNavigation(req *http.Request) bool {
+	if req == nil {
+		return false
+	}
+
+	return req.Header.Get("Sec-Fetch-Dest") == "document" &&
+		req.Header.Get("Sec-Fetch-Mode") == "navigate"
+}
+
 func isDocumentNavigationSubmission(req *http.Request) bool {
 	if req == nil {
 		return false
 	}
 
 	return req.Method == http.MethodPost &&
-		req.Header.Get("Sec-Fetch-Dest") == "document" &&
-		req.Header.Get("Sec-Fetch-Mode") == "navigate" &&
+		isDocumentNavigation(req) &&
 		req.Header.Get("Sec-Fetch-User") == "?1"
 }
 
@@ -2639,6 +2679,71 @@ func snapshotRequestBody(req *http.Request) ([]byte, error) {
 	req.Body = io.NopCloser(bytes.NewReader(body))
 	req.ContentLength = int64(len(body))
 	return body, nil
+}
+
+func normalizedURLPath(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+	if u.Path != "" {
+		return strings.ToLower(u.Path)
+	}
+	return "/"
+}
+
+func looksLikeTelemetryEndpointPath(u *url.URL) bool {
+	path := normalizedURLPath(u)
+	if path == "" {
+		return false
+	}
+
+	telemetryMarkers := []string{
+		"/api/telemetry",
+		"/api/ml/",
+		"/collect",
+		"/beacon",
+		"/metrics",
+		"/track",
+		"/events",
+		"/trap",
+	}
+
+	for _, marker := range telemetryMarkers {
+		if strings.Contains(path, marker) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func ghostHeadersInDeclaredOrder(req *http.Request, candidates []string) []string {
+	if req == nil {
+		return nil
+	}
+
+	order := req.Header.Get("X-Stealth-Header-Order")
+	if order == "" {
+		return nil
+	}
+
+	declared := strings.Split(strings.ToLower(order), ",")
+	ghosts := make([]string, 0)
+	for _, candidate := range candidates {
+		lowerCandidate := strings.ToLower(candidate)
+		declaredPresent := false
+		for _, header := range declared {
+			if strings.TrimSpace(header) == lowerCandidate {
+				declaredPresent = true
+				break
+			}
+		}
+		if declaredPresent && req.Header.Get(candidate) == "" {
+			ghosts = append(ghosts, lowerCandidate)
+		}
+	}
+
+	return ghosts
 }
 
 // bodyContainsRuntimePayload checks whether the body contains genuine browser
