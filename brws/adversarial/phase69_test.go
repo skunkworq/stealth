@@ -2,6 +2,7 @@ package adversarial_test
 
 import (
 	"encoding/json"
+	"regexp"
 	"testing"
 
 	"github.com/skunkworq/stealth/brws/adversarial"
@@ -57,14 +58,20 @@ func TestPhase69Integration(t *testing.T) {
 
 	uaData, _ := navData["userAgentData"].(map[string]interface{})
 	brands, _ := uaData["brands"].([]interface{})
+	re := regexp.MustCompile(`Chrome/(\d+)`)
+	matches := re.FindStringSubmatch(req1.Header.Get("User-Agent"))
+	expectedVersion := ""
+	if len(matches) > 1 {
+		expectedVersion = matches[1]
+	}
 
 	foundChromeBrand := false
 	for _, b := range brands {
 		bm := b.(map[string]interface{})
 		if bm["brand"] == "Google Chrome" {
 			foundChromeBrand = true
-			if bm["version"] != "134" {
-				t.Errorf("Expected Chrome version 134 in userAgentData, got %v", bm["version"])
+			if expectedVersion != "" && bm["version"] != expectedVersion {
+				t.Errorf("Expected Chrome version %s in userAgentData, got %v", expectedVersion, bm["version"])
 			}
 		}
 	}

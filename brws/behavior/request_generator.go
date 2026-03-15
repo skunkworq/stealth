@@ -9,9 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/crc32"
+	"io"
 	"math"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -86,18 +88,92 @@ type RequestGeneratorConfig struct {
 	EvadeCanvasGeometryDeep    bool             // Phase 94: ensure canvas measureText geometry consistency
 	EvadeMathPrecision         bool             // Phase 95: ensure floating point / math precision consistency
 	EvadeUADataDeep            bool             // Phase 96: ensure navigator.userAgentData high-entropy correlation
+	EvadeRequestProvenance     bool             // Phase 97: model request as same-origin telemetry submission, not initial navigation
+	EvasionStrategy            EvasionStrategy  // Adaptive strategy (overrides EvadeRequestProvenance if set)
 	ForceDetections            bool             // Overrides random chance to always trigger checks (for tests)
+}
+
+// MaxEvasionConfig returns a RequestGeneratorConfig with ALL evasion phases enabled.
+// This represents the sword's best attempt to evade the shield.
+func MaxEvasionConfig(profile *BrowserProfile) *RequestGeneratorConfig {
+	return &RequestGeneratorConfig{
+		Profile:                    profile,
+		SpoofLocalIPs:              false, // RealBrowserStrategy: real browsers never send proxy IP headers
+		EvadeCanvasEntropy:         true,
+		EvadeWebGLCount:            true,
+		EvadeScreenHeightGap:       true,
+		EvadeWebGLViewport:         true,
+		EvadeDeviceMemoryClamp:     true,
+		EvadeAudioBaseLatency:      true,
+		EvadeScreenOrientation:     true,
+		EvadeBatteryStatus:         true,
+		EvadeStorageQuota:          true,
+		EvadeConnectionSaveData:    true,
+		EvadeNavigatorKeyboard:     true,
+		EvadeHardwareConcurrency:   true,
+		EvadeNetworkQuantization:   true,
+		EvadeDPRQuantization:       true,
+		EvadeErrorStackFormat:      true,
+		EvadeWebGLParameters:       true,
+		EvadeLanguageConsistency:   true,
+		EvadeMediaQueryHover:       true,
+		EvadeTLSFingerprint:        true,
+		EvadeHardwareCoherence:     true,
+		EvadePointerInteraction:    true,
+		EvadePluginFilenames:       true,
+		EvadeWebGPU:                true,
+		EvadePermissions:           true,
+		EvadeMediaDevices:          true,
+		EvadeWebRTC:                true,
+		EvadeCanvasNoise:           true,
+		EvadeScreenIsExtended:      true,
+		EvadeNavigatorConnectivity: true,
+		EvadeNavigatorHardware:     true,
+		EvadeNavigatorModernAPIs:   true,
+		EvadeNavigatorMediaAPIs:    true,
+		EvadeHeaderOrder:           true,
+		EvadeNavigatorWorkers:      true,
+		EvadeWebGLShaderPrecision:  true,
+		EvadeTimingDeepAnalysis:    true,
+		EvadePlugins:               true,
+		EvadePermissionsDeep:       true,
+		EvadeClientHintsDeep:       true,
+		EvadeOffscreenCanvasDeep:   true,
+		EvadeGamepadAPI:            true,
+		EvadeHardwareHardening:     true,
+		EvadeScreenGeometryDeep:    true,
+		EvadeNavigatorPrototype:    true,
+		EvadeWebGLRendererDeep:     true,
+		EvadeAudioContextDeep:      true,
+		EvadePerformanceDeep:       true,
+		EvadeTimingDeep:            true,
+		EvadeTouchDeep:             true,
+		EvadeOrientationDeep:       true,
+		EvadeNetworkInfoDeep:       true,
+		EvadeStorageDeep:           true,
+		EvadeWebGLAttributesDeep:   true,
+		EvadePaintTimingDeep:       true,
+		EvadeWorkerCoherence:       true,
+		EvadeIntrospectionDeep:     true,
+		EvadeAudioGraphDeep:        true,
+		EvadeCanvasGeometryDeep:    true,
+		EvadeMathPrecision:         true,
+		EvadeUADataDeep:            true,
+		EvadeRequestProvenance:     true,
+		EvasionStrategy:            &SendBeaconStrategy{},
+	}
 }
 
 // RequestGenerator produces complete, internally-consistent stealth HTTP requests
 // with all fingerprint headers that the shield's StealthDetector checks.
 type RequestGenerator struct {
-	config     *RequestGeneratorConfig
-	eventGen   *EventGenerator
-	profile    *BrowserProfile
-	rng        *rand.Rand
-	canvasHash string // stable per instance
-	targetURL  string // target URL for timing referrer chain
+	config       *RequestGeneratorConfig
+	eventGen     *EventGenerator
+	profile      *BrowserProfile
+	rng          *rand.Rand
+	canvasHash   string // stable per instance
+	targetURL    string // target URL for timing referrer chain
+	loadEventEnd int64  // stored from timing generation for behavioral coordination
 }
 
 // NewRequestGenerator creates a new RequestGenerator. If config is nil, a random
@@ -155,7 +231,10 @@ func NewRequestGenerator(config *RequestGeneratorConfig) *RequestGenerator {
 	// IDAT chunk: zlib-compressed pixel data (valid DEFLATE stream)
 	var idatBuf bytes.Buffer
 	zlibW := zlib.NewWriter(&idatBuf)
-	rawPixels := make([]byte, 8100)
+	// Real canvas toDataURL() for a 300x150 default canvas produces 5KB-20KB base64.
+	// Use 48000 bytes (200x60 RGBA) to ensure compressed output > 200 base64 chars
+	// even with mostly-white data (passes canvas_payload_too_short check).
+	rawPixels := make([]byte, 48000)
 	if config.EvadeCanvasEntropy {
 		// Real canvases have low entropy (<6.0) because they have a solid background
 		// and simple shapes/text. We fill with white and sprinkle a unique 32-byte
@@ -278,6 +357,14 @@ func (rg *RequestGenerator) GenerateRequest(targetURL string) *http.Request {
 		}
 	}
 
+	// Adaptive evasion strategy (overrides Phase 97 if set)
+	if rg.config != nil && rg.config.EvasionStrategy != nil {
+		rg.config.EvasionStrategy.Apply(req, rg, targetURL)
+	} else if rg.config != nil && rg.config.EvadeRequestProvenance {
+		// Legacy Phase 97: Request Provenance Evasion
+		rg.applyProvenanceEvasion(req, targetURL)
+	}
+
 	// Dynamic IP Spoofing
 	if rg.config != nil && rg.config.SpoofLocalIPs {
 		ip := randomLocalIP()
@@ -289,6 +376,134 @@ func (rg *RequestGenerator) GenerateRequest(targetURL string) *http.Request {
 	}
 
 	return req
+}
+
+// applyProvenanceEvasion transforms the request from an initial top-level navigation
+// into a same-origin telemetry submission (XHR/fetch). Real browser stealth flows
+// work in two phases: (1) navigate to the page (document request, no runtime data),
+// (2) page JS collects fingerprints and sends them via fetch to a telemetry endpoint.
+// The shield's provenance check flags dense runtime bundles on initial navigation
+// because JS telemetry can't exist before the page loads and executes probes.
+func (rg *RequestGenerator) applyProvenanceEvasion(req *http.Request, targetURL string) {
+	// Model this as a POST telemetry submission — real JS telemetry uses fetch()
+	// with POST and a JSON body, not GET with data stuffed in headers.
+	req.Method = http.MethodPost
+
+	// Build a realistic telemetry beacon body that mirrors what real analytics
+	// SDKs (Segment, Amplitude, Sentry) send: session metadata + summarized
+	// runtime fingerprint signals. Body must be ≥256 bytes and contain runtime
+	// keywords to pass the shield's body-content analysis.
+	sessionID := fmt.Sprintf("%x", rg.rng.Uint64())
+	pageLoadTs := time.Now().Add(-time.Duration(2000+rg.rng.Intn(5000)) * time.Millisecond).UnixMilli()
+	ttfb := 80 + rg.rng.Intn(300)
+	fcp := ttfb + 100 + rg.rng.Intn(400)
+	lcp := fcp + 200 + rg.rng.Intn(800)
+	bodyJSON := fmt.Sprintf(
+		`{"sid":"%s","ts":%d,"page":"/","v":"1.4.2","seq":%d,`+
+			`"navigator":{"lang":"%s","cores":%d,"mem":%d},`+
+			`"timing":{"ttfb":%d,"fcp":%d,"lcp":%d},`+
+			`"canvas":"%x","audio":"%x",`+
+			`"webgl":{"vendor":"Google Inc.","renderer":"ANGLE"}}`,
+		sessionID, pageLoadTs, 1+rg.rng.Intn(5),
+		rg.profile.AcceptLanguage, rg.profile.HardwareConcurrency, rg.profile.DeviceMemory,
+		ttfb, fcp, lcp,
+		rg.rng.Uint64(), rg.rng.Uint64())
+	body := []byte(bodyJSON)
+	req.Header.Set("Content-Type", "application/json")
+	req.Body = io.NopCloser(bytes.NewReader(body))
+	req.ContentLength = int64(len(body))
+
+	// Change Sec-Fetch headers from initial navigation to same-origin fetch.
+	// same-origin mode (not cors) — this is a same-origin POST via fetch().
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "same-origin")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Del("Sec-Fetch-User") // only present on user-initiated navigation
+
+	// Set Referer and Origin to the origin page (different from the telemetry endpoint).
+	// Real pattern: page at / collects data, POSTs to /api/telemetry.
+	if parsed, err := url.Parse(targetURL); err == nil {
+		originPage := parsed.Scheme + "://" + parsed.Host + "/"
+		req.Header.Set("Referer", originPage)
+		req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
+	}
+
+	// Remove Upgrade-Insecure-Requests — only sent on document navigation
+	req.Header.Del("Upgrade-Insecure-Requests")
+
+	// Change Accept to XHR format (not document)
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+
+	// Chrome 146: XHR/fetch requests use priority u=1 (not u=0 like navigation)
+	if rg.profile.Browser == "chrome" {
+		req.Header.Set("Priority", "u=1, i")
+	}
+
+	// Strip all "JS context" headers AND most "post-load" telemetry headers.
+	// Phase 99: The shield now detects dense telemetry payloads in headers on
+	// same-origin fetch (postLoadHeaderCount >= 3 triggers bulk_payload check).
+	// Keep only Behavioral + Timing (2 post-load headers, below the >= 3 gate).
+	// This achieves:
+	// 1. hasJSFingerprintHeaders() = false → missing_* penalties skipped.
+	// 2. postLoadHeaderCount = 2 < 3 → telemetry bulk payload check skipped.
+	// 3. presentCount = 2 → coverage score 0.24 (below ensemble threshold).
+	req.Header.Del(constants.HeaderNavigatorData)
+	req.Header.Del(constants.HeaderWebGLData)
+	req.Header.Del(constants.HeaderPluginData)
+	req.Header.Del(constants.HeaderFontData)
+	req.Header.Del(constants.HeaderScreenData)
+	req.Header.Del(constants.HeaderWebRTCData)
+	req.Header.Del(constants.HeaderCanvasFingerprint)
+	req.Header.Del(constants.HeaderAudioData)
+
+	// Note: Chrome sends low-entropy Client Hints (Sec-Ch-Ua, -Mobile, -Platform)
+	// on ALL requests including fetch/XHR. Do NOT strip them — the shield detects
+	// Chrome UA without Client Hints as a strong signal.
+
+	// Update the X-Stealth-Header-Order if present, to reflect the new header set
+	if order := req.Header.Get("X-Stealth-Header-Order"); order != "" {
+		// Rebuild order without removed headers
+		removedHeaders := map[string]bool{
+			"Upgrade-Insecure-Requests":        true,
+			"Sec-Fetch-User":                   true,
+			constants.HeaderNavigatorData:      true,
+			constants.HeaderWebGLData:          true,
+			constants.HeaderPluginData:         true,
+			constants.HeaderFontData:           true,
+			constants.HeaderScreenData:         true,
+			constants.HeaderWebRTCData:         true,
+			constants.HeaderCanvasFingerprint:  true,
+			constants.HeaderAudioData:          true,
+		}
+		parts := strings.Split(order, ",")
+		filtered := make([]string, 0, len(parts))
+		for _, p := range parts {
+			trimmed := strings.TrimSpace(p)
+			if !removedHeaders[trimmed] {
+				filtered = append(filtered, trimmed)
+			}
+		}
+		// Add Origin, Referer, and Content-Type in browser-consistent positions
+		final := make([]string, 0, len(filtered)+3)
+		refererAdded := false
+		for _, h := range filtered {
+			// Content-Type goes before Accept in browser fetch order
+			if h == "Accept" {
+				final = append(final, "Content-Type")
+			}
+			final = append(final, h)
+			if h == "Accept-Language" && !refererAdded {
+				final = append(final, "Origin")
+				final = append(final, "Referer")
+				refererAdded = true
+			}
+		}
+		if !refererAdded {
+			final = append(final, "Origin")
+			final = append(final, "Referer")
+		}
+		req.Header.Set("X-Stealth-Header-Order", strings.Join(final, ","))
+	}
 }
 
 type headerPair struct {
@@ -311,9 +526,10 @@ func (rg *RequestGenerator) GenerateOrderedHeaders() []headerPair {
 		}
 	}
 
-	// chrome order (sample)
-	add("Host", "") // http.Request sets this
-	add("Connection", "keep-alive")
+	// Chrome 146 ordered headers.
+	// The X-Stealth-Header-Order simulation header uses HTTP/1.1 title-case names.
+	// The shield's header-order check expects User-Agent before Accept for Chrome,
+	// and Sec-Ch-Ua before User-Agent, so we preserve that relative ordering.
 	if rg.profile.SecChUa != "" {
 		add("Sec-Ch-Ua", rg.profile.SecChUa)
 		add("Sec-Ch-Ua-Mobile", rg.profile.SecChUaMobile)
@@ -323,7 +539,6 @@ func (rg *RequestGenerator) GenerateOrderedHeaders() []headerPair {
 			add("Sec-Ch-Ua-Arch", rg.profile.SecChUaArch)
 			add("Sec-Ch-Ua-Bitness", rg.profile.SecChUaBitness)
 		} else if (rg.config != nil && rg.config.EvadeClientHintsDeep) || (rg.config != nil && rg.config.ForceDetections) {
-			// Legacy/Fallback: Extract major version from Sec-Ch-Ua to build a realistic full version list
 			re := regexp.MustCompile(`"([^"]+)";v="(\d+)"`)
 			matches := re.FindAllStringSubmatch(rg.profile.SecChUa, -1)
 			fullVersions := []string{}
@@ -345,6 +560,9 @@ func (rg *RequestGenerator) GenerateOrderedHeaders() []headerPair {
 	add("Upgrade-Insecure-Requests", "1")
 	add("User-Agent", rg.profile.UserAgent)
 	add("Accept", rg.profile.Accept)
+	if rg.profile.Browser == "chrome" {
+		add("Priority", "u=0, i")
+	}
 	add("Sec-Fetch-Site", rg.profile.SecFetchSite)
 	add("Sec-Fetch-Mode", rg.profile.SecFetchMode)
 	add("Sec-Fetch-User", rg.profile.SecFetchUser)
@@ -432,6 +650,11 @@ func (rg *RequestGenerator) setHTTPHeaders(h http.Header) {
 	h.Set("Connection", "keep-alive")
 	h.Set("Upgrade-Insecure-Requests", "1")
 	h.Set("Cache-Control", "max-age=0")
+
+	// Chrome 146 Priority header (RFC 9218)
+	if rg.profile.Browser == "chrome" {
+		h.Set("Priority", "u=0, i")
+	}
 
 	// Sec-Fetch headers
 	h.Set("Sec-Fetch-Dest", rg.profile.SecFetchDest)
@@ -558,20 +781,13 @@ func (rg *RequestGenerator) generateWebGL(renderer string) string {
 	}
 
 	// Phase 81: WebGL Renderer Deep Consistency
+	// Use the profile's own renderer for consistency — the same renderer is passed to
+	// generateNavigator for hardware coherence, so overriding here would cause a mismatch
+	// between WebGL unmasked_renderer and navigator hardwareConcurrency.
 	finalRenderer := renderer
 	unmaskedRenderer := renderer
-	if rg.config.EvadeWebGLRendererDeep {
-		// Ensure renderer is OS-consistent
-		os := strings.ToLower(rg.profile.Platform)
-		if strings.Contains(os, "mac") || strings.Contains(os, "darwin") {
-			finalRenderer = "Apple M1"
-			unmaskedRenderer = "Apple M1"
-		} else if strings.Contains(os, "win") {
-			finalRenderer = "NVIDIA GeForce RTX 3080"
-			unmaskedRenderer = "NVIDIA GeForce RTX 3080"
-		}
-	} else if rg.config.ForceDetections {
-		// Simulate mismatch: NVIDIA on Mac
+	if rg.config.ForceDetections && !rg.config.EvadeWebGLRendererDeep {
+		// Simulate mismatch: NVIDIA on Mac (only if evasion not active)
 		os := strings.ToLower(rg.profile.Platform)
 		if strings.Contains(os, "mac") || strings.Contains(os, "darwin") {
 			finalRenderer = "NVIDIA GeForce RTX 3080"
@@ -997,6 +1213,9 @@ func (rg *RequestGenerator) generateTiming() string {
 		})
 	}
 
+	// Store loadEventEnd for behavioral timestamp coordination.
+	rg.loadEventEnd = loadEventEnd
+
 	data := map[string]interface{}{
 		"entries":         entries,
 		"ttfb":            float64(resources[0].maxGap + 50),
@@ -1011,8 +1230,36 @@ func (rg *RequestGenerator) generateTiming() string {
 
 // generateBehavioral creates the X-Behavioral-Data header JSON.
 // Delegates to the EventGenerator for human-like mouse/typing data.
+// When loadEventEnd is set (from timing generation), behavioral timestamps
+// are offset to start after page load to avoid the behavioral_before_page_load check.
 func (rg *RequestGenerator) generateBehavioral() string {
 	eventData := rg.eventGen.Generate()
+
+	// Coordinate behavioral timestamps with timing data:
+	// behavioral events must start AFTER loadEventEnd.
+	if rg.loadEventEnd > 0 && len(eventData.MouseTimestamps) > 0 {
+		earliest := eventData.MouseTimestamps[0]
+		for _, ts := range eventData.MouseTimestamps {
+			if ts < earliest {
+				earliest = ts
+			}
+		}
+		// Offset so first behavioral event is 500-1500ms after page load
+		offset := rg.loadEventEnd - earliest + 500 + int64(rg.rng.Intn(1000))
+		for i := range eventData.MouseTimestamps {
+			eventData.MouseTimestamps[i] += offset
+		}
+		for i := range eventData.TypingTimestamps {
+			eventData.TypingTimestamps[i] += offset
+		}
+		for i := range eventData.ScrollTimestamps {
+			eventData.ScrollTimestamps[i] += offset
+		}
+		for i := range eventData.ClickTimestamps {
+			eventData.ClickTimestamps[i] += offset
+		}
+	}
+
 	jsonStr, _ := rg.eventGen.ToJSON(eventData)
 	return jsonStr
 }
@@ -1132,6 +1379,16 @@ func (rg *RequestGenerator) generateNavigator(dims sharedDimensions, renderer st
 		"getGamepads":                true, // Presence indicator
 		"bluetooth":                  map[string]interface{}{"getAvailability": true},
 		"usb":                        map[string]interface{}{"getDevices": true},
+	}
+
+	// Storage API availability flags (present in all modern browsers)
+	data["hasLocalStorage"] = true
+	data["hasSessionStorage"] = true
+	data["hasIndexedDB"] = true
+
+	// hasChrome flag for Chromium browsers
+	if p.Browser == "chrome" || p.Browser == "edge" {
+		data["hasChrome"] = true
 	}
 
 	rg.addMathPrecision(data)
@@ -1690,6 +1947,13 @@ func (rg *RequestGenerator) calculateSharedDimensions() sharedDimensions {
 	height := res[1]
 
 	isMobile := p.Platform == "android" || p.Platform == "ios"
+
+	// Ensure DPR >= 2.0 is only used with wide screens on desktop.
+	// The shield flags DPR >= 2.0 + width < 1920 as improbable on non-mobile.
+	if !isMobile && pixelRatio >= 2.0 && width < 1920 {
+		// Downgrade to 1.0 DPR for narrow screens
+		pixelRatio = 1.0
+	}
 
 	scrollbarW := 0
 	if !isMobile {

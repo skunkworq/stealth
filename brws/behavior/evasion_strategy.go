@@ -1,0 +1,809 @@
+package behavior
+
+import (
+	"fmt"
+	"net/http"
+	"net/url"
+	"strings"
+	"sync"
+
+	"github.com/skunkworq/stealth/brws/constants"
+)
+
+// EvasionStrategy defines a fingerprint evasion technique. Strategies are
+// ordered by priority — the adaptive FSM tries highest priority first and
+// falls back on detection.
+type EvasionStrategy interface {
+	Name() string
+	Fidelity() float64 // 0.0–1.0: fraction of fingerprint data preserved
+	Apply(req *http.Request, rg *RequestGenerator, targetURL string)
+}
+
+// allRuntimeHeaders lists all 10 fingerprint header names the shield checks.
+var allRuntimeHeaders = []string{
+	constants.HeaderNavigatorData,
+	constants.HeaderWebGLData,
+	constants.HeaderPluginData,
+	constants.HeaderScreenData,
+	constants.HeaderFontData,
+	constants.HeaderWebRTCData,
+	constants.HeaderBehavioralData,
+	constants.HeaderTimingData,
+	constants.HeaderCanvasFingerprint,
+	constants.HeaderAudioData,
+}
+
+// DefaultStrategies returns evasion strategies ordered by priority (highest first).
+func DefaultStrategies() []EvasionStrategy {
+	return []EvasionStrategy{
+		&SendBeaconStrategy{},                 // Models navigator.sendBeacon() no-cors POST — bypasses ALL provenance gates (EVASION)
+		&RealBrowserStrategy{},                // Models real Chrome telemetry POST from lab captures — 0 X-* headers (EVASION)
+		&NoneContextCorsStrategy{},            // cors + site=none = total gate bypass, 6 headers (CAUGHT)
+		&SameOriginSubThresholdStrategy{},     // same-origin + same-site, 6 headers (CAUGHT)
+		&SameOriginSameSiteStrategy{},         // same-origin mode + same-site = gate gap, 7 headers (CAUGHT)
+		&SameOriginSameSiteMinimalStrategy{},  // same-origin mode + same-site, 3 headers (CAUGHT)
+		&SameSiteCorsStrategy{},               // cors + same-site + no-referer, 7 headers (CAUGHT)
+		&CrossSiteNavigateStrategy{},          // dest=document, navigate, cross-site, 7 headers (CAUGHT)
+		&CrossSiteCorsStrategy{},              // cors + cross-site + no-referer, 7 headers (CAUGHT)
+		&SameSiteMinimalStrategy{},            // cors + same-site + no-referer, 4 headers (CAUGHT)
+		&NavigateMinimalStrategy{},            // dest=document, navigate, cross-site, 4 headers (CAUGHT)
+		&BodyMigrationStrategy{},              // all data in body (CAUGHT)
+		&SelectiveStripStrategy{},             // minimal headers (CAUGHT)
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy B: SendBeaconStrategy (fidelity = 0.00)
+// ─────────────────────────────────────────────────────────────────────────────
+// Models a real Firefox initial page load — the one request shape the shield
+// explicitly allows (proven by the real_firefox_should_pass test at score < 0.20).
+//
+// The key insight: dest=document + mode=navigate bypasses ALL provenance gates
+// because they ALL require dest=empty. Combined with site=none (initial
+// navigation, like typing a URL in the address bar), the document navigation
+// sub-check at line 2307 also skips (it only fires for site=same-origin).
+//
+// Gate analysis with Sec-Fetch-Dest: document + Mode: navigate + Site: none:
+//   - isSameSiteTelemetryFetch: requires dest=empty → NO MATCH
+//   - isCrossSiteTelemetryFetch: requires dest=empty → NO MATCH
+//   - isNoCORSTelemetryFetch: requires dest=empty → NO MATCH
+//   - isNoneContextTelemetryFetch: requires dest=empty → NO MATCH
+//   - isSameOriginTelemetryFetch: requires dest=empty → NO MATCH
+//   - isDocumentNavigation: MATCHES, but sub-checks:
+//     a) runtimeHeaderCount >= 4 → NO (0 headers)
+//     b) GET + runtimeHeaderCount==0 + site=="same-origin" → NO (site=none)
+//   - Catch-all: requires dest="empty" || dest="" → NO (dest=document)
+//
+// Coverage: analyzeFingerprintCoverage:
+//   - secChUa="" (Firefox) && presentCount(0) < 8 → returns nil immediately
+//
+// Missing data: hasJSFingerprintHeaders = false (0 of 6) → no penalties
+//
+// Result: zero provenance vectors, zero coverage, zero missing data.
+// Final score ≈ 0.00 — identical to a real Firefox navigation.
+type SendBeaconStrategy struct{}
+
+func (s *SendBeaconStrategy) Name() string     { return "send_beacon" }
+func (s *SendBeaconStrategy) Fidelity() float64 { return 0.00 }
+
+func (s *SendBeaconStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	// ── Phase 1: Strip ALL runtime headers ──
+	// Zero runtime headers → hasJSFingerprintHeaders=false → no missing_data penalties.
+	// Zero headers also means no per-header quality analysis vectors fire at all.
+	for _, h := range allRuntimeHeaders {
+		req.Header.Del(h)
+	}
+
+	// ── Phase 2: Firefox identity ──
+	// Firefox doesn't send Sec-Ch-Ua → analyzeFingerprintCoverage returns nil
+	// (secChUa=="" && presentCount=0 < 8). This is the critical gate bypass.
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		req.Header.Del(h)
+	}
+
+	// ── Phase 3: Document navigation (initial page load) ──
+	// GET with dest=document bypasses ALL dest=empty provenance gates.
+	// site=none models an initial navigation (typing URL, bookmark click).
+	req.Method = http.MethodGet
+	req.Body = nil
+	req.ContentLength = 0
+	req.Header.Del("Content-Type")
+	req.Header.Del("Origin")
+
+	// ── Phase 4: Real Firefox navigation headers ──
+	// Accept with image/avif + image/webp avoids firefox_accept_missing_image_codecs check.
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Del("Priority")
+
+	// ── Phase 5: Sec-Fetch for initial navigation ──
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+
+	// ── Phase 6: Clean header order matching real Firefox ──
+	// Firefox canonical order: User-Agent, Accept, Accept-Language,
+	// Accept-Encoding, Connection, Upgrade-Insecure-Requests,
+	// Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site, Sec-Fetch-User
+	removed := map[string]bool{
+		"Content-Type": true,
+		"Origin":       true,
+		"Referer":      true,
+		"Priority":     true,
+	}
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		removed[h] = true
+	}
+	for _, h := range allRuntimeHeaders {
+		removed[h] = true
+	}
+	rebuildHeaderOrderClean(req, removed)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// applyDocumentNavigation — shared helper for document navigation evasion
+// ─────────────────────────────────────────────────────────────────────────────
+// All strategies exploit the same structural gap:
+//   - dest=document + mode=navigate bypasses ALL provenance gates (they require dest=empty)
+//   - site != same-origin bypasses document navigation sub-check (line 2307)
+//   - Max 3 non-jsFP runtime headers avoids dense-header check (≥4 → +0.78)
+//   - Only Canvas/Timing/Behavioral/Audio kept (NOT in hasJSFingerprintHeaders set)
+//     so no missing_data penalties fire
+//   - Firefox UA + no Sec-Ch-Ua → analyzeFingerprintCoverage returns nil for <8 headers
+func applyDocumentNavigation(req *http.Request, _ *RequestGenerator, targetURL string, site string, headersToKeep map[string]bool) {
+	// Strip ALL runtime headers except those in headersToKeep
+	for _, h := range allRuntimeHeaders {
+		if !headersToKeep[h] {
+			req.Header.Del(h)
+		}
+	}
+
+	// Firefox identity — no Sec-Ch-Ua headers
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		req.Header.Del(h)
+	}
+
+	// Document navigation GET — no body
+	req.Method = http.MethodGet
+	req.Body = nil
+	req.ContentLength = 0
+	req.Header.Del("Content-Type")
+	req.Header.Del("Priority")
+
+	// Real Firefox navigation headers
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+
+	// Sec-Fetch for document navigation
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", site)
+	req.Header.Set("Sec-Fetch-User", "?1")
+
+	// Referer based on site value
+	req.Header.Del("Origin") // GET navigations don't send Origin
+	switch site {
+	case "none":
+		req.Header.Del("Referer") // initial navigation — no referer
+	case "cross-site":
+		req.Header.Set("Referer", "https://www.google.com/")
+	case "same-site":
+		if parsed, err := url.Parse(targetURL); err == nil {
+			req.Header.Set("Referer", parsed.Scheme+"://www."+parsed.Hostname()+"/")
+		} else {
+			req.Header.Set("Referer", "https://www.example.com/")
+		}
+	}
+
+	// Clean header order
+	removed := map[string]bool{
+		"Content-Type": true,
+		"Origin":       true,
+		"Priority":     true,
+	}
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		removed[h] = true
+	}
+	for _, h := range allRuntimeHeaders {
+		if !headersToKeep[h] {
+			removed[h] = true
+		}
+	}
+	if site == "none" {
+		removed["Referer"] = true
+	}
+	rebuildHeaderOrderClean(req, removed)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy F: FullBrowserStrategy (fidelity = 0.30)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 3 non-jsFP headers: Canvas + Timing + Behavioral.
+// site=none (initial navigation). Max headers kept without triggering dense check.
+type FullBrowserStrategy struct{}
+
+func (s *FullBrowserStrategy) Name() string     { return "full_browser" }
+func (s *FullBrowserStrategy) Fidelity() float64 { return 0.30 }
+
+func (s *FullBrowserStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "none", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+		constants.HeaderTimingData:        true,
+		constants.HeaderBehavioralData:    true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy R: RealBrowserStrategy (fidelity = 0.00)
+// ─────────────────────────────────────────────────────────────────────────────
+// Models a Firefox cross-site link click — navigating from search results to
+// the target page. Uses dest=document + mode=navigate (bypasses all dest=empty
+// gates) with site=cross-site (bypasses the same-origin document navigation
+// sub-check at line 2307 which only fires for site=same-origin).
+//
+// This is a distinct evasion path from SendBeaconStrategy (which uses site=none).
+// Both exploit the same structural gap: document navigation + non-same-origin
+// site value = no detection sub-checks fire.
+type RealBrowserStrategy struct{}
+
+func (s *RealBrowserStrategy) Name() string      { return "real_browser" }
+func (s *RealBrowserStrategy) Fidelity() float64  { return 0.00 }
+
+func (s *RealBrowserStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	// ── Phase 1: Strip ALL runtime headers ──
+	for _, h := range allRuntimeHeaders {
+		req.Header.Del(h)
+	}
+
+	// ── Phase 2: Firefox identity ──
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		req.Header.Del(h)
+	}
+
+	// ── Phase 3: Cross-site document navigation (link click from search results) ──
+	req.Method = http.MethodGet
+	req.Body = nil
+	req.ContentLength = 0
+	req.Header.Del("Content-Type")
+
+	// ── Phase 4: Real Firefox navigation headers ──
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Del("Priority")
+
+	// Origin from referrer site (e.g. Google search results → target page).
+	req.Header.Del("Origin") // GET navigations don't send Origin
+	req.Header.Set("Referer", "https://www.google.com/")
+
+	// ── Phase 5: Sec-Fetch for cross-site navigation ──
+	// site=cross-site (not same-origin) → document navigation sub-check skips.
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Sec-Fetch-User", "?1")
+
+	// ── Phase 6: Clean header order ──
+	removed := map[string]bool{
+		"Content-Type": true,
+		"Origin":       true,
+		"Priority":     true,
+	}
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		removed[h] = true
+	}
+	for _, h := range allRuntimeHeaders {
+		removed[h] = true
+	}
+	rebuildHeaderOrderClean(req, removed)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy N: NoneContextCorsStrategy (fidelity = 0.20)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 2 non-jsFP headers: Canvas + Behavioral.
+// site=cross-site (link click from external search results).
+type NoneContextCorsStrategy struct{}
+
+func (s *NoneContextCorsStrategy) Name() string      { return "none_context_cors" }
+func (s *NoneContextCorsStrategy) Fidelity() float64  { return 0.20 }
+
+func (s *NoneContextCorsStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+		constants.HeaderBehavioralData:    true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy S: SameOriginSubThresholdStrategy (fidelity = 0.20)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 2 non-jsFP headers: Timing + Behavioral.
+// site=same-site (same-site link click).
+type SameOriginSubThresholdStrategy struct{}
+
+func (s *SameOriginSubThresholdStrategy) Name() string      { return "cross_site_same_origin" }
+func (s *SameOriginSubThresholdStrategy) Fidelity() float64  { return 0.20 }
+
+func (s *SameOriginSubThresholdStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "same-site", map[string]bool{
+		constants.HeaderTimingData:     true,
+		constants.HeaderBehavioralData: true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy 0a: SameOriginSameSiteStrategy (fidelity = 0.30)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 3 non-jsFP headers: Canvas + Timing + Audio.
+// site=cross-site (link click from external).
+type SameOriginSameSiteStrategy struct{}
+
+func (s *SameOriginSameSiteStrategy) Name() string     { return "same_site_telemetry" }
+func (s *SameOriginSameSiteStrategy) Fidelity() float64 { return 0.30 }
+
+func (s *SameOriginSameSiteStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+		constants.HeaderTimingData:        true,
+		constants.HeaderAudioData:         true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy 0b: SameOriginSameSiteMinimalStrategy (fidelity = 0.10)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 1 non-jsFP header: Canvas.
+// site=none (initial navigation).
+type SameOriginSameSiteMinimalStrategy struct{}
+
+func (s *SameOriginSameSiteMinimalStrategy) Name() string     { return "reduced_beacon" }
+func (s *SameOriginSameSiteMinimalStrategy) Fidelity() float64 { return 0.10 }
+
+func (s *SameOriginSameSiteMinimalStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "none", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy 1: SameSiteCorsStrategy (fidelity = 0.10)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 1 non-jsFP header: Behavioral.
+// site=cross-site.
+type SameSiteCorsStrategy struct{}
+
+func (s *SameSiteCorsStrategy) Name() string     { return "same_site_cors_telemetry" }
+func (s *SameSiteCorsStrategy) Fidelity() float64 { return 0.10 }
+
+func (s *SameSiteCorsStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderBehavioralData: true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy 2: CrossSiteNavigateStrategy (fidelity = 0.10)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 1 non-jsFP header: Timing.
+// site=same-site.
+type CrossSiteNavigateStrategy struct{}
+
+func (s *CrossSiteNavigateStrategy) Name() string     { return "navigate_form" }
+func (s *CrossSiteNavigateStrategy) Fidelity() float64 { return 0.10 }
+
+func (s *CrossSiteNavigateStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "same-site", map[string]bool{
+		constants.HeaderTimingData: true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy 3: CrossSiteCorsStrategy (fidelity = 0.20)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 2 non-jsFP headers: Canvas + Timing.
+// site=none.
+type CrossSiteCorsStrategy struct{}
+
+func (s *CrossSiteCorsStrategy) Name() string     { return "cross_site_cors" }
+func (s *CrossSiteCorsStrategy) Fidelity() float64 { return 0.20 }
+
+func (s *CrossSiteCorsStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "none", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+		constants.HeaderTimingData:        true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy 4: SameSiteMinimalStrategy (fidelity = 0.10)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 1 non-jsFP header: Audio.
+// site=cross-site.
+type SameSiteMinimalStrategy struct{}
+
+func (s *SameSiteMinimalStrategy) Name() string     { return "cors_reduced_beacon" }
+func (s *SameSiteMinimalStrategy) Fidelity() float64 { return 0.10 }
+
+func (s *SameSiteMinimalStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderAudioData: true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy 5: NavigateMinimalStrategy (fidelity = 0.20)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 2 non-jsFP headers: Audio + Canvas.
+// site=same-site.
+type NavigateMinimalStrategy struct{}
+
+func (s *NavigateMinimalStrategy) Name() string     { return "navigate_minimal" }
+func (s *NavigateMinimalStrategy) Fidelity() float64 { return 0.20 }
+
+func (s *NavigateMinimalStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "same-site", map[string]bool{
+		constants.HeaderAudioData:         true,
+		constants.HeaderCanvasFingerprint: true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy 6: BodyMigrationStrategy (fidelity = 0.30)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 3 non-jsFP headers: Behavioral + Audio + Canvas.
+// site=cross-site.
+type BodyMigrationStrategy struct{}
+
+func (s *BodyMigrationStrategy) Name() string     { return "body_migration" }
+func (s *BodyMigrationStrategy) Fidelity() float64 { return 0.30 }
+
+func (s *BodyMigrationStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderBehavioralData:    true,
+		constants.HeaderAudioData:         true,
+		constants.HeaderCanvasFingerprint: true,
+	})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy 7: SelectiveStripStrategy (fidelity = 0.00)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 0 runtime headers (pure page load).
+// site=same-site.
+type SelectiveStripStrategy struct{}
+
+func (s *SelectiveStripStrategy) Name() string     { return "selective_strip" }
+func (s *SelectiveStripStrategy) Fidelity() float64 { return 0.00 }
+
+func (s *SelectiveStripStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "same-site", map[string]bool{})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DetectionResult / DetectionAnalyzer — interface for self-analysis pre-flight
+// ─────────────────────────────────────────────────────────────────────────────
+
+// DetectionResult captures the shield's verdict on a request.
+type DetectionResult struct {
+	IsBot      bool
+	Score      float64
+	Indicators []string
+}
+
+// DetectionAnalyzer runs a request through local detection and returns a result.
+// In tests this is the StealthDetector; in production it can be nil (rely on
+// HTTP ban signals instead).
+type DetectionAnalyzer func(req *http.Request) DetectionResult
+
+// ─────────────────────────────────────────────────────────────────────────────
+// AdaptiveEvasionFSM
+// ─────────────────────────────────────────────────────────────────────────────
+
+type AdaptiveEvasionFSM struct {
+	strategies         []EvasionStrategy
+	stateIdx           int
+	states             []*FSMState
+	transitions        []FSMTransition
+	mu                 sync.Mutex
+	banSignals         int
+	banSignalThreshold int
+	exhausted          bool
+}
+
+type FSMState struct {
+	Strategy   EvasionStrategy
+	Attempts   int
+	Detections int
+	TotalScore float64
+}
+
+type FSMTransition struct {
+	From   string
+	To     string
+	Score  float64
+	Reason string
+}
+
+func NewAdaptiveEvasionFSM(strategies ...EvasionStrategy) *AdaptiveEvasionFSM {
+	if len(strategies) == 0 {
+		strategies = DefaultStrategies()
+	}
+	states := make([]*FSMState, len(strategies))
+	for i, s := range strategies {
+		states[i] = &FSMState{Strategy: s}
+	}
+	return &AdaptiveEvasionFSM{
+		strategies:         strategies,
+		states:             states,
+		banSignalThreshold: 3,
+	}
+}
+
+func (fsm *AdaptiveEvasionFSM) CurrentStrategy() EvasionStrategy {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	if fsm.stateIdx >= len(fsm.strategies) {
+		return fsm.strategies[len(fsm.strategies)-1]
+	}
+	return fsm.strategies[fsm.stateIdx]
+}
+
+func (fsm *AdaptiveEvasionFSM) RecordResult(score float64, detected bool) {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+
+	state := fsm.states[fsm.stateIdx]
+	state.Attempts++
+	state.TotalScore += score
+	if detected {
+		state.Detections++
+	}
+
+	if state.Attempts >= 3 {
+		detectionRate := float64(state.Detections) / float64(state.Attempts)
+		if detectionRate > 0.5 {
+			from := fsm.strategies[fsm.stateIdx].Name()
+			if fsm.stateIdx < len(fsm.strategies)-1 {
+				fsm.stateIdx++
+				to := fsm.strategies[fsm.stateIdx].Name()
+				fsm.transitions = append(fsm.transitions, FSMTransition{
+					From:   from,
+					To:     to,
+					Score:  score,
+					Reason: fmt.Sprintf("detection_rate=%.0f%% after %d trials", detectionRate*100, state.Attempts),
+				})
+			} else {
+				// Terminal strategy also failing — signal exhaustion
+				fsm.exhausted = true
+				fsm.transitions = append(fsm.transitions, FSMTransition{
+					From:   from,
+					To:     "browser_escalation",
+					Score:  score,
+					Reason: fmt.Sprintf("terminal_exhausted: detection_rate=%.0f%% after %d trials", detectionRate*100, state.Attempts),
+				})
+			}
+		}
+	}
+}
+
+// Exhausted returns true when all strategies have been tried and the terminal
+// strategy also exceeds the detection threshold.
+func (fsm *AdaptiveEvasionFSM) Exhausted() bool {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	return fsm.exhausted
+}
+
+// RecordBanSignal increments the ban signal counter for HTTP-level ban responses.
+func (fsm *AdaptiveEvasionFSM) RecordBanSignal(statusCode int) {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	fsm.banSignals++
+}
+
+// ShouldEscalate returns true if the FSM recommends escalating to browser mode,
+// either because all strategies are exhausted or ban signals exceed the threshold.
+func (fsm *AdaptiveEvasionFSM) ShouldEscalate() bool {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	return fsm.exhausted || fsm.banSignals >= fsm.banSignalThreshold
+}
+
+// EscalationReason returns why escalation is recommended.
+func (fsm *AdaptiveEvasionFSM) EscalationReason() string {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	if fsm.exhausted {
+		return "fsm_exhausted"
+	}
+	if fsm.banSignals >= fsm.banSignalThreshold {
+		return "ban_signals"
+	}
+	return ""
+}
+
+// ResetBanSignals clears the ban signal counter (e.g. after a successful browser request).
+func (fsm *AdaptiveEvasionFSM) ResetBanSignals() {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	fsm.banSignals = 0
+}
+
+func (fsm *AdaptiveEvasionFSM) Converged() bool {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	state := fsm.states[fsm.stateIdx]
+	if state.Attempts < 3 {
+		return false
+	}
+	return float64(state.Detections)/float64(state.Attempts) < 0.5
+}
+
+func (fsm *AdaptiveEvasionFSM) Summary() string {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+
+	var sb strings.Builder
+	sb.WriteString("=== Adaptive Evasion FSM ===\n")
+	for i, state := range fsm.states {
+		if state.Attempts == 0 {
+			continue
+		}
+		avgScore := state.TotalScore / float64(state.Attempts)
+		detRate := float64(state.Detections) / float64(state.Attempts)
+		marker := "  "
+		if i == fsm.stateIdx {
+			marker = "> "
+		}
+		fmt.Fprintf(&sb, "%s%-22s fidelity=%.0f%%  %d/%d detected (%.0f%%)  avg_score=%.3f\n",
+			marker, state.Strategy.Name(), state.Strategy.Fidelity()*100,
+			state.Detections, state.Attempts, detRate*100, avgScore)
+	}
+	for _, t := range fsm.transitions {
+		fmt.Fprintf(&sb, "  transition: %s -> %s (%s)\n", t.From, t.To, t.Reason)
+	}
+	fmt.Fprintf(&sb, "  exhausted=%v ban_signals=%d/%d\n", fsm.exhausted, fsm.banSignals, fsm.banSignalThreshold)
+	return sb.String()
+}
+
+func (fsm *AdaptiveEvasionFSM) StateIndex() int {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	return fsm.stateIdx
+}
+
+func (fsm *AdaptiveEvasionFSM) Strategies() []EvasionStrategy {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	return fsm.strategies
+}
+
+func (fsm *AdaptiveEvasionFSM) Transitions() []FSMTransition {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	return append([]FSMTransition{}, fsm.transitions...)
+}
+
+// GenerateAdaptiveRequest tries strategies with pre-flight self-analysis.
+// It walks the FSM, generating a request with each strategy and checking it
+// against the analyzer. If the analyzer detects the request, it records a
+// failure and advances to the next strategy. Returns the first request that
+// passes, or the last attempt if all strategies are caught.
+//
+// When analyzer is nil (production mode), returns the current strategy's
+// request without self-analysis — detection is handled by HTTP ban signals
+// fed back via RecordResult/RecordBanSignal.
+func (fsm *AdaptiveEvasionFSM) GenerateAdaptiveRequest(
+	profile *BrowserProfile,
+	targetURL string,
+	analyzer DetectionAnalyzer,
+) *http.Request {
+	maxAttempts := len(fsm.strategies)
+	var lastReq *http.Request
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		strategy := fsm.CurrentStrategy()
+
+		config := MaxEvasionConfig(profile)
+		config.EvasionStrategy = strategy
+
+		gen := NewRequestGenerator(config)
+		req := gen.GenerateRequest(targetURL)
+		lastReq = req
+
+		// No analyzer → return immediately (production: rely on HTTP ban signals)
+		if analyzer == nil {
+			return req
+		}
+
+		// Self-analyze
+		result := analyzer(req)
+		if !result.IsBot {
+			// Strategy evades — record success and return
+			fsm.RecordResult(result.Score, false)
+			return req
+		}
+
+		// Strategy caught — record failure (this advances FSM if detection rate > 50%)
+		fsm.RecordResult(result.Score, true)
+
+		// Check if FSM advanced to a new strategy
+		nextStrategy := fsm.CurrentStrategy()
+		if nextStrategy.Name() == strategy.Name() {
+			// FSM didn't advance yet (needs more attempts) — force immediate advance
+			// for the self-analysis loop since we know this attempt failed
+			fsm.mu.Lock()
+			if fsm.stateIdx < len(fsm.strategies)-1 {
+				from := fsm.strategies[fsm.stateIdx].Name()
+				fsm.stateIdx++
+				to := fsm.strategies[fsm.stateIdx].Name()
+				fsm.transitions = append(fsm.transitions, FSMTransition{
+					From:   from,
+					To:     to,
+					Score:  result.Score,
+					Reason: fmt.Sprintf("self_analysis_detected: score=%.3f indicators=%v", result.Score, result.Indicators),
+				})
+			} else {
+				fsm.exhausted = true
+			}
+			fsm.mu.Unlock()
+		}
+
+		if fsm.Exhausted() {
+			break
+		}
+	}
+
+	return lastReq
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// rebuildHeaderOrderClean strips removed headers from X-Stealth-Header-Order
+// WITHOUT injecting any headers that aren't actually present on the request.
+// This prevents ghost header detection where the declared order lists headers
+// (like Content-Type, Origin) that don't exist on the actual request.
+func rebuildHeaderOrderClean(req *http.Request, removed map[string]bool) {
+	order := req.Header.Get("X-Stealth-Header-Order")
+	if order == "" {
+		return
+	}
+
+	parts := strings.Split(order, ",")
+	filtered := make([]string, 0, len(parts))
+	for _, p := range parts {
+		trimmed := strings.TrimSpace(p)
+		if removed[trimmed] {
+			continue
+		}
+		// Only keep headers that are actually present on the request
+		if req.Header.Get(trimmed) == "" {
+			continue
+		}
+		filtered = append(filtered, trimmed)
+	}
+
+	req.Header.Set("X-Stealth-Header-Order", strings.Join(filtered, ","))
+}
+

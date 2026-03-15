@@ -57,6 +57,7 @@ type ToolComparisonConfig struct {
 type ScenarioResult struct {
 	Name         string             `json:"name"`
 	BotScore     float64            `json:"bot_score"`
+	Confidence   float64            `json:"confidence"`
 	IsBot        bool               `json:"is_bot"`
 	Indicators   []string           `json:"indicators"`
 	VectorScores map[string]float64 `json:"vector_scores"`
@@ -66,6 +67,7 @@ type ScenarioResult struct {
 type ToolResult struct {
 	Tool          ToolInfo         `json:"tool"`
 	AvgBotScore   float64          `json:"avg_bot_score"`
+	AvgConfidence float64          `json:"avg_confidence"`
 	DetectionRate float64          `json:"detection_rate"`
 	EvasionRate   float64          `json:"evasion_rate"`
 	FiredVectors  []string         `json:"fired_vectors"`
@@ -108,6 +110,8 @@ type ToolComparisonReport struct {
 	CaptchaResults []CaptchaToolResult  `json:"captcha_results,omitempty"`
 }
 
+const modeledTelemetryTargetURL = "https://api.example.com/telemetry"
+
 // buildToolProfiles returns the 10 tool profiles for comparison.
 func buildToolProfiles(includeBehavioral bool) []ToolProfile {
 	profiles := []ToolProfile{
@@ -119,7 +123,13 @@ func buildToolProfiles(includeBehavioral bool) []ToolProfile {
 		nodriverDefaultProfile(),
 		scraplingStealthyProfile(),
 		scraplingPlaywrightProfile(),
+		nodriverStealthifiedProfile(),
+		scraplingStealthifiedProfile(),
+		playwrightStealthProfile(),
+		curlImpersonateStealthifiedProfile(),
 		ourStealthSwordProfile(),
+		ourStealthArmedProfile(),
+		ourStealthBrowserProfile(),
 		ourStealthBrokenProfile(),
 	}
 	return profiles
@@ -427,8 +437,127 @@ func scraplingPlaywrightProfile() ToolProfile {
 	}
 }
 
+// nodriverStealthifiedProfile — nodriver with CDP-injected navigator properties,
+// canvas, timing, and audio data. Models what nodriver v2 would look like with
+// full fingerprint surface injection via evaluateOnNewDocument. Still lacks
+// behavioral data (mouse/keyboard simulation) which is the hardest to fake.
+func nodriverStealthifiedProfile() ToolProfile {
+	return ToolProfile{
+		Info: ToolInfo{
+			Name:        "nodriver_stealthified",
+			Version:     "0.38+",
+			Language:    "Python",
+			Category:    CategoryBrowserStealth,
+			HasJS:       true,
+			HasTLS:      true,
+			Description: "nodriver with CDP-injected navigator props, canvas, timing, audio",
+		},
+		Scenarios: []ShieldProfile{
+			{Name: "nodriver_full_injection", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				// Start from a MaxEvasionConfig to generate realistic fingerprint data,
+				// then selectively remove behavioral data (which nodriver can't generate).
+				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile()))
+				req := gen.GenerateRequest(modeledTelemetryTargetURL)
+				// Remove behavioral data — nodriver does not simulate mouse/keyboard
+				req.Header.Del("X-Behavioral-Data")
+				return req
+			}},
+		},
+	}
+}
+
+// scraplingStealthifiedProfile — Scrapling StealthyFetcher with BrowserForge v2
+// fingerprint injection, canvas noise, timing entries, and audio context.
+// Models what Scrapling would look like with full Patchright JS injection.
+// Still lacks behavioral data (no mouse/keyboard simulation library).
+func scraplingStealthifiedProfile() ToolProfile {
+	return ToolProfile{
+		Info: ToolInfo{
+			Name:        "scrapling_stealthified",
+			Version:     "0.3+",
+			Language:    "Python",
+			Category:    CategoryBrowserStealth,
+			HasJS:       true,
+			HasTLS:      true,
+			Description: "Scrapling with full BrowserForge v2 injection, canvas, timing, audio",
+		},
+		Scenarios: []ShieldProfile{
+			{Name: "scrapling_full_injection", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile()))
+				req := gen.GenerateRequest(modeledTelemetryTargetURL)
+				// Remove behavioral data — Scrapling does not simulate mouse/keyboard
+				req.Header.Del("X-Behavioral-Data")
+				return req
+			}},
+		},
+	}
+}
+
+// playwrightStealthProfile — Playwright with playwright-stealth plugin applied.
+// Regular Chrome UA (no HeadlessChrome), webdriver patched, real GPU via --use-gl=angle,
+// proper screen dimensions, full navigator injection. Still missing behavioral data.
+// Source: github.com/nichochar/playwright-stealth (JS injection patches).
+func playwrightStealthProfile() ToolProfile {
+	return ToolProfile{
+		Info: ToolInfo{
+			Name:        "playwright_stealth",
+			Version:     "1.48.0+stealth",
+			Language:    "Node.js",
+			Category:    CategoryBrowserStealth,
+			HasJS:       true,
+			HasTLS:      true,
+			Description: "Playwright + playwright-stealth plugin — patched UA, webdriver, GPU",
+		},
+		Scenarios: []ShieldProfile{
+			{Name: "playwright_stealth_patched", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile()))
+				req := gen.GenerateRequest(modeledTelemetryTargetURL)
+				// Remove behavioral data — playwright-stealth injects JS patches but
+				// does not generate synthetic mouse/keyboard events
+				req.Header.Del("X-Behavioral-Data")
+				return req
+			}},
+		},
+	}
+}
+
+// curlImpersonateStealthifiedProfile — curl-impersonate with synthetic fingerprint
+// headers injected. Models what curl-impersonate would do if it added static
+// navigator/canvas/screen/timing headers to bypass the fingerprint_coverage check.
+// Still fundamentally an HTTP-only client with no real JS execution.
+func curlImpersonateStealthifiedProfile() ToolProfile {
+	return ToolProfile{
+		Info: ToolInfo{
+			Name:        "curl_impersonate_stealthified",
+			Version:     "0.7+",
+			Language:    "C/curl",
+			Category:    CategoryHTTPImpersonate,
+			HasJS:       false,
+			HasTLS:      true,
+			Description: "curl-impersonate with synthetic fingerprint headers",
+		},
+		Scenarios: []ShieldProfile{
+			{Name: "curl_impersonate_synthetic_fp", Category: "http_impersonate", ShouldCatch: false, BuildReq: func() *http.Request {
+				// Use our generator for realistic fingerprint data but keep the curl-impersonate
+				// HTTP-level characteristics: Chrome 116 UA, headers, TLS
+				chrome116UA := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"
+				chrome116SecChUa := `"Chromium";v="116", "Not)A;Brand";v="24", "Google Chrome";v="116"`
+
+				profile := behavior.ChromeWindowsProfile()
+				profile.UserAgent = chrome116UA
+				profile.SecChUa = chrome116SecChUa
+				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(profile))
+				req := gen.GenerateRequest(modeledTelemetryTargetURL)
+				// Remove behavioral data — curl has no event generation
+				req.Header.Del("X-Behavioral-Data")
+				return req
+			}},
+		},
+	}
+}
+
 // ourStealthSwordProfile — our own stealth sword using behavior.NewRequestGenerator.
-// This is the positive control: should evade all detection.
+// It serves as the in-house browser-stealth profile in the comparison matrix.
 func ourStealthSwordProfile() ToolProfile {
 	return ToolProfile{
 		Info: ToolInfo{
@@ -445,19 +574,96 @@ func ourStealthSwordProfile() ToolProfile {
 				gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
 					Profile: behavior.ChromeWindowsProfile(),
 				})
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "stealth_sword_chrome_macos", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
 					Profile: behavior.ChromeMacOSProfile(),
 				})
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "stealth_sword_firefox", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
 					Profile: behavior.FirefoxWindowsProfile(),
 				})
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
+			}},
+		},
+	}
+}
+
+// ourStealthArmedProfile — our stealth sword with ALL evasion phases enabled.
+// This represents the sword's maximum evasion capability against the shield.
+func ourStealthArmedProfile() ToolProfile {
+	return ToolProfile{
+		Info: ToolInfo{
+			Name:        "our_stealth_armed",
+			Version:     "1.0",
+			Language:    "Go",
+			Category:    CategoryBrowserStealth,
+			HasJS:       true,
+			HasTLS:      true,
+			Description: "Our stealth sword — max evasion with all phases enabled",
+		},
+		Scenarios: []ShieldProfile{
+			{Name: "armed_chrome_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile()))
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
+			}},
+			{Name: "armed_chrome_macos", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeMacOSProfile()))
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
+			}},
+			{Name: "armed_chrome_linux", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeLinuxProfile()))
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
+			}},
+			{Name: "armed_firefox_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.FirefoxWindowsProfile()))
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
+			}},
+		},
+	}
+}
+
+// ourStealthBrowserProfile — full browser evasion with all 10 runtime headers preserved.
+// Uses same-origin navigation (dest=document, mode=navigate, site=same-origin)
+// which bypasses all provenance gates while keeping full fingerprint context.
+func ourStealthBrowserProfile() ToolProfile {
+	return ToolProfile{
+		Info: ToolInfo{
+			Name:        "our_stealth_browser",
+			Version:     "1.0",
+			Language:    "Go",
+			Category:    CategoryBrowserStealth,
+			HasJS:       true,
+			HasTLS:      true,
+			Description: "Our stealth browser — full fingerprint with navigation evasion",
+		},
+		Scenarios: []ShieldProfile{
+			{Name: "browser_chrome_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				cfg := behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile())
+				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
+				gen := behavior.NewRequestGenerator(cfg)
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
+			}},
+			{Name: "browser_chrome_macos", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				cfg := behavior.MaxEvasionConfig(behavior.ChromeMacOSProfile())
+				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
+				gen := behavior.NewRequestGenerator(cfg)
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
+			}},
+			{Name: "browser_chrome_linux", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				cfg := behavior.MaxEvasionConfig(behavior.ChromeLinuxProfile())
+				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
+				gen := behavior.NewRequestGenerator(cfg)
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
+			}},
+			{Name: "browser_firefox_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				cfg := behavior.MaxEvasionConfig(behavior.FirefoxWindowsProfile())
+				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
+				gen := behavior.NewRequestGenerator(cfg)
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 		},
 	}
@@ -533,12 +739,14 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 		}
 
 		totalScore := 0.0
+		totalConfidence := 0.0
 		detectedCount := 0
 		firedVecMap := make(map[string]bool)
 
 		for _, scenario := range tp.Scenarios {
 			// Run multiple iterations and average
 			var scenAvgScore float64
+			var scenAvgConfidence float64
 			var scenIsBot bool
 			var scenIndicators []string
 			scenVecScores := make(map[string]float64)
@@ -548,6 +756,7 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 				detection := detector.AnalyzeRequest(req, nil)
 
 				scenAvgScore += detection.Score
+				scenAvgConfidence += detection.Confidence
 
 				if detection.IsBot {
 					scenIsBot = true
@@ -570,12 +779,14 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 			}
 
 			scenAvgScore /= float64(cfg.Iterations)
+			scenAvgConfidence /= float64(cfg.Iterations)
 			// Deduplicate indicators
 			scenIndicators = dedup(scenIndicators)
 
 			sr := ScenarioResult{
 				Name:         scenario.Name,
 				BotScore:     scenAvgScore,
+				Confidence:   scenAvgConfidence,
 				IsBot:        scenIsBot,
 				Indicators:   scenIndicators,
 				VectorScores: scenVecScores,
@@ -583,6 +794,7 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 			tr.Scenarios = append(tr.Scenarios, sr)
 
 			totalScore += scenAvgScore
+			totalConfidence += scenAvgConfidence
 			if scenIsBot {
 				detectedCount++
 			}
@@ -591,6 +803,7 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 		numScenarios := len(tp.Scenarios)
 		if numScenarios > 0 {
 			tr.AvgBotScore = totalScore / float64(numScenarios)
+			tr.AvgConfidence = totalConfidence / float64(numScenarios)
 			tr.DetectionRate = float64(detectedCount) / float64(numScenarios)
 			tr.EvasionRate = 1.0 - tr.DetectionRate
 		}

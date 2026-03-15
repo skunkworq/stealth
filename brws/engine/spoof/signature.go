@@ -407,10 +407,391 @@ func GetFirefox109() *BrowserSignature {
 	}
 }
 
+// GetChrome146 returns the Chrome 146 signature (macOS, captured from training data)
+func GetChrome146() *BrowserSignature {
+	return &BrowserSignature{
+		Name:        "chrome",
+		Version:     "146",
+		OS:          "macos",
+		Description: "Chrome 146 on macOS",
+
+		TLS: &TLSSignature{
+			Version: 0x0303, // TLS 1.2 in hello, actual version in supported_versions
+			CipherSuites: []CipherEntry{
+				{Value: 0x1301, Name: "TLS_AES_128_GCM_SHA256"},
+				{Value: 0x1302, Name: "TLS_AES_256_GCM_SHA384"},
+				{Value: 0x1303, Name: "TLS_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xc02b, Name: "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xc02f, Name: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xc02c, Name: "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xc030, Name: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xcca9, Name: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xcca8, Name: "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xc013, Name: "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0xc014, Name: "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"},
+				{Value: 0x009c, Name: "TLS_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0x009d, Name: "TLS_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0x002f, Name: "TLS_RSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0x0035, Name: "TLS_RSA_WITH_AES_256_CBC_SHA"},
+			},
+			Extensions: []ExtensionEntry{
+				{Type: 0x5a5a, IsGREASE: true},
+				{Type: 0x0000, Name: "server_name"},
+				{Type: 0x0017, Name: "extended_master_secret"},
+				{Type: 0xff01, Name: "renegotiation_info"},
+				{Type: 0x000a, Name: "supported_groups"},
+				{Type: 0x000b, Name: "ec_point_formats"},
+				{Type: 0x0023, Name: "signed_certificate_timestamp"},
+				{Type: 0x0010, Name: "application_layer_protocol_negotiation"},
+				{Type: 0x0005, Name: "status_request"},
+				{Type: 0x0a0a, IsGREASE: true},
+				{Type: 0x0012, Name: "signed_certificate_timestamp"},
+				{Type: 0x0033, Name: "key_share"},
+				{Type: 0x002d, Name: "psk_key_exchange_modes"},
+				{Type: 0x002b, Name: "supported_versions"},
+				{Type: 0x001d, Name: "compress_certificate"},
+				{Type: 0x0011, Name: "application_settings"}, // ALPS
+				{Type: 0xfe0d, Name: "encrypted_client_hello"}, // ECH (standard in Chrome 146)
+				{Type: 0x0d0d, IsGREASE: true},
+				{Type: 0x002b, Name: "supported_versions"},
+				{Type: 0x0015, Name: "padding"},
+				{Type: 0x0f0f, IsGREASE: true},
+			},
+			SupportedGroups: []uint16{0x5a5a, 0x001d, 0x0017, 0x0018, 0x001e, 0x0a0a},
+			ALPN:            []string{"h2", "http/1.1"},
+			ALPS:            "h2",
+			CertCompression: []string{"brotli"},
+			KeyShareGroups:  []uint16{0x5a5a, 0x001d, 0x0a0a},
+		},
+
+		HTTP2: &HTTP2Signature{
+			Settings: []HTTP2SettingEntry{
+				{ID: 1, Name: "HEADER_TABLE_SIZE", Value: 65536},
+				{ID: 2, Name: "ENABLE_PUSH", Value: 0},
+				{ID: 3, Name: "MAX_CONCURRENT_STREAMS", Value: 1000},
+				{ID: 4, Name: "INITIAL_WINDOW_SIZE", Value: 6291456},
+				{ID: 6, Name: "MAX_HEADER_LIST_SIZE", Value: 262144},
+			},
+			PseudoHeaders: []string{
+				":method",
+				":authority",
+				":scheme",
+				":path",
+			},
+			HeaderPriority: &HeaderPriority{
+				Weight:    255,
+				Exclusive: true,
+			},
+			EnablePush:        false,
+			InitialWindowSize: 6291456,
+		},
+
+		HTTP: &HTTPSignature{
+			UserAgent:      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+			Accept:         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+			AcceptLanguage: "en-GB,en-US;q=0.9,en;q=0.8",
+			AcceptEncoding: "gzip, deflate, br, zstd",
+			Headers: []HeaderEntry{
+				{Name: ":method", Value: "GET", Required: true},
+				{Name: ":authority", Value: "", Required: true},
+				{Name: ":scheme", Value: "https", Required: true},
+				{Name: ":path", Value: "/", Required: true},
+				{Name: "accept", Value: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7", Required: true},
+				{Name: "accept-encoding", Value: "gzip, deflate, br, zstd", Required: true},
+				{Name: "accept-language", Value: "en-GB,en-US;q=0.9,en;q=0.8", Required: true},
+				{Name: "priority", Value: "u=0, i", Required: true},
+				{Name: "sec-ch-ua", Value: `"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"`, Required: true},
+				{Name: "sec-ch-ua-mobile", Value: "?0", Required: true},
+				{Name: "sec-ch-ua-platform", Value: `"macOS"`, Required: true},
+				{Name: "sec-fetch-dest", Value: "document", Required: true},
+				{Name: "sec-fetch-mode", Value: "navigate", Required: true},
+				{Name: "sec-fetch-site", Value: "none", Required: true},
+				{Name: "sec-fetch-user", Value: "?1", Required: true},
+				{Name: "upgrade-insecure-requests", Value: "1", Required: true},
+				{Name: "user-agent", Value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36", Required: true},
+			},
+			ClientHints: &ClientHintsEntry{
+				SecCHUA:         `"Chromium";v="146", "Not-A.Brand";v="24", "Google Chrome";v="146"`,
+				SecCHUAMobile:   "?0",
+				SecCHUAPlatform: `"macOS"`,
+			},
+			HTTPVersion: "2.0",
+		},
+	}
+}
+
+// GetFirefox128 returns the Firefox 128 signature
+func GetFirefox128() *BrowserSignature {
+	return &BrowserSignature{
+		Name:        "firefox",
+		Version:     "128",
+		OS:          "windows",
+		Description: "Firefox 128 on Windows 10",
+
+		TLS: &TLSSignature{
+			Version: 0x0303,
+			CipherSuites: []CipherEntry{
+				{Value: 0x1301, Name: "TLS_AES_128_GCM_SHA256"},
+				{Value: 0x1303, Name: "TLS_CHACHA20_POLY1305_SHA256"},
+				{Value: 0x1302, Name: "TLS_AES_256_GCM_SHA384"},
+				{Value: 0xc02b, Name: "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xc02f, Name: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xc02c, Name: "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xc030, Name: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xcca9, Name: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xcca8, Name: "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xc013, Name: "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0xc014, Name: "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"},
+				{Value: 0x009c, Name: "TLS_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0x009d, Name: "TLS_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0x002f, Name: "TLS_RSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0x0035, Name: "TLS_RSA_WITH_AES_256_CBC_SHA"},
+			},
+			Extensions: []ExtensionEntry{
+				{Type: 0x0000, Name: "server_name"},
+				{Type: 0x0017, Name: "extended_master_secret"},
+				{Type: 0xff01, Name: "renegotiation_info"},
+				{Type: 0x000a, Name: "supported_groups"},
+				{Type: 0x000b, Name: "ec_point_formats"},
+				{Type: 0x0023, Name: "session_ticket"},
+				{Type: 0x0010, Name: "application_layer_protocol_negotiation"},
+				{Type: 0x0005, Name: "status_request"},
+				{Type: 0x000d, Name: "signature_algorithms"},
+				{Type: 0x0012, Name: "signed_certificate_timestamp"},
+				{Type: 0x0033, Name: "key_share"},
+				{Type: 0x002d, Name: "psk_key_exchange_modes"},
+				{Type: 0x002b, Name: "supported_versions"},
+				{Type: 0x0015, Name: "padding"},
+			},
+			SupportedGroups:     []uint16{0x4588, 0x001d, 0x0017, 0x0018, 0x001e},
+			SignatureAlgorithms: []uint16{0x0403, 0x0804, 0x0401, 0x0503, 0x0203, 0x0805, 0x0805, 0x0103, 0x0202, 0x0402, 0x0502, 0x0102},
+			ALPN:                []string{"h2", "http/1.1"},
+			CertCompression:     nil,
+			KeyShareGroups:      []uint16{0x4588, 0x001d},
+		},
+
+		HTTP2: &HTTP2Signature{
+			Settings: []HTTP2SettingEntry{
+				{ID: 3, Name: "MAX_CONCURRENT_STREAMS", Value: 100},
+				{ID: 5, Name: "MAX_FRAME_SIZE", Value: 16384},
+				{ID: 4, Name: "INITIAL_WINDOW_SIZE", Value: 131072},
+			},
+			PseudoHeaders:     []string{":method", ":path", ":authority", ":scheme"},
+			EnablePush:        false,
+			InitialWindowSize: 131072,
+		},
+
+		HTTP: &HTTPSignature{
+			UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0",
+			Accept:         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8",
+			AcceptLanguage: "en-US,en;q=0.5",
+			AcceptEncoding: "gzip, deflate, br",
+			Headers: []HeaderEntry{
+				{Name: "user-agent", Value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0", Required: true},
+				{Name: "accept", Value: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8", Required: true},
+				{Name: "accept-language", Value: "en-US,en;q=0.5", Required: true},
+				{Name: "accept-encoding", Value: "gzip, deflate, br", Required: true},
+				{Name: "upgrade-insecure-requests", Value: "1", Required: true},
+				{Name: "sec-fetch-dest", Value: "document", Required: true},
+				{Name: "sec-fetch-mode", Value: "navigate", Required: true},
+				{Name: "sec-fetch-site", Value: "none", Required: true},
+				{Name: "sec-fetch-user", Value: "?1", Required: true},
+				{Name: "te", Value: "trailers", Required: true},
+			},
+			ClientHints: nil,
+			HTTPVersion: "2.0",
+		},
+	}
+}
+
+// GetEdge122 returns the Edge 122 signature
+func GetEdge122() *BrowserSignature {
+	return &BrowserSignature{
+		Name:        "edge",
+		Version:     "122",
+		OS:          "windows",
+		Description: "Microsoft Edge 122 on Windows 10",
+
+		TLS: &TLSSignature{
+			Version: 0x0303,
+			CipherSuites: []CipherEntry{
+				{Value: 0x1301, Name: "TLS_AES_128_GCM_SHA256"},
+				{Value: 0x1302, Name: "TLS_AES_256_GCM_SHA384"},
+				{Value: 0x1303, Name: "TLS_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xc02b, Name: "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xc02f, Name: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xc02c, Name: "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xc030, Name: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xcca9, Name: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xcca8, Name: "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xc013, Name: "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0xc014, Name: "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"},
+				{Value: 0x009c, Name: "TLS_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0x009d, Name: "TLS_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0x002f, Name: "TLS_RSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0x0035, Name: "TLS_RSA_WITH_AES_256_CBC_SHA"},
+			},
+			Extensions: []ExtensionEntry{
+				{Type: 0x5a5a, IsGREASE: true},
+				{Type: 0x0000, Name: "server_name"},
+				{Type: 0x0017, Name: "extended_master_secret"},
+				{Type: 0xff01, Name: "renegotiation_info"},
+				{Type: 0x000a, Name: "supported_groups"},
+				{Type: 0x000b, Name: "ec_point_formats"},
+				{Type: 0x0023, Name: "signed_certificate_timestamp"},
+				{Type: 0x0010, Name: "application_layer_protocol_negotiation"},
+				{Type: 0x0005, Name: "status_request"},
+				{Type: 0x0a0a, IsGREASE: true},
+				{Type: 0x0012, Name: "signed_certificate_timestamp"},
+				{Type: 0x0033, Name: "key_share"},
+				{Type: 0x002d, Name: "psk_key_exchange_modes"},
+				{Type: 0x002b, Name: "supported_versions"},
+				{Type: 0x001d, Name: "compress_certificate"},
+				{Type: 0x0011, Name: "application_settings"},
+				{Type: 0x0d0d, IsGREASE: true},
+				{Type: 0x002b, Name: "supported_versions"},
+				{Type: 0x0015, Name: "padding"},
+				{Type: 0x0f0f, IsGREASE: true},
+			},
+			SupportedGroups: []uint16{0x5a5a, 0x001d, 0x0017, 0x0018, 0x001e, 0x0a0a},
+			ALPN:            []string{"h2", "http/1.1"},
+			ALPS:            "h2",
+			CertCompression: []string{"brotli"},
+			KeyShareGroups:  []uint16{0x5a5a, 0x001d, 0x0a0a},
+		},
+
+		HTTP2: &HTTP2Signature{
+			Settings: []HTTP2SettingEntry{
+				{ID: 1, Name: "HEADER_TABLE_SIZE", Value: 65536},
+				{ID: 2, Name: "ENABLE_PUSH", Value: 0},
+				{ID: 3, Name: "MAX_CONCURRENT_STREAMS", Value: 1000},
+				{ID: 4, Name: "INITIAL_WINDOW_SIZE", Value: 6291456},
+				{ID: 6, Name: "MAX_HEADER_LIST_SIZE", Value: 262144},
+			},
+			PseudoHeaders:     []string{":method", ":authority", ":scheme", ":path"},
+			HeaderPriority:    &HeaderPriority{Weight: 255, Exclusive: true},
+			EnablePush:        false,
+			InitialWindowSize: 6291456,
+		},
+
+		HTTP: &HTTPSignature{
+			UserAgent:      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0",
+			Accept:         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+			AcceptLanguage: "en-US,en;q=0.9",
+			AcceptEncoding: "gzip, deflate, br",
+			Headers: []HeaderEntry{
+				{Name: ":method", Value: "GET", Required: true},
+				{Name: ":authority", Value: "", Required: true},
+				{Name: ":scheme", Value: "https", Required: true},
+				{Name: ":path", Value: "/", Required: true},
+				{Name: "sec-ch-ua", Value: `"Chromium";v="122", "Microsoft Edge";v="122", "Not(A:Brand";v="24"`, Required: true},
+				{Name: "sec-ch-ua-mobile", Value: "?0", Required: true},
+				{Name: "sec-ch-ua-platform", Value: `"Windows"`, Required: true},
+				{Name: "upgrade-insecure-requests", Value: "1", Required: true},
+				{Name: "user-agent", Value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 Edg/122.0.0.0", Required: true},
+				{Name: "accept", Value: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7", Required: true},
+				{Name: "sec-fetch-site", Value: "none", Required: true},
+				{Name: "sec-fetch-mode", Value: "navigate", Required: true},
+				{Name: "sec-fetch-user", Value: "?1", Required: true},
+				{Name: "sec-fetch-dest", Value: "document", Required: true},
+				{Name: "accept-encoding", Value: "gzip, deflate, br", Required: true},
+				{Name: "accept-language", Value: "en-US,en;q=0.9", Required: true},
+			},
+			ClientHints: &ClientHintsEntry{
+				SecCHUA:         `"Chromium";v="122", "Microsoft Edge";v="122", "Not(A:Brand";v="24"`,
+				SecCHUAMobile:   "?0",
+				SecCHUAPlatform: `"Windows"`,
+			},
+			HTTPVersion: "2.0",
+		},
+	}
+}
+
+// GetSafari17 returns the Safari 17 signature
+func GetSafari17() *BrowserSignature {
+	return &BrowserSignature{
+		Name:        "safari",
+		Version:     "17",
+		OS:          "macos",
+		Description: "Safari 17.6 on macOS Ventura",
+
+		TLS: &TLSSignature{
+			Version: 0x0303,
+			CipherSuites: []CipherEntry{
+				{Value: 0x1301, Name: "TLS_AES_128_GCM_SHA256"},
+				{Value: 0x1302, Name: "TLS_AES_256_GCM_SHA384"},
+				{Value: 0x1303, Name: "TLS_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xc02c, Name: "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xc02b, Name: "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xc030, Name: "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0xc02f, Name: "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0xcca9, Name: "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xcca8, Name: "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256"},
+				{Value: 0xc00a, Name: "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA"},
+				{Value: 0xc009, Name: "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0xc014, Name: "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA"},
+				{Value: 0xc013, Name: "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA"},
+				{Value: 0x009d, Name: "TLS_RSA_WITH_AES_256_GCM_SHA384"},
+				{Value: 0x009c, Name: "TLS_RSA_WITH_AES_128_GCM_SHA256"},
+				{Value: 0x0035, Name: "TLS_RSA_WITH_AES_256_CBC_SHA"},
+				{Value: 0x002f, Name: "TLS_RSA_WITH_AES_128_CBC_SHA"},
+			},
+			Extensions: []ExtensionEntry{
+				{Type: 0x0000, Name: "server_name"},
+				{Type: 0x0017, Name: "extended_master_secret"},
+				{Type: 0x000a, Name: "supported_groups"},
+				{Type: 0x000b, Name: "ec_point_formats"},
+				{Type: 0x0010, Name: "application_layer_protocol_negotiation"},
+				{Type: 0x0005, Name: "status_request"},
+				{Type: 0x0012, Name: "signed_certificate_timestamp"},
+				{Type: 0x0033, Name: "key_share"},
+				{Type: 0x002b, Name: "supported_versions"},
+				{Type: 0x002d, Name: "psk_key_exchange_modes"},
+			},
+			SupportedGroups: []uint16{0x0017, 0x0018, 0x0019, 0x001d},
+			ALPN:            []string{"h2", "http/1.1"},
+			CertCompression: nil,
+			KeyShareGroups:  []uint16{0x0017, 0x001d},
+		},
+
+		HTTP2: &HTTP2Signature{
+			Settings: []HTTP2SettingEntry{
+				{ID: 1, Name: "HEADER_TABLE_SIZE", Value: 4096},
+				{ID: 2, Name: "ENABLE_PUSH", Value: 0},
+				{ID: 3, Name: "MAX_CONCURRENT_STREAMS", Value: 100},
+				{ID: 4, Name: "INITIAL_WINDOW_SIZE", Value: 2097152},
+				{ID: 5, Name: "MAX_FRAME_SIZE", Value: 16384},
+			},
+			PseudoHeaders:     []string{":method", ":scheme", ":path", ":authority"},
+			EnablePush:        false,
+			InitialWindowSize: 2097152,
+		},
+
+		HTTP: &HTTPSignature{
+			UserAgent:      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
+			Accept:         "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+			AcceptLanguage: "en-US,en;q=0.9",
+			AcceptEncoding: "gzip, deflate, br",
+			Headers: []HeaderEntry{
+				{Name: "user-agent", Value: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15", Required: true},
+				{Name: "accept", Value: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", Required: true},
+				{Name: "accept-language", Value: "en-US,en;q=0.9", Required: true},
+				{Name: "accept-encoding", Value: "gzip, deflate, br", Required: true},
+			},
+			ClientHints: nil,
+			HTTPVersion: "2.0",
+		},
+	}
+}
+
 // LoadDefaultSignatures loads all built-in signatures
 func LoadDefaultSignatures() map[string]*BrowserSignature {
 	sigs := make(map[string]*BrowserSignature)
 	sigs["chrome-116"] = GetChrome116()
+	sigs["chrome-146"] = GetChrome146()
 	sigs["firefox-109"] = GetFirefox109()
+	sigs["firefox-128"] = GetFirefox128()
+	sigs["edge-122"] = GetEdge122()
+	sigs["safari-17"] = GetSafari17()
 	return sigs
 }

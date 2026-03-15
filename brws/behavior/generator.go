@@ -29,6 +29,18 @@ type EventData struct {
 
 	// Phase 46: Error Stack trace format
 	ErrorStack string `json:"errorStack,omitempty"`
+
+	// Canvas/Audio/WebGL fingerprints for platform-consistent evasion.
+	CanvasFingerprint *CanvasFingerprint `json:"canvasFingerprint,omitempty"`
+	AudioFingerprint  *AudioFingerprint  `json:"audioFingerprint,omitempty"`
+	WebGLFingerprint  *WebGLFingerprint  `json:"webglFingerprint,omitempty"`
+
+	// Timing coherence: CSI/LoadTimes and Performance API data
+	ChromeTiming      *ChromeTiming          `json:"chromeTiming,omitempty"`
+	PerformanceTiming *PerformanceTimingData `json:"performanceTiming,omitempty"`
+
+	// Navigator coherence data (cross-layer consistent fingerprint)
+	NavigatorData *NavigatorData `json:"navigatorData,omitempty"`
 }
 
 // GeneratorConfig controls the behavioral data generation parameters.
@@ -61,10 +73,27 @@ type GeneratorConfig struct {
 	EvadeScrollSpearman     bool
 	EvadeMouseTypingDensity bool
 	EvadeClickDwellTime     bool
+	EvadeTypingCorrection   bool // Inject corrective backspace+retype bursts (~5-8% of keystrokes)
+	EvadeThinkPause         bool // Inject bimodal think-pauses (200-800ms) in typing and mouse
+	EvadeClickDwellLogNorm  bool // Use log-normal distribution for click dwell times
 
 	// Phase 46: Error stack trace evasion
 	BrowserEngine         string // "chrome" or "firefox"
 	EvadeErrorStackFormat bool
+
+	// Canvas/Audio/WebGL fingerprint evasion
+	EvadeCanvasFingerprint bool   // Generate platform-consistent canvas data
+	EvadeAudioFingerprint  bool   // Generate platform-consistent audio data
+	Platform               string // Target platform for fingerprint consistency
+	Browser                string // Target browser for fingerprint consistency
+
+	// Timing coherence evasion
+	EvadeTimingCoherence bool   // Generate coherent CSI/LoadTimes data
+	PageURL              string // URL for performance timing entries
+
+	// Navigator coherence evasion
+	EvadeNavigatorCoherence bool
+	NavigatorProfile        *NavigatorProfile // Required when EvadeNavigatorCoherence is true
 }
 
 // DefaultGeneratorConfig returns sensible defaults for human-like behavior.
@@ -74,7 +103,7 @@ func DefaultGeneratorConfig() *GeneratorConfig {
 		MouseEventsMax:          30,
 		MouseSpeedMin:           20,
 		MouseSpeedMax:           400,
-		MicroTremorRatio:        0.3, // 30% of movements have micro-tremors (hand jitter)
+		MicroTremorRatio:        0.4, // 40% of movements have micro-tremors (hand jitter)
 		TypingEventsMin:         6,
 		TypingEventsMax:         15,
 		TypingSpeedMin:          50,
@@ -89,6 +118,10 @@ func DefaultGeneratorConfig() *GeneratorConfig {
 		EvadeScrollSpearman:     true,
 		EvadeMouseTypingDensity: true,
 		EvadeClickDwellTime:     true,
+		EvadeTypingCorrection:   true,
+		EvadeThinkPause:         true,
+		EvadeClickDwellLogNorm:  true,
+		EvadeTimingCoherence:    true,
 	}
 }
 
@@ -135,6 +168,33 @@ func (g *EventGenerator) Generate() *EventData {
 	// Phase 46: Error stack trace
 	if g.config.EvadeErrorStackFormat {
 		g.generateErrorStack(data)
+	}
+
+	// Canvas/Audio/WebGL fingerprints
+	if g.config.EvadeCanvasFingerprint || g.config.EvadeAudioFingerprint {
+		fp := GeneratePlatformFingerprints(g.config.Platform, g.config.Browser, g.config.Seed)
+		if g.config.EvadeCanvasFingerprint {
+			data.CanvasFingerprint = &fp.Canvas
+			data.WebGLFingerprint = &fp.WebGL
+		}
+		if g.config.EvadeAudioFingerprint {
+			data.AudioFingerprint = &fp.Audio
+		}
+	}
+
+	// Timing coherence: CSI/LoadTimes and Performance API
+	if g.config.EvadeTimingCoherence {
+		data.ChromeTiming = GenerateChromeTiming(g.config.Seed)
+		pageURL := g.config.PageURL
+		if pageURL == "" {
+			pageURL = "https://example.com/"
+		}
+		data.PerformanceTiming = GeneratePerformanceTiming(pageURL, g.config.Seed)
+	}
+
+	// Navigator coherence
+	if g.config.EvadeNavigatorCoherence && g.config.NavigatorProfile != nil {
+		data.NavigatorData = GenerateNavigatorData(*g.config.NavigatorProfile, g.config.Seed)
 	}
 
 	return data
@@ -334,6 +394,12 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 					baseInterval *= 4.0
 				}
 			}
+			// Think-pause: occasional 200-800ms gaps representing moments
+			// when a human pauses to read or think. Creates bimodal timing
+			// (fast action + occasional pause) instead of uniform intervals.
+			if g.config.EvadeThinkPause && g.rng.Float64() < 0.08 {
+				baseInterval += 200 + g.rng.Float64()*600
+			}
 			ts += int64(baseInterval)
 		}
 
@@ -431,33 +497,46 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 	// Post-process velocities with exponential moving average (EMA) to create
 	// strong positive autocorrelation at lags 1, 2, and 3. The EMA naturally
 	// produces temporal momentum because each output carries forward from
-	// Forward+backward passes avoid phase shift and reinforce structure.
+	// prior values. Forward+backward passes avoid phase shift and reinforce structure.
 	if g.config.EvadeMouseVelocityLag3 && len(velocities) > 5 {
-		// Adaptive EMA: keep smoothing until lag-2 autocorrelation exceeds 0.15.
-		// This guarantees the check never fires regardless of random seed.
-		alpha := 0.20
-		for pass := 0; pass < 20; pass++ {
-			// Forward EMA
+		// Adaptive EMA: keep smoothing until autocorrelation structure passes the
+		// shield's check. Shield flags: lag3 in [-0.1, 0.1] AND lag1 < 0.7.
+		// We need either lag1 >= 0.7 OR lag3 outside [-0.15, 0.15] (with margin).
+		alpha := 0.15 // Lower alpha = stronger smoothing = higher autocorrelation
+		for pass := 0; pass < 40; pass++ {
 			smoothed := make([]float64, len(velocities))
 			smoothed[0] = velocities[0]
 			for i := 1; i < len(velocities); i++ {
 				smoothed[i] = alpha*velocities[i] + (1-alpha)*smoothed[i-1]
 			}
-			// Backward EMA
 			for i := len(smoothed) - 2; i >= 0; i-- {
 				smoothed[i] = alpha*smoothed[i] + (1-alpha)*smoothed[i+1]
 			}
 			velocities = smoothed
 
-			// Check if lag-2 autocorrelation is strong enough
-			lag2 := lagNAuto(velocities, 2)
-			if lag2 > 0.15 {
+			lag1 := lagNAuto(velocities, 1)
+			lag3 := lagNAuto(velocities, 3)
+			if lag1 >= 0.75 || lag3 > 0.20 || lag3 < -0.20 {
 				break
 			}
 		}
-		// Round gently to 2 decimal places (preserves sub-unit structure)
-		for i := range velocities {
-			velocities[i] = math.Round(velocities[i]*100) / 100
+		// Round gently to 2 decimal places (preserves sub-unit structure).
+		// Then re-check — rounding can collapse lag structure in short sequences.
+		// If the shield check would fire, apply one final heavy forward-only EMA
+		// (which guarantees lag-1 > 0.7) and re-round.
+		for fixPass := 0; fixPass < 3; fixPass++ {
+			for i := range velocities {
+				velocities[i] = math.Round(velocities[i]*100) / 100
+			}
+			lag1 := lagNAuto(velocities, 1)
+			lag3 := lagNAuto(velocities, 3)
+			if !(lag3 >= -0.1 && lag3 <= 0.1 && lag1 < 0.7) {
+				break // Shield check won't fire
+			}
+			// Heavy forward EMA to push lag-1 above 0.7
+			for i := 1; i < len(velocities); i++ {
+				velocities[i] = 0.25*velocities[i] + 0.75*velocities[i-1]
+			}
 		}
 	} else if len(velocities) > 5 {
 		// Non-evasion: basic Gaussian smoothing (still somewhat bot-detectable)
@@ -485,6 +564,38 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 		velocities[1] = math.Min(velocities[1]*0.4, 25.0)
 		velocities[2] *= 0.7
 		velocities[3] *= 0.9
+	}
+
+	// Post-generation micro-tremor verification: ensure the ratio of 0.5-3px
+	// movements stays above the shield's MinMicroTremorRatio (0.10).
+	// If stochastic generation produced too few, inject additional micro-tremors
+	// by slightly perturbing existing positions to create small displacements.
+	if len(positions) >= 4 {
+		microCount := 0
+		for i := 1; i < len(positions); i++ {
+			dx := positions[i]["x"] - positions[i-1]["x"]
+			dy := positions[i]["y"] - positions[i-1]["y"]
+			dist := math.Sqrt(dx*dx + dy*dy)
+			if dist >= 0.5 && dist <= 3.0 {
+				microCount++
+			}
+		}
+		ratio := float64(microCount) / float64(len(positions)-1)
+		if ratio < 0.15 {
+			// Inject micro-tremors by nudging some positions slightly
+			for i := 2; i < len(positions)-1; i += 3 {
+				dx := positions[i]["x"] - positions[i-1]["x"]
+				dy := positions[i]["y"] - positions[i-1]["y"]
+				dist := math.Sqrt(dx*dx + dy*dy)
+				if dist > 3.0 {
+					// Move this position close to the previous one (1-2px away)
+					angle := math.Atan2(dy, dx)
+					radius := 1.0 + g.rng.Float64()*1.5
+					positions[i]["x"] = positions[i-1]["x"] + radius*math.Cos(angle)
+					positions[i]["y"] = positions[i-1]["y"] + radius*math.Sin(angle)
+				}
+			}
+		}
 	}
 
 	data.MousePositions = positions
@@ -535,11 +646,97 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 				interval = g.config.TypingSpeedMin * (0.5 + g.rng.Float64()*0.3)
 			}
 
+			// Think-pause: bimodal timing — most intervals are fast action,
+			// but ~6% are 200-800ms pauses where the human reads or thinks.
+			// This creates the bimodal distribution that defeats uniformity checks.
+			if g.config.EvadeThinkPause && g.rng.Float64() < 0.06 {
+				interval += 200 + g.rng.Float64()*600
+			}
+
 			// Clamp to reasonable range
-			interval = math.Max(25, math.Min(interval, 1200))
+			interval = math.Max(25, math.Min(interval, 1800))
 			ts += int64(interval)
 		}
 		timestamps = append(timestamps, ts)
+	}
+
+	// Corrective typing: inject backspace+retype bursts (~5-8% of keystrokes).
+	// Real humans make typos and correct them, producing a distinctive pattern:
+	// normal rhythm -> rapid backspace burst (1-3 keys at 30-60ms) -> short pause
+	// (100-300ms while re-reading) -> slightly varied retype rhythm.
+	// This creates natural cadence variance that defeats typing uniformity checks.
+	if g.config.EvadeTypingCorrection && len(timestamps) >= 6 {
+		// Determine how many correction events to inject (5-8% of keystrokes)
+		correctionCount := int(math.Max(1, math.Round(float64(len(timestamps))*0.05+g.rng.Float64()*0.03*float64(len(timestamps)))))
+		if correctionCount > len(timestamps)/4 {
+			correctionCount = len(timestamps) / 4
+		}
+
+		for c := 0; c < correctionCount; c++ {
+			// Pick a random insertion point (avoid first and last few keystrokes)
+			insertAt := 2 + g.rng.Intn(len(timestamps)-4)
+			baseTs := timestamps[insertAt]
+
+			// Generate 1-3 rapid backspace keystrokes (30-60ms intervals)
+			numBackspaces := 1 + g.rng.Intn(3)
+			correctionEvents := make([]int64, 0, numBackspaces+2)
+			bsTs := baseTs
+			for b := 0; b < numBackspaces; b++ {
+				bsTs += 30 + int64(g.rng.Intn(30)) // fast backspace: 30-60ms
+				correctionEvents = append(correctionEvents, bsTs)
+			}
+
+			// Short re-reading pause before retyping (100-300ms)
+			bsTs += 100 + int64(g.rng.Intn(200))
+
+			// 1-2 retype keystrokes with slightly different rhythm
+			numRetypes := 1 + g.rng.Intn(2)
+			for r := 0; r < numRetypes; r++ {
+				bsTs += 60 + int64(g.rng.Intn(80)) // retype: 60-140ms (slightly slower)
+				correctionEvents = append(correctionEvents, bsTs)
+			}
+
+			// Insert correction events into the timestamp stream
+			newTimestamps := make([]int64, 0, len(timestamps)+len(correctionEvents))
+			newTimestamps = append(newTimestamps, timestamps[:insertAt+1]...)
+			newTimestamps = append(newTimestamps, correctionEvents...)
+
+			// Shift all subsequent timestamps forward by the correction duration
+			correctionDuration := bsTs - baseTs
+			for j := insertAt + 1; j < len(timestamps); j++ {
+				newTimestamps = append(newTimestamps, timestamps[j]+correctionDuration)
+			}
+			timestamps = newTimestamps
+		}
+	}
+
+	// Post-generation CV verification for inter-key intervals.
+	// Shield flags CV < 0.15 as mechanical typing.
+	if len(timestamps) >= 3 {
+		intervals := make([]float64, len(timestamps)-1)
+		for i := 1; i < len(timestamps); i++ {
+			intervals[i-1] = float64(timestamps[i] - timestamps[i-1])
+		}
+		mean := 0.0
+		for _, v := range intervals {
+			mean += v
+		}
+		mean /= float64(len(intervals))
+		variance := 0.0
+		for _, v := range intervals {
+			d := v - mean
+			variance += d * d
+		}
+		variance /= float64(len(intervals))
+		cv := math.Sqrt(variance) / mean
+		if cv < 0.20 {
+			// Inject a long pause and a fast burst to force spread
+			timestamps[1] = timestamps[0] + 30 + int64(g.rng.Intn(20)) // fast: 30-50ms
+			if len(timestamps) > 3 {
+				timestamps[len(timestamps)-2] = timestamps[len(timestamps)-3] + 400 + int64(g.rng.Intn(300)) // pause: 400-700ms
+				timestamps[len(timestamps)-1] = timestamps[len(timestamps)-2] + 60 + int64(g.rng.Intn(40))
+			}
+		}
 	}
 
 	data.TypingTimestamps = timestamps
@@ -548,8 +745,11 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 	// Human hold times vary by key type: short for common letters (60-120ms),
 	// longer for modifiers/space (100-200ms), with occasional long holds (200-350ms).
 	// CV should be > 0.30 to avoid mechanical-typing detection.
-	holdTimes := make([]float64, 0, numKeys)
-	for i := 0; i < numKeys; i++ {
+	// Use len(timestamps) instead of numKeys because correction events may have
+	// added extra keystrokes to the timestamp stream.
+	actualKeyCount := len(timestamps)
+	holdTimes := make([]float64, 0, actualKeyCount)
+	for i := 0; i < actualKeyCount; i++ {
 		var hold float64
 		r := g.rng.Float64()
 		switch {
@@ -569,6 +769,28 @@ func (g *EventGenerator) generateTypingTimestamps(data *EventData) {
 		// Add noise ±15%
 		hold *= (0.85 + g.rng.Float64()*0.30)
 		holdTimes = append(holdTimes, math.Round(hold*10)/10)
+	}
+	// Post-generation CV verification: ensure CV > 0.20 (shield threshold is 0.15).
+	// If stochastic generation produced too-uniform hold times, inject variance by
+	// replacing one entry with a deliberate long hold.
+	if len(holdTimes) >= 3 {
+		mean := 0.0
+		for _, h := range holdTimes {
+			mean += h
+		}
+		mean /= float64(len(holdTimes))
+		variance := 0.0
+		for _, h := range holdTimes {
+			d := h - mean
+			variance += d * d
+		}
+		variance /= float64(len(holdTimes))
+		cv := math.Sqrt(variance) / mean
+		if cv < 0.20 {
+			// Inject a long hold and a short hold to force spread
+			holdTimes[0] = 55 + g.rng.Float64()*15           // very short: 55-70ms
+			holdTimes[len(holdTimes)-1] = 300 + g.rng.Float64()*150 // long: 300-450ms
+		}
 	}
 	data.KeystrokeHoldTimes = holdTimes
 }
@@ -695,20 +917,27 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 			if baseScale > 2.0 {
 				baseScale = 2.0
 			}
-			if i == 0 {
+			switch {
+			case i == 0:
 				// Anchor: guaranteed burst
-				interval = 30 + int(baseScale*20) + g.rng.Intn(60)
-			} else if i == 1 {
+				interval = 30 + int(baseScale*20) + g.rng.Intn(40)
+			case i == 1:
 				// Anchor: guaranteed long pause to widen histogram range
-				interval = 600 + g.rng.Intn(1200)
-			} else {
+				interval = 800 + g.rng.Intn(1200)
+			case i == numScrolls/2:
+				// Mid-anchor: guaranteed medium interval for 3-mode spread
+				interval = 200 + g.rng.Intn(150)
+			case i == numScrolls-1:
+				// End anchor: another burst to ensure second bin occupancy
+				interval = 40 + g.rng.Intn(50)
+			default:
 				r := g.rng.Float64()
-				if r < 0.30 {
-					interval = 30 + int(baseScale*25) + g.rng.Intn(60)
-				} else if r < 0.70 {
-					interval = 120 + int(baseScale*60) + g.rng.Intn(170)
+				if r < 0.25 {
+					interval = 30 + int(baseScale*25) + g.rng.Intn(50)
+				} else if r < 0.55 {
+					interval = 150 + int(baseScale*60) + g.rng.Intn(200)
 				} else {
-					interval = 400 + g.rng.Intn(1400)
+					interval = 500 + g.rng.Intn(1500)
 				}
 			}
 		} else {
@@ -721,6 +950,35 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 		}
 		ts += int64(interval)
 		scrollTimestamps = append(scrollTimestamps, ts)
+	}
+
+	// Post-verify scroll interval entropy — if below 1.5, regenerate with wider spread.
+	// The shield bins intervals into 10 buckets and computes Shannon entropy.
+	if g.config.EvadeScrollSpearman && len(scrollTimestamps) >= 4 {
+		for attempt := 0; attempt < 3; attempt++ {
+			if scrollIntervalEntropy(scrollTimestamps) >= 1.6 {
+				break
+			}
+			// Regenerate with forced wide spread: inject a very short and very long interval
+			base := scrollTimestamps[0]
+			for i := 1; i < len(scrollTimestamps); i++ {
+				var interval int
+				switch {
+				case i == 1:
+					interval = 20 + g.rng.Intn(40) // very short burst
+				case i == 2:
+					interval = 1000 + g.rng.Intn(1500) // very long pause
+				case i%3 == 0:
+					interval = 30 + g.rng.Intn(60) // burst
+				case i%3 == 1:
+					interval = 200 + g.rng.Intn(200) // medium
+				default:
+					interval = 600 + g.rng.Intn(1200) // long
+				}
+				base += int64(interval)
+				scrollTimestamps[i] = base
+			}
+		}
 	}
 
 	data.ScrollTimestamps = scrollTimestamps
@@ -783,47 +1041,35 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 		}
 	}
 
-	for ci, idx := range indices {
+	// Phase 98: Two-pass click generation — compute jittered positions FIRST,
+	// then derive Fitts's Law timing from the ACTUAL positions the shield will
+	// measure. Previously the timing was based on unjittered mouse positions,
+	// causing a distance mismatch that broke Pearson correlation ~10% of the time.
+
+	// Pass 1: Compute all jittered click positions and dwell times.
+	for _, idx := range indices {
 		pos := data.MousePositions[idx]
 
-		var clickTs int64
-		if ci == 0 {
-			// First click: always relative to mouse position
-			clickTs = data.MouseTimestamps[idx] + int64(1+g.rng.Intn(5))
-		} else if g.config.EvadeFittsLaw {
-			// Evasion ON: use Fitts's Law — movement time correlates with distance
-			prevPos := clickPositions[ci-1]
-			dx := pos["x"] - prevPos["x"]
-			dy := pos["y"] - prevPos["y"]
-			dist := math.Sqrt(dx*dx + dy*dy)
-			if dist < 1.0 {
-				dist = 1.0
-			}
-			// Fitts's Law: MT = a + b * log2(D/W + 1)
-			// Use moderate noise to keep correlation > 0.3
-			fittsID := math.Log2(dist/40.0 + 1)
-			movementTime := 250.0 + 250.0*fittsID
-			// Small noise: ±15% multiplicative + ±50ms additive
-			noise := 0.85 + g.rng.Float64()*0.30 // [0.85, 1.15]
-			movementTime *= noise
-			movementTime += float64(g.rng.Intn(100) - 50) // ±50ms
-			if movementTime < 150 {
-				movementTime = 150
-			}
-			clickTs = clickTimestamps[ci-1] + int64(movementTime)
-		} else {
-			// Evasion OFF: flat timing regardless of distance (bot-detectable)
-			clickTs = data.MouseTimestamps[idx] + int64(1+g.rng.Intn(5))
-		}
-		clickTimestamps = append(clickTimestamps, clickTs)
-
 		var dwellTime int64
-		if g.config.EvadeClickDwellTime {
+		if g.config.EvadeClickDwellLogNorm {
+			// Log-normal distribution for click dwell times: better matches
+			// human motor control than uniform. Most clicks cluster at 80-120ms
+			// with a long tail of deliberate slow clicks at 200-400ms.
+			// log-normal with mu=4.6 (~100ms median), sigma=0.4 gives:
+			//   - mode ~85ms, median ~100ms, mean ~108ms
+			//   - 95th percentile ~175ms, occasional values 200-400ms
+			logDwell := 4.6 + g.rng.NormFloat64()*0.4
+			dwell := math.Exp(logDwell)
+			// Clamp to reasonable range (40-500ms)
+			dwell = math.Max(40, math.Min(dwell, 500))
+			dwellTime = int64(math.Round(dwell))
+		} else if g.config.EvadeClickDwellTime {
 			dwellTime = 80 + int64(g.rng.Intn(120))
 		} else {
 			dwellTime = int64(g.rng.Intn(6))
 		}
 		clickDwellTimes = append(clickDwellTimes, dwellTime)
+
 		// Varied click offset distribution (defeats Check 17):
 		// - 30% precise clicks: 2-5px offset (user clicking carefully)
 		// - 40% moderate clicks: 5-12px offset (normal targeting)
@@ -846,6 +1092,63 @@ func (g *EventGenerator) generateClickEvents(data *EventData) {
 		})
 	}
 
+	// Pass 2: Compute click timestamps using the JITTERED positions for Fitts's Law.
+	// The shield measures distance between consecutive clickPositions, so timing
+	// must correlate with those exact distances to survive Pearson correlation check.
+	for ci, idx := range indices {
+		var clickTs int64
+		if ci == 0 {
+			// First click: always relative to mouse position
+			clickTs = data.MouseTimestamps[idx] + int64(1+g.rng.Intn(5))
+		} else if g.config.EvadeFittsLaw {
+			// Evasion ON: use Fitts's Law on JITTERED positions (matches shield's measurement)
+			prevPos := clickPositions[ci-1]
+			curPos := clickPositions[ci]
+			dx := curPos["x"] - prevPos["x"]
+			dy := curPos["y"] - prevPos["y"]
+			dist := math.Sqrt(dx*dx + dy*dy)
+			if dist < 1.0 {
+				dist = 1.0
+			}
+			// Fitts's Law: MT = a + b * log2(D/W + 1)
+			// Strong slope + minimal noise → Pearson correlation well above 0.3
+			fittsID := math.Log2(dist/40.0 + 1)
+			movementTime := 200.0 + 400.0*fittsID // Very strong slope for clear correlation
+			// Tiny noise: ±5% multiplicative + ±15ms additive
+			noise := 0.95 + g.rng.Float64()*0.10 // [0.95, 1.05]
+			movementTime *= noise
+			movementTime += float64(g.rng.Intn(30) - 15) // ±15ms
+			if movementTime < 150 {
+				movementTime = 150
+			}
+			clickTs = clickTimestamps[ci-1] + int64(movementTime)
+		} else {
+			// Evasion OFF: flat timing regardless of distance (bot-detectable)
+			clickTs = data.MouseTimestamps[idx] + int64(1+g.rng.Intn(5))
+		}
+		clickTimestamps = append(clickTimestamps, clickTs)
+	}
+
+	// Re-verify lag structure after click deceleration modified velocities.
+	// EvadeClickDeceleration (lines above) scales velocities near click indices
+	// and rounds to 1 decimal, which can destroy the lag-3 autocorrelation built
+	// by the EMA in generateMousePath. Apply the same fix: forward EMA until safe.
+	if g.config.EvadeMouseVelocityLag3 && len(data.MouseVelocities) > 5 {
+		for fixPass := 0; fixPass < 5; fixPass++ {
+			lag1 := lagNAuto(data.MouseVelocities, 1)
+			lag3 := lagNAuto(data.MouseVelocities, 3)
+			if !(lag3 >= -0.1 && lag3 <= 0.1 && lag1 < 0.7) {
+				break
+			}
+			for i := 1; i < len(data.MouseVelocities); i++ {
+				data.MouseVelocities[i] = 0.25*data.MouseVelocities[i] + 0.75*data.MouseVelocities[i-1]
+			}
+			for i := range data.MouseVelocities {
+				data.MouseVelocities[i] = math.Round(data.MouseVelocities[i]*100) / 100
+			}
+		}
+	}
+
 	data.ClickTimestamps = clickTimestamps
 	data.ClickPositions = clickPositions
 	data.ClickDwellTimes = clickDwellTimes
@@ -856,6 +1159,55 @@ func sign(x float64) float64 {
 		return 1
 	}
 	return -1
+}
+
+// scrollIntervalEntropy computes Shannon entropy of scroll intervals binned
+// into 10 buckets, matching the shield's calculateIntervalEntropy function.
+func scrollIntervalEntropy(timestamps []int64) float64 {
+	if len(timestamps) < 2 {
+		return 0
+	}
+	intervals := make([]float64, 0, len(timestamps)-1)
+	for i := 1; i < len(timestamps); i++ {
+		diff := float64(timestamps[i] - timestamps[i-1])
+		if diff > 0 {
+			intervals = append(intervals, diff)
+		}
+	}
+	if len(intervals) == 0 {
+		return 0
+	}
+	numBins := 10
+	minVal, maxVal := intervals[0], intervals[0]
+	for _, v := range intervals {
+		if v < minVal {
+			minVal = v
+		}
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+	if maxVal == minVal {
+		return 0
+	}
+	bins := make([]int, numBins)
+	binWidth := (maxVal - minVal) / float64(numBins)
+	for _, v := range intervals {
+		bin := int((v - minVal) / binWidth)
+		if bin >= numBins {
+			bin = numBins - 1
+		}
+		bins[bin]++
+	}
+	total := float64(len(intervals))
+	entropy := 0.0
+	for _, count := range bins {
+		if count > 0 {
+			p := float64(count) / total
+			entropy -= p * math.Log2(p)
+		}
+	}
+	return entropy
 }
 
 // lagNAuto computes the lag-N autocorrelation of a float64 sequence.

@@ -18,10 +18,11 @@ func TestToolComparisonBasicRanking(t *testing.T) {
 
 	// Print scoreboard
 	t.Logf("\n=== Tool Comparison Scoreboard ===")
-	t.Logf("%-30s %10s %12s %10s", "Tool", "Avg Score", "Detection %", "Evasion %")
-	t.Logf("%-30s %10s %12s %10s", "----", "---------", "-----------", "---------")
+	t.Logf("%-30s %10s %10s %12s %10s", "Tool", "Avg Score", "Avg Conf", "Detection %", "Evasion %")
+	t.Logf("%-30s %10s %10s %12s %10s", "----", "---------", "--------", "-----------", "---------")
 	for _, r := range report.Ranking {
-		t.Logf("%-30s %10.3f %11.0f%% %9.0f%%", r.ToolName, r.AvgScore, (1-r.EvasionRate)*100, r.EvasionRate*100)
+		tr := resultMapByName(report.Results, r.ToolName)
+		t.Logf("%-30s %10.3f %10.3f %11.0f%% %9.0f%%", r.ToolName, r.AvgScore, tr.AvgConfidence, (1-r.EvasionRate)*100, r.EvasionRate*100)
 	}
 
 	// Build a map for easy lookup
@@ -84,31 +85,32 @@ func TestToolComparisonBasicRanking(t *testing.T) {
 		}
 	}
 
-	// Our broken stealth: should be mostly detected (relaxed from 100% due to edge cases)
+	// Our broken stealth: should now be fully detected.
 	r, ok := resultMap["our_stealth_broken"]
 	if !ok {
 		t.Fatal("missing tool result for our_stealth_broken")
 	}
-	if r.DetectionRate < 0.90 {
-		t.Errorf("our_stealth_broken: expected >=90%% detection rate, got %.0f%% (avg score: %.3f)",
+	if r.DetectionRate < 1.0 {
+		t.Errorf("our_stealth_broken: expected 100%% detection rate, got %.0f%% (avg score: %.3f)",
 			r.DetectionRate*100, r.AvgBotScore)
 	}
 
-	// Our stealth sword: should be detected after shield upgrade (100% detection rate)
+	// Our stealth sword: should also be fully detected by the comparison harness.
 	sword, ok := resultMap["our_stealth_sword"]
 	if !ok {
 		t.Fatal("missing tool result for our_stealth_sword")
 	}
-	// With only 3 scenarios per tool and stochastic behavioral checks,
-	// expect >= 50% detection (at least 2/3 scenarios detected).
-	if sword.DetectionRate < 0.50 {
-		t.Errorf("our_stealth_sword: expected >= 50%% detection rate after shield upgrade, got %.0f%% (avg score: %.3f)",
+	if sword.DetectionRate < 1.0 {
+		t.Errorf("our_stealth_sword: expected 100%% detection rate after shield upgrade, got %.0f%% (avg score: %.3f)",
 			sword.DetectionRate*100, sword.AvgBotScore)
 		for _, s := range sword.Scenarios {
 			if !s.IsBot {
 				t.Errorf("  scenario %s evaded (score: %.3f), indicators: %v", s.Name, s.BotScore, s.Indicators)
 			}
 		}
+	}
+	if sword.AvgConfidence < 0.80 {
+		t.Errorf("our_stealth_sword: expected high detection confidence, got %.3f", sword.AvgConfidence)
 	}
 
 	// Ranking: sword is no longer #1 (detected by new checks)
@@ -249,4 +251,13 @@ func findSubstr(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func resultMapByName(results []ToolResult, name string) ToolResult {
+	for _, r := range results {
+		if r.Tool.Name == name {
+			return r
+		}
+	}
+	return ToolResult{}
 }

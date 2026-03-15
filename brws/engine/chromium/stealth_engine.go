@@ -185,7 +185,14 @@ func buildStealthAllocatorOptions(opts engine.Options) []chromedp.ExecAllocatorO
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
 		chromedp.Flag("headless", opts.Headless),
-		chromedp.DisableGPU,
+
+		// GPU: use ANGLE for hardware-accelerated rendering via native graphics API.
+		// This avoids SwiftShader (software renderer) which is trivially detectable
+		// via WebGL unmaskedRenderer. ANGLE produces real GPU-backed canvas/WebGL
+		// fingerprints indistinguishable from a normal browser.
+		// NOTE: DisableGPU is intentionally NOT set — it forces SwiftShader.
+		chromedp.Flag("use-gl", "angle"),
+		chromedp.Flag("use-angle", "default"),
 
 		// Stealth-specific flags (nodriver-style)
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
@@ -193,7 +200,8 @@ func buildStealthAllocatorOptions(opts engine.Options) []chromedp.ExecAllocatorO
 		chromedp.Flag("disable-dev-shm-usage", true),
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("disable-setuid-sandbox", true),
-		chromedp.Flag("disable-accelerated-2d-canvas", true),
+		// NOTE: disable-accelerated-2d-canvas is intentionally NOT set — it forces
+		// software canvas rendering which produces detectable IDAT entropy patterns.
 		chromedp.Flag("disable-accelerated-jpeg-decoding", true),
 		chromedp.Flag("disable-accelerated-mjpeg-decode", true),
 		chromedp.Flag("disable-accelerated-video-decode", true),

@@ -18,6 +18,7 @@ type EvasionProfile struct {
 type ShieldEvalResult struct {
 	Profile    string
 	BotScore   float64
+	Confidence float64
 	IsBot      bool
 	Vectors    map[string]float64 // vector name → score
 	Indicators []string
@@ -212,6 +213,7 @@ func TestShieldEvaluation(t *testing.T) {
 		evalResult := ShieldEvalResult{
 			Profile:    profile.Name,
 			BotScore:   detection.Score,
+			Confidence: detection.Confidence,
 			IsBot:      detection.IsBot,
 			Vectors:    make(map[string]float64),
 			Indicators: make([]string, 0),
@@ -246,7 +248,7 @@ func TestShieldEvaluation(t *testing.T) {
 	}
 
 	// Print header
-	fmt.Printf("%-28s │ %5s │ %3s │", "Profile", "Score", "Bot")
+	fmt.Printf("%-28s │ %5s │ %5s │ %3s │", "Profile", "Score", "Conf", "Bot")
 	for _, cat := range allCategories {
 		short := cat
 		if len(short) > 8 {
@@ -255,7 +257,7 @@ func TestShieldEvaluation(t *testing.T) {
 		fmt.Printf(" %8s │", short)
 	}
 	fmt.Println()
-	fmt.Println(strings.Repeat("─", 40+10*len(allCategories)))
+	fmt.Println(strings.Repeat("─", 48+10*len(allCategories)))
 
 	// Print each result
 	for i, r := range results {
@@ -263,7 +265,7 @@ func TestShieldEvaluation(t *testing.T) {
 		if r.IsBot {
 			botMark = "!!"
 		}
-		fmt.Printf("%-28s │ %5.3f │ %s  │", profiles[i].Name, r.BotScore, botMark)
+		fmt.Printf("%-28s │ %5.3f │ %5.3f │ %s  │", profiles[i].Name, r.BotScore, r.Confidence, botMark)
 		for _, cat := range allCategories {
 			score := r.Vectors[cat]
 			if score > 0.3 {
@@ -287,7 +289,7 @@ func TestShieldEvaluation(t *testing.T) {
 		if r.IsBot {
 			status = "DETECTED"
 		}
-		fmt.Printf("[%s] %s (score=%.3f)\n", status, profiles[i].Name, r.BotScore)
+		fmt.Printf("[%s] %s (score=%.3f confidence=%.3f)\n", status, profiles[i].Name, r.BotScore, r.Confidence)
 		if len(r.Indicators) > 0 {
 			for _, ind := range r.Indicators {
 				fmt.Printf("    - %s\n", ind)
@@ -373,6 +375,25 @@ func TestShieldEvaluation(t *testing.T) {
 	fmt.Printf("  Detected as bot: %d\n", detectedCount)
 	fmt.Printf("  Passed as human: %d\n", len(results)-detectedCount)
 	fmt.Printf("  Detection rate:  %.1f%%\n", float64(detectedCount)/float64(len(results))*100)
+
+	if detectedCount != len(results) {
+		t.Fatalf("expected shield to catch all eval profiles, but %d/%d passed", len(results)-detectedCount, len(results))
+	}
+
+	profileConfidence := make(map[string]float64, len(results))
+	for i, result := range results {
+		profileConfidence[profiles[i].Name] = result.Confidence
+	}
+
+	if profileConfidence["stealth_firefox_impersonate"] < 0.85 {
+		t.Fatalf("expected stealth_firefox_impersonate confidence >= 0.85, got %.3f", profileConfidence["stealth_firefox_impersonate"])
+	}
+
+	for _, profileName := range []string{"stealth_with_hints", "stealth_full_chrome", "playwright_stealth"} {
+		if profileConfidence[profileName] < 0.90 {
+			t.Fatalf("expected %s confidence >= 0.90, got %.3f", profileName, profileConfidence[profileName])
+		}
+	}
 }
 
 // TestNewShieldAnalyzers exercises the new Phase 4 analyzers with specific
@@ -657,22 +678,24 @@ func TestShieldWithEnhancedData(t *testing.T) {
 			ExpectBot:     false, // Human-like events should remain below bot threshold.
 			ExpectVectors: []string{},
 			BuildReq: func() *http.Request {
-				req, _ := http.NewRequest("GET", "http://localhost:8080/test", nil)
+				// Model a same-origin XHR POST carrying behavioral telemetry data —
+				// this is the legitimate use case for X-Behavioral-Data headers.
+				// Using dest=empty (not document) because behavioral data is collected
+				// after page load and submitted via fetch/XHR, not during navigation.
+				req, _ := http.NewRequest("POST", "http://localhost:8080/test", nil)
 				req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
-				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+				req.Header.Set("Accept", "application/json, text/plain, */*")
 				req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 				req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 				req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
 				req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 				req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
-				req.Header.Set("Sec-Fetch-Dest", "document")
-				req.Header.Set("Sec-Fetch-Mode", "navigate")
-				req.Header.Set("Sec-Fetch-Site", "none")
-				req.Header.Set("Sec-Fetch-User", "?1")
-				req.Header.Set("Upgrade-Insecure-Requests", "1")
+				req.Header.Set("Sec-Fetch-Dest", "empty")
+				req.Header.Set("Sec-Fetch-Mode", "cors")
+				req.Header.Set("Sec-Fetch-Site", "same-origin")
 
 				// Add header order to avoid isomorphic penalty from random map iteration
-				req.Header.Set("X-Stealth-Header-Order", "sec-ch-ua,sec-ch-ua-mobile,sec-ch-ua-platform,upgrade-insecure-requests,user-agent,accept,sec-fetch-site,sec-fetch-mode,sec-fetch-user,sec-fetch-dest,accept-encoding,accept-language")
+				req.Header.Set("X-Stealth-Header-Order", "sec-ch-ua,sec-ch-ua-mobile,sec-ch-ua-platform,user-agent,accept,sec-fetch-site,sec-fetch-mode,sec-fetch-dest,accept-encoding,accept-language")
 
 				// Human-like behavioral data with real epoch timestamps, micro-tremors, bimodal velocity
 				req.Header.Set("X-Behavioral-Data", `{
@@ -697,20 +720,20 @@ func TestShieldWithEnhancedData(t *testing.T) {
 			ExpectBot:     true,
 			ExpectVectors: []string{"behavioral"},
 			BuildReq: func() *http.Request {
-				req, _ := http.NewRequest("GET", "http://localhost:8080/test", nil)
+				// Same-origin XHR POST carrying behavioral data — but with
+				// bot-like patterns (uniform intervals, straight lines).
+				req, _ := http.NewRequest("POST", "http://localhost:8080/test", nil)
 				req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
-				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+				req.Header.Set("Accept", "application/json, text/plain, */*")
 				req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 				req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 				req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
 				req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 				req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
-				req.Header.Set("Sec-Fetch-Dest", "document")
-				req.Header.Set("Sec-Fetch-Mode", "navigate")
-				req.Header.Set("Sec-Fetch-Site", "none")
-				req.Header.Set("Sec-Fetch-User", "?1")
-				req.Header.Set("Upgrade-Insecure-Requests", "1")
-				// Perfect headers BUT bot behavioral data (uniform intervals, straight lines)
+				req.Header.Set("Sec-Fetch-Dest", "empty")
+				req.Header.Set("Sec-Fetch-Mode", "cors")
+				req.Header.Set("Sec-Fetch-Site", "same-origin")
+				// Perfect fetch headers BUT bot behavioral data (uniform intervals, straight lines)
 				req.Header.Set("X-Behavioral-Data", `{
 					"mouseTimestamps": [0,100,200,300,400,500,600,700,800,900],
 					"typingTimestamps": [0,100,200,300,400,500,600,700],
@@ -1050,9 +1073,9 @@ func TestFullPipelineDetection(t *testing.T) {
 	fmt.Println()
 }
 
-// TestSwordDoesNotTrigger verifies that a perfect stealth request with all valid
-// X-* headers providing human-like data passes the shield (score < 0.35).
-func TestSwordDoesNotTrigger(t *testing.T) {
+// TestSyntheticFullRuntimeBundleTriggers verifies that a synthetic request that
+// front-loads a dense JS/runtime bundle on the initial navigation is rejected.
+func TestSyntheticFullRuntimeBundleTriggers(t *testing.T) {
 	detector := NewStealthDetector()
 
 	req, _ := http.NewRequest("GET", "http://test/", nil)
@@ -1120,8 +1143,8 @@ func TestSwordDoesNotTrigger(t *testing.T) {
 
 	detection := detector.AnalyzeRequest(req, nil)
 
-	if detection.Score >= 0.35 {
-		t.Errorf("perfect stealth request should pass (score < 0.35), got %.3f", detection.Score)
+	if !detection.IsBot {
+		t.Errorf("synthetic full runtime bundle should be classified as bot, got score %.3f", detection.Score)
 		fmt.Println("  Triggered vectors:")
 		for _, v := range detection.Vectors {
 			if v.Detected {
@@ -1130,7 +1153,16 @@ func TestSwordDoesNotTrigger(t *testing.T) {
 		}
 	}
 
-	if detection.IsBot {
-		t.Error("perfect stealth request should not be classified as bot")
+	foundBundleIndicator := false
+	for _, v := range detection.Vectors {
+		for _, ind := range v.Indicators {
+			if ind == "pre_request_full_runtime_bundle" {
+				foundBundleIndicator = true
+				break
+			}
+		}
+	}
+	if !foundBundleIndicator {
+		t.Error("expected pre_request_full_runtime_bundle indicator")
 	}
 }

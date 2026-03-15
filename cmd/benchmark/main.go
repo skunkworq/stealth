@@ -89,6 +89,7 @@ Examples:
 	rootCmd.AddCommand(enginesCmd())
 	rootCmd.AddCommand(shieldCmd())
 	rootCmd.AddCommand(compareCmd())
+	rootCmd.AddCommand(blackboxCmd())
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -323,6 +324,77 @@ Examples:
 
 	cmd.Flags().BoolVar(&includeBehavioral, "behavioral", true, "Include behavioral analysis in evaluation")
 	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
+
+	return cmd
+}
+
+func blackboxCmd() *cobra.Command {
+	var (
+		baseURL        string
+		toolNames      []string
+		pythonBin      string
+		allowMissing   bool
+		insecureTLS    bool
+		jsonOutput     bool
+		includeModeled bool
+	)
+
+	cmd := &cobra.Command{
+		Use:   "blackbox",
+		Short: "Run real external scraping tools against the local lab and shield",
+		Long: `Runs real tool processes against the owned lab endpoints instead of
+modeled request profiles. Each tool is probed in two phases:
+
+1. /capture/json      - raw fingerprint capture
+2. /api/stealth-test  - shield scoring
+
+This is intended for defensive benchmarking of real locally installed tools,
+not for tuning or improving evasion behavior.
+
+Examples:
+  benchmark blackbox --base-url http://127.0.0.1:8080
+  benchmark blackbox --tools scrapy_default,nodriver
+  benchmark blackbox --json`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			tools := benchmark.DefaultBlackboxToolSpecs(pythonBin)
+			tools = benchmark.FilterBlackboxTools(tools, toolNames)
+			if len(tools) == 0 {
+				return fmt.Errorf("no blackbox tools selected")
+			}
+
+			report, err := benchmark.RunBlackboxBenchmark(context.Background(), &benchmark.BlackboxConfig{
+				BaseURL:                  baseURL,
+				InsecureTLS:              insecureTLS,
+				Tools:                    tools,
+				AllowMissing:             allowMissing,
+				IncludeModeledComparison: includeModeled,
+				Verbose:                  verbose,
+			})
+			if err != nil {
+				return err
+			}
+
+			if jsonOutput {
+				data, err := benchmark.ExportBlackboxJSON(report)
+				if err != nil {
+					return err
+				}
+				fmt.Println(string(data))
+				return nil
+			}
+
+			benchmark.PrintBlackboxReport(report)
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&baseURL, "base-url", "http://127.0.0.1:8080", "Base URL for the owned lab server")
+	cmd.Flags().StringSliceVar(&toolNames, "tools", nil, "Tool names to run (default: all built-in blackbox presets)")
+	cmd.Flags().StringVar(&pythonBin, "python", "python3", "Python binary to use for Python-based tool probes")
+	cmd.Flags().BoolVar(&allowMissing, "allow-missing", true, "Skip unavailable local tools instead of failing")
+	cmd.Flags().BoolVar(&insecureTLS, "insecure-tls", false, "Allow self-signed TLS for local HTTPS lab endpoints")
+	cmd.Flags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
+	cmd.Flags().BoolVar(&includeModeled, "modeled", true, "Include modeled profile comparison data")
 
 	return cmd
 }
