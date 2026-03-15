@@ -2350,6 +2350,7 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			runtimeHeaderCount <= 3 &&
 			isBrowserUA &&
 			(telemetryTarget || apiLikeHost) {
+			acceptLower := strings.ToLower(req.Header.Get("Accept"))
 			vec.Score += 0.40
 			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
 				"document_navigation_to_telemetry_target: %s",
@@ -2377,6 +2378,21 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			if req.Referer() == "" {
 				vec.Score += 0.18
 				vec.Indicators = append(vec.Indicators, "document_navigation_missing_referer_to_telemetry_target")
+			}
+
+			if strings.Contains(acceptLower, "text/html") {
+				vec.Score += 0.16
+				vec.Indicators = append(vec.Indicators, "document_navigation_html_accept_to_telemetry_target")
+			}
+
+			if req.Header.Get("Upgrade-Insecure-Requests") == "1" {
+				vec.Score += 0.12
+				vec.Indicators = append(vec.Indicators, "document_navigation_upgrade_insecure_requests_to_telemetry_target")
+			}
+
+			if req.Header.Get("Sec-Fetch-User") == "?1" {
+				vec.Score += 0.12
+				vec.Indicators = append(vec.Indicators, "document_navigation_user_activation_to_telemetry_target")
 			}
 		}
 

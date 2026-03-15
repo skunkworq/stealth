@@ -1555,6 +1555,9 @@ func TestInitialFirefoxNavigationToTelemetryTargetDetected(t *testing.T) {
 	foundAPIHost := false
 	foundNonSameOrigin := false
 	foundMissingReferer := false
+	foundHTMLAccept := false
+	foundUpgradeInsecure := false
+	foundUserActivation := false
 	for _, vec := range detection.Vectors {
 		for _, ind := range vec.Indicators {
 			if strings.HasPrefix(ind, "document_navigation_to_telemetry_target") {
@@ -1568,6 +1571,15 @@ func TestInitialFirefoxNavigationToTelemetryTargetDetected(t *testing.T) {
 			}
 			if ind == "document_navigation_missing_referer_to_telemetry_target" {
 				foundMissingReferer = true
+			}
+			if ind == "document_navigation_html_accept_to_telemetry_target" {
+				foundHTMLAccept = true
+			}
+			if ind == "document_navigation_upgrade_insecure_requests_to_telemetry_target" {
+				foundUpgradeInsecure = true
+			}
+			if ind == "document_navigation_user_activation_to_telemetry_target" {
+				foundUserActivation = true
 			}
 		}
 	}
@@ -1583,6 +1595,15 @@ func TestInitialFirefoxNavigationToTelemetryTargetDetected(t *testing.T) {
 	}
 	if !foundMissingReferer {
 		t.Fatal("expected document_navigation_missing_referer_to_telemetry_target indicator")
+	}
+	if !foundHTMLAccept {
+		t.Fatal("expected document_navigation_html_accept_to_telemetry_target indicator")
+	}
+	if !foundUpgradeInsecure {
+		t.Fatal("expected document_navigation_upgrade_insecure_requests_to_telemetry_target indicator")
+	}
+	if !foundUserActivation {
+		t.Fatal("expected document_navigation_user_activation_to_telemetry_target indicator")
 	}
 }
 
@@ -1608,7 +1629,10 @@ func TestNormalInitialFirefoxNavigationDoesNotTriggerTelemetryTargetIndicators(t
 			if strings.HasPrefix(ind, "document_navigation_to_telemetry_target") ||
 				strings.HasPrefix(ind, "document_navigation_api_hostname") ||
 				strings.HasPrefix(ind, "document_navigation_non_same_origin_target") ||
-				ind == "document_navigation_missing_referer_to_telemetry_target" {
+				ind == "document_navigation_missing_referer_to_telemetry_target" ||
+				ind == "document_navigation_html_accept_to_telemetry_target" ||
+				ind == "document_navigation_upgrade_insecure_requests_to_telemetry_target" ||
+				ind == "document_navigation_user_activation_to_telemetry_target" {
 				t.Fatalf("did not expect telemetry-target navigation indicator %q for a normal initial Firefox navigation", ind)
 			}
 		}
