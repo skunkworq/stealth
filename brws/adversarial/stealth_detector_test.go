@@ -1430,9 +1430,10 @@ func TestNormalSameOriginDocumentNavigationGetDoesNotTriggerIndicators(t *testin
 
 	req := httptest.NewRequest("GET", "https://example.com/dashboard", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("Referer", "https://example.com/home")
 	req.Header.Set("Sec-Fetch-Dest", "document")
 	req.Header.Set("Sec-Fetch-Mode", "navigate")
@@ -1446,6 +1447,84 @@ func TestNormalSameOriginDocumentNavigationGetDoesNotTriggerIndicators(t *testin
 		for _, ind := range vec.Indicators {
 			if strings.HasPrefix(ind, "document_navigation_") {
 				t.Fatalf("did not expect document navigation indicator %q for a normal same-origin navigation", ind)
+			}
+		}
+	}
+}
+
+func TestSameOriginFirefoxDocumentNavigationSpoofDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://test/products", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
+	req.Header.Set("Referer", "http://test/dashboard")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("X-Stealth-Header-Order", "Upgrade-Insecure-Requests,User-Agent,Accept,Sec-Fetch-Site,Sec-Fetch-Mode,Sec-Fetch-User,Sec-Fetch-Dest,Accept-Encoding,Accept-Language")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected spoofed same-origin Firefox navigation to be detected, got score %.3f", detection.Score)
+	}
+
+	foundAcceptMismatch := false
+	foundMissingConnection := false
+	foundImprobableOrder := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "document_navigation_firefox_accept_missing_image_codecs" {
+				foundAcceptMismatch = true
+			}
+			if ind == "document_navigation_missing_connection_header" {
+				foundMissingConnection = true
+			}
+			if strings.HasPrefix(ind, "document_navigation_improbable_header_order") {
+				foundImprobableOrder = true
+			}
+		}
+	}
+
+	if !foundAcceptMismatch {
+		t.Fatal("expected document_navigation_firefox_accept_missing_image_codecs indicator")
+	}
+	if !foundMissingConnection {
+		t.Fatal("expected document_navigation_missing_connection_header indicator")
+	}
+	if !foundImprobableOrder {
+		t.Fatal("expected document_navigation_improbable_header_order indicator")
+	}
+}
+
+func TestNormalSameOriginFirefoxDocumentNavigationDoesNotTriggerSpoofIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "http://test/products", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Referer", "http://test/dashboard")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Accept-Language,Accept-Encoding,Connection,Upgrade-Insecure-Requests,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-User")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_firefox_accept_missing_image_codecs") ||
+				strings.HasPrefix(ind, "document_navigation_missing_connection_header") ||
+				strings.HasPrefix(ind, "document_navigation_improbable_header_order") {
+				t.Fatalf("did not expect Firefox navigation spoof indicator %q for a normal same-origin navigation", ind)
 			}
 		}
 	}
@@ -1588,6 +1667,189 @@ func TestCrossSubdomainSameSiteTelemetryDoesNotTriggerSameOriginClaim(t *testing
 				ind == "same_site_body_missing_runtime_payload" ||
 				strings.HasPrefix(ind, "telemetry_runtime_duplicated_in_body_and_headers") {
 				t.Fatalf("did not expect same-site origin claim indicator %q for cross-subdomain telemetry", ind)
+			}
+		}
+	}
+}
+
+func TestSameSiteDenseRuntimeDuplicationDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/dashboard","v":"2.1.0","seq":4,` +
+		`"navigator":{"lang":"en-US","cores":8,"mem":8,"ua_blob":"` + strings.Repeat("n", 900) + `"},` +
+		`"timing":{"ttfb":120,"fcp":340,"lcp":810,"trace":"` + strings.Repeat("t", 900) + `"},` +
+		`"canvas":{"hash":"abcdef1234567890","trace":"` + strings.Repeat("c", 900) + `"},` +
+		`"audio":{"hash":"fedcba0987654321","trace":"` + strings.Repeat("a", 900) + `"},` +
+		`"behavior":{"moves":42,"clicks":3,"scrolls":5},` +
+		`"webgl":{"vendor":"Google Inc.","renderer":"ANGLE"}}`
+	req := httptest.NewRequest("POST", "http://test/api/ml/trap", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://app.test")
+	req.Header.Set("Referer", "http://app.test/dashboard")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="146", "Google Chrome";v="146", "Not-A.Brand";v="24"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Screen-Data", strings.Repeat("s", 256))
+	req.Header.Set("X-Font-Data", strings.Repeat("f", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected dense same-site runtime duplication to be detected, got score %.3f", detection.Score)
+	}
+
+	foundUserActivation := false
+	foundDuplication := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "same_site_xhr_with_user_activation" {
+				foundUserActivation = true
+			}
+			if strings.HasPrefix(ind, "same_site_dense_runtime_body_header_duplication") {
+				foundDuplication = true
+			}
+		}
+	}
+
+	if !foundUserActivation {
+		t.Fatal("expected same_site_xhr_with_user_activation indicator")
+	}
+	if !foundDuplication {
+		t.Fatal("expected same_site_dense_runtime_body_header_duplication indicator")
+	}
+}
+
+func TestNormalSameSiteAnalyticsPostDoesNotTriggerDenseRuntimeDuplication(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("POST", "https://metrics.example.com/collect", strings.NewReader(`{"sid":"abc","ts":1700000000,"page":"/dashboard","v":"2.1.0","seq":4}`))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://app.example.com")
+	req.Header.Set("Referer", "https://app.example.com/dashboard")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="146", "Google Chrome";v="146", "Not-A.Brand";v="24"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if ind == "same_site_xhr_with_user_activation" ||
+				strings.HasPrefix(ind, "same_site_dense_runtime_body_header_duplication") {
+				t.Fatalf("did not expect dense-runtime same-site indicator %q for a normal analytics post", ind)
+			}
+		}
+	}
+}
+
+func TestSameSiteGETRuntimeBundleDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	body := `{"sid":"abc","ts":1700000000,"page":"/dashboard","v":"2.1.0","seq":4,` +
+		`"navigator":{"lang":"en-US","cores":8,"mem":8,"ua_blob":"` + strings.Repeat("n", 400) + `"},` +
+		`"timing":{"ttfb":120,"fcp":340,"lcp":810},` +
+		`"canvas":{"hash":"abcdef1234567890"},` +
+		`"audio":{"hash":"fedcba0987654321"}}`
+	req := httptest.NewRequest("GET", "http://test/api/ml/trap", strings.NewReader(body))
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "http://app.test")
+	req.Header.Set("Referer", "http://app.test/dashboard")
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", "cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="146", "Google Chrome";v="146", "Not-A.Brand";v="24"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	req.Header.Set("X-Navigator-Data", strings.Repeat("n", 256))
+	req.Header.Set("X-WebGL-Data", strings.Repeat("w", 256))
+	req.Header.Set("X-Plugin-Data", strings.Repeat("p", 256))
+	req.Header.Set("X-Screen-Data", strings.Repeat("s", 256))
+	req.Header.Set("X-Font-Data", strings.Repeat("f", 256))
+	req.Header.Set("X-Behavioral-Data", strings.Repeat("b", 2600))
+	req.Header.Set("X-Timing-Data", strings.Repeat("t", 2600))
+	req.Header.Set("X-Audio-Data", strings.Repeat("a", 600))
+	req.Header.Set("X-Canvas-Fingerprint", strings.Repeat("c", 1200))
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected same-site GET runtime bundle to be detected, got score %.3f", detection.Score)
+	}
+
+	foundRuntimeBundle := false
+	foundBody := false
+	foundContentType := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "same_site_get_runtime_bundle") {
+				foundRuntimeBundle = true
+			}
+			if strings.HasPrefix(ind, "same_site_get_with_body") {
+				foundBody = true
+			}
+			if strings.HasPrefix(ind, "same_site_get_with_content_type") {
+				foundContentType = true
+			}
+		}
+	}
+
+	if !foundRuntimeBundle {
+		t.Fatal("expected same_site_get_runtime_bundle indicator")
+	}
+	if !foundBody {
+		t.Fatal("expected same_site_get_with_body indicator")
+	}
+	if !foundContentType {
+		t.Fatal("expected same_site_get_with_content_type indicator")
+	}
+}
+
+func TestNormalSameSiteGETDoesNotTriggerRuntimeBundleIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://metrics.example.com/collect", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36")
+	req.Header.Set("Accept", "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Referer", "https://app.example.com/dashboard")
+	req.Header.Set("Sec-Fetch-Dest", "image")
+	req.Header.Set("Sec-Fetch-Mode", "no-cors")
+	req.Header.Set("Sec-Fetch-Site", "same-site")
+	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="146", "Google Chrome";v="146", "Not-A.Brand";v="24"`)
+	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
+	req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "same_site_get_runtime_bundle") ||
+				strings.HasPrefix(ind, "same_site_get_with_body") ||
+				strings.HasPrefix(ind, "same_site_get_with_content_type") {
+				t.Fatalf("did not expect same-site GET runtime indicator %q for a normal same-site GET", ind)
 			}
 		}
 	}

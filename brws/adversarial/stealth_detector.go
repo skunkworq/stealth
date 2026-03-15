@@ -1788,6 +1788,27 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		sameOriginClaim := false
 		requiredRuntimeHeaders := 4
 
+		if req.Method == http.MethodGet && mode == "cors" && runtimeHeaderCount >= 6 {
+			vec.Score += 0.78
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"same_site_get_runtime_bundle: %d runtime/%d post_load headers",
+				runtimeHeaderCount, postLoadHeaderCount))
+
+			if bodyErr == nil && len(bodySnapshot) > 0 {
+				vec.Score += 0.26
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"same_site_get_with_body: %d bytes",
+					len(bodySnapshot)))
+			}
+
+			if req.Header.Get("Content-Type") != "" {
+				vec.Score += 0.18
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"same_site_get_with_content_type: %s",
+					req.Header.Get("Content-Type")))
+			}
+		}
+
 		if req.Method == http.MethodPost && mode == "same-origin" && runtimeHeaderCount >= 3 {
 			requiredRuntimeHeaders = 3
 			vec.Score += 0.78
@@ -1810,11 +1831,23 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			}
 		}
 
+		if req.Method == http.MethodPost && mode == "cors" && req.Header.Get("Sec-Fetch-User") == "?1" {
+			vec.Score += 0.24
+			vec.Indicators = append(vec.Indicators, "same_site_xhr_with_user_activation")
+		}
+
 		if req.Method == http.MethodPost && runtimeHeaderCount >= 6 && hasRuntimeBody {
 			if sameOriginClaim && postLoadHeaderCount >= 3 {
 				vec.Score += 0.30
 				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
 					"telemetry_runtime_duplicated_in_body_and_headers: %d runtime/%d post_load headers",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+
+			if !sameOriginClaim && runtimeHeaderCount >= 8 && postLoadHeaderCount >= 3 {
+				vec.Score += 0.72
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"same_site_dense_runtime_body_header_duplication: %d runtime/%d post_load headers",
 					runtimeHeaderCount, postLoadHeaderCount))
 			}
 		}
@@ -2196,6 +2229,34 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			if req.Header.Get("Upgrade-Insecure-Requests") == "" {
 				vec.Score += 0.12
 				vec.Indicators = append(vec.Indicators, "document_navigation_missing_upgrade_insecure_requests")
+			}
+
+			if req.ProtoMajor == 1 && req.Header.Get("Connection") == "" {
+				vec.Score += 0.20
+				vec.Indicators = append(vec.Indicators, "document_navigation_missing_connection_header")
+			}
+
+			if strings.Contains(uaLower, "firefox") {
+				acceptLower := strings.ToLower(req.Header.Get("Accept"))
+				if !strings.Contains(acceptLower, "image/avif") || !strings.Contains(acceptLower, "image/webp") {
+					vec.Score += 0.28
+					vec.Indicators = append(vec.Indicators, "document_navigation_firefox_accept_missing_image_codecs")
+				}
+			}
+
+			order := declaredHeaderOrder(req)
+			upgradeIdx := headerOrderIndex(order, "upgrade-insecure-requests")
+			uaIdx := headerOrderIndex(order, "user-agent")
+			acceptIdx := headerOrderIndex(order, "accept")
+			acceptLangIdx := headerOrderIndex(order, "accept-language")
+			if upgradeIdx != -1 &&
+				((uaIdx != -1 && upgradeIdx < uaIdx) ||
+					(acceptIdx != -1 && upgradeIdx < acceptIdx) ||
+					(acceptLangIdx != -1 && upgradeIdx < acceptLangIdx)) {
+				vec.Score += 0.24
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"document_navigation_improbable_header_order: upgrade-insecure-requests@%d",
+					upgradeIdx))
 			}
 		}
 	}
@@ -2722,12 +2783,11 @@ func ghostHeadersInDeclaredOrder(req *http.Request, candidates []string) []strin
 		return nil
 	}
 
-	order := req.Header.Get("X-Stealth-Header-Order")
-	if order == "" {
+	declared := declaredHeaderOrder(req)
+	if len(declared) == 0 {
 		return nil
 	}
 
-	declared := strings.Split(strings.ToLower(order), ",")
 	ghosts := make([]string, 0)
 	for _, candidate := range candidates {
 		lowerCandidate := strings.ToLower(candidate)
@@ -2744,6 +2804,40 @@ func ghostHeadersInDeclaredOrder(req *http.Request, candidates []string) []strin
 	}
 
 	return ghosts
+}
+
+func declaredHeaderOrder(req *http.Request) []string {
+	if req == nil {
+		return nil
+	}
+
+	order := req.Header.Get("X-Stealth-Header-Order")
+	if order == "" {
+		return nil
+	}
+
+	parts := strings.Split(strings.ToLower(order), ",")
+	normalized := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+		normalized = append(normalized, trimmed)
+	}
+
+	return normalized
+}
+
+func headerOrderIndex(order []string, header string) int {
+	lowerHeader := strings.ToLower(header)
+	for i, current := range order {
+		if current == lowerHeader {
+			return i
+		}
+	}
+
+	return -1
 }
 
 // bodyContainsRuntimePayload checks whether the body contains genuine browser
