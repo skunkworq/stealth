@@ -1530,6 +1530,91 @@ func TestNormalSameOriginFirefoxDocumentNavigationDoesNotTriggerSpoofIndicators(
 	}
 }
 
+func TestInitialFirefoxNavigationToTelemetryTargetDetected(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://api.example.com/telemetry", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Accept-Language,Accept-Encoding,Connection,Upgrade-Insecure-Requests,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-User")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("expected initial Firefox navigation to telemetry target to be detected, got score %.3f", detection.Score)
+	}
+
+	foundTelemetryTarget := false
+	foundAPIHost := false
+	foundNonSameOrigin := false
+	foundMissingReferer := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_to_telemetry_target") {
+				foundTelemetryTarget = true
+			}
+			if strings.HasPrefix(ind, "document_navigation_api_hostname") {
+				foundAPIHost = true
+			}
+			if strings.HasPrefix(ind, "document_navigation_non_same_origin_target") {
+				foundNonSameOrigin = true
+			}
+			if ind == "document_navigation_missing_referer_to_telemetry_target" {
+				foundMissingReferer = true
+			}
+		}
+	}
+
+	if !foundTelemetryTarget {
+		t.Fatal("expected document_navigation_to_telemetry_target indicator")
+	}
+	if !foundAPIHost {
+		t.Fatal("expected document_navigation_api_hostname indicator")
+	}
+	if !foundNonSameOrigin {
+		t.Fatal("expected document_navigation_non_same_origin_target indicator")
+	}
+	if !foundMissingReferer {
+		t.Fatal("expected document_navigation_missing_referer_to_telemetry_target indicator")
+	}
+}
+
+func TestNormalInitialFirefoxNavigationDoesNotTriggerTelemetryTargetIndicators(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://www.example.com/products", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Accept-Language,Accept-Encoding,Connection,Upgrade-Insecure-Requests,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-User")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_to_telemetry_target") ||
+				strings.HasPrefix(ind, "document_navigation_api_hostname") ||
+				strings.HasPrefix(ind, "document_navigation_non_same_origin_target") ||
+				ind == "document_navigation_missing_referer_to_telemetry_target" {
+				t.Fatalf("did not expect telemetry-target navigation indicator %q for a normal initial Firefox navigation", ind)
+			}
+		}
+	}
+}
+
 func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
 	detector := NewStealthDetector()
 

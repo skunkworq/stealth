@@ -110,6 +110,8 @@ type ToolComparisonReport struct {
 	CaptchaResults []CaptchaToolResult  `json:"captcha_results,omitempty"`
 }
 
+const modeledTelemetryTargetURL = "https://api.example.com/telemetry"
+
 // buildToolProfiles returns the 10 tool profiles for comparison.
 func buildToolProfiles(includeBehavioral bool) []ToolProfile {
 	profiles := []ToolProfile{
@@ -455,7 +457,7 @@ func nodriverStealthifiedProfile() ToolProfile {
 				// Start from a MaxEvasionConfig to generate realistic fingerprint data,
 				// then selectively remove behavioral data (which nodriver can't generate).
 				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile()))
-				req := gen.GenerateRequest("http://test/")
+				req := gen.GenerateRequest(modeledTelemetryTargetURL)
 				// Remove behavioral data — nodriver does not simulate mouse/keyboard
 				req.Header.Del("X-Behavioral-Data")
 				return req
@@ -482,7 +484,7 @@ func scraplingStealthifiedProfile() ToolProfile {
 		Scenarios: []ShieldProfile{
 			{Name: "scrapling_full_injection", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile()))
-				req := gen.GenerateRequest("http://test/")
+				req := gen.GenerateRequest(modeledTelemetryTargetURL)
 				// Remove behavioral data — Scrapling does not simulate mouse/keyboard
 				req.Header.Del("X-Behavioral-Data")
 				return req
@@ -509,7 +511,7 @@ func playwrightStealthProfile() ToolProfile {
 		Scenarios: []ShieldProfile{
 			{Name: "playwright_stealth_patched", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile()))
-				req := gen.GenerateRequest("http://test/")
+				req := gen.GenerateRequest(modeledTelemetryTargetURL)
 				// Remove behavioral data — playwright-stealth injects JS patches but
 				// does not generate synthetic mouse/keyboard events
 				req.Header.Del("X-Behavioral-Data")
@@ -545,7 +547,7 @@ func curlImpersonateStealthifiedProfile() ToolProfile {
 				profile.UserAgent = chrome116UA
 				profile.SecChUa = chrome116SecChUa
 				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(profile))
-				req := gen.GenerateRequest("http://test/")
+				req := gen.GenerateRequest(modeledTelemetryTargetURL)
 				// Remove behavioral data — curl has no event generation
 				req.Header.Del("X-Behavioral-Data")
 				return req
@@ -572,19 +574,19 @@ func ourStealthSwordProfile() ToolProfile {
 				gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
 					Profile: behavior.ChromeWindowsProfile(),
 				})
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "stealth_sword_chrome_macos", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
 					Profile: behavior.ChromeMacOSProfile(),
 				})
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "stealth_sword_firefox", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
 					Profile: behavior.FirefoxWindowsProfile(),
 				})
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 		},
 	}
@@ -606,19 +608,19 @@ func ourStealthArmedProfile() ToolProfile {
 		Scenarios: []ShieldProfile{
 			{Name: "armed_chrome_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile()))
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "armed_chrome_macos", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeMacOSProfile()))
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "armed_chrome_linux", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.ChromeLinuxProfile()))
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "armed_firefox_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.FirefoxWindowsProfile()))
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 		},
 	}
@@ -643,25 +645,25 @@ func ourStealthBrowserProfile() ToolProfile {
 				cfg := behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile())
 				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
 				gen := behavior.NewRequestGenerator(cfg)
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "browser_chrome_macos", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				cfg := behavior.MaxEvasionConfig(behavior.ChromeMacOSProfile())
 				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
 				gen := behavior.NewRequestGenerator(cfg)
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "browser_chrome_linux", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				cfg := behavior.MaxEvasionConfig(behavior.ChromeLinuxProfile())
 				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
 				gen := behavior.NewRequestGenerator(cfg)
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 			{Name: "browser_firefox_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				cfg := behavior.MaxEvasionConfig(behavior.FirefoxWindowsProfile())
 				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
 				gen := behavior.NewRequestGenerator(cfg)
-				return gen.GenerateRequest("http://test/")
+				return gen.GenerateRequest(modeledTelemetryTargetURL)
 			}},
 		},
 	}

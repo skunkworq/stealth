@@ -2181,6 +2181,8 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		bodyText := strings.TrimSpace(string(bodySnapshot))
 		uaLower := strings.ToLower(req.Header.Get("User-Agent"))
 		isBrowserUA := strings.Contains(uaLower, "chrome") || strings.Contains(uaLower, "firefox") || strings.Contains(uaLower, "safari")
+		telemetryTarget := looksLikeTelemetryEndpointPath(req.URL)
+		apiLikeHost := looksLikeAPIHostname(req.URL)
 
 		if runtimeHeaderCount >= 4 {
 			vec.Score += 0.78
@@ -2198,6 +2200,40 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			if bodyErr == nil && len(bodySnapshot) > 0 && !bodyContainsRuntimePayload(bodyText) {
 				vec.Score += 0.18
 				vec.Indicators = append(vec.Indicators, "document_navigation_body_missing_runtime_payload")
+			}
+		}
+
+		if req.Method == http.MethodGet &&
+			runtimeHeaderCount <= 3 &&
+			isBrowserUA &&
+			(telemetryTarget || apiLikeHost) {
+			vec.Score += 0.40
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"document_navigation_to_telemetry_target: %s",
+				normalizedURLPath(req.URL)))
+
+			if telemetryTarget {
+				vec.Score += 0.10
+				vec.Indicators = append(vec.Indicators, "document_navigation_non_page_endpoint")
+			}
+
+			if apiLikeHost {
+				vec.Score += 0.20
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"document_navigation_api_hostname: %s",
+					normalizedURLHost(req.URL)))
+			}
+
+			if req.Header.Get("Sec-Fetch-Site") != "same-origin" {
+				vec.Score += 0.22
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"document_navigation_non_same_origin_target: site=%s",
+					req.Header.Get("Sec-Fetch-Site")))
+			}
+
+			if req.Referer() == "" {
+				vec.Score += 0.18
+				vec.Indicators = append(vec.Indicators, "document_navigation_missing_referer_to_telemetry_target")
 			}
 		}
 
@@ -2752,6 +2788,14 @@ func normalizedURLPath(u *url.URL) string {
 	return "/"
 }
 
+func normalizedURLHost(u *url.URL) string {
+	if u == nil {
+		return ""
+	}
+
+	return strings.ToLower(strings.Split(u.Host, ":")[0])
+}
+
 func looksLikeTelemetryEndpointPath(u *url.URL) bool {
 	path := normalizedURLPath(u)
 	if path == "" {
@@ -2771,6 +2815,31 @@ func looksLikeTelemetryEndpointPath(u *url.URL) bool {
 
 	for _, marker := range telemetryMarkers {
 		if strings.Contains(path, marker) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func looksLikeAPIHostname(u *url.URL) bool {
+	host := normalizedURLHost(u)
+	if host == "" {
+		return false
+	}
+
+	prefixes := []string{
+		"api.",
+		"metrics.",
+		"telemetry.",
+		"events.",
+		"collect.",
+		"track.",
+		"beacon.",
+	}
+
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(host, prefix) {
 			return true
 		}
 	}
