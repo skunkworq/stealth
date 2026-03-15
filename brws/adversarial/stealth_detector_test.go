@@ -1687,6 +1687,43 @@ func TestDocumentNavigationWithRuntimeHeadersCaught(t *testing.T) {
 	}
 }
 
+func TestDocumentNavigationWithRuntimeHeadersToTelemetryTargetCaught(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://api.example.com/telemetry", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("Referer", "https://www.google.com/")
+	req.Header.Set("X-Canvas-Fingerprint", "abc123")
+	req.Header.Set("X-Timing-Data", `{"load":100}`)
+	req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Accept-Language,Accept-Encoding,Connection,Upgrade-Insecure-Requests,Referer,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-User,X-Canvas-Fingerprint,X-Timing-Data")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("document navigation with runtime headers to telemetry target should be detected, got score %.3f", detection.Score)
+	}
+
+	foundRuntimeOnTelemetry := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_runtime_headers_on_telemetry_target") {
+				foundRuntimeOnTelemetry = true
+			}
+		}
+	}
+	if !foundRuntimeOnTelemetry {
+		t.Fatal("expected document_navigation_runtime_headers_on_telemetry_target indicator")
+	}
+}
+
 // TestDocumentNavigationWithSuspiciousQueryCaught verifies detection of large
 // encoded payloads in URL query parameters on document navigations.
 func TestDocumentNavigationWithSuspiciousQueryCaught(t *testing.T) {

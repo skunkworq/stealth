@@ -2394,6 +2394,13 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 				vec.Score += 0.12
 				vec.Indicators = append(vec.Indicators, "document_navigation_user_activation_to_telemetry_target")
 			}
+
+			if runtimeHeaderCount >= 1 {
+				vec.Score += 0.14
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"document_navigation_runtime_headers_on_telemetry_target: %d runtime headers",
+					runtimeHeaderCount))
+			}
 		}
 
 		if req.Method == http.MethodGet &&
