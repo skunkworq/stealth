@@ -37,10 +37,11 @@ type Client struct {
 	cfSolver      *CloudflareSolverClient
 
 	// Anti-bot escalation
-	waterfall   *wf.Waterfall
-	tierTracker *proxy.TierTracker
-	escalation  *EscalationConfig
-	evasionFSM  *behavior.AdaptiveEvasionFSM
+	waterfall        *wf.Waterfall
+	tierTracker      *proxy.TierTracker
+	escalation       *EscalationConfig
+	evasionFSM       *behavior.AdaptiveEvasionFSM
+	evasionFSMEnabled bool
 
 	logger       *instrumentation.Logger
 	tracer       *instrumentation.Tracer
@@ -243,12 +244,14 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		escalation = DefaultEscalationConfig()
 	}
 
-	// Initialize evasion FSM (enabled by default for adaptive anti-ban)
-	var evasionFSM *behavior.AdaptiveEvasionFSM
-	if !cfg.EvasionFSMDisabled {
-		evasionFSM = behavior.NewAdaptiveEvasionFSM()
-		logger.Info("evasion FSM initialized")
+	// Evasion FSM is created lazily on first Navigate() so it can select
+	// URL-aware strategies (telemetry URLs get exotic dest strategies first).
+	// The evasionFSMEnabled flag controls whether it will be created.
+	evasionFSMEnabled := !cfg.EvasionFSMDisabled
+	if evasionFSMEnabled {
+		logger.Info("evasion FSM enabled (will initialize on first request)")
 	}
+	var evasionFSM *behavior.AdaptiveEvasionFSM
 
 	c := &Client{
 		engine:        eng,
@@ -262,8 +265,9 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		waterfall:     waterfallEng,
 		tierTracker:   tierTracker,
 		escalation:    escalation,
-		evasionFSM:    evasionFSM,
-		logger:        logger,
+		evasionFSM:        evasionFSM,
+		evasionFSMEnabled: evasionFSMEnabled,
+		logger:            logger,
 		tracer:        tracer,
 		hooks:         hooks,
 		fsm:           fsm,
@@ -286,6 +290,12 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 	defer span.End()
 
 	c.logger.Info("navigating", "url", url)
+
+	// Lazy FSM init — select URL-aware strategies on first request
+	if c.evasionFSMEnabled && c.evasionFSM == nil {
+		c.evasionFSM = behavior.NewAdaptiveEvasionFSMForURL(url)
+		c.logger.Info("evasion FSM initialized with URL-aware strategies", "url", url)
+	}
 
 	_ = c.hooks.Execute(ctx, instrumentation.HookNames.OnRequestStart)
 	c.fsm.ResetState(instrumentation.RequestStates.Idle)

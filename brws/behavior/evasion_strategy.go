@@ -499,6 +499,271 @@ func (s *SelectiveStripStrategy) Apply(req *http.Request, rg *RequestGenerator, 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// URL Classification — determines whether a target URL looks like a telemetry
+// endpoint (triggers shield telemetry target detection) or a normal page URL.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// URLType classifies a request URL for strategy selection.
+type URLType int
+
+const (
+	URLTypePage      URLType = iota // Normal web page — document navigation is safe
+	URLTypeTelemetry                // Telemetry/API endpoint — exotic dest strategies required
+)
+
+// classifyURL mirrors the shield's looksLikeTelemetryEndpointPath and
+// looksLikeAPIHostname to predict which URLs will trigger telemetry detection.
+func classifyURL(targetURL string) URLType {
+	parsed, err := url.Parse(targetURL)
+	if err != nil {
+		return URLTypePage
+	}
+
+	// Mirror shield's looksLikeAPIHostname prefixes
+	hostLower := strings.ToLower(parsed.Hostname())
+	apiPrefixes := []string{"api.", "metrics.", "telemetry.", "events.", "collect.", "track.", "beacon."}
+	for _, p := range apiPrefixes {
+		if strings.HasPrefix(hostLower, p) {
+			return URLTypeTelemetry
+		}
+	}
+
+	// Mirror shield's looksLikeTelemetryEndpointPath patterns
+	pathLower := strings.ToLower(parsed.Path)
+	telemetryPatterns := []string{"/api/telemetry", "/api/ml/", "/collect", "/beacon", "/metrics", "/track", "/events", "/trap"}
+	for _, pattern := range telemetryPatterns {
+		if strings.Contains(pathLower, pattern) {
+			return URLTypeTelemetry
+		}
+	}
+
+	return URLTypePage
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Exotic dest strategies — bypass ALL shield provenance gates.
+//
+// The shield's named gates only cover:
+//   - dest=empty (all 5 named telemetry gates)
+//   - dest=document (isDocumentNavigation)
+// The catch-all only fires for dest=empty or dest="".
+//
+// Any other dest value (iframe, script, image, style, worker) passes through
+// ALL detection layers with zero provenance score. Combined with Firefox UA
+// (no Sec-Ch-Ua → analyzeFingerprintCoverage returns nil) and zero runtime
+// headers (no missing data penalties), these score ≈ 0.00.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// applyExoticDest is the shared helper for non-document, non-empty dest strategies.
+func applyExoticDest(req *http.Request, targetURL string, dest string, mode string, site string, accept string, includeReferer bool) {
+	// Strip ALL runtime headers — zero fingerprint surface
+	for _, h := range allRuntimeHeaders {
+		req.Header.Del(h)
+	}
+
+	// Firefox identity — no Sec-Ch-Ua → analyzeFingerprintCoverage returns nil
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		req.Header.Del(h)
+	}
+
+	// GET — no body
+	req.Method = http.MethodGet
+	req.Body = nil
+	req.ContentLength = 0
+	req.Header.Del("Content-Type")
+	req.Header.Del("Origin")
+	req.Header.Del("Priority")
+
+	// Standard Firefox sub-resource headers
+	req.Header.Set("Accept", accept)
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+
+	// No UIR or SFU for sub-resource fetches (only document navigations)
+	req.Header.Del("Upgrade-Insecure-Requests")
+	req.Header.Del("Sec-Fetch-User")
+
+	// Sec-Fetch headers
+	req.Header.Set("Sec-Fetch-Dest", dest)
+	req.Header.Set("Sec-Fetch-Mode", mode)
+	req.Header.Set("Sec-Fetch-Site", site)
+
+	// Referer — sub-resource requests typically include the embedding page
+	if includeReferer {
+		if parsed, err := url.Parse(targetURL); err == nil {
+			req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Hostname()+"/")
+		}
+	} else {
+		req.Header.Del("Referer")
+	}
+
+	// Clean header order
+	removed := map[string]bool{
+		"Content-Type":              true,
+		"Origin":                    true,
+		"Priority":                  true,
+		"Upgrade-Insecure-Requests": true,
+		"Sec-Fetch-User":           true,
+	}
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		removed[h] = true
+	}
+	for _, h := range allRuntimeHeaders {
+		removed[h] = true
+	}
+	if !includeReferer {
+		removed["Referer"] = true
+	}
+	rebuildHeaderOrderClean(req, removed)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy I1: IframeNavigationStrategy (fidelity = 0.00)
+// ─────────────────────────────────────────────────────────────────────────────
+// Models <iframe src="target"> — a page embedding the target URL in an iframe.
+// dest=iframe bypasses isDocumentNavigation (requires dest=document) and all
+// dest=empty gates. The catch-all also skips (requires dest=empty or "").
+type IframeNavigationStrategy struct{}
+
+func (s *IframeNavigationStrategy) Name() string      { return "iframe_navigation" }
+func (s *IframeNavigationStrategy) Fidelity() float64  { return 0.00 }
+
+func (s *IframeNavigationStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	// Iframe navigations use mode=navigate but dest=iframe (not document)
+	applyExoticDest(req, targetURL, "iframe", "navigate", "cross-site",
+		"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8", true)
+	// Iframes do send UIR (nested navigation) but NOT SFU (not user-activated)
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy I2: ScriptFetchStrategy (fidelity = 0.00)
+// ─────────────────────────────────────────────────────────────────────────────
+// Models <script src="target"> — loading a JavaScript resource from the target.
+// dest=script + mode=no-cors is the standard shape for cross-origin script tags.
+type ScriptFetchStrategy struct{}
+
+func (s *ScriptFetchStrategy) Name() string      { return "script_fetch" }
+func (s *ScriptFetchStrategy) Fidelity() float64  { return 0.00 }
+
+func (s *ScriptFetchStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	applyExoticDest(req, targetURL, "script", "no-cors", "cross-site", "*/*", true)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy I3: ImagePixelStrategy (fidelity = 0.00)
+// ─────────────────────────────────────────────────────────────────────────────
+// Models <img src="target"> — a tracking pixel or image load from the target.
+// Extremely common pattern for analytics (Facebook Pixel, Google Analytics, etc.).
+type ImagePixelStrategy struct{}
+
+func (s *ImagePixelStrategy) Name() string      { return "image_pixel" }
+func (s *ImagePixelStrategy) Fidelity() float64  { return 0.00 }
+
+func (s *ImagePixelStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	applyExoticDest(req, targetURL, "image", "no-cors", "cross-site",
+		"image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8", true)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy I4: StyleFetchStrategy (fidelity = 0.00)
+// ─────────────────────────────────────────────────────────────────────────────
+// Models <link rel="stylesheet" href="target"> — loading a CSS resource.
+type StyleFetchStrategy struct{}
+
+func (s *StyleFetchStrategy) Name() string      { return "style_fetch" }
+func (s *StyleFetchStrategy) Fidelity() float64  { return 0.00 }
+
+func (s *StyleFetchStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	applyExoticDest(req, targetURL, "style", "no-cors", "cross-site",
+		"text/css,*/*;q=0.1", true)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy I5: WorkerImportStrategy (fidelity = 0.00)
+// ─────────────────────────────────────────────────────────────────────────────
+// Models importScripts("target") inside a Service Worker — loading a script
+// resource from within a worker context.
+type WorkerImportStrategy struct{}
+
+func (s *WorkerImportStrategy) Name() string      { return "worker_import" }
+func (s *WorkerImportStrategy) Fidelity() float64  { return 0.00 }
+
+func (s *WorkerImportStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	applyExoticDest(req, targetURL, "worker", "same-origin", "same-origin", "*/*", false)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// URL-aware strategy selection
+// ─────────────────────────────────────────────────────────────────────────────
+
+// StrategiesForURL returns an ordered strategy list adapted to the target URL.
+// For telemetry/API endpoints, exotic dest strategies (iframe, script, image)
+// are prioritized since they bypass all shield gates. For normal page URLs,
+// document navigation strategies come first.
+func StrategiesForURL(targetURL string) []EvasionStrategy {
+	urlType := classifyURL(targetURL)
+
+	switch urlType {
+	case URLTypeTelemetry:
+		// Exotic dest strategies first — these bypass ALL gates for telemetry URLs
+		return []EvasionStrategy{
+			&IframeNavigationStrategy{},
+			&ScriptFetchStrategy{},
+			&ImagePixelStrategy{},
+			&StyleFetchStrategy{},
+			&WorkerImportStrategy{},
+			// Fallback to document navigation strategies
+			&SendBeaconStrategy{},
+			&RealBrowserStrategy{},
+			&NoneContextCorsStrategy{},
+			&SameOriginSubThresholdStrategy{},
+			&SameOriginSameSiteStrategy{},
+			&SameOriginSameSiteMinimalStrategy{},
+			&SameSiteCorsStrategy{},
+			&CrossSiteNavigateStrategy{},
+			&CrossSiteCorsStrategy{},
+			&SameSiteMinimalStrategy{},
+			&NavigateMinimalStrategy{},
+			&BodyMigrationStrategy{},
+			&SelectiveStripStrategy{},
+		}
+	default:
+		// Normal page URLs — document navigation first, exotic dest as fallback
+		return []EvasionStrategy{
+			&SendBeaconStrategy{},
+			&RealBrowserStrategy{},
+			&IframeNavigationStrategy{},
+			&ScriptFetchStrategy{},
+			&ImagePixelStrategy{},
+			&NoneContextCorsStrategy{},
+			&SameOriginSubThresholdStrategy{},
+			&SameOriginSameSiteStrategy{},
+			&SameOriginSameSiteMinimalStrategy{},
+			&SameSiteCorsStrategy{},
+			&CrossSiteNavigateStrategy{},
+			&CrossSiteCorsStrategy{},
+			&SameSiteMinimalStrategy{},
+			&NavigateMinimalStrategy{},
+			&BodyMigrationStrategy{},
+			&StyleFetchStrategy{},
+			&WorkerImportStrategy{},
+			&SelectiveStripStrategy{},
+		}
+	}
+}
+
+// NewAdaptiveEvasionFSMForURL creates an FSM with strategy ordering optimized
+// for the target URL. Telemetry URLs get exotic dest strategies first.
+func NewAdaptiveEvasionFSMForURL(targetURL string) *AdaptiveEvasionFSM {
+	return NewAdaptiveEvasionFSM(StrategiesForURL(targetURL)...)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // DetectionResult / DetectionAnalyzer — interface for self-analysis pre-flight
 // ─────────────────────────────────────────────────────────────────────────────
 

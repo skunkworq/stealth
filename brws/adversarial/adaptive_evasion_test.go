@@ -351,6 +351,138 @@ func TestFSMExhaustionSignal(t *testing.T) {
 	}
 }
 
+// TestExoticDestStrategiesEvadeShield verifies the new exotic dest strategies
+// (iframe, script, image, style, worker) bypass all shield provenance gates.
+func TestExoticDestStrategiesEvadeShield(t *testing.T) {
+	shield := adversarial.NewStealthDetector()
+	profile := behavior.ChromeWindowsProfile()
+
+	strategies := []behavior.EvasionStrategy{
+		&behavior.IframeNavigationStrategy{},
+		&behavior.ScriptFetchStrategy{},
+		&behavior.ImagePixelStrategy{},
+		&behavior.StyleFetchStrategy{},
+		&behavior.WorkerImportStrategy{},
+	}
+
+	for _, s := range strategies {
+		t.Run(s.Name(), func(t *testing.T) {
+			detections := 0
+			var totalScore float64
+			trials := 20
+
+			for i := 0; i < trials; i++ {
+				config := behavior.MaxEvasionConfig(profile)
+				config.EvasionStrategy = s
+				gen := behavior.NewRequestGenerator(config)
+				req := gen.GenerateRequest("https://api.example.com/telemetry")
+				result := shield.AnalyzeRequest(req, nil)
+
+				totalScore += result.Score
+				if result.IsBot {
+					detections++
+				}
+			}
+
+			avgScore := totalScore / float64(trials)
+			detRate := float64(detections) / float64(trials)
+
+			t.Logf("%-20s detection=%.0f%% avg_score=%.3f", s.Name(), detRate*100, avgScore)
+
+			if detRate > 0.05 {
+				t.Errorf("exotic dest strategy %q detected %.0f%% (want < 5%%)", s.Name(), detRate*100)
+			}
+			if avgScore > 0.30 {
+				t.Errorf("exotic dest strategy %q avg_score=%.3f (want < 0.30)", s.Name(), avgScore)
+			}
+		})
+	}
+}
+
+// TestURLAwareFSMConvergesOnTelemetryURL verifies the URL-aware FSM converges
+// on an exotic dest strategy for telemetry URLs instead of exhausting.
+func TestURLAwareFSMConvergesOnTelemetryURL(t *testing.T) {
+	shield := adversarial.NewStealthDetector()
+	profile := behavior.ChromeWindowsProfile()
+	targetURL := "https://api.example.com/telemetry"
+
+	fsm := behavior.NewAdaptiveEvasionFSMForURL(targetURL)
+
+	// Run enough trials to let the FSM converge
+	maxTrials := len(behavior.StrategiesForURL(targetURL)) * 3
+	for trial := 0; trial < maxTrials; trial++ {
+		strategy := fsm.CurrentStrategy()
+		config := behavior.MaxEvasionConfig(profile)
+		config.EvasionStrategy = strategy
+		gen := behavior.NewRequestGenerator(config)
+		req := gen.GenerateRequest(targetURL)
+		result := shield.AnalyzeRequest(req, nil)
+		fsm.RecordResult(result.Score, result.IsBot)
+
+		// Stop early if converged
+		if fsm.Converged() {
+			break
+		}
+	}
+
+	t.Logf("\n%s", fsm.Summary())
+
+	strategy := fsm.CurrentStrategy()
+	t.Logf("Converged on: %s (fidelity=%.0f%%)", strategy.Name(), strategy.Fidelity()*100)
+
+	// The FSM should converge — NOT exhaust
+	if fsm.Exhausted() {
+		t.Error("URL-aware FSM should converge on an exotic dest strategy, not exhaust")
+	}
+	if !fsm.Converged() {
+		t.Error("URL-aware FSM should converge on one of the exotic dest strategies")
+	}
+
+	// The converged strategy should be one of the exotic dest strategies
+	exoticNames := map[string]bool{
+		"iframe_navigation": true,
+		"script_fetch":      true,
+		"image_pixel":       true,
+		"style_fetch":       true,
+		"worker_import":     true,
+	}
+	if !exoticNames[strategy.Name()] {
+		t.Errorf("expected convergence on an exotic dest strategy, got %q", strategy.Name())
+	}
+}
+
+// TestURLClassification verifies the URL classifier mirrors the shield's detection patterns.
+func TestURLClassification(t *testing.T) {
+	tests := []struct {
+		url      string
+		wantType behavior.URLType
+	}{
+		{"https://api.example.com/telemetry", behavior.URLTypeTelemetry},
+		{"https://api.example.com/v1/data", behavior.URLTypeTelemetry},    // api. prefix
+		{"https://metrics.example.com/report", behavior.URLTypeTelemetry}, // metrics. prefix
+		{"https://example.com/api/ml/trap", behavior.URLTypeTelemetry},    // /api/ml/ path
+		{"https://example.com/collect", behavior.URLTypeTelemetry},        // /collect path
+		{"https://example.com/beacon", behavior.URLTypeTelemetry},         // /beacon path
+		{"https://www.example.com/", behavior.URLTypePage},
+		{"https://www.example.com/about", behavior.URLTypePage},
+		{"https://example.com/products/widget", behavior.URLTypePage},
+		{"https://data.example.com/ingest", behavior.URLTypePage}, // not in shield's pattern list
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.url, func(t *testing.T) {
+			strategies := behavior.StrategiesForURL(tt.url)
+			gotType := behavior.URLTypePage
+			if strategies[0].Name() == "iframe_navigation" {
+				gotType = behavior.URLTypeTelemetry
+			}
+			if gotType != tt.wantType {
+				t.Errorf("classifyURL(%q) = %d, want %d", tt.url, gotType, tt.wantType)
+			}
+		})
+	}
+}
+
 func containsStr(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
 		if s[i:i+len(substr)] == substr {
