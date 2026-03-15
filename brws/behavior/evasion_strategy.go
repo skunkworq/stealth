@@ -512,28 +512,144 @@ func (s *SelectiveStripStrategy) Apply(req *http.Request, rg *RequestGenerator, 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy C1: ChromeSameOriginFetchStrategy (fidelity = 0.50)
+// Strategy D1: PostLoadSameOriginFetchStrategy (fidelity = 0.40)
 // ─────────────────────────────────────────────────────────────────────────────
-// Models a real Firefox in-page fetch() call to a same-origin API endpoint.
-// Uses Firefox UA (no Sec-Ch-Ua → coverage returns nil for <8 headers) and
-// includes 5 carefully chosen runtime headers to minimize detection:
+// Models a real Firefox in-page fetch() to a same-origin API endpoint.
+// Key insight: uses ONLY 4 post-load headers (Timing, Behavioral, Audio, Canvas)
+// with ZERO jsFP headers (Navigator, WebGL, Plugin, Screen, Font, WebRTC).
 //
-// Header selection rationale (5 of 10):
-//   - WebGL + Font: browser-agnostic data, no missing-data penalty
-//   - Timing + Behavioral + Audio: MUST include — these have hasJSFP-gated
-//     missing-data penalties (0.40, 0.50, 0.45 respectively). Including them
-//     eliminates 3 of 4 penalties, leaving only Canvas (0.35).
+// Gate analysis: dest=empty + mode=cors + site=same-origin + Firefox + GET:
+//   - runtimeHeaderCount=4 < 5 → NEW telemetry GET runtime bundle gate SKIPPED
+//   - runtimeHeaderCount=4 < 6 → old same-origin GET gate SKIPPED
+//   - hasJSFingerprintHeaders=false (0 of 6 jsFP headers) → no missing-data penalties
+//   - Coverage: secChUa="" && 4 < 8 → returns nil
+//   - jsFingerprintCount=0 → mixed_runtime_surfaces amplifier SKIPPED
 //
-// Gate analysis: dest=empty + mode=cors + site=same-origin + Firefox:
-//   - isSameOriginTelemetryFetch: YES, but runtimeHeaderCount=5 < 6 and
-//     postLoadHeaderCount=3 → all sub-checks need ≥6 runtime to fire → SKIP
-//   - Catch-all: runtimeHeaderCount=5 ≠ 0 → SKIP
-//   - Coverage: secChUa="" && 5 < 8 → returns nil → SKIP
-//   - Missing data: only Canvas (0.35) — Navigator/Plugin/Screen/WebRTC return nil
-//
-// Adaptive scorer with 1 detected vector (Canvas 0.35):
-//
-//	FinalScore = 0.50*0.35 + 0.30*0.35 + 0.20*(1/N) ≈ 0.30 (below 0.35)
+// Result: zero detection vectors fire → FinalScore ≈ 0.00
+type PostLoadSameOriginFetchStrategy struct{}
+
+func (s *PostLoadSameOriginFetchStrategy) Name() string      { return "postload_same_origin_fetch" }
+func (s *PostLoadSameOriginFetchStrategy) Fidelity() float64 { return 0.40 }
+
+func (s *PostLoadSameOriginFetchStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyPostLoadFetch(req, targetURL, "cors", "same-origin", false)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy D2: PostLoadCrossSiteFetchStrategy (fidelity = 0.40)
+// ─────────────────────────────────────────────────────────────────────────────
+// Same approach as D1 but with site=cross-site, modeling a cross-origin
+// analytics SDK call. Origin header included for cross-site cors.
+type PostLoadCrossSiteFetchStrategy struct{}
+
+func (s *PostLoadCrossSiteFetchStrategy) Name() string      { return "postload_cross_site_fetch" }
+func (s *PostLoadCrossSiteFetchStrategy) Fidelity() float64 { return 0.40 }
+
+func (s *PostLoadCrossSiteFetchStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyPostLoadFetch(req, targetURL, "cors", "cross-site", true)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy D3: PostLoadNoCORSBeaconStrategy (fidelity = 0.40)
+// ─────────────────────────────────────────────────────────────────────────────
+// Same approach as D1 but with mode=no-cors + site=same-site.
+type PostLoadNoCORSBeaconStrategy struct{}
+
+func (s *PostLoadNoCORSBeaconStrategy) Name() string      { return "postload_nocors_beacon" }
+func (s *PostLoadNoCORSBeaconStrategy) Fidelity() float64 { return 0.40 }
+
+func (s *PostLoadNoCORSBeaconStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyPostLoadFetch(req, targetURL, "no-cors", "same-site", false)
+}
+
+// applyPostLoadFetch is the shared helper for D-series strategies.
+// Uses exactly 4 post-load runtime headers (Timing, Behavioral, Audio, Canvas)
+// with zero jsFP headers → runtimeHeaderCount=4 < 5, hasJSFP=false.
+func applyPostLoadFetch(req *http.Request, targetURL, mode, site string, includeOrigin bool) {
+	// ── Phase 1: Keep ONLY post-load headers (no jsFP headers) ──
+	keepHeaders := map[string]bool{
+		constants.HeaderTimingData:        true,
+		constants.HeaderBehavioralData:    true,
+		constants.HeaderAudioData:         true,
+		constants.HeaderCanvasFingerprint: true,
+	}
+	for _, h := range allRuntimeHeaders {
+		if !keepHeaders[h] {
+			req.Header.Del(h)
+		}
+	}
+	fixBehavioralDataForFirefox(req)
+
+	// ── Phase 2: Firefox identity (no Sec-Ch-Ua → coverage nil for <8 headers) ──
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{
+		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
+	} {
+		req.Header.Del(h)
+	}
+
+	// ── Phase 3: Fetch shape ──
+	req.Method = http.MethodGet
+	req.Body = nil
+	req.ContentLength = 0
+	req.Header.Del("Content-Type")
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+
+	// Referer
+	if parsed, err := url.Parse(targetURL); err == nil {
+		if site == "cross-site" {
+			req.Header.Set("Referer", "https://app.example.com/dashboard")
+		} else if site == "same-site" {
+			req.Header.Set("Referer", parsed.Scheme+"://www."+parsed.Hostname()+"/")
+		} else {
+			req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/")
+		}
+	}
+
+	if includeOrigin {
+		req.Header.Set("Origin", "https://app.example.com")
+	} else {
+		req.Header.Del("Origin")
+	}
+
+	// ── Phase 4: Sec-Fetch ──
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", mode)
+	req.Header.Set("Sec-Fetch-Site", site)
+	req.Header.Del("Sec-Fetch-User")
+	req.Header.Del("Upgrade-Insecure-Requests")
+
+	// ── Phase 5: Clean header order ──
+	removed := map[string]bool{
+		"Content-Type":              true,
+		"Upgrade-Insecure-Requests": true,
+		"Sec-Fetch-User":            true,
+		"Priority":                  true,
+	}
+	if !includeOrigin {
+		removed["Origin"] = true
+	}
+	for _, h := range []string{
+		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
+	} {
+		removed[h] = true
+	}
+	for _, h := range allRuntimeHeaders {
+		if !keepHeaders[h] {
+			removed[h] = true
+		}
+	}
+	rebuildHeaderOrderClean(req, removed)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy C1: ChromeSameOriginFetchStrategy (fidelity = 0.50) [LEGACY - now caught]
+// ─────────────────────────────────────────────────────────────────────────────
 type ChromeSameOriginFetchStrategy struct{}
 
 func (s *ChromeSameOriginFetchStrategy) Name() string      { return "chrome_same_origin_fetch" }
@@ -977,10 +1093,14 @@ func StrategiesForURL(targetURL string) []EvasionStrategy {
 
 	switch urlType {
 	case URLTypeTelemetry:
-		// Chrome same-origin fetch strategies first — these model real in-page
-		// fetch() calls with Sec-Ch-Ua (bypasses catch-all) and pre-load headers
-		// (pushes coverage below detection threshold).
+		// D-series: 4 post-load headers only (Timing+Behavioral+Audio+Canvas).
+		// runtimeHeaderCount=4 < 5 → bypasses all telemetry GET runtime bundle gates.
+		// hasJSFingerprintHeaders=false → no missing-data penalties.
 		return []EvasionStrategy{
+			&PostLoadSameOriginFetchStrategy{},
+			&PostLoadCrossSiteFetchStrategy{},
+			&PostLoadNoCORSBeaconStrategy{},
+			// C-series legacy (now caught by >=5 runtime header gate)
 			&ChromeSameOriginFetchStrategy{},
 			&ChromeCrossSiteFetchStrategy{},
 			&ChromeNoCORSBeaconStrategy{},
@@ -1007,10 +1127,13 @@ func StrategiesForURL(targetURL string) []EvasionStrategy {
 			&SelectiveStripStrategy{},
 		}
 	default:
-		// Normal page URLs — document navigation first, Chrome fetch + exotic as fallback
+		// Normal page URLs — document navigation first, D-series + C-series + exotic as fallback
 		return []EvasionStrategy{
 			&SendBeaconStrategy{},
 			&RealBrowserStrategy{},
+			&PostLoadSameOriginFetchStrategy{},
+			&PostLoadCrossSiteFetchStrategy{},
+			&PostLoadNoCORSBeaconStrategy{},
 			&ChromeSameOriginFetchStrategy{},
 			&ChromeCrossSiteFetchStrategy{},
 			&ChromeNoCORSBeaconStrategy{},
