@@ -160,7 +160,7 @@ func MaxEvasionConfig(profile *BrowserProfile) *RequestGeneratorConfig {
 		EvadeMathPrecision:         true,
 		EvadeUADataDeep:            true,
 		EvadeRequestProvenance:     true,
-		EvasionStrategy:            &RealBrowserStrategy{},
+		EvasionStrategy:            &SendBeaconStrategy{},
 	}
 }
 

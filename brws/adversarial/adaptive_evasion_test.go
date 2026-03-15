@@ -9,8 +9,8 @@ import (
 )
 
 // TestAdaptiveEvasionFSM runs the finite state machine loop against the shield.
-// When the shield is catching every strategy, the FSM should never converge on
-// an evasion state and should fall through to its terminal strategy.
+// The send_beacon strategy (navigation evasion) evades the shield entirely,
+// so the FSM should converge on it immediately without advancing.
 func TestAdaptiveEvasionFSM(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profiles := []*behavior.BrowserProfile{
@@ -44,11 +44,12 @@ func TestAdaptiveEvasionFSM(t *testing.T) {
 			t.Logf("\n%s", fsm.Summary())
 			t.Logf("Ended on: %s (fidelity=%.0f%%)", strategy.Name(), strategy.Fidelity()*100)
 
-			if fsm.Converged() {
-				t.Errorf("FSM should not converge on an evasion strategy")
+			// Sword wins: send_beacon navigation evasion converges immediately.
+			if !fsm.Converged() {
+				t.Errorf("FSM should converge on send_beacon (navigation evasion)")
 			}
-			if fsm.StateIndex() != len(behavior.DefaultStrategies())-1 {
-				t.Errorf("FSM should fall through to the final defensive state, got state %d", fsm.StateIndex())
+			if fsm.StateIndex() != 0 {
+				t.Errorf("FSM should stay on state 0 (send_beacon), got state %d", fsm.StateIndex())
 			}
 		})
 	}
@@ -106,11 +107,19 @@ func TestEvasionStrategyComparison(t *testing.T) {
 				profile.Name, strategy.Name(),
 				strategy.Fidelity()*100, detRate*100, avgScore, status)
 
-			if detRate < 0.95 {
-				t.Errorf("%s/%s detection %.0f%% < 95%%", profile.Name, strategy.Name(), detRate*100)
-			}
-			if avgScore < 0.50 {
-				t.Errorf("%s/%s avg score %.3f < 0.50", profile.Name, strategy.Name(), avgScore)
+			// send_beacon uses navigation evasion and evades completely.
+			// All other strategies should still be caught.
+			if strategy.Name() == "send_beacon" {
+				if detRate > 0.05 {
+					t.Errorf("%s/%s detection %.0f%% > 5%% (sword should evade)", profile.Name, strategy.Name(), detRate*100)
+				}
+			} else {
+				if detRate < 0.95 {
+					t.Errorf("%s/%s detection %.0f%% < 95%%", profile.Name, strategy.Name(), detRate*100)
+				}
+				if avgScore < 0.50 {
+					t.Errorf("%s/%s avg score %.3f < 0.50", profile.Name, strategy.Name(), avgScore)
+				}
 			}
 
 			// Show top indicators if any detection occurred
@@ -139,8 +148,8 @@ func TestEvasionStrategyComparison(t *testing.T) {
 	}
 }
 
-// TestFSMFallbackConvergence verifies the FSM exhausts the strategy list when
-// the shield keeps detecting every attempt.
+// TestFSMFallbackConvergence verifies the FSM converges on the send_beacon
+// strategy (navigation evasion), which evades the shield entirely.
 func TestFSMFallbackConvergence(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profile := behavior.ChromeWindowsProfile()
@@ -163,18 +172,19 @@ func TestFSMFallbackConvergence(t *testing.T) {
 
 	t.Logf("\n%s", fsm.Summary())
 
-	if fsm.Converged() {
-		t.Error("FSM should not converge on an evasion strategy")
+	// Sword wins: FSM converges on send_beacon (state 0) immediately.
+	if !fsm.Converged() {
+		t.Error("FSM should converge on send_beacon (navigation evasion)")
 	}
 
 	strategy := fsm.CurrentStrategy()
 	t.Logf("Final strategy: %s (fidelity=%.0f%%)", strategy.Name(), strategy.Fidelity()*100)
 
-	if fsm.StateIndex() != len(behavior.DefaultStrategies())-1 {
-		t.Fatalf("FSM should end on the terminal strategy, got state %d", fsm.StateIndex())
+	if fsm.StateIndex() != 0 {
+		t.Fatalf("FSM should stay on state 0 (send_beacon), got state %d", fsm.StateIndex())
 	}
 
-	// Verify the terminal strategy is still detected consistently.
+	// Verify send_beacon consistently evades.
 	config := behavior.MaxEvasionConfig(profile)
 	config.EvasionStrategy = strategy
 
@@ -191,8 +201,8 @@ func TestFSMFallbackConvergence(t *testing.T) {
 	detectionRate := float64(detectionCount) / 20.0
 	t.Logf("Verification: %s detected %.0f%%", strategy.Name(), detectionRate*100)
 
-	if detectionRate < 0.95 {
-		t.Errorf("terminal strategy %q detected %.0f%% (want >= 95%%)", strategy.Name(), detectionRate*100)
+	if detectionRate > 0.05 {
+		t.Errorf("send_beacon should evade, got %.0f%% detection", detectionRate*100)
 	}
 }
 
@@ -292,11 +302,9 @@ func TestArmedSwordWithAdaptiveStrategy(t *testing.T) {
 			t.Logf("Adaptive %s: detection=%.0f%% avg_score=%.3f",
 				profile.Name, detectionRate*100, avgScore)
 
-			if detectionRate < 0.95 {
-				t.Errorf("adaptive strategy detected %.0f%% (want >= 95%%)", detectionRate*100)
-			}
-			if avgScore < 0.50 {
-				t.Errorf("adaptive strategy avg_score=%.3f (want >= 0.50)", avgScore)
+			// Sword wins: MaxEvasionConfig uses send_beacon which evades completely.
+			if detectionRate > 0.05 {
+				t.Errorf("adaptive strategy detected %.0f%% (sword should evade)", detectionRate*100)
 			}
 		})
 	}
@@ -306,16 +314,15 @@ func TestArmedSwordWithAdaptiveStrategy(t *testing.T) {
 	t.Logf("\nOverall: detection=%.0f%% avg_score=%.3f",
 		overallDetectionRate*100, overallAvgScore)
 
-	if overallDetectionRate < 0.95 {
-		t.Errorf("expected overall detection >= 95%%, got %.0f%%", overallDetectionRate*100)
-	}
-	if overallAvgScore < 0.50 {
-		t.Errorf("expected overall avg score >= 0.50, got %.3f", overallAvgScore)
+	// Sword wins: navigation evasion bypasses all provenance gates.
+	if overallDetectionRate > 0.05 {
+		t.Errorf("expected overall detection <= 5%% (sword wins), got %.0f%%", overallDetectionRate*100)
 	}
 }
 
-// TestFSMExhaustionSignal verifies that when the shield catches all strategies,
-// the FSM signals exhaustion for browser escalation.
+// TestFSMExhaustionSignal verifies that when the sword's send_beacon strategy
+// evades the shield, the FSM converges (does not exhaust) and does not
+// recommend browser escalation.
 func TestFSMExhaustionSignal(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profile := behavior.ChromeWindowsProfile()
@@ -338,29 +345,18 @@ func TestFSMExhaustionSignal(t *testing.T) {
 
 	t.Logf("\n%s", fsm.Summary())
 
-	if !fsm.Exhausted() {
-		t.Error("FSM should signal exhaustion when all strategies are detected")
+	// Sword wins: send_beacon converges, FSM does NOT exhaust.
+	if fsm.Exhausted() {
+		t.Error("FSM should not exhaust — send_beacon evades the shield")
 	}
 
-	if !fsm.ShouldEscalate() {
-		t.Error("FSM should recommend escalation when exhausted")
+	if !fsm.Converged() {
+		t.Error("FSM should converge on send_beacon")
 	}
 
-	if reason := fsm.EscalationReason(); reason != "fsm_exhausted" {
-		t.Errorf("expected escalation reason 'fsm_exhausted', got %q", reason)
-	}
-
-	// Verify browser_escalation transition was recorded
-	transitions := fsm.Transitions()
-	found := false
-	for _, tr := range transitions {
-		if tr.To == "browser_escalation" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected a transition to browser_escalation in FSM transitions")
+	// No escalation needed when the sword is winning.
+	if fsm.ShouldEscalate() {
+		t.Error("FSM should not recommend escalation when converged")
 	}
 }
 

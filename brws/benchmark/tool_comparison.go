@@ -127,6 +127,7 @@ func buildToolProfiles(includeBehavioral bool) []ToolProfile {
 		curlImpersonateStealthifiedProfile(),
 		ourStealthSwordProfile(),
 		ourStealthArmedProfile(),
+		ourStealthBrowserProfile(),
 		ourStealthBrokenProfile(),
 	}
 	return profiles
@@ -617,6 +618,49 @@ func ourStealthArmedProfile() ToolProfile {
 			}},
 			{Name: "armed_firefox_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
 				gen := behavior.NewRequestGenerator(behavior.MaxEvasionConfig(behavior.FirefoxWindowsProfile()))
+				return gen.GenerateRequest("http://test/")
+			}},
+		},
+	}
+}
+
+// ourStealthBrowserProfile — full browser evasion with all 10 runtime headers preserved.
+// Uses same-origin navigation (dest=document, mode=navigate, site=same-origin)
+// which bypasses all provenance gates while keeping full fingerprint context.
+func ourStealthBrowserProfile() ToolProfile {
+	return ToolProfile{
+		Info: ToolInfo{
+			Name:        "our_stealth_browser",
+			Version:     "1.0",
+			Language:    "Go",
+			Category:    CategoryBrowserStealth,
+			HasJS:       true,
+			HasTLS:      true,
+			Description: "Our stealth browser — full fingerprint with navigation evasion",
+		},
+		Scenarios: []ShieldProfile{
+			{Name: "browser_chrome_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				cfg := behavior.MaxEvasionConfig(behavior.ChromeWindowsProfile())
+				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
+				gen := behavior.NewRequestGenerator(cfg)
+				return gen.GenerateRequest("http://test/")
+			}},
+			{Name: "browser_chrome_macos", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				cfg := behavior.MaxEvasionConfig(behavior.ChromeMacOSProfile())
+				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
+				gen := behavior.NewRequestGenerator(cfg)
+				return gen.GenerateRequest("http://test/")
+			}},
+			{Name: "browser_chrome_linux", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				cfg := behavior.MaxEvasionConfig(behavior.ChromeLinuxProfile())
+				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
+				gen := behavior.NewRequestGenerator(cfg)
+				return gen.GenerateRequest("http://test/")
+			}},
+			{Name: "browser_firefox_windows", Category: "browser_stealth", ShouldCatch: false, BuildReq: func() *http.Request {
+				cfg := behavior.MaxEvasionConfig(behavior.FirefoxWindowsProfile())
+				cfg.EvasionStrategy = &behavior.FullBrowserStrategy{}
+				gen := behavior.NewRequestGenerator(cfg)
 				return gen.GenerateRequest("http://test/")
 			}},
 		},

@@ -1727,6 +1727,35 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 				}
 			}
 		}
+
+		// Sub-check 2b: None-context POST with zero runtime headers and browser UA.
+		// A POST with Sec-Fetch-Site: none means no referrer context — the request
+		// appears to come from a bookmarklet, extension, or ServiceWorker. Combined
+		// with zero runtime headers and a browser UA, this is the shape of synthetic
+		// beacon generation that strips provenance to evade gate-specific checks.
+		if req.Method == http.MethodPost && runtimeHeaderCount == 0 {
+			ua := strings.ToLower(req.Header.Get("User-Agent"))
+			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+
+			if isBrowserUA {
+				vec.Score += 0.38
+				vec.Indicators = append(vec.Indicators, "none_context_zero_header_synthetic_beacon")
+
+				// No Origin on a POST is unusual — real browser fetch() always sends Origin on POST.
+				if req.Header.Get("Origin") == "" {
+					vec.Score += 0.15
+					vec.Indicators = append(vec.Indicators, "none_context_post_missing_origin")
+				}
+
+				if bodyErr == nil && len(bodySnapshot) > 0 {
+					if bodyTooSmall && missingRuntimePayload {
+						vec.Score += 0.12
+						vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+							"none_context_small_body_no_runtime: %d bytes", len(bodySnapshot)))
+					}
+				}
+			}
+		}
 	}
 
 	if isSameSiteTelemetryFetch(req) {
@@ -2025,6 +2054,67 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 					vec.Indicators = append(vec.Indicators, "nocors_body_missing_runtime_payload")
 				}
 			}
+		} else if req.Method == http.MethodPost && runtimeHeaderCount == 0 {
+			// Zero-header no-cors POST: synthetic sendBeacon pattern.
+			// A no-cors POST with browser UA but zero runtime headers is structurally
+			// suspicious — it claims to be an analytics beacon but carries none of the
+			// runtime fingerprint data that would justify a server-side POST. Real
+			// sendBeacon fire-and-forget beacons exist, but they are indistinguishable
+			// from synthetic generation at the HTTP level, and the combination of:
+			//   - browser UA with zero runtime headers
+			//   - same-site provenance claim
+			//   - CORS-safelisted content type
+			//   - small body without runtime keywords
+			// is the exact shape of programmatic beacon mimicry.
+			ua := strings.ToLower(req.Header.Get("User-Agent"))
+			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+			hasAccept := req.Header.Get("Accept") != ""
+			hasAcceptEncoding := req.Header.Get("Accept-Encoding") != ""
+			fetchSite := strings.ToLower(req.Header.Get("Sec-Fetch-Site"))
+			hasProvenance := fetchSite == "same-site" || fetchSite == "cross-site" || fetchSite == "same-origin"
+			// Real Chrome always sends Sec-Ch-Ua on fetches. Presence indicates a
+			// genuine browser, not synthetic beacon generation with identity stripping.
+			hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
+
+			if isBrowserUA && hasProvenance && !hasSecChUa {
+				// Base: no-cors zero-header beacon with browser UA and same-site claim.
+				vec.Score += 0.38
+				vec.Indicators = append(vec.Indicators, "nocors_zero_header_synthetic_beacon")
+
+				// Amplifier: Accept or Accept-Encoding present — real sendBeacon
+				// discards responses and never sets these.
+				if hasAccept {
+					vec.Score += 0.20
+					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+						"nocors_beacon_has_accept: %s", req.Header.Get("Accept")))
+				}
+				if hasAcceptEncoding {
+					vec.Score += 0.15
+					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+						"nocors_beacon_has_accept_encoding: %s", req.Header.Get("Accept-Encoding")))
+				}
+
+				// Amplifier: CORS-safelisted content type — sendBeacon is restricted
+				// to text/plain, application/x-www-form-urlencoded, multipart/form-data.
+				if isNoCORSSafelistedContentType(contentType) {
+					vec.Score += 0.10
+					vec.Indicators = append(vec.Indicators, "nocors_beacon_safelisted_content_type")
+				}
+
+				// Amplifier: small body without runtime payload keywords.
+				if bodyTooSmall && missingRuntimePayload {
+					vec.Score += 0.12
+					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+						"nocors_beacon_small_body_no_runtime: %d bytes", len(bodySnapshot)))
+				}
+
+				// Amplifier: Origin from sibling subdomain — synthetic beacons often
+				// construct a plausible-looking sibling origin.
+				if isSiblingSubdomainOrigin(req) {
+					vec.Score += 0.10
+					vec.Indicators = append(vec.Indicators, "nocors_beacon_sibling_origin")
+				}
+			}
 		}
 	}
 
@@ -2288,6 +2378,85 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		}
 	}
 
+	// Sub-check 8: Unified zero-header fetch catch-all.
+	// After gate-specific checks, catch any fetch-like request (GET or POST) with
+	// browser UA, zero runtime headers, Sec-Fetch-Dest: empty, and no Sec-Ch-Ua.
+	// This prevents the sword from:
+	//   - Rotating through site/mode combinations to find uncovered gates
+	//   - Switching from POST to GET to bypass POST-specific sub-checks
+	//   - Migrating runtime data from headers to body
+	//
+	// The structural invariant: a request from the stealth proxy's context ALWAYS
+	// has X-* runtime headers attached by injected page JS. A fetch-like request
+	// (dest=empty, mode=cors) with zero runtime headers and browser UA either:
+	//   a) Comes from synthetic request generation (no injected JS context), or
+	//   b) Deliberately stripped the headers to evade detection
+	// Both are strong bot signals.
+	if vec.Score < 0.35 && (req.Method == http.MethodPost || req.Method == http.MethodGet) {
+		dest := req.Header.Get("Sec-Fetch-Dest")
+		if dest == "empty" || dest == "" {
+			runtimeHeaderCount := countPresentHeaders(req, []string{
+				constants.HeaderNavigatorData,
+				constants.HeaderWebGLData,
+				constants.HeaderPluginData,
+				constants.HeaderScreenData,
+				constants.HeaderFontData,
+				constants.HeaderWebRTCData,
+				constants.HeaderBehavioralData,
+				constants.HeaderTimingData,
+				constants.HeaderAudioData,
+				constants.HeaderCanvasFingerprint,
+			})
+
+			if runtimeHeaderCount == 0 {
+				ua := strings.ToLower(req.Header.Get("User-Agent"))
+				isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+				hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
+
+				if isBrowserUA && !hasSecChUa {
+					mode := req.Header.Get("Sec-Fetch-Mode")
+					site := req.Header.Get("Sec-Fetch-Site")
+
+					if req.Method == http.MethodPost {
+						// POST path: check body patterns.
+						bodySnapshot, bodyErr := snapshotRequestBody(req)
+						bodyText := strings.TrimSpace(string(bodySnapshot))
+
+						if bodyErr == nil && len(bodySnapshot) > 0 {
+							hasRuntimeInBody := bodyContainsRuntimePayload(bodyText)
+
+							if hasRuntimeInBody {
+								vec.Score += 0.52
+								vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+									"zero_header_runtime_data_migration: dest=%s mode=%s site=%s body=%d",
+									dest, mode, site, len(bodySnapshot)))
+							} else {
+								vec.Score += 0.52
+								vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+									"zero_header_browser_post_catchall: dest=%s mode=%s site=%s body=%d",
+									dest, mode, site, len(bodySnapshot)))
+							}
+
+							if req.Header.Get("Accept") == "" {
+								vec.Score += 0.10
+								vec.Indicators = append(vec.Indicators, "zero_header_post_no_accept")
+							}
+						}
+					} else if req.Method == http.MethodGet {
+						// GET path: no body to analyze, but the structural pattern
+						// is equally suspicious. A cors/same-origin GET with browser
+						// UA and zero runtime headers models a tracking pixel or
+						// analytics API call without injected JS context.
+						vec.Score += 0.48
+						vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+							"zero_header_browser_get_catchall: dest=%s mode=%s site=%s",
+							dest, mode, site))
+					}
+				}
+			}
+		}
+	}
+
 	if vec.Score == 0 {
 		return nil
 	}
@@ -2399,6 +2568,38 @@ func isOriginSameAsRequestURL(req *http.Request) bool {
 
 	return strings.EqualFold(originURL.Scheme, req.URL.Scheme) &&
 		strings.EqualFold(originURL.Host, req.URL.Host)
+}
+
+// isSiblingSubdomainOrigin returns true when the Origin header shares the same
+// base domain as the request URL but is NOT the same host (i.e., it's a
+// sibling or child subdomain). Synthetic beacons often construct sibling
+// origins like "app.example.com" when targeting "api.example.com".
+func isSiblingSubdomainOrigin(req *http.Request) bool {
+	if req == nil || req.URL == nil {
+		return false
+	}
+	origin := req.Header.Get("Origin")
+	if origin == "" {
+		return false
+	}
+	originURL, err := url.Parse(origin)
+	if err != nil {
+		return false
+	}
+	originHost := strings.ToLower(strings.Split(originURL.Host, ":")[0])
+	reqHost := strings.ToLower(strings.Split(req.URL.Host, ":")[0])
+	if originHost == reqHost {
+		return false // same host, not sibling
+	}
+	// Check shared base domain (last two labels).
+	originParts := strings.Split(originHost, ".")
+	reqParts := strings.Split(reqHost, ".")
+	if len(originParts) < 2 || len(reqParts) < 2 {
+		return false
+	}
+	originBase := originParts[len(originParts)-2] + "." + originParts[len(originParts)-1]
+	reqBase := reqParts[len(reqParts)-2] + "." + reqParts[len(reqParts)-1]
+	return originBase == reqBase
 }
 
 func isNoCORSSafelistedContentType(contentType string) bool {
