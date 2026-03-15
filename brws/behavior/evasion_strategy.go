@@ -1,15 +1,11 @@
 package behavior
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/skunkworq/stealth/brws/constants"
 )
@@ -37,16 +33,6 @@ var allRuntimeHeaders = []string{
 	constants.HeaderAudioData,
 }
 
-// safeHeaders are runtime headers with no missing_* penalty when stripped.
-var safeHeaders = []string{
-	constants.HeaderNavigatorData,
-	constants.HeaderWebGLData,
-	constants.HeaderPluginData,
-	constants.HeaderScreenData,
-	constants.HeaderFontData,
-	constants.HeaderWebRTCData,
-}
-
 // DefaultStrategies returns evasion strategies ordered by priority (highest first).
 func DefaultStrategies() []EvasionStrategy {
 	return []EvasionStrategy{
@@ -69,990 +55,464 @@ func DefaultStrategies() []EvasionStrategy {
 // ─────────────────────────────────────────────────────────────────────────────
 // Strategy B: SendBeaconStrategy (fidelity = 0.00)
 // ─────────────────────────────────────────────────────────────────────────────
-// Models navigator.sendBeacon() — a legitimate browser API for sending small
-// analytics payloads during page unload. sendBeacon uses no-cors mode which
-// completely bypasses ALL provenance gates in the shield:
+// Models a real Firefox initial page load — the one request shape the shield
+// explicitly allows (proven by the real_firefox_should_pass test at score < 0.20).
 //
-//   POST /collect  HTTP/2
-//   Sec-Fetch-Dest: empty
-//   Sec-Fetch-Mode: no-cors       ← THE KEY
-//   Sec-Fetch-Site: same-site
-//   Content-Type: text/plain;charset=UTF-8
-//   Origin: https://app.example.com
-//   Referer: https://app.example.com/dashboard
-//   (NO custom X-* headers)
+// The key insight: dest=document + mode=navigate bypasses ALL provenance gates
+// because they ALL require dest=empty. Combined with site=none (initial
+// navigation, like typing a URL in the address bar), the document navigation
+// sub-check at line 2307 also skips (it only fires for site=same-origin).
 //
-// Gate analysis with Sec-Fetch-Mode: no-cors:
-//   - isSameSiteTelemetryFetch: requires mode=cors|same-origin → NO MATCH
-//   - isNoCORSTelemetryFetch: matches mode=no-cors but requires runtimeHeaderCount >= 5 → SKIPPED (0 headers)
-//   - isSameOriginTelemetryFetch: requires mode=same-origin → NO MATCH
-//   - isRichChromiumNavigationWithoutRuntimeState: requires mode=navigate → NO MATCH
-//   - isCrossSiteTelemetryFetch: requires site=cross-site → NO MATCH (same-site)
-//   - All other gates: don't match no-cors
+// Gate analysis with Sec-Fetch-Dest: document + Mode: navigate + Site: none:
+//   - isSameSiteTelemetryFetch: requires dest=empty → NO MATCH
+//   - isCrossSiteTelemetryFetch: requires dest=empty → NO MATCH
+//   - isNoCORSTelemetryFetch: requires dest=empty → NO MATCH
+//   - isNoneContextTelemetryFetch: requires dest=empty → NO MATCH
+//   - isSameOriginTelemetryFetch: requires dest=empty → NO MATCH
+//   - isDocumentNavigation: MATCHES, but sub-checks:
+//     a) runtimeHeaderCount >= 4 → NO (0 headers)
+//     b) GET + runtimeHeaderCount==0 + site=="same-origin" → NO (site=none)
+//   - Catch-all: requires dest="empty" || dest="" → NO (dest=document)
 //
-// Result: zero provenance vectors fire. Combined with zero runtime headers,
-// analyzeFingerprintCoverage returns nil (no Sec-Ch-Ua, presentCount=0 with
-// Firefox UA). Final score = 0.00.
+// Coverage: analyzeFingerprintCoverage:
+//   - secChUa="" (Firefox) && presentCount(0) < 8 → returns nil immediately
+//
+// Missing data: hasJSFingerprintHeaders = false (0 of 6) → no penalties
+//
+// Result: zero provenance vectors, zero coverage, zero missing data.
+// Final score ≈ 0.00 — identical to a real Firefox navigation.
 type SendBeaconStrategy struct{}
 
 func (s *SendBeaconStrategy) Name() string     { return "send_beacon" }
-func (s *SendBeaconStrategy) Fidelity() float64 { return 0.0 } // no fingerprint data preserved
+func (s *SendBeaconStrategy) Fidelity() float64 { return 0.00 }
 
 func (s *SendBeaconStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	// ── Phase 1: Strip ALL custom X-* runtime headers ──
-	// Zero runtime headers causes 15 of 19 detection vectors to return nil.
+	// ── Phase 1: Strip ALL runtime headers ──
+	// Zero runtime headers → hasJSFingerprintHeaders=false → no missing_data penalties.
+	// Zero headers also means no per-header quality analysis vectors fire at all.
 	for _, h := range allRuntimeHeaders {
 		req.Header.Del(h)
 	}
 
 	// ── Phase 2: Firefox identity ──
 	// Firefox doesn't send Sec-Ch-Ua → analyzeFingerprintCoverage returns nil
-	// (secChUa=="" && presentCount<8). Chrome UA with Sec-Ch-Ua absent would
-	// trigger the coverage vector at 0.50.
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	// (secChUa=="" && presentCount=0 < 8). This is the critical gate bypass.
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		req.Header.Del(h)
 	}
-	req.Header.Del("Sec-Ch-Ua")
-	req.Header.Del("Sec-Ch-Ua-Mobile")
-	req.Header.Del("Sec-Ch-Ua-Platform")
-	req.Header.Del("Sec-Ch-Ua-Full-Version-List")
-	req.Header.Del("Sec-Ch-Ua-Arch")
-	req.Header.Del("Sec-Ch-Ua-Bitness")
-	req.Header.Del("Sec-Ch-Ua-Model")
 
-	// ── Phase 3: GET navigation request ──
-	// Switch to a document navigation — this bypasses ALL provenance gate
-	// functions (they all require Sec-Fetch-Dest: "empty") AND the unified
-	// catch-all sub-check 8 (which checks dest=="empty" || dest=="").
-	// A GET with dest=document + mode=navigate is indistinguishable from a
-	// real Firefox user clicking a link or typing a URL.
+	// ── Phase 3: Document navigation (initial page load) ──
+	// GET with dest=document bypasses ALL dest=empty provenance gates.
+	// site=none models an initial navigation (typing URL, bookmark click).
 	req.Method = http.MethodGet
 	req.Body = nil
 	req.ContentLength = 0
 	req.Header.Del("Content-Type")
-
-	// ── Phase 4: Navigation metadata ──
-	// Real Firefox navigation: dest=document, mode=navigate, site=same-origin
-	// (or cross-site for external links). No Origin on GET navigations.
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	req.Header.Del("Sec-Fetch-User") // ?1 would indicate user-initiated, but omitting is fine
-
-	// Navigation: Origin is NOT sent on GET. Referer is sent from the source page.
 	req.Header.Del("Origin")
-	if parsed, err := url.Parse(targetURL); err == nil {
-		req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/dashboard")
-	}
 
-	req.Header.Del("Upgrade-Insecure-Requests")
-
-	// ── Phase 5: Accept header ──
-	// For dest=document navigations, real Firefox sends the full navigation Accept.
-	// Using application/json on a document navigation would be a mismatch, so
-	// we use the real Firefox navigation Accept header.
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-
-	// Keep Accept-Language (already set by profile). Missing → HTTP vector +0.15.
-
-	// Accept-Encoding: keep it — real Firefox sends it on fetch() GET requests.
-	// Removing it is fine too, but keeping it is more natural.
-
-	// Firefox doesn't send Priority header.
+	// ── Phase 4: Real Firefox navigation headers ──
+	// Accept with image/avif + image/webp avoids firefox_accept_missing_image_codecs check.
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
 	req.Header.Del("Priority")
 
-	// Rebuild header order — strip all removed headers.
+	// ── Phase 5: Sec-Fetch for initial navigation ──
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+
+	// ── Phase 6: Clean header order matching real Firefox ──
+	// Firefox canonical order: User-Agent, Accept, Accept-Language,
+	// Accept-Encoding, Connection, Upgrade-Insecure-Requests,
+	// Sec-Fetch-Dest, Sec-Fetch-Mode, Sec-Fetch-Site, Sec-Fetch-User
 	removed := map[string]bool{
-		"Upgrade-Insecure-Requests":    true,
-		"Sec-Fetch-User":              true,
-		"Sec-Ch-Ua":                   true,
-		"Sec-Ch-Ua-Mobile":            true,
-		"Sec-Ch-Ua-Platform":          true,
-		"Sec-Ch-Ua-Full-Version-List": true,
-		"Sec-Ch-Ua-Arch":              true,
-		"Sec-Ch-Ua-Bitness":           true,
-		"Sec-Ch-Ua-Model":             true,
-		"Priority":                    true,
-		"Content-Type":                true,
-		"Origin":                      true,
+		"Content-Type": true,
+		"Origin":       true,
+		"Referer":      true,
+		"Priority":     true,
+	}
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
 		removed[h] = true
 	}
-	rebuildHeaderOrder(req, removed)
+	rebuildHeaderOrderClean(req, removed)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy F: FullBrowserStrategy (fidelity = 1.00)
+// applyDocumentNavigation — shared helper for document navigation evasion
 // ─────────────────────────────────────────────────────────────────────────────
-// Models a stealth browser with FULL JS runtime context — all 10 fingerprint
-// headers are preserved with their quality data (navigator, webgl, canvas,
-// audio, timing, behavioral, etc.).
-//
-// The key insight: use Sec-Fetch-Dest: document + Sec-Fetch-Mode: navigate +
-// Sec-Fetch-Site: same-origin with a Referer. This models a same-origin link
-// click (user navigating within the same site). It:
-//
-//   1. Bypasses ALL provenance gate functions (they require dest=empty)
-//   2. Is NOT an initial navigation (site != none, has Referer)
-//      → isInitialNavigationDenseRuntimeBundle returns false
-//      → no pre_request_full_runtime_bundle penalty
-//   3. Bypasses sub-check 8 catch-all (requires dest=empty)
-//   4. Keeps original browser identity → no isomorphic cross-validation mismatches
-//   5. FingerprintCoverage: presentCount=10 → score 0.10 (detected=false)
-//      Through adaptive scorer: ~0.08 → well under 0.35 threshold
-//
-// The request looks like a real user clicking a link on the same site, where
-// the browser has already collected runtime fingerprint data from the previous
-// page's JS execution and forwards it as part of the navigation context.
-type FullBrowserStrategy struct{}
+// All strategies exploit the same structural gap:
+//   - dest=document + mode=navigate bypasses ALL provenance gates (they require dest=empty)
+//   - site != same-origin bypasses document navigation sub-check (line 2307)
+//   - Max 3 non-jsFP runtime headers avoids dense-header check (≥4 → +0.78)
+//   - Only Canvas/Timing/Behavioral/Audio kept (NOT in hasJSFingerprintHeaders set)
+//     so no missing_data penalties fire
+//   - Firefox UA + no Sec-Ch-Ua → analyzeFingerprintCoverage returns nil for <8 headers
+func applyDocumentNavigation(req *http.Request, _ *RequestGenerator, targetURL string, site string, headersToKeep map[string]bool) {
+	// Strip ALL runtime headers except those in headersToKeep
+	for _, h := range allRuntimeHeaders {
+		if !headersToKeep[h] {
+			req.Header.Del(h)
+		}
+	}
 
-func (s *FullBrowserStrategy) Name() string     { return "full_browser" }
-func (s *FullBrowserStrategy) Fidelity() float64 { return 1.00 } // all 10 fingerprint headers preserved
+	// Firefox identity — no Sec-Ch-Ua headers
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		req.Header.Del(h)
+	}
 
-func (s *FullBrowserStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	// ── Phase 1: Keep ALL runtime headers ──
-	// All 10 X-* fingerprint headers stay. Their quality data passes the
-	// shield's per-vector checks (canvas entropy, webgl extensions, navigator
-	// coherence, etc.) thanks to the evasion flags in MaxEvasionConfig.
-
-	// ── Phase 2: Keep original browser identity ──
-	// Don't switch to Firefox — keep the profile's real UA and Client Hints.
-	// This ensures isomorphic cross-validation passes (navigator.userAgent
-	// matches HTTP UA, vendor matches browser, etc.).
-
-	// ── Phase 3: Navigation GET request ──
-	// Models clicking a link within the same site. GET with dest=document +
-	// mode=navigate bypasses ALL provenance gates.
+	// Document navigation GET — no body
 	req.Method = http.MethodGet
 	req.Body = nil
 	req.ContentLength = 0
 	req.Header.Del("Content-Type")
+	req.Header.Del("Priority")
 
-	// ── Phase 4: Same-origin navigation metadata ──
-	// site=same-origin + Referer present → NOT initial navigation
-	// → isInitialTopLevelNavigation returns false
-	// → no pre_request_full_runtime_bundle penalty
+	// Real Firefox navigation headers
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+
+	// Sec-Fetch for document navigation
 	req.Header.Set("Sec-Fetch-Dest", "document")
 	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	req.Header.Del("Sec-Fetch-User") // omit — not all navigations are user-initiated
+	req.Header.Set("Sec-Fetch-Site", site)
+	req.Header.Set("Sec-Fetch-User", "?1")
 
-	// Navigation: no Origin on GET. Referer from same host.
-	req.Header.Del("Origin")
-	if parsed, err := url.Parse(targetURL); err == nil {
-		req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/dashboard")
+	// Referer based on site value
+	req.Header.Del("Origin") // GET navigations don't send Origin
+	switch site {
+	case "none":
+		req.Header.Del("Referer") // initial navigation — no referer
+	case "cross-site":
+		req.Header.Set("Referer", "https://www.google.com/")
+	case "same-site":
+		if parsed, err := url.Parse(targetURL); err == nil {
+			req.Header.Set("Referer", parsed.Scheme+"://www."+parsed.Hostname()+"/")
+		} else {
+			req.Header.Set("Referer", "https://www.example.com/")
+		}
 	}
 
-	// Keep Upgrade-Insecure-Requests for Chrome (real Chrome sends it on navigations).
-	// Firefox also sends it.
-
-	// ── Phase 5: Navigation Accept header ──
-	// Standard browser navigation Accept — matches what the profile's browser sends.
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
-	} else {
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	}
-
-	// Rebuild header order — only remove Content-Type and Origin from the order.
+	// Clean header order
 	removed := map[string]bool{
 		"Content-Type": true,
 		"Origin":       true,
+		"Priority":     true,
 	}
-	rebuildHeaderOrder(req, removed)
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		removed[h] = true
+	}
+	for _, h := range allRuntimeHeaders {
+		if !headersToKeep[h] {
+			removed[h] = true
+		}
+	}
+	if site == "none" {
+		removed["Referer"] = true
+	}
+	rebuildHeaderOrderClean(req, removed)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy F: FullBrowserStrategy (fidelity = 0.30)
+// ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 3 non-jsFP headers: Canvas + Timing + Behavioral.
+// site=none (initial navigation). Max headers kept without triggering dense check.
+type FullBrowserStrategy struct{}
+
+func (s *FullBrowserStrategy) Name() string     { return "full_browser" }
+func (s *FullBrowserStrategy) Fidelity() float64 { return 0.30 }
+
+func (s *FullBrowserStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+	applyDocumentNavigation(req, rg, targetURL, "none", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+		constants.HeaderTimingData:        true,
+		constants.HeaderBehavioralData:    true,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Strategy R: RealBrowserStrategy (fidelity = 0.00)
 // ─────────────────────────────────────────────────────────────────────────────
-// Models a REAL Chrome 146 cross-site telemetry POST exactly as observed in lab
-// captures (MITM proxy + CDP). The lab shows that Sentry, Amplitude, FullStory,
-// and other real analytics beacons use:
+// Models a Firefox cross-site link click — navigating from search results to
+// the target page. Uses dest=document + mode=navigate (bypasses all dest=empty
+// gates) with site=cross-site (bypasses the same-origin document navigation
+// sub-check at line 2307 which only fires for site=same-origin).
 //
-//   POST /api/.../envelope  HTTP/2
-//   Sec-Fetch-Dest: empty
-//   Sec-Fetch-Mode: cors
-//   Sec-Fetch-Site: cross-site
-//   Content-Type: text/plain;charset=UTF-8
-//   Origin: https://www.example.com
-//   Referer: https://www.example.com/
-//   (NO custom X-* headers — ever)
-//
-// This strategy strips ALL X-* runtime headers because no real browser sends them.
-// This makes 15 of 19 detection vectors return nil (no data to analyze).
-//
-// Coverage analysis (presentCount=0):
-//   - Chrome profiles: Sec-Ch-Ua present → score 0.50 (http_impersonation_no_js_context)
-//     BUT this is a false positive — real Chrome telemetry POSTs also have 0 X-* headers.
-//     The key: isRichChromiumNavigationWithoutRuntimeState only fires on dest=document +
-//     mode=navigate + Upgrade-Insecure-Requests=1 — NOT on dest=empty + mode=cors.
-//     So we avoid the 0.65 bump. With only coverage at 0.50 and all other vectors nil,
-//     the adaptive scorer gives:
-//       WeightedAvg ≈ 0.50 (only coverage contributes)
-//       MaxScore = 0.50
-//       MajorityVote = 0.0 (only 1/19 vectors positive)
-//       Final = 0.50*0.50 + 0.30*0.50 + 0.20*0.0 = 0.40
-//     This is ABOVE the 0.35 threshold for Chrome profiles.
-//
-//   - Firefox profiles: No Sec-Ch-Ua → coverage returns nil immediately (line 1334).
-//     All other vectors nil → score 0.00. Firefox profiles pass cleanly.
-//
-//   - For Chrome profiles: We strip Sec-Ch-Ua headers. Without dest=document +
-//     mode=navigate, the chrome_navigation_missing_client_hints check doesn't fire.
-//     This gives us presentCount=0, secChUa="" → coverage returns nil.
-//     The UA still says Chrome but that only triggers the Sec-Ch-Ua* check in
-//     analyzeHTTPHeaders IF dest=document && mode=navigate — which we avoid.
-//
-// Cross-vector consistency (all gates miss):
-//   - runtimeHeaderCount = 0 → all gates require >= 3-4 → SKIP
-//   - Sub-checks 1-2: require X-Behavioral-Data/X-Timing-Data → absent → SKIP
-//
-// Header order: Without X-Stealth-Header-Order, Go's map iteration order is used.
-// This IS a detection signal but the shield only uses it for fingerprinting, not scoring.
+// This is a distinct evasion path from SendBeaconStrategy (which uses site=none).
+// Both exploit the same structural gap: document navigation + non-same-origin
+// site value = no detection sub-checks fire.
 type RealBrowserStrategy struct{}
 
 func (s *RealBrowserStrategy) Name() string      { return "real_browser" }
-func (s *RealBrowserStrategy) Fidelity() float64  { return 0.0 } // no fingerprint data preserved
+func (s *RealBrowserStrategy) Fidelity() float64  { return 0.00 }
 
 func (s *RealBrowserStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	// Phase 1: Strip ALL custom X-* runtime headers.
-	// The shield now covers every header count:
-	//   - 0 headers → zero-header synthetic beacon gate (score 0.35)
-	//   - 1-2 post-load only → cherry-pick gate (score 0.50)
-	//   - 3+ with JS fingerprint → missing_* penalties cascade (score 1.0)
-	//   - 6-7 headers → deep fingerprint analysis catches fabrication (score 1.0)
-	// Zero headers gives the LOWEST detection score (0.38 via adaptive scorer),
-	// so it's the least-bad option. The sword is fundamentally trapped.
+	// ── Phase 1: Strip ALL runtime headers ──
 	for _, h := range allRuntimeHeaders {
 		req.Header.Del(h)
 	}
 
-	// IP spoofing is disabled at the config level (SpoofLocalIPs=false in
-	// MaxEvasionConfig) because real browsers never send proxy IP headers.
-
-	// Chrome profiles are fundamentally detectable from Go HTTP:
-	//   - No GREASE in TLS (Go crypto/tls vs Chrome's BoringSSL)
-	//   - Client Hints dilemma: keep → coverage 0.50, strip → Sec-Ch-Ua* 0.35
-	//   - Both paths lead to detection via adaptive scorer MajorityVote amplifier
-	//
-	// The pragmatic fix: adopt a Firefox-compatible identity. Firefox doesn't use
-	// Client Hints, and its TLS profile is closer to Go's. This matches what real
-	// stealth tools do — consistent identity over high-fidelity impersonation.
-	//
-	// From lab captures, Firefox cross-site telemetry POSTs look identical to Chrome
-	// except: no Sec-Ch-Ua*, no Priority header, Firefox-style Accept.
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	}
-	req.Header.Del("Sec-Ch-Ua")
-	req.Header.Del("Sec-Ch-Ua-Mobile")
-	req.Header.Del("Sec-Ch-Ua-Platform")
-	req.Header.Del("Sec-Ch-Ua-Full-Version-List")
-	req.Header.Del("Sec-Ch-Ua-Arch")
-	req.Header.Del("Sec-Ch-Ua-Bitness")
-	req.Header.Del("Sec-Ch-Ua-Model")
-
-	// Phase 2: Model as cross-site telemetry POST — matching real Sentry/FullStory
-	// beacons from lab captures.
-	req.Method = http.MethodPost
-
-	body := buildCleanAnalyticsBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-
-	// Use application/json — this triggers a CORS preflight in a real browser,
-	// but the shield's synthetic beacon check only fires for CORS-safe content
-	// types (text/plain, form-urlencoded, multipart). Using application/json
-	// bypasses the isCorsSafe gate. Real internal analytics endpoints that use
-	// CORS with preflight commonly use application/json.
-	req.Header.Set("Content-Type", "application/json")
-
-	// Same-site CORS fetch metadata — models a cross-subdomain analytics POST
-	// (e.g. app.example.com → api.example.com). This is how real internal
-	// analytics endpoints work: the dashboard and API share a registrable domain.
-	// The shield's same-site gate requires runtimeHeaderCount >= 3-4 for all
-	// checks, so zero-header requests pass through silently.
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Site", "same-site")
-	req.Header.Del("Sec-Fetch-User")
-
-	// Same-site: Origin is a sibling subdomain of the request URL host.
-	// E.g. request to api.example.com has Origin: https://app.example.com
-	if parsed, err := url.Parse(targetURL); err == nil {
-		host := parsed.Host
-		if !strings.Contains(host, ":") {
-			host = "app." + host
-		} else {
-			parts := strings.SplitN(host, ":", 2)
-			host = "app." + parts[0] + ":" + parts[1]
-		}
-		req.Header.Set("Origin", parsed.Scheme+"://"+host)
-		req.Header.Del("Referer") // no-referrer policy — common for internal analytics
+	// ── Phase 2: Firefox identity ──
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		req.Header.Del(h)
 	}
 
-	req.Header.Del("Upgrade-Insecure-Requests")
-	// Use XHR/fetch Accept — avoid bare "*/*" which the shield flags as generic.
-	// Lab captures show real portal/API calls use this format (e.g. Afterpay portal).
-	req.Header.Set("Accept", "application/json, text/plain, */*")
+	// ── Phase 3: Cross-site document navigation (link click from search results) ──
+	req.Method = http.MethodGet
+	req.Body = nil
+	req.ContentLength = 0
+	req.Header.Del("Content-Type")
 
-	// Firefox doesn't send Priority header on fetch POSTs.
-	// Since we adopt Firefox identity for all profiles, always strip it.
+	// ── Phase 4: Real Firefox navigation headers ──
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
 	req.Header.Del("Priority")
 
-	// Rebuild header order — strip all removed headers but keep correct relative
-	// order to avoid suspicious_header_order (isomorphic analyzer checks UA vs Accept).
+	// Origin from referrer site (e.g. Google search results → target page).
+	req.Header.Del("Origin") // GET navigations don't send Origin
+	req.Header.Set("Referer", "https://www.google.com/")
+
+	// ── Phase 5: Sec-Fetch for cross-site navigation ──
+	// site=cross-site (not same-origin) → document navigation sub-check skips.
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	req.Header.Set("Sec-Fetch-User", "?1")
+
+	// ── Phase 6: Clean header order ──
 	removed := map[string]bool{
-		"Upgrade-Insecure-Requests":    true,
-		"Sec-Fetch-User":              true,
-		"Sec-Ch-Ua":                   true,
-		"Sec-Ch-Ua-Mobile":            true,
-		"Sec-Ch-Ua-Platform":          true,
-		"Sec-Ch-Ua-Full-Version-List": true,
-		"Sec-Ch-Ua-Arch":              true,
-		"Sec-Ch-Ua-Bitness":           true,
-		"Sec-Ch-Ua-Model":             true,
-		"Priority":                    true,
+		"Content-Type": true,
+		"Origin":       true,
+		"Priority":     true,
+	}
+	for _, h := range []string{"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model"} {
+		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
 		removed[h] = true
 	}
-	rebuildHeaderOrder(req, removed)
+	rebuildHeaderOrderClean(req, removed)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy N: NoneContextCorsStrategy (fidelity = 0.60)
+// Strategy N: NoneContextCorsStrategy (fidelity = 0.20)
 // ─────────────────────────────────────────────────────────────────────────────
-// Threshold-proof evasion that targets score = 0.00 by exploiting three
-// independent structural invariants in the shield:
-//
-//  1. Provenance bypass: site=none matches NO gate function (sub-checks 3-7
-//     all require same-site, cross-site, same-origin, or document+navigate).
-//
-//  2. Coverage nil band: presentCount in [6,7] with < 8 → analyzeFingerprintCoverage
-//     returns nil, emitting no vector at all. No threshold change can catch zero.
-//
-//  3. Missing-header immunity: all 4 must-keep headers present (Behavioral,
-//     Timing, Canvas, Audio) so no missing_* penalty fires even though
-//     hasJSFingerprintHeaders=true (Navigator, WebGL are included).
-//
-// The shield cannot lower the bot threshold below 0. The only counter is to
-// remove the nil band, add a new gate for site=none, or flag the specific
-// 6-header composition — all of which are structural changes, not knob turns.
+// Document navigation with 2 non-jsFP headers: Canvas + Behavioral.
+// site=cross-site (link click from external search results).
 type NoneContextCorsStrategy struct{}
 
 func (s *NoneContextCorsStrategy) Name() string      { return "none_context_cors" }
-func (s *NoneContextCorsStrategy) Fidelity() float64  { return 0.6 }
+func (s *NoneContextCorsStrategy) Fidelity() float64  { return 0.20 }
 
 func (s *NoneContextCorsStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-
-	body := buildCleanAnalyticsBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	// site=none bypasses ALL provenance gate functions.
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Site", "none")
-	req.Header.Del("Sec-Fetch-User")
-	req.Header.Del("Referer")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
-	}
-
-	req.Header.Del("Upgrade-Insecure-Requests")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Priority", "u=1, i")
-	}
-
-	// Keep exactly 6 runtime headers = 4 must-keep + 2 safe:
-	//   Must-keep: Behavioral, Timing, Canvas, Audio → no missing_* penalties
-	//   Safe:      Navigator, WebGL → hasJSFP=true but irrelevant (all must-keep present)
-	//   Stripped:  Plugin, Screen, Font, WebRTC (4 safe headers removed)
-	// presentCount=6 → coverage nil band → score 0.00
-	req.Header.Del(constants.HeaderPluginData)
-	req.Header.Del(constants.HeaderScreenData)
-	req.Header.Del(constants.HeaderFontData)
-	req.Header.Del(constants.HeaderWebRTCData)
-
-	removed := map[string]bool{
-		"Upgrade-Insecure-Requests":  true,
-		"Sec-Fetch-User":            true,
-		"Referer":                   true,
-		constants.HeaderPluginData:   true,
-		constants.HeaderScreenData:   true,
-		constants.HeaderFontData:     true,
-		constants.HeaderWebRTCData:   true,
-	}
-	rebuildHeaderOrder(req, removed)
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+		constants.HeaderBehavioralData:    true,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy S: SameOriginSubThresholdStrategy (fidelity = 0.55)
+// Strategy S: SameOriginSubThresholdStrategy (fidelity = 0.20)
 // ─────────────────────────────────────────────────────────────────────────────
-// Fallback zero-score strategy using a different provenance path.
-// Uses mode=same-origin + site=same-site (enters sub-check 3 gate) but with
-// only 2 runtime headers (below the 3-header threshold), so all interior
-// checks skip. Combined with the coverage nil band at 6 headers for zero score.
-//
-// Wait — with mode=same-origin + site=same-site, if we use 6 headers,
-// runtimeHeaderCount=6 >= 3 triggers same_site_same_origin_mode_mismatch.
-// So this strategy uses site=cross-site instead:
-//   - Sub-check 3: requires site=same-site → cross-site → SKIP
-//   - Sub-check 4: requires mode=cors → same-origin → SKIP
-//   - Sub-check 7: requires site=same-origin → cross-site → SKIP
-// All gates skipped, 6 headers in nil band → score 0.00.
+// Document navigation with 2 non-jsFP headers: Timing + Behavioral.
+// site=same-site (same-site link click).
 type SameOriginSubThresholdStrategy struct{}
 
 func (s *SameOriginSubThresholdStrategy) Name() string      { return "cross_site_same_origin" }
-func (s *SameOriginSubThresholdStrategy) Fidelity() float64  { return 0.55 }
+func (s *SameOriginSubThresholdStrategy) Fidelity() float64  { return 0.20 }
 
 func (s *SameOriginSubThresholdStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-
-	body := buildCleanAnalyticsBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	// mode=same-origin + site=cross-site: bypasses ALL gate functions.
-	// Sub-check 3 needs site=same-site, sub-check 4 needs mode=cors,
-	// sub-check 7 needs site=same-origin.
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "same-origin")
-	req.Header.Set("Sec-Fetch-Site", "cross-site")
-	req.Header.Del("Sec-Fetch-User")
-	req.Header.Del("Referer")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		host := parsed.Host
-		if !strings.Contains(host, ":") {
-			host = "app." + host
-		} else {
-			parts := strings.SplitN(host, ":", 2)
-			host = "app." + parts[0] + ":" + parts[1]
-		}
-		req.Header.Set("Origin", parsed.Scheme+"://"+host)
-	}
-
-	req.Header.Del("Upgrade-Insecure-Requests")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Priority", "u=1, i")
-	}
-
-	// Keep exactly 6 runtime headers: 4 must-keep + 2 safe → nil coverage band
-	req.Header.Del(constants.HeaderPluginData)
-	req.Header.Del(constants.HeaderScreenData)
-	req.Header.Del(constants.HeaderFontData)
-	req.Header.Del(constants.HeaderWebRTCData)
-
-	removed := map[string]bool{
-		"Upgrade-Insecure-Requests":  true,
-		"Sec-Fetch-User":            true,
-		"Referer":                   true,
-		constants.HeaderPluginData:   true,
-		constants.HeaderScreenData:   true,
-		constants.HeaderFontData:     true,
-		constants.HeaderWebRTCData:   true,
-	}
-	rebuildHeaderOrder(req, removed)
+	applyDocumentNavigation(req, rg, targetURL, "same-site", map[string]bool{
+		constants.HeaderTimingData:     true,
+		constants.HeaderBehavioralData: true,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy 0a: SameOriginSameSiteStrategy (fidelity = 0.70)
+// Strategy 0a: SameOriginSameSiteStrategy (fidelity = 0.30)
 // ─────────────────────────────────────────────────────────────────────────────
-// Exploits the gate gap between sub-check 3 (requires mode=cors) and sub-check 7
-// (requires site=same-origin). By using mode=same-origin + site=same-site, ALL
-// provenance sub-checks (3-7) are bypassed.
-//
-// Gate analysis:
-//   - Sub-check 3 (same-site cors): requires mode=cors → we use same-origin → SKIP
-//   - Sub-check 4 (cross-site cors): requires site=cross-site → same-site → SKIP
-//   - Sub-check 5 (no-cors): requires mode=no-cors → same-origin → SKIP
-//   - Sub-check 6 (navigate): requires dest=document + mode=navigate → SKIP
-//   - Sub-check 7 (same-origin): requires site=same-origin → same-site → SKIP
-//
-// Coverage: presentCount=7 → nil band (6-7 returns nil).
-// hasJSFP=true (safe headers present) but all must-keep headers are present → no missing_*.
+// Document navigation with 3 non-jsFP headers: Canvas + Timing + Audio.
+// site=cross-site (link click from external).
 type SameOriginSameSiteStrategy struct{}
 
 func (s *SameOriginSameSiteStrategy) Name() string     { return "same_site_telemetry" }
-func (s *SameOriginSameSiteStrategy) Fidelity() float64 { return 0.7 }
+func (s *SameOriginSameSiteStrategy) Fidelity() float64 { return 0.30 }
 
 func (s *SameOriginSameSiteStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-
-	body := buildCleanAnalyticsBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	// mode=same-origin + site=same-site: falls through ALL gate functions.
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "same-origin")
-	req.Header.Set("Sec-Fetch-Site", "same-site")
-	req.Header.Del("Sec-Fetch-User")
-	req.Header.Del("Referer")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		// Set Origin to a sibling subdomain so it doesn't match the request URL
-		// (avoids isOriginSameAsRequestURL even though sub-checks don't fire).
-		host := parsed.Host
-		if !strings.Contains(host, ":") {
-			host = "app." + host
-		} else {
-			parts := strings.SplitN(host, ":", 2)
-			host = "app." + parts[0] + ":" + parts[1]
-		}
-		req.Header.Set("Origin", parsed.Scheme+"://"+host)
-	}
-
-	req.Header.Del("Upgrade-Insecure-Requests")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Priority", "u=1, i")
-	}
-
-	// Strip 3 safe headers → presentCount=7 (coverage nil at 6-7).
-	req.Header.Del(constants.HeaderFontData)
-	req.Header.Del(constants.HeaderWebRTCData)
-	req.Header.Del(constants.HeaderScreenData)
-
-	rebuildHeaderOrder(req, map[string]bool{
-		"Upgrade-Insecure-Requests": true,
-		"Sec-Fetch-User":           true,
-		"Referer":                  true,
-		constants.HeaderFontData:   true,
-		constants.HeaderWebRTCData: true,
-		constants.HeaderScreenData: true,
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+		constants.HeaderTimingData:        true,
+		constants.HeaderAudioData:         true,
 	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy 0b: SameOriginSameSiteMinimalStrategy (fidelity = 0.40)
+// Strategy 0b: SameOriginSameSiteMinimalStrategy (fidelity = 0.10)
 // ─────────────────────────────────────────────────────────────────────────────
-// Same gate-gap exploit as Strategy 0a but with only 3 must-keep headers,
-// providing a lower-fidelity fallback. With presentCount=3 and secChUa present,
-// coverage score = 0.30*(1-0.3)=0.21 which is below the 0.35 bot threshold.
-// hasJSFP=false (no safe headers) → no missing_* penalties.
+// Document navigation with 1 non-jsFP header: Canvas.
+// site=none (initial navigation).
 type SameOriginSameSiteMinimalStrategy struct{}
 
 func (s *SameOriginSameSiteMinimalStrategy) Name() string     { return "reduced_beacon" }
-func (s *SameOriginSameSiteMinimalStrategy) Fidelity() float64 { return 0.4 }
+func (s *SameOriginSameSiteMinimalStrategy) Fidelity() float64 { return 0.10 }
 
 func (s *SameOriginSameSiteMinimalStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-
-	body := buildCleanAnalyticsBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	// mode=same-origin + site=same-site: falls through ALL gate functions.
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "same-origin")
-	req.Header.Set("Sec-Fetch-Site", "same-site")
-	req.Header.Del("Sec-Fetch-User")
-	req.Header.Del("Referer")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		host := parsed.Host
-		if !strings.Contains(host, ":") {
-			host = "app." + host
-		} else {
-			parts := strings.SplitN(host, ":", 2)
-			host = "app." + parts[0] + ":" + parts[1]
-		}
-		req.Header.Set("Origin", parsed.Scheme+"://"+host)
-	}
-
-	req.Header.Del("Upgrade-Insecure-Requests")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Priority", "u=1, i")
-	}
-
-	// Strip ALL safe headers + Audio → presentCount=3 (Behavioral, Timing, Canvas)
-	for _, h := range safeHeaders {
-		req.Header.Del(h)
-	}
-	req.Header.Del(constants.HeaderAudioData)
-
-	removed := map[string]bool{
-		"Upgrade-Insecure-Requests": true,
-		"Sec-Fetch-User":           true,
-		"Referer":                  true,
-	}
-	for _, h := range safeHeaders {
-		removed[h] = true
-	}
-	removed[constants.HeaderAudioData] = true
-	rebuildHeaderOrder(req, removed)
+	applyDocumentNavigation(req, rg, targetURL, "none", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy 1: SameSiteCorsStrategy (fidelity = 0.70)  [CAUGHT by hardened shield]
+// Strategy 1: SameSiteCorsStrategy (fidelity = 0.10)
 // ─────────────────────────────────────────────────────────────────────────────
-// Models a cross-subdomain XHR (e.g. app.example.com → api.example.com)
-// under Referrer-Policy: no-referrer.
-//
-// Gate analysis:
-//   - Sub-check 3 (same-site cors): requires Referer!="" → we suppress Referer → SKIP
-//   - Sub-check 5 (no-cors): requires mode=no-cors → we use mode=cors → SKIP
-//   - Sub-check 6 (navigate): requires dest=document → we use dest=empty → SKIP
-//   - Sub-check 7 (same-origin): requires site=same-origin → we use same-site → SKIP
-//
-// Coverage: presentCount=7 → nil band (6-7 returns nil).
+// Document navigation with 1 non-jsFP header: Behavioral.
+// site=cross-site.
 type SameSiteCorsStrategy struct{}
 
 func (s *SameSiteCorsStrategy) Name() string     { return "same_site_cors_telemetry" }
-func (s *SameSiteCorsStrategy) Fidelity() float64 { return 0.7 }
+func (s *SameSiteCorsStrategy) Fidelity() float64 { return 0.10 }
 
 func (s *SameSiteCorsStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-
-	body := buildCleanAnalyticsBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	// mode=cors + site=same-site: dodges Sub-check 7 (needs same-origin)
-	// and Sub-check 3 (needs Referer). Sub-check 5 needs no-cors.
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Site", "same-site")
-	req.Header.Del("Sec-Fetch-User")
-	req.Header.Del("Referer")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
-	}
-
-	req.Header.Del("Upgrade-Insecure-Requests")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Priority", "u=1, i")
-	}
-
-	// Strip 3 safe headers → presentCount=7 (coverage nil at 6-7).
-	req.Header.Del(constants.HeaderFontData)
-	req.Header.Del(constants.HeaderWebRTCData)
-	req.Header.Del(constants.HeaderScreenData)
-
-	rebuildHeaderOrder(req, map[string]bool{
-		"Upgrade-Insecure-Requests":  true,
-		"Sec-Fetch-User":            true,
-		"Referer":                   true,
-		constants.HeaderFontData:    true,
-		constants.HeaderWebRTCData:  true,
-		constants.HeaderScreenData:  true,
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderBehavioralData: true,
 	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy 2: CrossSiteNavigateStrategy (fidelity = 0.65)
+// Strategy 2: CrossSiteNavigateStrategy (fidelity = 0.10)
 // ─────────────────────────────────────────────────────────────────────────────
-// Models a cross-site form submission (e.g. shop.com → payment-gateway.com).
-//
-// Gate analysis:
-//   - Sub-check 6 (navigate): requires site=same-origin → we use cross-site → SKIP
-//   - Sub-checks 3-5,7: require dest=empty → we use dest=document → SKIP
-//   - isInitialNavigation: requires site=none → we use cross-site → SKIP
-//
-// Coverage: presentCount=7 → nil band.
+// Document navigation with 1 non-jsFP header: Timing.
+// site=same-site.
 type CrossSiteNavigateStrategy struct{}
 
 func (s *CrossSiteNavigateStrategy) Name() string     { return "navigate_form" }
-func (s *CrossSiteNavigateStrategy) Fidelity() float64 { return 0.65 }
+func (s *CrossSiteNavigateStrategy) Fidelity() float64 { return 0.10 }
 
 func (s *CrossSiteNavigateStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-
-	body := buildCleanFormBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	// dest=document bypasses all dest=empty gates.
-	// site=cross-site bypasses Sub-check 6 (needs same-origin).
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "cross-site")
-	req.Header.Set("Sec-Fetch-User", "?1")
-	req.Header.Del("Referer")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
-	}
-
-	req.Header.Set("Upgrade-Insecure-Requests", "1")
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
-		req.Header.Set("Priority", "u=0, i")
-	} else {
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-		req.Header.Del("Priority")
-	}
-
-	// Strip 3 safe headers → presentCount=7 (coverage nil at 6-7).
-	req.Header.Del(constants.HeaderFontData)
-	req.Header.Del(constants.HeaderWebRTCData)
-	req.Header.Del(constants.HeaderScreenData)
-
-	rebuildHeaderOrder(req, map[string]bool{
-		"Referer":                   true,
-		constants.HeaderFontData:    true,
-		constants.HeaderWebRTCData:  true,
-		constants.HeaderScreenData:  true,
+	applyDocumentNavigation(req, rg, targetURL, "same-site", map[string]bool{
+		constants.HeaderTimingData: true,
 	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy 3: CrossSiteCorsStrategy (fidelity = 0.55)
+// Strategy 3: CrossSiteCorsStrategy (fidelity = 0.20)
 // ─────────────────────────────────────────────────────────────────────────────
-// Models a third-party API call (e.g. analytics.thirdparty.com) under
-// Referrer-Policy: no-referrer.
-//
-// Gate analysis:
-//   - Sub-check 4 (cross-site cors): requires Referer!="" → no Referer → SKIP
-//   - Sub-check 7 (same-origin): requires site=same-origin → cross-site → SKIP
-//   - Sub-check 5 (no-cors): requires mode=no-cors → cors → SKIP
-//   - Sub-check 6 (navigate): requires dest=document → empty → SKIP
-//
-// Coverage: presentCount=7 → nil band.
+// Document navigation with 2 non-jsFP headers: Canvas + Timing.
+// site=none.
 type CrossSiteCorsStrategy struct{}
 
 func (s *CrossSiteCorsStrategy) Name() string     { return "cross_site_cors" }
-func (s *CrossSiteCorsStrategy) Fidelity() float64 { return 0.55 }
+func (s *CrossSiteCorsStrategy) Fidelity() float64 { return 0.20 }
 
 func (s *CrossSiteCorsStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-
-	body := buildCleanAnalyticsBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Site", "cross-site")
-	req.Header.Del("Sec-Fetch-User")
-	req.Header.Del("Referer")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
-	}
-
-	req.Header.Del("Upgrade-Insecure-Requests")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Priority", "u=1, i")
-	}
-
-	req.Header.Del(constants.HeaderFontData)
-	req.Header.Del(constants.HeaderWebRTCData)
-	req.Header.Del(constants.HeaderScreenData)
-
-	rebuildHeaderOrder(req, map[string]bool{
-		"Upgrade-Insecure-Requests":  true,
-		"Sec-Fetch-User":            true,
-		"Referer":                   true,
-		constants.HeaderFontData:    true,
-		constants.HeaderWebRTCData:  true,
-		constants.HeaderScreenData:  true,
+	applyDocumentNavigation(req, rg, targetURL, "none", map[string]bool{
+		constants.HeaderCanvasFingerprint: true,
+		constants.HeaderTimingData:        true,
 	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy 4: SameSiteMinimalStrategy (fidelity = 0.40)
+// Strategy 4: SameSiteMinimalStrategy (fidelity = 0.10)
 // ─────────────────────────────────────────────────────────────────────────────
-// Same-site cors approach with only 4 must-keep headers. Falls below any
-// runtimeHeaderCount >= 5 gate. hasJSFP=false → no missing_* penalties.
-// Coverage: presentCount=4, secChUa present → 0.30*(1-0.4)=0.18 → below threshold.
+// Document navigation with 1 non-jsFP header: Audio.
+// site=cross-site.
 type SameSiteMinimalStrategy struct{}
 
 func (s *SameSiteMinimalStrategy) Name() string     { return "cors_reduced_beacon" }
-func (s *SameSiteMinimalStrategy) Fidelity() float64 { return 0.4 }
+func (s *SameSiteMinimalStrategy) Fidelity() float64 { return 0.10 }
 
 func (s *SameSiteMinimalStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-
-	body := buildCleanAnalyticsBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "cors")
-	req.Header.Set("Sec-Fetch-Site", "same-site")
-	req.Header.Del("Sec-Fetch-User")
-	req.Header.Del("Referer")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
-	}
-
-	req.Header.Del("Upgrade-Insecure-Requests")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Priority", "u=1, i")
-	}
-
-	for _, h := range safeHeaders {
-		req.Header.Del(h)
-	}
-
-	removed := map[string]bool{
-		"Upgrade-Insecure-Requests": true,
-		"Sec-Fetch-User":           true,
-		"Referer":                  true,
-	}
-	for _, h := range safeHeaders {
-		removed[h] = true
-	}
-	rebuildHeaderOrder(req, removed)
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderAudioData: true,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy 5: NavigateMinimalStrategy (fidelity = 0.30)
+// Strategy 5: NavigateMinimalStrategy (fidelity = 0.20)
 // ─────────────────────────────────────────────────────────────────────────────
-// Cross-site navigate with only 4 must-keep headers. Double protection:
-// dest=document bypasses dest=empty gates, 4 headers below count thresholds.
+// Document navigation with 2 non-jsFP headers: Audio + Canvas.
+// site=same-site.
 type NavigateMinimalStrategy struct{}
 
 func (s *NavigateMinimalStrategy) Name() string     { return "navigate_minimal" }
-func (s *NavigateMinimalStrategy) Fidelity() float64 { return 0.3 }
+func (s *NavigateMinimalStrategy) Fidelity() float64 { return 0.20 }
 
 func (s *NavigateMinimalStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-
-	body := buildCleanFormBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	req.Header.Set("Sec-Fetch-Dest", "document")
-	req.Header.Set("Sec-Fetch-Mode", "navigate")
-	req.Header.Set("Sec-Fetch-Site", "cross-site")
-	req.Header.Set("Sec-Fetch-User", "?1")
-	req.Header.Del("Referer")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
-	}
-
-	req.Header.Set("Upgrade-Insecure-Requests", "1")
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
-		req.Header.Set("Priority", "u=0, i")
-	} else {
-		req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
-		req.Header.Del("Priority")
-	}
-
-	for _, h := range safeHeaders {
-		req.Header.Del(h)
-	}
-
-	removed := map[string]bool{
-		"Referer": true,
-	}
-	for _, h := range safeHeaders {
-		removed[h] = true
-	}
-	rebuildHeaderOrder(req, removed)
+	applyDocumentNavigation(req, rg, targetURL, "same-site", map[string]bool{
+		constants.HeaderAudioData:         true,
+		constants.HeaderCanvasFingerprint: true,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy 6 (fallback): BodyMigrationStrategy (fidelity = 1.0)
+// Strategy 6: BodyMigrationStrategy (fidelity = 0.30)
 // ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 3 non-jsFP headers: Behavioral + Audio + Canvas.
+// site=cross-site.
 type BodyMigrationStrategy struct{}
 
 func (s *BodyMigrationStrategy) Name() string     { return "body_migration" }
-func (s *BodyMigrationStrategy) Fidelity() float64 { return 1.0 }
+func (s *BodyMigrationStrategy) Fidelity() float64 { return 0.30 }
 
 func (s *BodyMigrationStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	fpData := collectHeaderValues(req, allRuntimeHeaders)
-	applySameOriginPostTransform(req, rg, targetURL)
-
-	body := buildBodyWithMigratedData(rg, fpData)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	for _, h := range allRuntimeHeaders {
-		req.Header.Del(h)
-	}
-
-	if v, ok := fpData[constants.HeaderBehavioralData]; ok && v != "" {
-		req.Header.Set(constants.HeaderBehavioralData, v)
-	}
-	if v, ok := fpData[constants.HeaderTimingData]; ok && v != "" {
-		req.Header.Set(constants.HeaderTimingData, v)
-	}
-
-	removed := make(map[string]bool)
-	for _, h := range allRuntimeHeaders {
-		removed[h] = true
-	}
-	removed["Upgrade-Insecure-Requests"] = true
-	removed["Sec-Fetch-User"] = true
-	delete(removed, constants.HeaderBehavioralData)
-	delete(removed, constants.HeaderTimingData)
-	rebuildHeaderOrder(req, removed)
+	applyDocumentNavigation(req, rg, targetURL, "cross-site", map[string]bool{
+		constants.HeaderBehavioralData:    true,
+		constants.HeaderAudioData:         true,
+		constants.HeaderCanvasFingerprint: true,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy 7 (fallback): SelectiveStripStrategy (fidelity = 0.2)
+// Strategy 7: SelectiveStripStrategy (fidelity = 0.00)
 // ─────────────────────────────────────────────────────────────────────────────
+// Document navigation with 0 runtime headers (pure page load).
+// site=same-site.
 type SelectiveStripStrategy struct{}
 
 func (s *SelectiveStripStrategy) Name() string     { return "selective_strip" }
-func (s *SelectiveStripStrategy) Fidelity() float64 { return 0.2 }
+func (s *SelectiveStripStrategy) Fidelity() float64 { return 0.00 }
 
 func (s *SelectiveStripStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
-	applySameOriginPostTransform(req, rg, targetURL)
-
-	body := buildMinimalTelemetryBody(rg)
-	req.Body = io.NopCloser(bytes.NewReader(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", "application/json")
-
-	headersToStrip := []string{
-		constants.HeaderNavigatorData,
-		constants.HeaderWebGLData,
-		constants.HeaderPluginData,
-		constants.HeaderFontData,
-		constants.HeaderScreenData,
-		constants.HeaderWebRTCData,
-		constants.HeaderCanvasFingerprint,
-		constants.HeaderAudioData,
-	}
-	for _, h := range headersToStrip {
-		req.Header.Del(h)
-	}
-
-	removed := make(map[string]bool)
-	for _, h := range headersToStrip {
-		removed[h] = true
-	}
-	removed["Upgrade-Insecure-Requests"] = true
-	removed["Sec-Fetch-User"] = true
-	rebuildHeaderOrder(req, removed)
+	applyDocumentNavigation(req, rg, targetURL, "same-site", map[string]bool{})
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DetectionResult / DetectionAnalyzer — interface for self-analysis pre-flight
+// ─────────────────────────────────────────────────────────────────────────────
+
+// DetectionResult captures the shield's verdict on a request.
+type DetectionResult struct {
+	IsBot      bool
+	Score      float64
+	Indicators []string
+}
+
+// DetectionAnalyzer runs a request through local detection and returns a result.
+// In tests this is the StealthDetector; in production it can be nil (rely on
+// HTTP ban signals instead).
+type DetectionAnalyzer func(req *http.Request) DetectionResult
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AdaptiveEvasionFSM
@@ -1231,229 +691,100 @@ func (fsm *AdaptiveEvasionFSM) StateIndex() int {
 	return fsm.stateIdx
 }
 
+func (fsm *AdaptiveEvasionFSM) Strategies() []EvasionStrategy {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	return fsm.strategies
+}
+
 func (fsm *AdaptiveEvasionFSM) Transitions() []FSMTransition {
 	fsm.mu.Lock()
 	defer fsm.mu.Unlock()
 	return append([]FSMTransition{}, fsm.transitions...)
 }
 
+// GenerateAdaptiveRequest tries strategies with pre-flight self-analysis.
+// It walks the FSM, generating a request with each strategy and checking it
+// against the analyzer. If the analyzer detects the request, it records a
+// failure and advances to the next strategy. Returns the first request that
+// passes, or the last attempt if all strategies are caught.
+//
+// When analyzer is nil (production mode), returns the current strategy's
+// request without self-analysis — detection is handled by HTTP ban signals
+// fed back via RecordResult/RecordBanSignal.
+func (fsm *AdaptiveEvasionFSM) GenerateAdaptiveRequest(
+	profile *BrowserProfile,
+	targetURL string,
+	analyzer DetectionAnalyzer,
+) *http.Request {
+	maxAttempts := len(fsm.strategies)
+	var lastReq *http.Request
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		strategy := fsm.CurrentStrategy()
+
+		config := MaxEvasionConfig(profile)
+		config.EvasionStrategy = strategy
+
+		gen := NewRequestGenerator(config)
+		req := gen.GenerateRequest(targetURL)
+		lastReq = req
+
+		// No analyzer → return immediately (production: rely on HTTP ban signals)
+		if analyzer == nil {
+			return req
+		}
+
+		// Self-analyze
+		result := analyzer(req)
+		if !result.IsBot {
+			// Strategy evades — record success and return
+			fsm.RecordResult(result.Score, false)
+			return req
+		}
+
+		// Strategy caught — record failure (this advances FSM if detection rate > 50%)
+		fsm.RecordResult(result.Score, true)
+
+		// Check if FSM advanced to a new strategy
+		nextStrategy := fsm.CurrentStrategy()
+		if nextStrategy.Name() == strategy.Name() {
+			// FSM didn't advance yet (needs more attempts) — force immediate advance
+			// for the self-analysis loop since we know this attempt failed
+			fsm.mu.Lock()
+			if fsm.stateIdx < len(fsm.strategies)-1 {
+				from := fsm.strategies[fsm.stateIdx].Name()
+				fsm.stateIdx++
+				to := fsm.strategies[fsm.stateIdx].Name()
+				fsm.transitions = append(fsm.transitions, FSMTransition{
+					From:   from,
+					To:     to,
+					Score:  result.Score,
+					Reason: fmt.Sprintf("self_analysis_detected: score=%.3f indicators=%v", result.Score, result.Indicators),
+				})
+			} else {
+				fsm.exhausted = true
+			}
+			fsm.mu.Unlock()
+		}
+
+		if fsm.Exhausted() {
+			break
+		}
+	}
+
+	return lastReq
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-func collectHeaderValues(req *http.Request, headers []string) map[string]string {
-	data := make(map[string]string)
-	for _, h := range headers {
-		if v := req.Header.Get(h); v != "" {
-			data[h] = v
-		}
-	}
-	return data
-}
-
-func applySameOriginPostTransform(req *http.Request, rg *RequestGenerator, targetURL string) {
-	req.Method = http.MethodPost
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", "same-origin")
-	req.Header.Set("Sec-Fetch-Site", "same-origin")
-	req.Header.Del("Sec-Fetch-User")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		originPage := parsed.Scheme + "://" + parsed.Host + "/"
-		req.Header.Set("Referer", originPage)
-		req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
-	}
-
-	req.Header.Del("Upgrade-Insecure-Requests")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-
-	if rg.profile.Browser == "chrome" {
-		req.Header.Set("Priority", "u=1, i")
-	}
-}
-
-func buildCleanAnalyticsBody(rg *RequestGenerator) []byte {
-	sessionID := fmt.Sprintf("%x", rg.rng.Uint64())
-	ts := time.Now().Add(-time.Duration(2000+rg.rng.Intn(5000)) * time.Millisecond).UnixMilli()
-	// Build a realistic analytics envelope matching FullStory/Amplitude-style format.
-	// Real SDKs include standalone runtime data objects at the top level — the shield
-	// now checks for exact JSON key matches ("navigator", "timing", "canvas") rather
-	// than substring matching, so we must use genuine runtime key names with realistic
-	// browser data structures.
-	//
-	// These fields mirror what real browser-side telemetry SDKs collect:
-	//   - navigator: window.navigator properties
-	//   - timing: performance.timing / PerformanceNavigationTiming API
-	//   - canvas: CanvasRenderingContext2D fingerprint hash
-	bodyJSON := fmt.Sprintf(
-		`{"sid":"%s","ts":%d,"page":"/","v":"2.1.0","seq":%d,`+
-			`"navigator":{"userAgent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0","language":"en-US","languages":["en-US","en"],"hardwareConcurrency":%d,"deviceMemory":%d,"platform":"Win32","maxTouchPoints":0,"cookieEnabled":true,"doNotTrack":null},`+
-			`"timing":{"connectStart":%d,"domComplete":%d,"domContentLoadedEventEnd":%d,"domInteractive":%d,"fetchStart":%d,"loadEventEnd":%d,"responseEnd":%d,"responseStart":%d},`+
-			`"canvas":"%x%x",`+
-			`"perf":{"ttfb":%d,"fcp":%d,"lcp":%d,"cls":0.%d,"inp":%d},`+
-			`"viewport":{"w":%d,"h":%d,"dpr":%d},`+
-			`"session":{"referrer":"https://www.google.com/search?q=example","entry":"/","depth":%d,"duration":%d},`+
-			`"sdk":{"name":"web-vitals","version":"3.5.2","integrations":["BrowserTracing","Replay"]},`+
-			`"env":{"release":"prod-2024.%d.%d","environment":"production","dist":"%x"},`+
-			`"tags":{"transaction":"/api/data","http.method":"GET","http.status_code":"200"},`+
-			`"breadcrumbs":[{"type":"navigation","timestamp":%d,"data":{"from":"/","to":"/dashboard"}},`+
-			`{"type":"ui.click","timestamp":%d,"message":"button.submit","data":{"nodeId":%d}}],`+
-			`"contexts":{"device":{"family":"Desktop"},"os":{"name":"Windows","version":"10"},"browser":{"name":"Firefox","version":"128.0"}}}`,
-		sessionID, ts, 1+rg.rng.Intn(5),
-		// navigator
-		4+rg.rng.Intn(12), 4+rg.rng.Intn(4)*4,
-		// timing (relative to fetchStart baseline)
-		ts-int64(3000+rg.rng.Intn(2000)), ts+int64(800+rg.rng.Intn(2000)),
-		ts+int64(400+rg.rng.Intn(1500)), ts+int64(300+rg.rng.Intn(1200)),
-		ts-int64(3000+rg.rng.Intn(2000)), ts+int64(900+rg.rng.Intn(2500)),
-		ts+int64(100+rg.rng.Intn(500)), ts+int64(80+rg.rng.Intn(400)),
-		// canvas hash
-		rg.rng.Uint64(), rg.rng.Uint64(),
-		// perf
-		80+rg.rng.Intn(300), 180+rg.rng.Intn(400), 380+rg.rng.Intn(800),
-		1+rg.rng.Intn(200), 50+rg.rng.Intn(200),
-		// viewport
-		1280+rg.rng.Intn(640), 720+rg.rng.Intn(360), 1+rg.rng.Intn(2),
-		// session
-		1+rg.rng.Intn(8), 5000+rg.rng.Intn(30000),
-		// env
-		1+rg.rng.Intn(12), 1+rg.rng.Intn(30), rg.rng.Uint32(),
-		// breadcrumbs
-		ts-int64(1000+rg.rng.Intn(3000)), ts-int64(500+rg.rng.Intn(1500)),
-		100+rg.rng.Intn(500))
-	return []byte(bodyJSON)
-}
-
-// buildSendBeaconBody builds a small (<512 bytes) analytics ping payload
-// matching what real navigator.sendBeacon() calls send. Typical payloads are
-// session heartbeats, page visibility changes, or web vitals metrics.
-//
-// IMPORTANT: Does NOT include "navigator", "webgl", "canvas", "timing",
-// "behavior", "audio", "webrtc", "plugins", "screen", "fonts" as exact JSON
-// keys — these are the keywords checked by bodyContainsRuntimePayload.
-func buildSendBeaconBody(rg *RequestGenerator) []byte {
-	sessionID := fmt.Sprintf("%x", rg.rng.Uint64())
-	ts := time.Now().Add(-time.Duration(2000+rg.rng.Intn(5000)) * time.Millisecond).Unix()
-	bodyJSON := fmt.Sprintf(
-		`{"sid":"%s","ts":%d,"type":"heartbeat","ttfb":%d,"fcp":%d,"lcp":%d,"cls":0.%02d,"inp":%d,"url":"/","dur":%d}`,
-		sessionID, ts,
-		80+rg.rng.Intn(200),   // ttfb
-		180+rg.rng.Intn(300),  // fcp
-		380+rg.rng.Intn(500),  // lcp
-		1+rg.rng.Intn(20),     // cls (0.01–0.20)
-		50+rg.rng.Intn(150),   // inp
-		5000+rg.rng.Intn(25000), // dur (session duration ms)
-	)
-	return []byte(bodyJSON)
-}
-
-// buildRuntimeKeyBody builds an analytics-style JSON body that INCLUDES a
-// runtime keyword as a top-level JSON key. The shield's bodyContainsRuntimePayload()
-// does exact key matching against: "navigator", "webgl", "canvas", "timing",
-// "behavior", "audio", "webrtc", "plugins", "screen", "fonts". If any of these
-// is a top-level key, the function returns true and ALL cross-vector provenance
-// gates skip their body-based detection.
-//
-// Real analytics SDKs like Sentry, PostHog, and Amplitude often include
-// "timing" or "screen" data in their event payloads, so these keys are
-// structurally plausible.
-func buildRuntimeKeyBody(rg *RequestGenerator) []byte {
-	sessionID := fmt.Sprintf("%x", rg.rng.Uint64())
-	ts := time.Now().Add(-time.Duration(2000+rg.rng.Intn(5000)) * time.Millisecond).UnixMilli()
-
-	// Include "timing" as a top-level key — this is the most natural runtime
-	// keyword for an analytics payload (web vitals / performance timing).
-	bodyJSON := fmt.Sprintf(
-		`{"sid":"%s","ts":%d,"type":"pageview","timing":{"ttfb":%d,"fcp":%d,"lcp":%d,"cls":0.%02d,"inp":%d},"url":"/","dur":%d}`,
-		sessionID, ts,
-		80+rg.rng.Intn(200),   // ttfb
-		180+rg.rng.Intn(300),  // fcp
-		380+rg.rng.Intn(500),  // lcp
-		1+rg.rng.Intn(20),     // cls (0.01–0.20)
-		50+rg.rng.Intn(150),   // inp
-		5000+rg.rng.Intn(25000), // dur
-	)
-	return []byte(bodyJSON)
-}
-
-func buildCleanFormBody(rg *RequestGenerator) []byte {
-	sessionID := fmt.Sprintf("%x", rg.rng.Uint64())
-	ts := time.Now().Add(-time.Duration(2000+rg.rng.Intn(5000)) * time.Millisecond).UnixMilli()
-	body := fmt.Sprintf(
-		"sid=%s&ts=%d&page=%%2F&v=2.1.0&seq=%d&w=%d&h=%d&depth=%d",
-		sessionID, ts, 1+rg.rng.Intn(5),
-		1280+rg.rng.Intn(640), 720+rg.rng.Intn(360),
-		1+rg.rng.Intn(8))
-	return []byte(body)
-}
-
-func buildBodyWithMigratedData(rg *RequestGenerator, fpData map[string]string) []byte {
-	sessionID := fmt.Sprintf("%x", rg.rng.Uint64())
-	pageLoadTs := time.Now().Add(-time.Duration(2000+rg.rng.Intn(5000)) * time.Millisecond).UnixMilli()
-	ttfb := 80 + rg.rng.Intn(300)
-	fcp := ttfb + 100 + rg.rng.Intn(400)
-	lcp := fcp + 200 + rg.rng.Intn(800)
-
-	payload := map[string]any{
-		"sid":  sessionID,
-		"ts":   pageLoadTs,
-		"page": "/",
-		"v":    "2.1.0",
-		"seq":  1 + rg.rng.Intn(5),
-		"navigator": map[string]any{
-			"lang":  rg.profile.AcceptLanguage,
-			"cores": rg.profile.HardwareConcurrency,
-			"mem":   rg.profile.DeviceMemory,
-		},
-		"timing": map[string]any{
-			"ttfb": ttfb,
-			"fcp":  fcp,
-			"lcp":  lcp,
-		},
-		"canvas": fmt.Sprintf("%x", rg.rng.Uint64()),
-		"audio":  fmt.Sprintf("%x", rg.rng.Uint64()),
-		"webgl": map[string]any{
-			"vendor":   "Google Inc.",
-			"renderer": "ANGLE",
-		},
-	}
-
-	if len(fpData) > 0 {
-		runtime := make(map[string]string)
-		for header, value := range fpData {
-			key := strings.TrimPrefix(header, "X-")
-			key = strings.ReplaceAll(key, "-", "_")
-			key = strings.ToLower(key)
-			runtime[key] = value
-		}
-		payload["runtime"] = runtime
-	}
-
-	body, _ := json.Marshal(payload)
-	return body
-}
-
-func buildMinimalTelemetryBody(rg *RequestGenerator) []byte {
-	sessionID := fmt.Sprintf("%x", rg.rng.Uint64())
-	pageLoadTs := time.Now().Add(-time.Duration(2000+rg.rng.Intn(5000)) * time.Millisecond).UnixMilli()
-	ttfb := 80 + rg.rng.Intn(300)
-	fcp := ttfb + 100 + rg.rng.Intn(400)
-	lcp := fcp + 200 + rg.rng.Intn(800)
-
-	bodyJSON := fmt.Sprintf(
-		`{"sid":"%s","ts":%d,"page":"/","v":"1.4.2","seq":%d,`+
-			`"navigator":{"lang":"%s","cores":%d,"mem":%d},`+
-			`"timing":{"ttfb":%d,"fcp":%d,"lcp":%d},`+
-			`"canvas":"%x","audio":"%x",`+
-			`"webgl":{"vendor":"Google Inc.","renderer":"ANGLE"}}`,
-		sessionID, pageLoadTs, 1+rg.rng.Intn(5),
-		rg.profile.AcceptLanguage, rg.profile.HardwareConcurrency, rg.profile.DeviceMemory,
-		ttfb, fcp, lcp,
-		rg.rng.Uint64(), rg.rng.Uint64())
-	return []byte(bodyJSON)
-}
-
-func rebuildHeaderOrder(req *http.Request, removed map[string]bool) {
+// rebuildHeaderOrderClean strips removed headers from X-Stealth-Header-Order
+// WITHOUT injecting any headers that aren't actually present on the request.
+// This prevents ghost header detection where the declared order lists headers
+// (like Content-Type, Origin) that don't exist on the actual request.
+func rebuildHeaderOrderClean(req *http.Request, removed map[string]bool) {
 	order := req.Header.Get("X-Stealth-Header-Order")
 	if order == "" {
 		return
@@ -1463,34 +794,16 @@ func rebuildHeaderOrder(req *http.Request, removed map[string]bool) {
 	filtered := make([]string, 0, len(parts))
 	for _, p := range parts {
 		trimmed := strings.TrimSpace(p)
-		if !removed[trimmed] {
-			filtered = append(filtered, trimmed)
+		if removed[trimmed] {
+			continue
 		}
+		// Only keep headers that are actually present on the request
+		if req.Header.Get(trimmed) == "" {
+			continue
+		}
+		filtered = append(filtered, trimmed)
 	}
 
-	includeReferer := !removed["Referer"]
-	final := make([]string, 0, len(filtered)+3)
-	originAdded := false
-	for _, h := range filtered {
-		final = append(final, h)
-		if h == "Accept" {
-			// Content-Type AFTER Accept — real browsers place Accept in the
-			// standard header block before Content-Type from the fetch body options.
-			final = append(final, "Content-Type")
-		}
-		if h == "Accept-Language" && !originAdded {
-			final = append(final, "Origin")
-			if includeReferer {
-				final = append(final, "Referer")
-			}
-			originAdded = true
-		}
-	}
-	if !originAdded {
-		final = append(final, "Origin")
-		if includeReferer {
-			final = append(final, "Referer")
-		}
-	}
-	req.Header.Set("X-Stealth-Header-Order", strings.Join(final, ","))
+	req.Header.Set("X-Stealth-Header-Order", strings.Join(filtered, ","))
 }
+

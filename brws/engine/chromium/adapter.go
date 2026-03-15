@@ -43,7 +43,7 @@ func StealthConfigFromFingerprint(fp *types.CompleteFingerprint) *StealthConfig 
 	// If a behavior trace contains exact CPU core counts or memory size, we map it here
 	// Default to realistic randoms if missing
 	config.DeviceMemoryGB = 8
-	config.CanvasNoise = true
+	config.CanvasNoise = false // ANGLE GPU produces natural canvas fingerprints
 
 	// Ensure accurate screen resolutions if captured via behavioral hooks
 	config.ScreenWidth = 1920

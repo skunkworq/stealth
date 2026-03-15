@@ -1615,6 +1615,129 @@ func TestNormalInitialFirefoxNavigationDoesNotTriggerTelemetryTargetIndicators(t
 	}
 }
 
+// TestDocumentNavigationWithRuntimeHeadersCaught verifies that ANY runtime X-*
+// headers on a document navigation are detected, regardless of target URL.
+// This is the URL-independent hardening layer.
+func TestDocumentNavigationWithRuntimeHeadersCaught(t *testing.T) {
+	detector := NewStealthDetector()
+
+	// Even targeting a normal page URL, runtime headers on navigation = caught
+	req := httptest.NewRequest("GET", "https://www.example.com/products", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	// Add 2 runtime headers — structurally impossible on a real navigation
+	req.Header.Set("X-Canvas-Fingerprint", "abc123")
+	req.Header.Set("X-Timing-Data", `{"load":100}`)
+	req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Accept-Language,Accept-Encoding,Connection,Upgrade-Insecure-Requests,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-User,X-Canvas-Fingerprint,X-Timing-Data")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	if !detection.IsBot {
+		t.Fatalf("document navigation with runtime headers should be detected, got score %.3f", detection.Score)
+	}
+
+	foundSynthetic := false
+	foundPostLoad := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_synthetic_runtime_headers") {
+				foundSynthetic = true
+			}
+			if strings.HasPrefix(ind, "document_navigation_postload_on_navigation") {
+				foundPostLoad = true
+			}
+		}
+	}
+	if !foundSynthetic {
+		t.Fatal("expected document_navigation_synthetic_runtime_headers indicator")
+	}
+	if !foundPostLoad {
+		t.Fatal("expected document_navigation_postload_on_navigation indicator")
+	}
+}
+
+// TestDocumentNavigationWithSuspiciousQueryCaught verifies detection of large
+// encoded payloads in URL query parameters on document navigations.
+func TestDocumentNavigationWithSuspiciousQueryCaught(t *testing.T) {
+	detector := NewStealthDetector()
+
+	// Simulate fingerprint data smuggled via query string (base64 blob)
+	longPayload := strings.Repeat("YWJjZGVm", 100) // ~800 bytes of base64
+	req := httptest.NewRequest("GET", "https://www.example.com/page?data="+longPayload, nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Accept-Language,Accept-Encoding,Connection,Upgrade-Insecure-Requests,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-User")
+
+	detection := detector.AnalyzeRequest(req, nil)
+
+	foundSuspiciousQuery := false
+	foundEncodedPayload := false
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_suspicious_query_string") {
+				foundSuspiciousQuery = true
+			}
+			if ind == "document_navigation_encoded_query_payload" {
+				foundEncodedPayload = true
+			}
+		}
+	}
+	if !foundSuspiciousQuery {
+		t.Fatal("expected document_navigation_suspicious_query_string indicator")
+	}
+	if !foundEncodedPayload {
+		t.Fatal("expected document_navigation_encoded_query_payload indicator")
+	}
+
+	// Score should be high enough to flag
+	if detection.Score < 0.35 {
+		t.Fatalf("expected score >= 0.35 for query smuggling, got %.3f", detection.Score)
+	}
+}
+
+// TestNormalQueryStringNotFlagged ensures short, normal query params don't trigger.
+func TestNormalQueryStringNotFlagged(t *testing.T) {
+	detector := NewStealthDetector()
+
+	req := httptest.NewRequest("GET", "https://www.example.com/products?page=2&sort=price&utm_source=google", nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+	req.Header.Set("Upgrade-Insecure-Requests", "1")
+	req.Header.Set("Sec-Fetch-Dest", "document")
+	req.Header.Set("Sec-Fetch-Mode", "navigate")
+	req.Header.Set("Sec-Fetch-Site", "none")
+	req.Header.Set("Sec-Fetch-User", "?1")
+	req.Header.Set("X-Stealth-Header-Order", "User-Agent,Accept,Accept-Language,Accept-Encoding,Connection,Upgrade-Insecure-Requests,Sec-Fetch-Dest,Sec-Fetch-Mode,Sec-Fetch-Site,Sec-Fetch-User")
+
+	detection := detector.AnalyzeRequest(req, nil)
+	for _, vec := range detection.Vectors {
+		for _, ind := range vec.Indicators {
+			if strings.HasPrefix(ind, "document_navigation_suspicious_query_string") ||
+				ind == "document_navigation_encoded_query_payload" {
+				t.Fatalf("normal short query params should not trigger query smuggling detection: %s", ind)
+			}
+		}
+	}
+}
+
 func TestNormalSameOriginPostDoesNotTriggerTelemetryIndicators(t *testing.T) {
 	detector := NewStealthDetector()
 

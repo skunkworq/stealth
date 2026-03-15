@@ -678,22 +678,24 @@ func TestShieldWithEnhancedData(t *testing.T) {
 			ExpectBot:     false, // Human-like events should remain below bot threshold.
 			ExpectVectors: []string{},
 			BuildReq: func() *http.Request {
-				req, _ := http.NewRequest("GET", "http://localhost:8080/test", nil)
+				// Model a same-origin XHR POST carrying behavioral telemetry data —
+				// this is the legitimate use case for X-Behavioral-Data headers.
+				// Using dest=empty (not document) because behavioral data is collected
+				// after page load and submitted via fetch/XHR, not during navigation.
+				req, _ := http.NewRequest("POST", "http://localhost:8080/test", nil)
 				req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
-				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+				req.Header.Set("Accept", "application/json, text/plain, */*")
 				req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 				req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 				req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
 				req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 				req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
-				req.Header.Set("Sec-Fetch-Dest", "document")
-				req.Header.Set("Sec-Fetch-Mode", "navigate")
-				req.Header.Set("Sec-Fetch-Site", "none")
-				req.Header.Set("Sec-Fetch-User", "?1")
-				req.Header.Set("Upgrade-Insecure-Requests", "1")
+				req.Header.Set("Sec-Fetch-Dest", "empty")
+				req.Header.Set("Sec-Fetch-Mode", "cors")
+				req.Header.Set("Sec-Fetch-Site", "same-origin")
 
 				// Add header order to avoid isomorphic penalty from random map iteration
-				req.Header.Set("X-Stealth-Header-Order", "sec-ch-ua,sec-ch-ua-mobile,sec-ch-ua-platform,upgrade-insecure-requests,user-agent,accept,sec-fetch-site,sec-fetch-mode,sec-fetch-user,sec-fetch-dest,accept-encoding,accept-language")
+				req.Header.Set("X-Stealth-Header-Order", "sec-ch-ua,sec-ch-ua-mobile,sec-ch-ua-platform,user-agent,accept,sec-fetch-site,sec-fetch-mode,sec-fetch-dest,accept-encoding,accept-language")
 
 				// Human-like behavioral data with real epoch timestamps, micro-tremors, bimodal velocity
 				req.Header.Set("X-Behavioral-Data", `{
@@ -718,20 +720,20 @@ func TestShieldWithEnhancedData(t *testing.T) {
 			ExpectBot:     true,
 			ExpectVectors: []string{"behavioral"},
 			BuildReq: func() *http.Request {
-				req, _ := http.NewRequest("GET", "http://localhost:8080/test", nil)
+				// Same-origin XHR POST carrying behavioral data — but with
+				// bot-like patterns (uniform intervals, straight lines).
+				req, _ := http.NewRequest("POST", "http://localhost:8080/test", nil)
 				req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36")
-				req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+				req.Header.Set("Accept", "application/json, text/plain, */*")
 				req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 				req.Header.Set("Accept-Encoding", "gzip, deflate, br, zstd")
 				req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
 				req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 				req.Header.Set("Sec-Ch-Ua-Mobile", "?0")
-				req.Header.Set("Sec-Fetch-Dest", "document")
-				req.Header.Set("Sec-Fetch-Mode", "navigate")
-				req.Header.Set("Sec-Fetch-Site", "none")
-				req.Header.Set("Sec-Fetch-User", "?1")
-				req.Header.Set("Upgrade-Insecure-Requests", "1")
-				// Perfect headers BUT bot behavioral data (uniform intervals, straight lines)
+				req.Header.Set("Sec-Fetch-Dest", "empty")
+				req.Header.Set("Sec-Fetch-Mode", "cors")
+				req.Header.Set("Sec-Fetch-Site", "same-origin")
+				// Perfect fetch headers BUT bot behavioral data (uniform intervals, straight lines)
 				req.Header.Set("X-Behavioral-Data", `{
 					"mouseTimestamps": [0,100,200,300,400,500,600,700,800,900],
 					"typingTimestamps": [0,100,200,300,400,500,600,700],

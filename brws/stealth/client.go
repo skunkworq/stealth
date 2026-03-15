@@ -66,7 +66,7 @@ type Config struct {
 	Escalation      *EscalationConfig
 	WaterfallEngine *wf.Waterfall
 	TieredProxies   []proxy.TieredProxy
-	EvasionFSMEnabled bool
+	EvasionFSMDisabled bool // Set true to disable the adaptive evasion FSM (enabled by default)
 }
 
 // StealthConfig configures stealth capabilities.
@@ -243,9 +243,9 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		escalation = DefaultEscalationConfig()
 	}
 
-	// Initialize evasion FSM if enabled
+	// Initialize evasion FSM (enabled by default for adaptive anti-ban)
 	var evasionFSM *behavior.AdaptiveEvasionFSM
-	if cfg.EvasionFSMEnabled {
+	if !cfg.EvasionFSMDisabled {
 		evasionFSM = behavior.NewAdaptiveEvasionFSM()
 		logger.Info("evasion FSM initialized")
 	}
@@ -336,7 +336,7 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		break
 	}
 
-	// EVASION FSM: feed result and check for browser escalation
+	// EVASION FSM: on ban signal, rotate strategy and retry before escalating
 	if c.evasionFSM != nil && resp != nil {
 		detected := isBanSignal(c.escalation, resp.Status)
 		score := 0.0
@@ -346,6 +346,37 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		c.evasionFSM.RecordResult(score, detected)
 		if detected {
 			c.evasionFSM.RecordBanSignal(resp.Status)
+
+			// Retry with rotated strategy before escalating to browser mode
+			prevStrategy := c.evasionFSM.CurrentStrategy().Name()
+			for fsmRetry := 0; fsmRetry < len(c.evasionFSM.Strategies()) && !c.evasionFSM.ShouldEscalate(); fsmRetry++ {
+				nextStrategy := c.evasionFSM.CurrentStrategy().Name()
+				if fsmRetry > 0 && nextStrategy == prevStrategy {
+					break // FSM didn't advance — stop retrying
+				}
+				prevStrategy = nextStrategy
+				c.logger.Info("evasion FSM retry", "strategy", nextStrategy, "attempt", fsmRetry+1)
+
+				resp, err = activeEngine.Do(ctx, &engine.Request{
+					URL:     url,
+					Timeout: c.options.Timeout,
+				})
+				if err != nil {
+					break
+				}
+
+				retryDetected := isBanSignal(c.escalation, resp.Status)
+				retryScore := 0.0
+				if retryDetected {
+					retryScore = 1.0
+				}
+				c.evasionFSM.RecordResult(retryScore, retryDetected)
+				if retryDetected {
+					c.evasionFSM.RecordBanSignal(resp.Status)
+				} else {
+					break // Strategy evaded — stop retrying
+				}
+			}
 		}
 		if c.evasionFSM.ShouldEscalate() && c.waterfall != nil {
 			reason := c.evasionFSM.EscalationReason()
@@ -728,9 +759,17 @@ func WithSession(profileDir, name string) Option {
 }
 
 // WithEvasionFSM enables the adaptive evasion FSM for browser mode escalation.
+// This is the default behavior — call this only if you previously disabled it.
 func WithEvasionFSM() Option {
 	return func(c *Config) {
-		c.EvasionFSMEnabled = true
+		c.EvasionFSMDisabled = false
+	}
+}
+
+// WithoutEvasionFSM disables the adaptive evasion FSM.
+func WithoutEvasionFSM() Option {
+	return func(c *Config) {
+		c.EvasionFSMDisabled = true
 	}
 }
 

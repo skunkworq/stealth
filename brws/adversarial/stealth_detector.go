@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/constants"
+	"github.com/skunkworq/stealth/brws/types"
 )
 
 // StealthDetector analyzes HTTP requests to detect stealth browser automation
@@ -623,6 +624,108 @@ func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.Connec
 	sd.mu.Unlock()
 
 	return &detection
+}
+
+// AnalyzeRequestWithTLS performs comprehensive stealth detection with deep TLS
+// fingerprint analysis from a parsed ClientHello. Use this when you have access
+// to the raw TLS handshake data (e.g., via CapturingListener).
+func (sd *StealthDetector) AnalyzeRequestWithTLS(req *http.Request, tlsFP *types.TLSFingerprint) *StealthDetection {
+	// Run standard analysis without TLS connection state
+	detection := sd.AnalyzeRequest(req, nil)
+
+	if tlsFP == nil {
+		return detection
+	}
+
+	// Determine claimed browser from UA
+	claimedBrowser := ""
+	if req != nil {
+		ua := strings.ToLower(req.Header.Get("User-Agent"))
+		if strings.Contains(ua, "chrome") {
+			claimedBrowser = "chrome"
+		} else if strings.Contains(ua, "firefox") {
+			claimedBrowser = "firefox"
+		}
+	}
+
+	// Run deep TLS analysis
+	deepAnalysis := AnalyzeTLSDeep(tlsFP, claimedBrowser)
+	if deepAnalysis == nil {
+		return detection
+	}
+
+	// Build TLS vector from deep analysis
+	tlsVec := DetectionVector{
+		Name:        "TLS Fingerprint (Deep)",
+		Category:    "tls",
+		Weight:      constants.WeightTLS,
+		Description: "Deep TLS ClientHello analysis against browser baselines",
+		Score:       deepAnalysis.BotScore,
+		Detected:    deepAnalysis.BotScore >= 0.35,
+		Indicators:  deepAnalysis.Indicators,
+	}
+
+	// Store TLS info
+	detection.TLSFingerprint = &TLSFingerprintInfo{
+		JA4:        tlsFP.JA4,
+		JA3:        tlsFP.JA3String,
+		TLSVersion: fmt.Sprintf("0x%04x", tlsFP.Version),
+		HasGREASE:  len(tlsFP.GREASE) > 0,
+		HasALPS:    hasExtension(tlsFP, 0x44cd),
+		Anomalies:  deepAnalysis.Anomalies,
+	}
+
+	// Replace or add TLS vector
+	replaced := false
+	for i, v := range detection.Vectors {
+		if v.Category == "tls" {
+			detection.Vectors[i] = tlsVec
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		detection.Vectors = append(detection.Vectors, tlsVec)
+	}
+
+	// Re-run adaptive scoring with new TLS vector
+	if sd.config.EnableAdaptiveScoring && sd.adaptiveScorer != nil {
+		vectorResults := make(map[VectorCategory]*VectorResult)
+		for _, v := range detection.Vectors {
+			cat := categoryFromString(v.Category)
+			vectorResults[cat] = &VectorResult{Score: v.Score, Detected: v.Detected}
+		}
+
+		adaptiveResult := sd.adaptiveScorer.ScoreResults(vectorResults)
+		detection.Score = adaptiveResult.FinalScore
+		detection.IsBot = adaptiveResult.FinalScore >= sd.config.ThresholdBot
+		detection.IsStealth = sd.detectStealthBrowser(detection)
+		detection.Confidence = calculateDetectionConfidence(detection)
+	}
+
+	return detection
+}
+
+// categoryFromString converts a category string back to VectorCategory.
+func categoryFromString(s string) VectorCategory {
+	switch s {
+	case "tls":
+		return VectorTLS
+	case "http":
+		return VectorHTTP
+	case "navigator":
+		return VectorNavigator
+	case "canvas":
+		return VectorCanvas
+	case "timing":
+		return VectorTiming
+	case "behavioral":
+		return VectorBehavioral
+	case "webgl":
+		return VectorWebGL
+	default:
+		return VectorHTTP
+	}
 }
 
 // RecordBypassOutcome records an outcome for adaptive weight adjustment.
@@ -2203,6 +2306,46 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			}
 		}
 
+		// Sub-check 6b: ANY runtime X-* headers on a document navigation.
+		// Real top-level navigations (typing a URL, clicking a link, submitting a
+		// form) NEVER carry custom X-Canvas-Fingerprint, X-Timing-Data, X-Behavioral-Data
+		// or X-Audio-Data headers. These headers are injected by client-side JS after
+		// page load. Their presence on a dest=document GET is structurally impossible
+		// regardless of the target URL, making this a URL-independent bot signal.
+		if req.Method == http.MethodGet &&
+			runtimeHeaderCount >= 1 && runtimeHeaderCount <= 3 &&
+			isBrowserUA {
+			vec.Score += 0.55
+			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+				"document_navigation_synthetic_runtime_headers: %d runtime headers on page load",
+				runtimeHeaderCount))
+
+			if postLoadHeaderCount >= 1 {
+				vec.Score += 0.20
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"document_navigation_postload_on_navigation: %d post-load headers present",
+					postLoadHeaderCount))
+			}
+		}
+
+		// Sub-check 6c: Suspicious query string on document navigation.
+		// Real navigations may have short query params (utm_source, page=2, q=search),
+		// but large encoded payloads (>512 bytes) or base64 blobs in query strings
+		// indicate fingerprint data smuggling via URL parameters.
+		if req.Method == http.MethodGet && isBrowserUA && req.URL != nil {
+			queryLen := len(req.URL.RawQuery)
+			if queryLen > 512 {
+				vec.Score += 0.45
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"document_navigation_suspicious_query_string: %d bytes in query params",
+					queryLen))
+			}
+			if queryLen > 0 && looksLikeEncodedPayload(req.URL.RawQuery) {
+				vec.Score += 0.35
+				vec.Indicators = append(vec.Indicators, "document_navigation_encoded_query_payload")
+			}
+		}
+
 		if req.Method == http.MethodGet &&
 			runtimeHeaderCount <= 3 &&
 			isBrowserUA &&
@@ -2842,6 +2985,33 @@ func looksLikeAPIHostname(u *url.URL) bool {
 		if strings.HasPrefix(host, prefix) {
 			return true
 		}
+	}
+
+	return false
+}
+
+// looksLikeEncodedPayload checks whether a query string contains base64 or
+// percent-encoded blobs that suggest fingerprint data smuggling. It looks for:
+//   - Long base64-like runs (>64 chars of [A-Za-z0-9+/=])
+//   - Dense percent-encoding (>30% of characters are %XX sequences)
+func looksLikeEncodedPayload(query string) bool {
+	// Check for base64-like runs: contiguous [A-Za-z0-9+/=] longer than 64 chars
+	run := 0
+	for _, c := range query {
+		if (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '+' || c == '/' || c == '=' {
+			run++
+			if run > 64 {
+				return true
+			}
+		} else {
+			run = 0
+		}
+	}
+
+	// Check for dense percent-encoding
+	pctCount := strings.Count(query, "%")
+	if len(query) > 32 && float64(pctCount*3)/float64(len(query)) > 0.30 {
+		return true
 	}
 
 	return false

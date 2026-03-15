@@ -79,7 +79,7 @@ func DefaultStealthConfig() *StealthConfig {
 		Platform:            "Win32",
 		WebGLVendor:         randomGPUVendor(),
 		WebGLRenderer:       randomGPURenderer("Win32"),
-		CanvasNoise:         true,
+		CanvasNoise:         false, // Disabled: ANGLE GPU produces natural canvas fingerprints
 		CanvasNoiseStrength: 0.5,
 		WebRTC:              DefaultWebRTCConfig(),
 		HumanizeMouse:       true,
@@ -161,11 +161,15 @@ func GenerateStealthScript(config *StealthConfig) string {
 	}
 
 	canvasNoiseStrength := config.CanvasNoiseStrength
-	if canvasNoiseStrength <= 0 {
-		canvasNoiseStrength = 0.5
-	}
-	if canvasNoiseStrength > 1.0 {
-		canvasNoiseStrength = 1.0
+	if config.CanvasNoise {
+		if canvasNoiseStrength <= 0 {
+			canvasNoiseStrength = 0.5
+		}
+		if canvasNoiseStrength > 1.0 {
+			canvasNoiseStrength = 1.0
+		}
+	} else {
+		canvasNoiseStrength = 0 // No noise — ANGLE GPU produces natural fingerprints
 	}
 
 	devicePixelRatio := config.DevicePixelRatio
@@ -326,66 +330,12 @@ func GenerateStealthScript(config *StealthConfig) string {
         tagName: 'VIDEO',
     };
     
-    // 10. WebGL Spoofing (expanded with 25+ extensions and GL parameters)
-    const webglExtensions = [
-        'ANGLE_instanced_arrays', 'EXT_blend_minmax', 'EXT_color_buffer_half_float',
-        'EXT_disjoint_timer_query', 'EXT_float_blend', 'EXT_frag_depth',
-        'EXT_shader_texture_lod', 'EXT_texture_compression_bptc',
-        'EXT_texture_compression_rgtc', 'EXT_texture_filter_anisotropic',
-        'EXT_sRGB', 'KHR_parallel_shader_compile', 'OES_element_index_uint',
-        'OES_fbo_render_mipmap', 'OES_standard_derivatives', 'OES_texture_float',
-        'OES_texture_float_linear', 'OES_texture_half_float',
-        'OES_texture_half_float_linear', 'OES_vertex_array_object',
-        'WEBGL_color_buffer_float', 'WEBGL_compressed_texture_s3tc',
-        'WEBGL_compressed_texture_s3tc_srgb', 'WEBGL_debug_renderer_info',
-        'WEBGL_debug_shaders', 'WEBGL_depth_texture', 'WEBGL_draw_buffers',
-        'WEBGL_lose_context', 'WEBGL_multi_draw'
-    ];
-    const fakeExtObj = { /* stub for generic extensions */ };
-    const fakeWebGLContext = {
-        getSupportedExtensions: () => webglExtensions,
-        getExtension: (name) => {
-            if (name === 'WEBGL_debug_renderer_info') {
-                return {
-                    UNMASKED_VENDOR_WEBGL: 0x9245,
-                    UNMASKED_RENDERER_WEBGL: 0x9246,
-                };
-            }
-            if (name === 'WEBGL_lose_context') {
-                return { loseContext: () => {}, restoreContext: () => {} };
-            }
-            if (name === 'EXT_texture_filter_anisotropic') {
-                return { MAX_TEXTURE_MAX_ANISOTROPY_EXT: 0x84FF, TEXTURE_MAX_ANISOTROPY_EXT: 0x84FE };
-            }
-            if (name === 'WEBGL_draw_buffers') {
-                return { MAX_DRAW_BUFFERS_WEBGL: 8, MAX_COLOR_ATTACHMENTS_WEBGL: 8, drawBuffersWEBGL: () => {} };
-            }
-            if (webglExtensions.includes(name)) return fakeExtObj;
-            return null;
-        },
-        getParameter: (param) => {
-            if (param === 0x9245) return '%s';  // UNMASKED_VENDOR_WEBGL
-            if (param === 0x9246) return '%s';  // UNMASKED_RENDERER_WEBGL
-            if (param === 0x0D33) return 16384;  // MAX_TEXTURE_SIZE
-            if (param === 0x8B8C) return 'WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)';  // SHADING_LANGUAGE_VERSION
-            if (param === 0x1F01) return 'WebKit WebGL';  // RENDERER
-            if (param === 0x1F00) return 'WebKit';  // VENDOR
-            if (param === 0x8869) return 16;  // MAX_VERTEX_ATTRIBS
-            if (param === 0x8DFB) return 30;  // MAX_VARYING_VECTORS
-            if (param === 0x8B4D) return 1024;  // MAX_FRAGMENT_UNIFORM_VECTORS
-            if (param === 0x0D32) return 16384;  // MAX_VIEWPORT_DIMS (approx)
-            if (param === 0x8B4A) return 256;  // MAX_VERTEX_UNIFORM_VECTORS
-            if (param === 0x851C) return 16;  // MAX_TEXTURE_IMAGE_UNITS
-            if (param === 0x8872) return 16;  // MAX_VERTEX_TEXTURE_IMAGE_UNITS
-            if (param === 0x8824) return 16;  // MAX_COMBINED_TEXTURE_IMAGE_UNITS
-            if (param === 0x0D34) return 16384;  // MAX_CUBE_MAP_TEXTURE_SIZE
-            if (param === 0x84E8) return 16;  // MAX_RENDERBUFFER_SIZE scaled
-            return null;
-        },
-        createShader: () => ({}),
-        createProgram: () => ({}),
-        createBuffer: () => ({}),
-    };
+    // 10. WebGL Vendor/Renderer Spoofing (Proxy on real GPU context)
+    // With ANGLE GPU rendering, the real WebGL context is preserved — only the
+    // unmasked vendor/renderer strings are spoofed to prevent GPU fingerprinting.
+    // All other WebGL calls pass through to the real GPU-backed context.
+    const spoofedWebGLVendor = '%s';
+    const spoofedWebGLRenderer = '%s';
     
     // 11. Enhanced Canvas Fingerprint Randomization (Deterministic per-session)
     // Avoid Math.random() directly which triggers "randomized_canvas" detection
@@ -400,6 +350,7 @@ func GenerateStealthScript(config *StealthConfig) string {
 
     const rand = (min = 0, max = 1) => random() * (max - min) + min;
     const noiseStrength = %f; // 0.0-1.0 configurable strength
+    const canvasNoiseEnabled = noiseStrength > 0;
     const pixelNoiseRate = 0.03 + (noiseStrength * 0.02); // 3-5%% of pixels
 
     const staticTextDx = rand(-0.2, 0.2) * noiseStrength;
@@ -419,24 +370,13 @@ func GenerateStealthScript(config *StealthConfig) string {
             const realCanvas = realCreateElement('canvas');
             const originalGetContext = realCanvas.getContext.bind(realCanvas);
 
-            // Patch toDataURL and toBlob at the canvas level
-            const origToDataURL = realCanvas.toDataURL.bind(realCanvas);
-            const origToBlob = realCanvas.toBlob?.bind(realCanvas);
+            // Canvas noise patches — only when noise is enabled.
+            // When disabled (ANGLE GPU), native canvas produces natural fingerprints.
+            if (canvasNoiseEnabled) {
+                const origToDataURL = realCanvas.toDataURL.bind(realCanvas);
+                const origToBlob = realCanvas.toBlob?.bind(realCanvas);
 
-            realCanvas.toDataURL = function(...args) {
-                // Force a re-render pass through our noised context
-                const ctx = realCanvas.getContext('2d');
-                if (ctx) {
-                    const w = realCanvas.width || 1;
-                    const h = realCanvas.height || 1;
-                    const imageData = ctx.getImageData(0, 0, w, h);
-                    ctx.putImageData(imageData, 0, 0);
-                }
-                return origToDataURL(...args);
-            };
-
-            if (origToBlob) {
-                realCanvas.toBlob = function(callback, ...args) {
+                realCanvas.toDataURL = function(...args) {
                     const ctx = realCanvas.getContext('2d');
                     if (ctx) {
                         const w = realCanvas.width || 1;
@@ -444,16 +384,50 @@ func GenerateStealthScript(config *StealthConfig) string {
                         const imageData = ctx.getImageData(0, 0, w, h);
                         ctx.putImageData(imageData, 0, 0);
                     }
-                    return origToBlob(callback, ...args);
+                    return origToDataURL(...args);
                 };
+
+                if (origToBlob) {
+                    realCanvas.toBlob = function(callback, ...args) {
+                        const ctx = realCanvas.getContext('2d');
+                        if (ctx) {
+                            const w = realCanvas.width || 1;
+                            const h = realCanvas.height || 1;
+                            const imageData = ctx.getImageData(0, 0, w, h);
+                            ctx.putImageData(imageData, 0, 0);
+                        }
+                        return origToBlob(callback, ...args);
+                    };
+                }
             }
 
             realCanvas.getContext = function(contextType, ...args) {
                 const ctx = originalGetContext(contextType, ...args);
 
-                if (contextType === 'webgl' || contextType === 'experimental-webgl') {
-                    return fakeWebGLContext;
-                } else if (contextType === '2d' && ctx) {
+                if ((contextType === 'webgl' || contextType === 'experimental-webgl') && ctx) {
+                    // Proxy wraps real GPU-backed WebGL context — only vendor/renderer spoofed
+                    return new Proxy(ctx, {
+                        get(target, prop, receiver) {
+                            if (prop === 'getParameter') {
+                                return function(param) {
+                                    if (param === 0x9245) return spoofedWebGLVendor;
+                                    if (param === 0x9246) return spoofedWebGLRenderer;
+                                    return target.getParameter.call(target, param);
+                                };
+                            }
+                            if (prop === 'getExtension') {
+                                return function(name) {
+                                    if (name === 'WEBGL_debug_renderer_info') {
+                                        return { UNMASKED_VENDOR_WEBGL: 0x9245, UNMASKED_RENDERER_WEBGL: 0x9246 };
+                                    }
+                                    return target.getExtension.call(target, name);
+                                };
+                            }
+                            const val = Reflect.get(target, prop, receiver);
+                            return typeof val === 'function' ? val.bind(target) : val;
+                        }
+                    });
+                } else if (contextType === '2d' && ctx && canvasNoiseEnabled) {
                     // Add subtle noise to canvas operations
                     const origFillText = ctx.fillText.bind(ctx);
                     const origStrokeText = ctx.strokeText?.bind(ctx);

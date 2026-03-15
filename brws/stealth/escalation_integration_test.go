@@ -25,9 +25,9 @@ func (s *stubEngine) Do(_ context.Context, _ *engine.Request) (*engine.Response,
 
 // TestClient_FSMWaterfallEscalation verifies the full escalation loop:
 // 1. HTTP engine returns ban signals (403)
-// 2. Evasion FSM accumulates ban signals and triggers escalation
-// 3. Waterfall promotes chromium tier
-// 4. Subsequent request uses the waterfall (chromium wins)
+// 2. Evasion FSM retry loop cycles through strategies within a single Navigate
+// 3. Ban signals accumulate and trigger escalation
+// 4. Waterfall promotes chromium tier
 func TestClient_FSMWaterfallEscalation(t *testing.T) {
 	// HTTP engine always returns 403 (banned)
 	httpEngine := &stubEngine{
@@ -52,7 +52,7 @@ func TestClient_FSMWaterfallEscalation(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.EngineName = "native"
-	cfg.EvasionFSMEnabled = true
+	// EvasionFSM is enabled by default
 	cfg.WaterfallEngine = waterfallEng
 	cfg.Escalation = &EscalationConfig{
 		Enabled:              true,
@@ -68,33 +68,17 @@ func TestClient_FSMWaterfallEscalation(t *testing.T) {
 
 	ctx := context.Background()
 
-	// First request: http engine responds 403, FSM records ban signal
+	// A single Navigate call against a persistently-403 engine will trigger
+	// the FSM retry loop, which cycles through strategies. Each retry records
+	// a ban signal, so the FSM crosses the threshold (3) within this call.
 	resp, err := client.Navigate(ctx, "http://example.com")
 	if err != nil {
-		t.Fatalf("first navigate error: %v", err)
+		t.Fatalf("navigate error: %v", err)
 	}
 
-	// After 1 ban signal, FSM should not yet recommend escalation (threshold=3)
-	if client.evasionFSM.ShouldEscalate() {
-		t.Error("should not escalate after 1 ban signal")
-	}
-
-	// Second request: another 403
-	resp, err = client.Navigate(ctx, "http://example.com")
-	if err != nil {
-		t.Fatalf("second navigate error: %v", err)
-	}
-
-	// Third request: third 403 — this should cross the ban signal threshold
-	// The escalation block in Navigate also calls escalate() which adds another
-	// ban signal, so we expect escalation after this request
-	resp, err = client.Navigate(ctx, "http://example.com")
-	if err != nil {
-		t.Fatalf("third navigate error: %v", err)
-	}
-
+	// FSM should have escalated — the retry loop accumulated 3+ ban signals
 	if !client.evasionFSM.ShouldEscalate() {
-		t.Error("FSM should recommend escalation after 3+ ban signals")
+		t.Error("FSM should recommend escalation after retry loop accumulated ban signals")
 	}
 
 	reason := client.evasionFSM.EscalationReason()
@@ -105,6 +89,7 @@ func TestClient_FSMWaterfallEscalation(t *testing.T) {
 	// Verify waterfall metrics show the chromium tier was promoted
 	metrics := waterfallEng.Metrics()
 	t.Logf("Waterfall metrics: wins=%v errors=%v", metrics.Wins, metrics.Errors)
+	t.Logf("FSM summary:\n%s", client.evasionFSM.Summary())
 
 	_ = resp
 }
@@ -133,7 +118,7 @@ func TestClient_FSMExhaustion_PromotesChromium(t *testing.T) {
 
 	cfg := DefaultConfig()
 	cfg.EngineName = "native"
-	cfg.EvasionFSMEnabled = true
+	// EvasionFSM is enabled by default
 	cfg.WaterfallEngine = waterfallEng
 	cfg.Escalation = &EscalationConfig{
 		Enabled:              true,

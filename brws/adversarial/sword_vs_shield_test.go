@@ -142,9 +142,8 @@ func TestSwordVsShield(t *testing.T) {
 			t.Fatalf("expected armed sword avg score >= 0.50 in library matrix, got %.3f", armedResult.AvgBotScore)
 		}
 
-		// Full browser: same-origin navigation with ALL 10 runtime headers.
-		// The shield should also catch impossible document navigations that carry
-		// dense runtime context.
+		// Full browser: the shield should also catch the stripped document-navigation
+		// variant that keeps only a small non-JS runtime subset.
 		browserResult, ok := resultMap["our_stealth_browser"]
 		if !ok {
 			t.Fatal("missing tool result for our_stealth_browser")
