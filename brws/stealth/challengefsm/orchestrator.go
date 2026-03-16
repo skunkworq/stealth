@@ -124,6 +124,76 @@ func (co *ChallengeOrchestrator) HandleResponse(
 	return resp, nil
 }
 
+// HandleResponseWithTraceEvents is like HandleResponse but injects pre-generated
+// trace events into the challenge context for replay-based solving.
+func (co *ChallengeOrchestrator) HandleResponseWithTraceEvents(
+	ctx context.Context,
+	targetURL string,
+	resp *engine.Response,
+	eng engine.Engine,
+	timeout time.Duration,
+	traceEvents []adversarial.CaptchaEvent,
+) (*engine.Response, error) {
+	ch := co.detector.Detect(resp)
+	if ch == nil {
+		return resp, nil
+	}
+
+	co.logger.Info("challenge detected (trace-enhanced)",
+		"type", string(ch.Type),
+		"url", targetURL,
+		"trace_events", len(traceEvents),
+	)
+
+	solver := co.registry.FindSolver(ch)
+	if solver == nil {
+		co.logger.Warn("no solver for challenge type", "type", string(ch.Type))
+		return resp, nil
+	}
+
+	cfg := co.config
+	if cfg == nil {
+		cfg = &SolverConfig{MaxRetries: 1, Timeout: timeout, HumanDelay: true}
+	}
+	if cfg.Timeout == 0 {
+		cfg.Timeout = timeout
+	}
+
+	cctx := &ChallengeContext{
+		Ctx:         ctx,
+		TargetURL:   targetURL,
+		Response:    resp,
+		Challenge:   ch,
+		Engine:      eng,
+		Config:      cfg,
+		Logger:      co.logger,
+		TraceEvents: traceEvents,
+	}
+
+	start := time.Now()
+	result, err := solver.Solve(cctx)
+	duration := time.Since(start)
+
+	success := err == nil && result != nil && result.Solved
+	co.metrics.Record(solver.Provider(), success, duration)
+
+	if err != nil {
+		co.logger.Warn("trace-enhanced solve failed",
+			"provider", solver.Provider(), "duration_ms", duration.Milliseconds(), "error", err)
+		return resp, err
+	}
+
+	if result.Solved {
+		co.logger.Info("challenge solved (trace-enhanced)",
+			"provider", solver.Provider(), "duration_ms", duration.Milliseconds())
+		if result.Response != nil {
+			return result.Response, nil
+		}
+	}
+
+	return resp, nil
+}
+
 // Metrics returns the solve metrics tracker.
 func (co *ChallengeOrchestrator) Metrics() *SolveMetrics {
 	return co.metrics
@@ -180,7 +250,7 @@ func (ud *UnifiedDetector) Detect(resp *engine.Response) *challenge.Challenge {
 	}
 
 	// 3. Check for captcha headers (X-Captcha-Required)
-	if hasCaptchaHeader(resp.Headers) {
+	if HasCaptchaHeader(resp.Headers) {
 		bodyStr := strings.ToLower(string(resp.Body))
 		if strings.Contains(bodyStr, "recaptcha") || hasCaptchaTypeHeader(resp.Headers, "recaptcha-v2") {
 			return &challenge.Challenge{
@@ -212,8 +282,8 @@ func cfChallengeTypeToGeneric(cfType adversarial.CloudflareChallengeType) challe
 	}
 }
 
-// hasCaptchaHeader checks for X-Captcha-Required: 1 header.
-func hasCaptchaHeader(headers map[string][]string) bool {
+// HasCaptchaHeader checks for X-Captcha-Required: 1 header.
+func HasCaptchaHeader(headers map[string][]string) bool {
 	for _, v := range headers["X-Captcha-Required"] {
 		if v == "1" {
 			return true

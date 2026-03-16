@@ -1556,6 +1556,12 @@ type AdaptiveEvasionFSM struct {
 	banSignals         int
 	banSignalThreshold int
 	exhausted          bool
+
+	// Captcha tracking
+	captchaDetections int // total captcha challenges encountered
+	captchaSolves     int // successful solves
+	captchaFailures   int // failed solve attempts
+	captchaMaxRetries int // max failures before escalation (default 2)
 }
 
 type FSMState struct {
@@ -1584,6 +1590,7 @@ func NewAdaptiveEvasionFSM(strategies ...EvasionStrategy) *AdaptiveEvasionFSM {
 		strategies:         strategies,
 		states:             states,
 		banSignalThreshold: 3,
+		captchaMaxRetries:  2,
 	}
 }
 
@@ -1650,17 +1657,23 @@ func (fsm *AdaptiveEvasionFSM) RecordBanSignal(statusCode int) {
 }
 
 // ShouldEscalate returns true if the FSM recommends escalating to browser mode,
-// either because all strategies are exhausted or ban signals exceed the threshold.
+// either because all strategies are exhausted, ban signals exceed the threshold,
+// or captcha solving has been exhausted.
 func (fsm *AdaptiveEvasionFSM) ShouldEscalate() bool {
 	fsm.mu.Lock()
 	defer fsm.mu.Unlock()
-	return fsm.exhausted || fsm.banSignals >= fsm.banSignalThreshold
+	return fsm.exhausted ||
+		fsm.banSignals >= fsm.banSignalThreshold ||
+		fsm.captchaFailures >= fsm.captchaMaxRetries
 }
 
 // EscalationReason returns why escalation is recommended.
 func (fsm *AdaptiveEvasionFSM) EscalationReason() string {
 	fsm.mu.Lock()
 	defer fsm.mu.Unlock()
+	if fsm.captchaFailures >= fsm.captchaMaxRetries {
+		return "captcha_solve_exhausted"
+	}
 	if fsm.exhausted {
 		return "fsm_exhausted"
 	}
@@ -1675,6 +1688,41 @@ func (fsm *AdaptiveEvasionFSM) ResetBanSignals() {
 	fsm.mu.Lock()
 	defer fsm.mu.Unlock()
 	fsm.banSignals = 0
+}
+
+// RecordCaptchaDetected records that a captcha challenge was encountered.
+func (fsm *AdaptiveEvasionFSM) RecordCaptchaDetected() {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	fsm.captchaDetections++
+}
+
+// RecordCaptchaSolveResult records the outcome of a captcha solve attempt.
+// On failure, it also counts as a ban signal since the site is actively blocking.
+func (fsm *AdaptiveEvasionFSM) RecordCaptchaSolveResult(solved bool) {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	if solved {
+		fsm.captchaSolves++
+	} else {
+		fsm.captchaFailures++
+		fsm.banSignals++ // failed captcha = effectively blocked
+	}
+}
+
+// ShouldAttemptCaptcha returns true if captcha solving should be attempted
+// before escalating to browser mode. Returns false after repeated failures.
+func (fsm *AdaptiveEvasionFSM) ShouldAttemptCaptcha() bool {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	return fsm.captchaFailures < fsm.captchaMaxRetries
+}
+
+// CaptchaStats returns captcha detection/solve/failure counts.
+func (fsm *AdaptiveEvasionFSM) CaptchaStats() (detections, solves, failures int) {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	return fsm.captchaDetections, fsm.captchaSolves, fsm.captchaFailures
 }
 
 func (fsm *AdaptiveEvasionFSM) Converged() bool {
@@ -1710,7 +1758,9 @@ func (fsm *AdaptiveEvasionFSM) Summary() string {
 	for _, t := range fsm.transitions {
 		fmt.Fprintf(&sb, "  transition: %s -> %s (%s)\n", t.From, t.To, t.Reason)
 	}
-	fmt.Fprintf(&sb, "  exhausted=%v ban_signals=%d/%d\n", fsm.exhausted, fsm.banSignals, fsm.banSignalThreshold)
+	fmt.Fprintf(&sb, "  exhausted=%v ban_signals=%d/%d captcha=%d/%d/%d (det/solve/fail)\n",
+		fsm.exhausted, fsm.banSignals, fsm.banSignalThreshold,
+		fsm.captchaDetections, fsm.captchaSolves, fsm.captchaFailures)
 	return sb.String()
 }
 

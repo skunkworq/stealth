@@ -1,0 +1,1183 @@
+{
+  "id": "rec_turnstile_1",
+  "session_id": "sess_test_1773629803540",
+  "challenge_type": "turnstile",
+  "challenge_variant": "rotate",
+  "site_url": "http://localhost:9080/api/trace/lab",
+  "started_at": "2026-03-16T02:56:43.540745Z",
+  "completed_at": "2026-03-16T02:56:43.542863Z",
+  "duration_ms": 2,
+  "solved": true,
+  "events": [
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 0,
+      "x": 153.93990393002363,
+      "y": 315.01241096845854
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 13,
+      "x": 192.61345353170827,
+      "y": 293.584303720154
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 23,
+      "x": 215.94563439737365,
+      "y": 278.8060866319575
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 31,
+      "x": 235.5268803630766,
+      "y": 266.73431227191156
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 39,
+      "x": 247.78668821776785,
+      "y": 263.0671180773975
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 47,
+      "x": 263.35497600272356,
+      "y": 256.75153396493636
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 53,
+      "x": 271.7835570960091,
+      "y": 249.78105852244852
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 60,
+      "x": 286.274575423426,
+      "y": 246.1155503805593
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 69,
+      "x": 296.91752621684486,
+      "y": 239.49734249482077
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 76,
+      "x": 303.5073333522915,
+      "y": 235.88678088456305
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 85,
+      "x": 310.8266826807733,
+      "y": 229.66425349968443
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 92,
+      "x": 314.52699549561663,
+      "y": 227.39770966417294
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 99,
+      "x": 322.46537400591274,
+      "y": 222.593942602035
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 107,
+      "x": 322.1954548464942,
+      "y": 221.83268259418426
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 117,
+      "x": 326.96301521768453,
+      "y": 218.20401718266524
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 126,
+      "x": 328.6891984966064,
+      "y": 216.60323662179383
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 133,
+      "x": 327.5360694438728,
+      "y": 211.87921030084792
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 140,
+      "x": 329.52107874939867,
+      "y": 213.15976337998782
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 148,
+      "x": 330.56865440328835,
+      "y": 210.16048906492804
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 156,
+      "x": 329.3525720180511,
+      "y": 209.00066642310856
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 164,
+      "x": 329.5685177333671,
+      "y": 209.3774605258248
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 170,
+      "x": 330.1453035792056,
+      "y": 206.81173800261027
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 179,
+      "x": 333.90529781036565,
+      "y": 207.52591818139044
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 186,
+      "x": 331.91634201881516,
+      "y": 208.14609032555617
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 194,
+      "x": 332.31206141008187,
+      "y": 207.77542802067964
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 204,
+      "x": 329.22121380558343,
+      "y": 206.9422129419242
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 211,
+      "x": 328.67560177373963,
+      "y": 205.12256880612864
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 219,
+      "x": 330.261325460528,
+      "y": 204.4454375980413
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 228,
+      "x": 327.3748109720825,
+      "y": 204.1196545727285
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 236,
+      "x": 326.79852128586197,
+      "y": 205.3817247962778
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 245,
+      "x": 326.7781543788517,
+      "y": 205.82579993321093
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 254,
+      "x": 328.02099671752046,
+      "y": 203.75412682082452
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 262,
+      "x": 324.20928010594844,
+      "y": 203.13102685002283
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 271,
+      "x": 325.9153618789781,
+      "y": 203.39190281241605
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 277,
+      "x": 325.5637506990387,
+      "y": 200.59855749390914
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 284,
+      "x": 325.19091735261793,
+      "y": 202.381576905756
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 292,
+      "x": 322.10630130932856,
+      "y": 196.8661979045266
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 301,
+      "x": 323.32822274936046,
+      "y": 198.58653234652164
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 309,
+      "x": 323.4595822984737,
+      "y": 194.4027502550609
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 316,
+      "x": 323.7435904632111,
+      "y": 193.7216757506968
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 324,
+      "x": 322.61303866910066,
+      "y": 191.4757584528683
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 331,
+      "x": 324.51237536789205,
+      "y": 190.22751056701458
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 339,
+      "x": 322.67009096122246,
+      "y": 186.46440161678004
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 346,
+      "x": 321.6269148735536,
+      "y": 184.53047377409936
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 355,
+      "x": 322.3393998662017,
+      "y": 181.15668018207336
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 363,
+      "x": 322.950895904529,
+      "y": 180.93721592918487
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 370,
+      "x": 321.6344389603735,
+      "y": 179.08053701116802
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 378,
+      "x": 321.1492338312474,
+      "y": 176.7210929426435
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 385,
+      "x": 323.66981332630445,
+      "y": 176.50108684424094
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 392,
+      "x": 321.2592301885147,
+      "y": 174.6966505655722
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 400,
+      "x": 322.8020983092752,
+      "y": 176.87958549734782
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 408,
+      "x": 322.765392766448,
+      "y": 176.51862577843005
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 422,
+      "x": 324.62159808336713,
+      "y": 176.3122845317236
+    },
+    {
+      "type": "mousedown",
+      "timestamp": 0,
+      "elapsed_ms": 497,
+      "x": 322.5309827665164,
+      "y": 176.0932829033196
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 504,
+      "x": 322.5198721081933,
+      "y": 174.7514867128528
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 607,
+      "x": 322.8740471843954,
+      "y": 175.4886231822267
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 619,
+      "x": 321.7946406154174,
+      "y": 175.23975897242056
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 626,
+      "x": 324.41092508460196,
+      "y": 174.1138780994495
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 632,
+      "x": 324.66169705395794,
+      "y": 169.19180290781418
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 641,
+      "x": 322.46632974662367,
+      "y": 166.24135089285244
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 648,
+      "x": 324.7064904688995,
+      "y": 164.35334976027505
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 655,
+      "x": 324.96748083998335,
+      "y": 159.70173894952276
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 662,
+      "x": 321.40401199676427,
+      "y": 158.37583195893413
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 669,
+      "x": 321.24843594764536,
+      "y": 153.55465931916768
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 677,
+      "x": 321.2134686797313,
+      "y": 146.13852615506966
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 684,
+      "x": 322.5777685929209,
+      "y": 145.51484876011278
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 691,
+      "x": 322.79909961280663,
+      "y": 140.0476040927828
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 700,
+      "x": 318.8097798127206,
+      "y": 135.95442513617616
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 709,
+      "x": 316.74373223906014,
+      "y": 134.94556960286744
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 716,
+      "x": 315.6534122628309,
+      "y": 128.08398135416414
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 722,
+      "x": 314.3275202138668,
+      "y": 123.63629541250141
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 735,
+      "x": 309.83967318449487,
+      "y": 119.14874552076995
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 742,
+      "x": 307.6984080586123,
+      "y": 117.44339069023401
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 751,
+      "x": 303.052080437502,
+      "y": 114.04840503625043
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 757,
+      "x": 301.51124921053275,
+      "y": 111.53630262322507
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 768,
+      "x": 297.48618664777507,
+      "y": 106.79624423120329
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 773,
+      "x": 297.8305956899729,
+      "y": 108.13896968433436
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 782,
+      "x": 293.47282595910536,
+      "y": 106.48304368496545
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 792,
+      "x": 292.3436229526271,
+      "y": 105.46612473109379
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 800,
+      "x": 288.06802680210706,
+      "y": 103.31073353004462
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 808,
+      "x": 286.1250313903757,
+      "y": 99.69108009622056
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 816,
+      "x": 284.40624317376233,
+      "y": 96.81555580196735
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 823,
+      "x": 281.2950086895199,
+      "y": 95.48654709535322
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 830,
+      "x": 275.3989500104396,
+      "y": 93.39416992786089
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 838,
+      "x": 273.92851511413164,
+      "y": 93.45829014656836
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 845,
+      "x": 270.8049618577458,
+      "y": 91.0486574159736
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 853,
+      "x": 270.70378203686727,
+      "y": 87.74341742559099
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 860,
+      "x": 262.9520791341979,
+      "y": 85.98565285916523
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 868,
+      "x": 262.85715132176404,
+      "y": 86.43426093649225
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 876,
+      "x": 258.63103583151275,
+      "y": 86.12488183229979
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 898,
+      "x": 253.3921211060045,
+      "y": 83.80577712159109
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 906,
+      "x": 251.9986390419613,
+      "y": 83.61869547795061
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 914,
+      "x": 249.13318821861446,
+      "y": 81.42642647426858
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 922,
+      "x": 249.90747153322516,
+      "y": 80.7274357892556
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 930,
+      "x": 246.05361295512182,
+      "y": 82.76339043771203
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 939,
+      "x": 244.7346642940849,
+      "y": 80.2957015254261
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 949,
+      "x": 240.11119868158704,
+      "y": 80.34175791544226
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 956,
+      "x": 241.4314788129972,
+      "y": 79.4573038712958
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 966,
+      "x": 239.7465998105937,
+      "y": 81.12875627119095
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 972,
+      "x": 236.26467224006103,
+      "y": 80.20805364955298
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 982,
+      "x": 235.03079220606588,
+      "y": 78.5810738916036
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 990,
+      "x": 236.71411163965914,
+      "y": 76.5517006065345
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 998,
+      "x": 232.87583709017616,
+      "y": 76.76340410559679
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1007,
+      "x": 233.98880008187137,
+      "y": 78.80973474590778
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1013,
+      "x": 230.76477867263344,
+      "y": 78.7334553049294
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1020,
+      "x": 229.43923626953307,
+      "y": 79.19799935821287
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1028,
+      "x": 229.9329780266501,
+      "y": 75.74139177959817
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1036,
+      "x": 228.36009521073265,
+      "y": 78.19263377940915
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1044,
+      "x": 227.92582431228124,
+      "y": 77.99138292329042
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1052,
+      "x": 227.73949559843396,
+      "y": 75.21720648002261
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1059,
+      "x": 224.57404235483125,
+      "y": 75.420127657232
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1073,
+      "x": 223.84851911253975,
+      "y": 75.56471104413734
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1081,
+      "x": 223.8612298975588,
+      "y": 77.04873968427364
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1101,
+      "x": 220.93691918477782,
+      "y": 77.44247846172868
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1110,
+      "x": 221.50608244559572,
+      "y": 77.28977994007498
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1116,
+      "x": 221.62075176610534,
+      "y": 77.16346693048965
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1122,
+      "x": 222.9877258239775,
+      "y": 76.73813610505943
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1129,
+      "x": 220.7723083677571,
+      "y": 75.39086283531553
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1137,
+      "x": 218.55299133708985,
+      "y": 75.67514308745234
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1146,
+      "x": 218.0235800598491,
+      "y": 76.51097238565231
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1153,
+      "x": 217.5069435181639,
+      "y": 77.37756717593993
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1161,
+      "x": 219.89542057792204,
+      "y": 78.27697434325506
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1169,
+      "x": 218.2424302416154,
+      "y": 75.80811226987032
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1177,
+      "x": 216.7909232753756,
+      "y": 78.15170666642562
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1185,
+      "x": 215.86438617003475,
+      "y": 74.8220782496488
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1192,
+      "x": 213.6461775565682,
+      "y": 74.49301346082554
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1199,
+      "x": 215.01995262900616,
+      "y": 74.71790646559819
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1207,
+      "x": 212.08648822754014,
+      "y": 76.60273982781715
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1216,
+      "x": 214.5682169693155,
+      "y": 76.37530885373788
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1223,
+      "x": 212.08986236445742,
+      "y": 75.00265914990509
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1232,
+      "x": 212.52410256981705,
+      "y": 78.1224386040025
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1239,
+      "x": 213.48984150701358,
+      "y": 75.71095715038047
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1251,
+      "x": 210.72795118950998,
+      "y": 74.74317363211438
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1274,
+      "x": 210.00945196825185,
+      "y": 76.23024835832453
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1408,
+      "x": 212.16661565810492,
+      "y": 78.40664869835514
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1420,
+      "x": 212.62124942855894,
+      "y": 75.164603434895
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1427,
+      "x": 212.9532125075269,
+      "y": 76.05581069115154
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1434,
+      "x": 211.48985791487712,
+      "y": 77.54856404497883
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1442,
+      "x": 213.05368930244512,
+      "y": 76.31259929104041
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1451,
+      "x": 211.99887317273658,
+      "y": 75.68254089237989
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1459,
+      "x": 214.41812161091536,
+      "y": 76.23911388204509
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1467,
+      "x": 214.25407894194714,
+      "y": 75.42932540267051
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1474,
+      "x": 213.96247308871358,
+      "y": 74.5954055147251
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1482,
+      "x": 215.64471287525765,
+      "y": 75.67323011010579
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1496,
+      "x": 217.8374504722627,
+      "y": 75.83352201755241
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1505,
+      "x": 214.86767372430882,
+      "y": 74.50457375704865
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1557,
+      "x": 215.89225141543363,
+      "y": 75.23580023293945
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1579,
+      "x": 214.24174460372103,
+      "y": 75.15517776305612
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1587,
+      "x": 218.60716389166825,
+      "y": 78.25382855945598
+    },
+    {
+      "type": "mouseup",
+      "timestamp": 0,
+      "elapsed_ms": 1599,
+      "x": 217.33447278001316,
+      "y": 75.83087115842551
+    },
+    {
+      "type": "click",
+      "timestamp": 0,
+      "elapsed_ms": 1600,
+      "x": 218.92388832890887,
+      "y": 77.47845105405926
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1601,
+      "x": 218.9933427562756,
+      "y": 76.44908887545816
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1742,
+      "x": 216.7478818310798,
+      "y": 84.84876052972245
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1755,
+      "x": 217.8313912916284,
+      "y": 95.46847420621238
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1762,
+      "x": 216.71951069864602,
+      "y": 107.17831245183122
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1769,
+      "x": 214.6226224453772,
+      "y": 124.46828529203748
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1777,
+      "x": 217.38918742326882,
+      "y": 136.06608778385927
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1784,
+      "x": 217.0790487707126,
+      "y": 156.4507391458153
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1789,
+      "x": 216.99712731250355,
+      "y": 176.30161895180154
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1799,
+      "x": 215.38480342302162,
+      "y": 188.8879996283245
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1807,
+      "x": 214.91307456743013,
+      "y": 220.50959093524042
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1815,
+      "x": 215.2139186870985,
+      "y": 253.64526829870246
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1822,
+      "x": 217.04184868644222,
+      "y": 283.7768348829422
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1829,
+      "x": 216.772484161768,
+      "y": 293.6379211871258
+    },
+    {
+      "type": "mousemove",
+      "timestamp": 0,
+      "elapsed_ms": 1837,
+      "x": 219.07194990641622,
+      "y": 319.0849731011106
+    }
+  ],
+  "metrics": {
+    "total_events": 165,
+    "mouse_moves": 162,
+    "clicks": 3,
+    "keystrokes": 0,
+    "scrolls": 0,
+    "avg_mouse_velocity": 855.6329312067853,
+    "max_mouse_velocity": 9803.295745597947,
+    "avg_event_interval_ms": 11.201219512195122,
+    "pauses": 0,
+    "hesitations": 0,
+    "straightness": 0.24111791014733006,
+    "direction_changes": 63,
+    "y_variance": 66.29175382183873
+  }
+}

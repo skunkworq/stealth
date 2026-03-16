@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/skunkworq/stealth/brws/adversarial"
 	"github.com/skunkworq/stealth/brws/challenge"
 	"github.com/skunkworq/stealth/brws/engine"
 	"github.com/skunkworq/stealth/brws/instrumentation"
@@ -37,6 +38,10 @@ type ChallengeContext struct {
 	Engine    engine.Engine
 	Config    *SolverConfig
 	Logger    *instrumentation.Logger
+
+	// TraceEvents are pre-generated behavioral events from trace replay.
+	// When set, solvers use these instead of generating synthetic events.
+	TraceEvents []adversarial.CaptchaEvent
 }
 
 // SolveResult holds the outcome of a challenge solve attempt.

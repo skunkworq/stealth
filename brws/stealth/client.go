@@ -43,6 +43,9 @@ type Client struct {
 	evasionFSM        *behavior.AdaptiveEvasionFSM
 	evasionFSMEnabled bool
 
+	// Captcha solving with trace replay
+	traceLibrary *adversarial.TraceLibrary
+
 	logger       *instrumentation.Logger
 	tracer       *instrumentation.Tracer
 	hooks        *instrumentation.HookRegistry
@@ -68,6 +71,9 @@ type Config struct {
 	WaterfallEngine    *wf.Waterfall
 	TieredProxies      []proxy.TieredProxy
 	EvasionFSMDisabled bool // Set true to disable the adaptive evasion FSM (enabled by default)
+
+	// Trace-based captcha solving
+	TraceDataDir string // path to trace data directory for replay-based solving
 }
 
 // StealthConfig configures stealth capabilities.
@@ -157,10 +163,14 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 
 	logger.Info("initializing stealth client", "engine", cfg.EngineName)
 
+	stealthEnabled := cfg.Stealth != nil && cfg.Stealth.Enabled
 	eng, err := engine.New(cfg.EngineName, engine.Options{
 		Headless:         cfg.Headless,
 		Proxy:            cfg.Proxy,
 		ProfileDir:       cfg.Session.ProfileDir,
+		Stealth:          stealthEnabled,
+		StealthTLS:       stealthEnabled,
+		ProfileName:      "chrome-120-macos",
 		StealthConfigRaw: cfg.Stealth,
 	})
 	if err != nil {
@@ -253,6 +263,17 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 	}
 	var evasionFSM *behavior.AdaptiveEvasionFSM
 
+	// Load trace library for replay-based captcha solving
+	var traceLib *adversarial.TraceLibrary
+	if cfg.TraceDataDir != "" {
+		traceLib = adversarial.NewTraceLibrary(cfg.TraceDataDir)
+		if err := traceLib.LoadAll(); err != nil {
+			logger.Warn("failed to load trace library", "error", err)
+		} else {
+			logger.Info("trace library loaded", "recordings", traceLib.Count())
+		}
+	}
+
 	c := &Client{
 		engine:            eng,
 		options:           &Options{Timeout: 30 * time.Second},
@@ -267,6 +288,7 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		escalation:        escalation,
 		evasionFSM:        evasionFSM,
 		evasionFSMEnabled: evasionFSMEnabled,
+		traceLibrary:      traceLib,
 		logger:            logger,
 		tracer:            tracer,
 		hooks:             hooks,
@@ -414,15 +436,43 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		}
 	}
 
-	// CHALLENGE HANDLING: delegate entirely to orchestrator
-	if c.orchestrator != nil && c.config.Challenge.AutoSolve {
+	// CAPTCHA SOLVING: detect captcha in response, attempt solve with trace replay before escalating
+	if c.evasionFSM != nil && resp != nil && c.isCaptchaResponse(resp) {
+		c.evasionFSM.RecordCaptchaDetected()
+		c.logger.Info("captcha detected in response", "url", url, "status", resp.Status)
+
+		if c.evasionFSM.ShouldAttemptCaptcha() {
+			solvedResp, solveErr := c.attemptCaptchaSolve(ctx, url, resp)
+			if solveErr == nil && solvedResp != nil {
+				c.evasionFSM.RecordCaptchaSolveResult(true)
+				resp = solvedResp
+				span.AddEvent("captcha_solved_via_fsm", nil)
+				c.logger.Info("captcha solved via FSM", "url", url)
+			} else {
+				c.evasionFSM.RecordCaptchaSolveResult(false)
+				c.logger.Warn("captcha solve failed", "url", url, "error", solveErr)
+
+				// Check if we should escalate to browser after captcha failure
+				if c.evasionFSM.ShouldEscalate() && c.waterfall != nil {
+					reason := c.evasionFSM.EscalationReason()
+					c.waterfall.PromoteTier("chromium")
+					c.logger.Info("captcha solve exhausted, escalating", "reason", reason)
+				}
+			}
+		} else {
+			c.logger.Info("captcha solve exhausted, skipping to orchestrator")
+		}
+	}
+
+	// CHALLENGE HANDLING: delegate to orchestrator for anything the FSM didn't solve
+	if c.orchestrator != nil && c.config.Challenge.AutoSolve && !c.isCleanResponse(resp) {
 		_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected)
 		solvedResp, _ := c.orchestrator.HandleResponse(ctx, url, resp, c.engine, c.options.Timeout)
 		if solvedResp != nil {
 			resp = solvedResp
 			span.AddEvent("challenge_solved", nil)
 		}
-	} else if c.config.Challenge.AutoDetect {
+	} else if c.config.Challenge.AutoDetect && !c.isCleanResponse(resp) {
 		// Fallback to generic challenge detection (no orchestrator)
 		detector := challenge.NewDetector()
 		if ch := detector.Detect(resp.Body, resp.Headers); ch != nil {
@@ -445,6 +495,74 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		FinalURL: resp.FinalURL,
 		Trace:    resp.Trace,
 	}, nil
+}
+
+// isCaptchaResponse returns true if the response contains a captcha/challenge.
+func (c *Client) isCaptchaResponse(resp *engine.Response) bool {
+	if resp == nil {
+		return false
+	}
+	// Use orchestrator's unified detector if available
+	if c.orchestrator != nil {
+		ud := challengefsm.NewUnifiedDetector()
+		if ch := ud.Detect(resp); ch != nil {
+			return true
+		}
+	}
+	// Fallback: check headers and body
+	return challengefsm.HasCaptchaHeader(resp.Headers)
+}
+
+// isCleanResponse returns true if the response doesn't contain a challenge.
+func (c *Client) isCleanResponse(resp *engine.Response) bool {
+	if resp == nil {
+		return false
+	}
+	return resp.Status >= 200 && resp.Status < 400 && !c.isCaptchaResponse(resp)
+}
+
+// attemptCaptchaSolve tries to solve a detected captcha, using trace-replayed
+// events when available, falling back to synthetic event generation.
+func (c *Client) attemptCaptchaSolve(ctx context.Context, targetURL string, resp *engine.Response) (*engine.Response, error) {
+	if c.orchestrator == nil {
+		return nil, fmt.Errorf("no challenge orchestrator configured")
+	}
+
+	// Generate trace-based events if trace library has recordings
+	var traceEvents []adversarial.CaptchaEvent
+	if c.traceLibrary != nil && c.traceLibrary.Count() > 0 {
+		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+		// Try to find a matching trace for the challenge type
+		ud := challengefsm.NewUnifiedDetector()
+		if ch := ud.Detect(resp); ch != nil {
+			challengeType := string(ch.Type)
+			events, err := c.traceLibrary.GenerateFromTrace(challengeType, "", rng.Float64)
+			if err == nil {
+				traceEvents = events
+				c.logger.Info("using trace-replayed events for captcha solve",
+					"type", challengeType, "events", len(traceEvents))
+			}
+		}
+	}
+
+	// Use orchestrator with trace events injected
+	solvedResp, err := c.orchestrator.HandleResponseWithTraceEvents(
+		ctx, targetURL, resp, c.engine, c.options.Timeout, traceEvents,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if solvedResp != nil && solvedResp != resp {
+		return solvedResp, nil
+	}
+	return nil, fmt.Errorf("captcha solve did not produce a clean response")
+}
+
+// WithTraceLibrary configures a trace data directory for replay-based captcha solving.
+func WithTraceLibrary(dataDir string) Option {
+	return func(c *Config) {
+		c.TraceDataDir = dataDir
+	}
 }
 
 // Response represents the result of a navigation.
@@ -682,10 +800,19 @@ func (c *Client) registerSolvers(registry *challengefsm.SolverRegistry) {
 		c.logger.Info("registered captcha FSM solver")
 	}
 
-	// 3. DataDome solver (new)
+	// 3. DataDome solver
 	dataDomeSolver := challengefsm.NewDataDomeFSMSolver()
 	registry.Register(dataDomeSolver)
 	c.logger.Info("registered datadome FSM solver")
+
+	// 4. Dynamic solver (catch-all, registered last for lowest priority)
+	// Uses challenge classification + trace replay for unknown challenge types.
+	if c.traceLibrary != nil && c.traceLibrary.Count() > 0 {
+		dynSolver := adversarial.NewDynamicSolver(c.traceLibrary, c.config.TraceDataDir)
+		dynamicFSM := challengefsm.NewDynamicFSMSolver(dynSolver, c.engine)
+		registry.Register(dynamicFSM)
+		c.logger.Info("registered dynamic FSM solver", "traces", c.traceLibrary.Count())
+	}
 }
 
 // Hooks returns the hook registry for custom behavior.

@@ -258,7 +258,13 @@ func (s *CaptchaFSMSolver) solveInlineCaptcha(cctx *ChallengeContext, cr *Captch
 		time.Sleep(delay)
 	}
 
-	events := s.genEvents(solveResult.SolveTimeMs, solveResult.Solution)
+	// Use trace-replayed events when available, otherwise generate synthetic ones
+	var events []adversarial.CaptchaEvent
+	if len(cctx.TraceEvents) > 0 {
+		events = cctx.TraceEvents
+	} else {
+		events = s.genEvents(solveResult.SolveTimeMs, solveResult.Solution)
+	}
 
 	verifyURL := cctx.Config.VerifyURL
 	if verifyURL == "" {

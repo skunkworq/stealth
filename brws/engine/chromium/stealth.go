@@ -211,6 +211,19 @@ func GenerateStealthScript(config *StealthConfig) string {
     Object.defineProperty(screen, 'availHeight', { get: () => %d });
     Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
     Object.defineProperty(screen, 'pixelDepth', { get: () => 24 });
+    Object.defineProperty(screen, 'availLeft', { get: () => 0 });
+    Object.defineProperty(screen, 'availTop', { get: () => 0 });
+    Object.defineProperty(screen, 'isExtended', { get: () => false });
+    Object.defineProperty(screen, 'orientation', {
+        get: () => ({
+            type: 'landscape-primary',
+            angle: 0,
+            lock: () => Promise.resolve(),
+            unlock: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+        })
+    });
     
     Object.defineProperty(window, 'innerWidth', { get: () => %d });
     Object.defineProperty(window, 'innerHeight', { get: () => %d });
@@ -264,11 +277,14 @@ func GenerateStealthScript(config *StealthConfig) string {
     });
     
     // 7. Connection Spoofing (Network Information API)
+    // Chrome quantizes RTT to multiples of 25ms and downlink to multiples of 0.05 Mbps.
+    const connRtt = (Math.floor(random() * 6) + 1) * 25; // 25-150ms in 25ms steps
+    const connDownlink = Math.round((random() * 9.5 + 0.5) * 20) / 20; // 0.5-10 Mbps, 0.05 steps
     Object.defineProperty(navigator, 'connection', {
         get: () => ({
-            downlink: 10,
-            effectiveType: '4g',
-            rtt: 50,
+            downlink: connDownlink,
+            effectiveType: connRtt <= 75 ? '4g' : '3g',
+            rtt: connRtt,
             saveData: false,
             onchange: null,
             addEventListener: () => {},
@@ -276,46 +292,27 @@ func GenerateStealthScript(config *StealthConfig) string {
         })
     });
     
-    // 8. Advanced Webdriver Flag Removal (nodriver strategy)
+    // 7b. navigator.onLine (consistent with connection API)
     try {
-        const defaultGetter = Object.getOwnPropertyDescriptor(
-            Navigator.prototype,
-            "webdriver"
-        ).get;
-        
+        Object.defineProperty(navigator, 'onLine', {
+            get: () => true,
+            configurable: true,
+        });
+    } catch(e) {}
+
+    // 8. Advanced Webdriver Flag Removal (nodriver strategy)
+    // Uses delete + redefine instead of Proxy to avoid toString detection.
+    // Getter must be named "get webdriver" to match real Chrome's descriptor.
+    try {
+        delete Navigator.prototype.webdriver;
+        // eslint-disable-next-line -- named getter must match Chrome's internal name
+        const wdGetter = { get webdriver() { return false; } };
         Object.defineProperty(Navigator.prototype, "webdriver", {
+            get: Object.getOwnPropertyDescriptor(wdGetter, 'webdriver').get,
             set: undefined,
             enumerable: true,
             configurable: true,
-            get: new Proxy(defaultGetter, {
-                apply: (target, thisArg, args) => {
-                    return false;
-                },
-            }),
         });
-        
-        // Hide the Proxy perfectly using Object.getOwnPropertyDescriptor bridging
-        const originalGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor;
-        Object.getOwnPropertyDescriptor = function(obj, prop) {
-            const descriptor = originalGetOwnPropertyDescriptor(obj, prop);
-            if (obj === Navigator.prototype && prop === "webdriver" && descriptor && descriptor.get) {
-                // Return the original raw getter instead of our proxy when inspected
-                descriptor.get = defaultGetter;
-            }
-            return descriptor;
-        };
-
-        // Perfectly disguise .toString() to look like C++ native code
-        const originalToString = Function.prototype.toString;
-        Function.prototype.toString = function(...args) {
-            if (this === Navigator.prototype.__lookupGetter__('webdriver') || this.name === "get webdriver") {
-                return 'function get webdriver() { [native code] }';
-            }
-            if (this === Object.getOwnPropertyDescriptor || this === Function.prototype.toString) {
-                return 'function ' + this.name + '() { [native code] }';
-            }
-            return originalToString.call(this, ...args);
-        };
     } catch(e) {}
     
     // 9. Video Element Spoofing
@@ -500,17 +497,16 @@ func GenerateStealthScript(config *StealthConfig) string {
         },
     });
     
-    // 13. Plugin spoofing (5 plugins matching real Chrome)
+    // 13. Plugin spoofing (2 plugins matching real Chrome 120+)
+    // Native Client was removed from Chrome 87 (2020).
+    // Modern Chrome only has PDF Viewer and PDF Plugin.
     Object.defineProperty(navigator, 'plugins', {
         get: () => {
             const plugins = [
-                { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 1, item: () => null, namedItem: () => null },
-                { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '', length: 1, item: () => null, namedItem: () => null },
-                { name: 'Native Client', filename: 'internal-nacl-plugin', description: '', length: 2, item: () => null, namedItem: () => null },
-                { name: 'Chromium PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 1, item: () => null, namedItem: () => null },
-                { name: 'Chromium PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '', length: 1, item: () => null, namedItem: () => null },
+                { name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 1, item: () => null, namedItem: () => null },
+                { name: 'Chrome PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 1, item: () => null, namedItem: () => null },
             ];
-            plugins.length = 5;
+            plugins.length = 2;
             return plugins;
         }
     });
@@ -603,6 +599,13 @@ func GenerateStealthScript(config *StealthConfig) string {
     });
 
     // 21. AudioContext Spoofing (consistent sample rate and latency)
+    // Real baseLatency = bufferSize / sampleRate. Common buffer sizes: 128, 256, 512.
+    // 128/48000 = 0.002667, 256/48000 = 0.005333, 512/48000 = 0.010667
+    const audioBufferSizes = [128, 256, 256, 512]; // weighted towards 256
+    const audioBuffer = audioBufferSizes[Math.floor(random() * audioBufferSizes.length)];
+    const audioBaseLatency = audioBuffer / 48000;
+    // outputLatency varies by OS/driver: typically 0.008-0.032
+    const audioOutputLatency = 0.008 + random() * 0.024;
     try {
         const OrigAudioContext = window.AudioContext || window.webkitAudioContext;
         if (OrigAudioContext) {
@@ -610,26 +613,64 @@ func GenerateStealthScript(config *StealthConfig) string {
             const origCreateOscillator = origProto.createOscillator;
             const origCreateDynamicsCompressor = origProto.createDynamicsCompressor;
             Object.defineProperty(origProto, 'sampleRate', { get: () => 48000 });
-            Object.defineProperty(origProto, 'baseLatency', { get: () => 0.005333 });
-            Object.defineProperty(origProto, 'outputLatency', { get: () => 0.016 });
-            // Ensure createOscillator and createDynamicsCompressor exist
+            Object.defineProperty(origProto, 'baseLatency', { get: () => audioBaseLatency });
+            Object.defineProperty(origProto, 'outputLatency', { get: () => audioOutputLatency });
+            // Ensure createOscillator and createDynamicsCompressor exist with realistic defaults
             if (!origCreateOscillator) {
-                origProto.createOscillator = function() { return { connect: () => {}, start: () => {}, frequency: { value: 440 } }; };
+                origProto.createOscillator = function() {
+                    return {
+                        connect: () => {},
+                        disconnect: () => {},
+                        start: () => {},
+                        stop: () => {},
+                        type: 'sine',
+                        frequency: { value: 440, defaultValue: 440, minValue: -3.4028235e38, maxValue: 3.4028235e38 },
+                        detune: { value: 0, defaultValue: 0, minValue: -3.4028235e38, maxValue: 3.4028235e38 },
+                        addEventListener: () => {},
+                        removeEventListener: () => {},
+                    };
+                };
             }
             if (!origCreateDynamicsCompressor) {
-                origProto.createDynamicsCompressor = function() { return { connect: () => {}, reduction: { value: 0 } }; };
+                origProto.createDynamicsCompressor = function() {
+                    return {
+                        connect: () => {},
+                        disconnect: () => {},
+                        threshold: { value: -24, defaultValue: -24 },
+                        knee: { value: 30, defaultValue: 30 },
+                        ratio: { value: 12, defaultValue: 12 },
+                        attack: { value: 0.003, defaultValue: 0.003 },
+                        release: { value: 0.25, defaultValue: 0.25 },
+                        reduction: 0,
+                        addEventListener: () => {},
+                        removeEventListener: () => {},
+                    };
+                };
+            }
+
+            // AudioWorklet (Chrome 66+, required for modern UA)
+            if (!origProto.audioWorklet) {
+                Object.defineProperty(origProto, 'audioWorklet', {
+                    get: () => ({
+                        addModule: () => Promise.resolve(),
+                    }),
+                    configurable: true,
+                });
             }
         }
     } catch(e) {}
 
     // 22. Headless Detection Mitigations
     // Realistic window dimension gaps (title bar + taskbar simulation)
+    // Real Chrome gap varies: Windows 74-112, macOS 52-88 depending on
+    // bookmarks bar, extensions shelf, zoom, display scaling.
+    const chromeGap = 74 + Math.floor(random() * 38); // 74-112
     try {
         Object.defineProperty(window, 'outerHeight', {
-            get: () => %d + 85  // screenHeight + title bar + taskbar
+            get: () => %d + chromeGap
         });
         Object.defineProperty(window, 'outerWidth', {
-            get: () => %d       // screenWidth (maximized window)
+            get: () => %d
         });
     } catch(e) {}
 
@@ -641,29 +682,41 @@ func GenerateStealthScript(config *StealthConfig) string {
     } catch(e) {}
 
     // chrome.loadTimes() — present in real Chrome, absent in headless
+    // Values must be monotonically increasing and span realistic durations.
     if (window.chrome) {
+        const nowSec = Date.now() / 1000;
+        // Build monotonic timeline: request → start → commit → paint → fpal → docEnd → load
+        const ltRequest = nowSec - 2.5 - random() * 3;
+        const ltStart = ltRequest + 0.001 + random() * 0.05;
+        const ltCommit = ltStart + 0.05 + random() * 0.4;
+        const ltFirstPaint = ltCommit + 0.01 + random() * 0.3;
+        const ltFinishDoc = ltFirstPaint + 0.1 + random() * 0.5;
+        const ltFinish = ltFinishDoc + 0.01 + random() * 0.2;
+        const ltFPAL = ltFinish + 0.05 + random() * 0.15; // non-zero!
+
         window.chrome.loadTimes = function() {
             return {
-                commitLoadTime: Date.now() / 1000 - Math.random() * 2,
+                commitLoadTime: ltCommit,
                 connectionInfo: 'h2',
-                finishDocumentLoadTime: Date.now() / 1000 - Math.random() * 0.5,
-                finishLoadTime: Date.now() / 1000 - Math.random() * 0.3,
-                firstPaintAfterLoadTime: 0,
-                firstPaintTime: Date.now() / 1000 - Math.random() * 1.5,
+                finishDocumentLoadTime: ltFinishDoc,
+                finishLoadTime: ltFinish,
+                firstPaintAfterLoadTime: ltFPAL,
+                firstPaintTime: ltFirstPaint,
                 navigationType: 'Other',
                 npnNegotiatedProtocol: 'h2',
-                requestTime: Date.now() / 1000 - Math.random() * 3,
-                startLoadTime: Date.now() / 1000 - Math.random() * 2.5,
+                requestTime: ltRequest,
+                startLoadTime: ltStart,
                 wasAlternateProtocolAvailable: false,
                 wasFetchedViaSpdy: true,
                 wasNpnNegotiated: true
             };
         };
+        const csiStartE = ltRequest * 1000;
         window.chrome.csi = function() {
             return {
-                onloadT: Date.now(),
-                pageT: Math.random() * 3000 + 500,
-                startE: Date.now() - Math.random() * 5000,
+                onloadT: ltFinish * 1000,
+                pageT: (ltFinish - ltRequest) * 1000,
+                startE: csiStartE,
                 tran: 15
             };
         };
@@ -732,7 +785,7 @@ func GenerateStealthScript(config *StealthConfig) string {
 
 	if !config.PluginsSync {
 		// Enforce penalty detectable mock if RL agent failed to mutate
-		script = strings.Replace(script, `name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'Portable Document Format'`,
+		script = strings.Replace(script, `name: 'PDF Viewer', filename: 'internal-pdf-viewer', description: 'Portable Document Format'`,
 			`name: 'Detectable Plugin', filename: 'detectable'`, 1)
 	}
 
@@ -755,19 +808,17 @@ func GenerateStealthScript(config *StealthConfig) string {
 const originalQuery = window.navigator.permissions.query;
 window.navigator.permissions.query = function(parameters) {
     if (parameters.name === 'notifications') {
-        const p = Promise.resolve({ state: 'prompt' });
-        p.isProxy = true; // explicitly detectable! wait, they asked for bypass on Sync = true.
-        return Promise.resolve({ state: 'prompt' }); 
+        return Promise.resolve({ state: 'prompt', onchange: null });
     }
     return originalQuery.call(this, parameters);
 };`
 	} else {
 		script += "\n" + `
-// 21. Detectable Permissions API Mock
+// 21. Detectable Permissions API Mock (intentionally detectable for penalty)
 const originalQuery = window.navigator.permissions.query;
 window.navigator.permissions.query = function(parameters) {
     const p = Promise.resolve({ state: 'default' });
-    p.isProxy = true; 
+    p.isProxy = true;
     return p;
 };`
 	}

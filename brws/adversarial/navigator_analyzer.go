@@ -94,6 +94,12 @@ func (na *NavigatorAnalyzer) Analyze(req *http.Request) *DetectionVector {
 	indicators = na.checkCanvasMeasureText(navData, vec, indicators)
 	indicators = na.checkMathPrecision(navData, vec, indicators)
 
+	// Browser-mode stealth detection
+	indicators = na.checkPluginAnachronism(navData, vec, indicators, reqUA)
+	indicators = na.checkLoadTimesFirstPaintAfterLoad(navData, vec, indicators)
+	indicators = na.checkGeometryGapSignature(navData, vec, indicators)
+	indicators = na.checkToStringOverride(navData, vec, indicators)
+
 	vec.Indicators = indicators
 	vec.Detected = len(indicators) > 0
 	return vec
@@ -117,6 +123,51 @@ func (na *NavigatorAnalyzer) checkWebdriver(navData map[string]interface{}, vec 
 		indicators = append(indicators, "missing_webdriver_toString")
 		vec.Score += 0.3
 	}
+
+	// Check property descriptor flags for webdriver.
+	// In real Chrome, navigator.webdriver descriptor is:
+	//   { get: [native], set: undefined, enumerable: true, configurable: true }
+	// However, the getter's .name should be "get webdriver" and its toString
+	// should return 'function get webdriver() { [native code] }'.
+	// Stealth scripts that delete+redefine produce a getter with different
+	// function body or name.
+	if desc, ok := navData["webdriver_descriptor"].(map[string]interface{}); ok {
+		// If configurable is explicitly false, it was patched then locked
+		if configurable, ok := desc["configurable"].(bool); ok && !configurable {
+			indicators = append(indicators, "webdriver_descriptor_locked")
+			vec.Score += 0.25
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        "webdriver_descriptor_locked",
+				Fired:       true,
+				Weight:      0.25,
+				Score:       0.25,
+				Field:       "webdriver descriptor.configurable",
+				Actual:      "false",
+				Expected:    "true (Chrome default)",
+				Severity:    "medium",
+				Description: "navigator.webdriver property descriptor has configurable=false, indicating post-patch lockdown.",
+			})
+		}
+		// Check getter name — real Chrome getter is named "get webdriver"
+		if getterName, ok := desc["getter_name"].(string); ok {
+			if getterName != "get webdriver" && getterName != "" {
+				indicators = append(indicators, "webdriver_getter_name_anomaly")
+				vec.Score += 0.30
+				vec.CheckReports = append(vec.CheckReports, CheckReport{
+					Name:        "webdriver_getter_name_anomaly",
+					Fired:       true,
+					Weight:      0.30,
+					Score:       0.30,
+					Field:       "webdriver getter.name",
+					Actual:      getterName,
+					Expected:    "get webdriver",
+					Severity:    "medium",
+					Description: "navigator.webdriver getter function has unexpected name, indicating stealth redefinition.",
+				})
+			}
+		}
+	}
+
 	return indicators
 }
 
@@ -1914,6 +1965,212 @@ func (na *NavigatorAnalyzer) checkMathPrecision(navData map[string]interface{}, 
 			Expected:    "precise float",
 			Severity:    "high",
 			Description: "Math trigonometric functions return suspiciously clean or zeroed values, suggesting a naive JS engine stub.",
+		})
+	}
+
+	return indicators
+}
+
+// --- Browser-Mode Stealth Detection ---
+
+// checkPluginAnachronism detects plugins that no longer exist in modern Chrome.
+// Native Client was removed from Chrome 87+ (2020). Claiming it with Chrome 120+
+// is a dead giveaway of a stealth script using outdated plugin lists.
+func (na *NavigatorAnalyzer) checkPluginAnachronism(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+	if !strings.Contains(strings.ToLower(reqUA), "chrome") {
+		return indicators
+	}
+
+	// Check for plugin names via structured data
+	if plugins, ok := navData["plugins"].([]interface{}); ok {
+		hasNativeClient := false
+		hasBothPDFVariants := false
+		chromePDF := false
+		chromiumPDF := false
+
+		for _, p := range plugins {
+			pm, ok := p.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			name, _ := pm["name"].(string)
+			switch name {
+			case "Native Client":
+				hasNativeClient = true
+			case "Chrome PDF Plugin":
+				chromePDF = true
+			case "Chromium PDF Plugin":
+				chromiumPDF = true
+			}
+		}
+
+		hasBothPDFVariants = chromePDF && chromiumPDF
+
+		if hasNativeClient {
+			indicators = append(indicators, "plugin_anachronism_native_client")
+			vec.Score += 0.45
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:     "plugin_anachronism_native_client",
+				Fired:    true,
+				Weight:   0.45,
+				Score:    0.45,
+				Field:    "navigator.plugins",
+				Actual:   "Native Client present",
+				Expected: "absent in Chrome 87+",
+				Severity: "high",
+				Description: "Native Client plugin was removed from Chrome 87 (2020). " +
+					"Its presence with a modern Chrome UA indicates a stealth injection script.",
+			})
+		}
+
+		if hasBothPDFVariants {
+			indicators = append(indicators, "plugin_dual_pdf_signature")
+			vec.Score += 0.35
+			vec.CheckReports = append(vec.CheckReports, CheckReport{
+				Name:        "plugin_dual_pdf_signature",
+				Fired:       true,
+				Weight:      0.35,
+				Score:       0.35,
+				Field:       "navigator.plugins",
+				Actual:      "both Chrome PDF Plugin and Chromium PDF Plugin",
+				Expected:    "only one PDF plugin variant",
+				Severity:    "high",
+				Description: "Real Chrome has only one PDF plugin. Having both Chrome and Chromium PDF variants is a known stealth kit signature.",
+			})
+		}
+	}
+
+	// Also check plugin_names array if sent as flat list
+	if names, ok := navData["plugin_names"].([]interface{}); ok {
+		for _, n := range names {
+			if name, ok := n.(string); ok && name == "Native Client" {
+				indicators = append(indicators, "plugin_anachronism_native_client")
+				vec.Score += 0.45
+				break
+			}
+		}
+	}
+
+	return indicators
+}
+
+// checkLoadTimesFirstPaintAfterLoad detects spoofed chrome.loadTimes() where
+// firstPaintAfterLoadTime is always 0. In real Chrome, this value is non-zero
+// when a paint occurs after the load event.
+func (na *NavigatorAnalyzer) checkLoadTimesFirstPaintAfterLoad(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	lt, ok := navData["chrome_loadTimes"].(map[string]interface{})
+	if !ok {
+		return indicators
+	}
+
+	fpal, hasFPAL := lt["firstPaintAfterLoadTime"].(float64)
+	finishT, hasFinish := lt["finishLoadTime"].(float64)
+
+	// firstPaintAfterLoadTime===0 while finishLoadTime is non-zero is suspicious.
+	// Real Chrome sets this to 0 only if no paint occurred after load (rare for HTML pages).
+	if hasFPAL && hasFinish && fpal == 0 && finishT > 0 {
+		indicators = append(indicators, "loadtimes_zero_first_paint_after_load")
+		vec.Score += 0.35
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        "loadtimes_zero_first_paint_after_load",
+			Fired:       true,
+			Weight:      0.35,
+			Score:       0.35,
+			Field:       "chrome.loadTimes().firstPaintAfterLoadTime",
+			Actual:      "0",
+			Expected:    "> 0 for pages with visible content",
+			Severity:    "medium",
+			Description: "chrome.loadTimes().firstPaintAfterLoadTime is always 0 in known stealth scripts that use Math.random() for other fields.",
+		})
+	}
+
+	// Check for loadTimes values that are too close together (all derived from Date.now())
+	requestT, _ := lt["requestTime"].(float64)
+	startT, _ := lt["startLoadTime"].(float64)
+	commitT, _ := lt["commitLoadTime"].(float64)
+	firstPaintT, _ := lt["firstPaintTime"].(float64)
+
+	if requestT > 0 && startT > 0 && commitT > 0 && firstPaintT > 0 && finishT > 0 {
+		span := finishT - requestT
+		if span > 0 {
+			commitGap := commitT - startT
+			paintGap := firstPaintT - commitT
+			if commitGap > 0 && paintGap > 0 {
+				allTight := commitGap < 0.5 && paintGap < 0.5 && span < 3.5
+				if allTight {
+					indicators = append(indicators, "loadtimes_suspiciously_tight_clustering")
+					vec.Score += 0.25
+				}
+			}
+		}
+	}
+
+	return indicators
+}
+
+// checkGeometryGapSignature detects stealth scripts that set outerHeight = innerHeight + constant.
+// Real browser chrome gaps vary by OS, extensions, bookmarks bar, zoom level, etc.
+func (na *NavigatorAnalyzer) checkGeometryGapSignature(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	var outerH, innerH float64
+	var hasOuter, hasInner bool
+
+	if window, ok := navData["window"].(map[string]interface{}); ok {
+		outerH, hasOuter = window["outerHeight"].(float64)
+		innerH, hasInner = window["innerHeight"].(float64)
+	}
+	if !hasOuter {
+		outerH, hasOuter = navData["outerHeight"].(float64)
+	}
+	if !hasInner {
+		innerH, hasInner = navData["innerHeight"].(float64)
+	}
+
+	if !hasOuter || !hasInner || outerH <= 0 || innerH <= 0 {
+		return indicators
+	}
+
+	gap := outerH - innerH
+
+	// Known stealth script gap signatures
+	knownStealthGaps := map[float64]bool{
+		85:  true,
+		165: true,
+	}
+
+	if knownStealthGaps[gap] {
+		indicators = append(indicators, fmt.Sprintf("geometry_gap_stealth_signature_%.0f", gap))
+		vec.Score += 0.30
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        "geometry_gap_stealth_signature",
+			Fired:       true,
+			Weight:      0.30,
+			Score:       0.30,
+			Field:       "outerHeight - innerHeight",
+			Actual:      fmt.Sprintf("%.0f", gap),
+			Expected:    "variable (52-112, OS/config dependent)",
+			Severity:    "medium",
+			Description: "Window geometry gap is a known stealth script signature value.",
+		})
+	}
+
+	return indicators
+}
+
+// checkToStringOverride detects patched Function.prototype.toString.
+func (na *NavigatorAnalyzer) checkToStringOverride(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+	if overridden, ok := navData["toString_overridden"].(bool); ok && overridden {
+		indicators = append(indicators, "function_tostring_override_detected")
+		vec.Score += 0.40
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        "function_tostring_override_detected",
+			Fired:       true,
+			Weight:      0.40,
+			Score:       0.40,
+			Field:       "Function.prototype.toString",
+			Actual:      "overridden",
+			Expected:    "native",
+			Severity:    "high",
+			Description: "Function.prototype.toString has been overridden — a hallmark of stealth injection scripts.",
 		})
 	}
 

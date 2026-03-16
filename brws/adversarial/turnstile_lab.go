@@ -9,10 +9,12 @@ import (
 const defaultTurnstileTokenTTL = 5 * time.Minute
 
 const (
-	turnstileInteractionCheckbox  = "checkbox"
-	turnstileInteractionHold      = "hold"
-	turnstileInteractionDrag      = "drag"
-	turnstileInteractionPrecision = "drag_precision"
+	turnstileInteractionCheckbox    = "checkbox"
+	turnstileInteractionHold        = "hold"
+	turnstileInteractionDrag        = "drag"
+	turnstileInteractionPrecision   = "drag_precision"
+	turnstileInteractionRotate      = "rotate"
+	turnstileInteractionSlidePuzzle = "slide_puzzle"
 )
 
 // TurnstileRetryPolicy models the widget retry behavior exposed to the client.
@@ -41,6 +43,20 @@ type TurnstileInteractionConfig struct {
 	RequiredSettleMs         int    `json:"required_settle_ms,omitempty"`
 	RequiredDirectionChanges int    `json:"required_direction_changes,omitempty"`
 	TargetZoneWidthPx        int    `json:"target_zone_width_px,omitempty"`
+
+	// Rotate challenge: user must rotate a dial to a target angle
+	TargetAngleDeg       int `json:"target_angle_deg,omitempty"`       // 0-359 degrees
+	AngleToleranceDeg    int `json:"angle_tolerance_deg,omitempty"`    // ±degrees (default 15)
+	DialRadiusPx         int `json:"dial_radius_px,omitempty"`         // radius of the rotation dial
+	MinRotationEvents    int `json:"min_rotation_events,omitempty"`    // minimum mousemove events during rotation
+	RequiredOvershootDeg int `json:"required_overshoot_deg,omitempty"` // must overshoot then correct
+
+	// Slide puzzle: user must slide a piece to a target X position
+	TargetSlideXPx       int `json:"target_slide_x_px,omitempty"`       // target X offset in pixels
+	SlideTolerancePx     int `json:"slide_tolerance_px,omitempty"`      // ±pixels (default 8)
+	SlideTrackWidthPx    int `json:"slide_track_width_px,omitempty"`    // total track width
+	MinSlideEvents       int `json:"min_slide_events,omitempty"`        // minimum drag events
+	RequiredSlideYJitter int `json:"required_slide_y_jitter,omitempty"` // min Y-axis variance during slide (humans wobble)
 }
 
 // TurnstileInteractionProof captures the interaction performed against the widget.
@@ -58,6 +74,20 @@ type TurnstileInteractionProof struct {
 	SettleDurationMs  int    `json:"settle_duration_ms,omitempty"`
 	DirectionChanges  int    `json:"direction_changes,omitempty"`
 	FinalDragOffsetPx int    `json:"final_drag_offset_px,omitempty"`
+
+	// Rotate proof
+	FinalAngleDeg      int     `json:"final_angle_deg,omitempty"`
+	RotationEventCount int     `json:"rotation_event_count,omitempty"`
+	OvershootDeg       int     `json:"overshoot_deg,omitempty"`
+	RotationDurationMs int     `json:"rotation_duration_ms,omitempty"`
+	AngularVelocityAvg float64 `json:"angular_velocity_avg,omitempty"` // degrees/sec
+
+	// Slide puzzle proof
+	FinalSlideXPx    int     `json:"final_slide_x_px,omitempty"`
+	SlideEventCount  int     `json:"slide_event_count,omitempty"`
+	SlideYVariancePx float64 `json:"slide_y_variance_px,omitempty"` // Y-axis wobble (humans > 2px)
+	SlideDurationMs  int     `json:"slide_duration_ms,omitempty"`
+	SlideOvershootPx int     `json:"slide_overshoot_px,omitempty"`
 }
 
 // TurnstileHeuristicSignal captures one heuristic bot-detection indicator.
@@ -192,6 +222,10 @@ func defaultTurnstileWidgetConfig(sessionID string) TurnstileWidgetConfig {
 func turnstileWidgetConfigForRisk(sessionID string, detectionScore float64) TurnstileWidgetConfig {
 	cfg := defaultTurnstileWidgetConfig(sessionID)
 	switch {
+	case detectionScore >= 0.95:
+		// Maximum risk: visual puzzle (rotate or slide)
+		cfg.RiskLevel = "extreme"
+		cfg.Interaction = turnstileRotateConfig(270) // default target 270°
 	case detectionScore >= 0.90:
 		cfg.RiskLevel = "critical"
 		cfg.Interaction = TurnstileInteractionConfig{
@@ -228,6 +262,30 @@ func turnstileWidgetConfigForRisk(sessionID string, detectionScore float64) Turn
 		}
 	}
 	return cfg
+}
+
+// turnstileRotateConfig returns a rotate challenge configuration.
+func turnstileRotateConfig(targetDeg int) TurnstileInteractionConfig {
+	return TurnstileInteractionConfig{
+		Type:                 turnstileInteractionRotate,
+		TargetAngleDeg:       targetDeg,
+		AngleToleranceDeg:    15,
+		DialRadiusPx:         80,
+		MinRotationEvents:    10,
+		RequiredOvershootDeg: 8, // must overshoot target then correct back
+	}
+}
+
+// turnstileSlidePuzzleConfig returns a slide puzzle challenge configuration.
+func turnstileSlidePuzzleConfig(targetXPx int) TurnstileInteractionConfig {
+	return TurnstileInteractionConfig{
+		Type:                 turnstileInteractionSlidePuzzle,
+		TargetSlideXPx:       targetXPx,
+		SlideTolerancePx:     8,
+		SlideTrackWidthPx:    300,
+		MinSlideEvents:       12,
+		RequiredSlideYJitter: 3, // humans wobble ≥3px on Y axis during horizontal drag
+	}
 }
 
 func sanitizeTurnstileData(value string, maxLen int) string {

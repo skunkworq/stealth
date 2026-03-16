@@ -292,7 +292,8 @@ func TestTurnstileInitEscalatesInteractionByRisk(t *testing.T) {
 		{name: "low", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.20}`, wantRisk: "low", wantVariant: turnstileInteractionCheckbox},
 		{name: "medium", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.55}`, wantRisk: "medium", wantVariant: turnstileInteractionHold},
 		{name: "high", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.85}`, wantRisk: "high", wantVariant: turnstileInteractionDrag},
-		{name: "critical", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.95}`, wantRisk: "critical", wantVariant: turnstileInteractionPrecision},
+		{name: "critical", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.92}`, wantRisk: "critical", wantVariant: turnstileInteractionPrecision},
+		{name: "extreme", body: `{"challenge_type":"cloudflare_turnstile","detection_score":0.96}`, wantRisk: "extreme", wantVariant: turnstileInteractionRotate},
 	}
 
 	for _, tc := range testCases {
@@ -400,7 +401,7 @@ func TestTurnstileWidgetPageRendersRiskVariants(t *testing.T) {
 		{
 			name:            "critical precision drag",
 			sessionID:       "widget-critical",
-			detectionScore:  "0.95",
+			detectionScore:  "0.92",
 			wantRisk:        "critical",
 			wantInteraction: turnstileInteractionPrecision,
 			wantLabel:       `aria-label="Local Turnstile harness precision drag handle"`,
@@ -568,7 +569,7 @@ func TestTurnstileDragVariantRequiresDragProof(t *testing.T) {
 func TestTurnstilePrecisionVariantRequiresOvershootAndSettle(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 
-	session := cc.CreateTurnstileChallengeWithRisk("widget-precision", "1x00000000000000000000AA", 0.95)
+	session := cc.CreateTurnstileChallengeWithRisk("widget-precision", "1x00000000000000000000AA", 0.92)
 	cc.PresentTurnstileWidget(session.ID, "localhost")
 	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")
@@ -590,7 +591,7 @@ func TestTurnstilePrecisionVariantRequiresOvershootAndSettle(t *testing.T) {
 		t.Fatal("expected straight drag proof to be rejected for precision variant")
 	}
 
-	session = cc.CreateTurnstileChallengeWithRisk("widget-precision-pass", "1x00000000000000000000AA", 0.95)
+	session = cc.CreateTurnstileChallengeWithRisk("widget-precision-pass", "1x00000000000000000000AA", 0.92)
 	cc.PresentTurnstileWidget(session.ID, "localhost")
 	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")
@@ -619,7 +620,7 @@ func TestTurnstilePrecisionVariantRequiresOvershootAndSettle(t *testing.T) {
 func TestTurnstilePrecisionVariantRequiresApproachHover(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 
-	session := cc.CreateTurnstileChallengeWithRisk("widget-precision-approach", "1x00000000000000000000AA", 0.95)
+	session := cc.CreateTurnstileChallengeWithRisk("widget-precision-approach", "1x00000000000000000000AA", 0.92)
 	cc.PresentTurnstileWidget(session.ID, "localhost")
 	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")
@@ -772,7 +773,7 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 		},
 		{
 			Name:               "precision-human-like",
-			DetectionScore:     0.95,
+			DetectionScore:     0.92,
 			ExpectPass:         true,
 			PresentWidget:      true,
 			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
@@ -838,7 +839,7 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 		},
 		{
 			Name:               "precision-no-settle",
-			DetectionScore:     0.95,
+			DetectionScore:     0.92,
 			ExpectPass:         false,
 			PresentWidget:      true,
 			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
@@ -858,7 +859,7 @@ func TestEvaluateTurnstileDefense(t *testing.T) {
 		},
 		{
 			Name:               "precision-no-approach",
-			DetectionScore:     0.95,
+			DetectionScore:     0.92,
 			ExpectPass:         false,
 			PresentWidget:      true,
 			LifecycleCallbacks: []string{"before-interactive", "after-interactive"},
@@ -1076,7 +1077,7 @@ func TestTurnstileHeuristicReportFlagsImpossibleSubmissionGap(t *testing.T) {
 func TestTurnstileSolvedStatusIncludesHeuristicReport(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 
-	session := cc.CreateTurnstileChallengeWithRisk("status-heuristic", "1x00000000000000000000AA", 0.95)
+	session := cc.CreateTurnstileChallengeWithRisk("status-heuristic", "1x00000000000000000000AA", 0.92)
 	cc.PresentTurnstileWidget(session.ID, "localhost")
 	cc.RecordTurnstileClientSnapshot(session.ID, humanLikeTurnstileSnapshot())
 	cc.RecordTurnstileCallback(session.ID, "before-interactive")

@@ -349,7 +349,7 @@ func TestSwordSolvesTurnstileVariants(t *testing.T) {
 	}{
 		{name: "hold", score: 0.55, wantVariant: "hold"},
 		{name: "drag", score: 0.85, wantVariant: "drag"},
-		{name: "precision", score: 0.95, wantVariant: "drag_precision"},
+		{name: "precision", score: 0.92, wantVariant: "drag_precision"},
 	}
 
 	for _, tc := range testCases {

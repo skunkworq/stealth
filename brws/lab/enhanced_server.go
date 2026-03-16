@@ -56,6 +56,9 @@ type EnhancedServer struct {
 
 	// The Singleton WAF Shield memory
 	stealthServer *adversarial.AdvancedStealthServer
+
+	// Trace recording lab
+	traceLab *adversarial.TraceLabServer
 }
 
 // ServerConfig for the enhanced lab server
@@ -101,12 +104,19 @@ func NewEnhancedServer(config *ServerConfig, logger *slog.Logger) *EnhancedServe
 	capture.CaptureRawBytes = config.CaptureRawBytes
 	capture.CaptureTiming = config.CaptureTiming
 
+	// Determine trace data directory
+	traceDataDir := config.CaptureDir
+	if traceDataDir == "" {
+		traceDataDir = "training-data"
+	}
+
 	srv := &EnhancedServer{
 		capture:       capture,
 		config:        config,
 		logger:        logger,
 		wsClients:     make(map[*websocket.Conn]bool),
 		stealthServer: adversarial.NewAdvancedStealthServer(),
+		traceLab:      adversarial.NewTraceLabServer(traceDataDir),
 	}
 
 	// Wire v3 assessment callback for WebSocket broadcast
@@ -333,6 +343,9 @@ func (s *EnhancedServer) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/training/samples", s.handleTrainingSamples)
 	mux.HandleFunc("/api/training/export", s.handleTrainingExport)
 	mux.HandleFunc("/api/training/stats", s.handleTrainingStats)
+
+	// Trace recording lab
+	s.traceLab.MountRoutes(mux)
 
 	// Shield evaluation API endpoints
 	mux.HandleFunc("/api/shield/evaluate", s.handleShieldEvaluate)
