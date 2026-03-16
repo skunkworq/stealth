@@ -1,8 +1,10 @@
 package behavior
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -10,6 +12,11 @@ import (
 
 	"github.com/skunkworq/stealth/brws/constants"
 )
+
+// nopCloser wraps a byte slice as an io.ReadCloser for request bodies.
+func nopCloser(data []byte) io.ReadCloser {
+	return io.NopCloser(bytes.NewReader(data))
+}
 
 // EvasionStrategy defines a fingerprint evasion technique. Strategies are
 // ordered by priority — the adaptive FSM tries highest priority first and
@@ -764,6 +771,229 @@ func applySingleHeaderFetch(req *http.Request, targetURL, keepHeader, mode, site
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// F-series: POST-based strategies exploiting POST detection gaps
+// ─────────────────────────────────────────────────────────────────────────────
+// The shield's POST gates have narrow coverage windows:
+//   - No-CORS POST: only checks runtimeHeaderCount>=5 and ==0 (gap: 1-4)
+//   - Cross-site POST cherry-pick: requires jsFingerprintCount==0 (gap: jsFP>0)
+//   - Same-site POST cherry-pick: requires jsFingerprintCount==0 (gap: jsFP>0)
+//   - None-context POST: only checks >=4 and ==0 (gap: 1-3)
+// All F-series also use compound JSON body keys to evade bodyContainsRuntimePayload
+// exact-match check (e.g. "timing_metrics" ≠ "timing").
+
+// craftEvasionBody returns a ~600 byte JSON analytics payload using compound
+// keys that evade the detector's bodyContainsRuntimePayload exact-key check.
+func craftEvasionBody() string {
+	return `{"event_type":"page_metrics","session_id":"a1b2c3d4e5f6","ts":1710000000,"metrics":{"timing_metrics":{"page_load_ms":1234,"dom_ready_ms":890,"fcp_ms":456,"ttfb_ms":123},"nav_entropy":5.23,"interaction_events":[{"type":"click","ts":1710000001,"x":412,"y":308},{"type":"scroll","ts":1710000002,"delta":120}],"perf_data":{"cls":0.05,"lcp_ms":2100,"fid_ms":12,"inp_ms":45}},"client_hints":{"platform":"Win32","mobile":false,"arch":"x86"},"page_url":"https://example.com/dashboard","sdk_ver":"4.2.1"}`
+}
+
+// applyPostFetch is the shared helper for F-series POST strategies.
+// Shapes the request as a browser POST with selected runtime headers and
+// a body payload using compound JSON keys to evade exact-match body checks.
+func applyPostFetch(req *http.Request, targetURL string, keepHeaders map[string]bool, mode, site, contentType string, includeOrigin bool) {
+	// ── Phase 1: Keep ONLY selected runtime headers ──
+	for _, h := range allRuntimeHeaders {
+		if !keepHeaders[h] {
+			req.Header.Del(h)
+		}
+	}
+	fixBehavioralDataForFirefox(req)
+
+	// ── Phase 2: Firefox identity (no Sec-Ch-Ua) ──
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
+	for _, h := range []string{
+		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
+	} {
+		req.Header.Del(h)
+	}
+
+	// ── Phase 3: POST shape with body ──
+	body := craftEvasionBody()
+	req.Method = http.MethodPost
+	req.Body = nopCloser([]byte(body))
+	req.ContentLength = int64(len(body))
+	req.Header.Set("Content-Type", contentType)
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
+
+	// ── Phase 4: Origin + Referer ──
+	if parsed, err := url.Parse(targetURL); err == nil {
+		if site == "cross-site" {
+			req.Header.Set("Referer", "https://app.example.com/dashboard")
+		} else if site == "same-site" {
+			req.Header.Set("Referer", parsed.Scheme+"://www."+parsed.Hostname()+"/")
+		} else if site == "same-origin" {
+			req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/")
+		}
+		// No Referer for site=none (bookmarklet/extension context)
+	}
+
+	if includeOrigin {
+		if site == "cross-site" {
+			req.Header.Set("Origin", "https://app.example.com")
+		} else if parsed, err := url.Parse(targetURL); err == nil {
+			req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
+		}
+	} else {
+		req.Header.Del("Origin")
+	}
+
+	// ── Phase 5: Sec-Fetch ──
+	req.Header.Set("Sec-Fetch-Dest", "empty")
+	req.Header.Set("Sec-Fetch-Mode", mode)
+	req.Header.Set("Sec-Fetch-Site", site)
+	req.Header.Del("Sec-Fetch-User")
+	req.Header.Del("Upgrade-Insecure-Requests")
+
+	// ── Phase 6: Clean header order ──
+	removed := map[string]bool{
+		"Upgrade-Insecure-Requests": true,
+		"Sec-Fetch-User":            true,
+		"Priority":                  true,
+	}
+	if !includeOrigin {
+		removed["Origin"] = true
+	}
+	for _, h := range []string{
+		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
+	} {
+		removed[h] = true
+	}
+	for _, h := range allRuntimeHeaders {
+		if !keepHeaders[h] {
+			removed[h] = true
+		}
+	}
+	rebuildHeaderOrderClean(req, removed)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy F1: PostNoCORSTwoHeaderStrategy (fidelity = 0.15)
+// ─────────────────────────────────────────────────────────────────────────────
+// POST with no-cors mode and 2 post-load headers (Timing + Audio).
+// No-CORS POST gates only check runtimeHeaderCount>=5 and ==0.
+// runtimeHeaderCount=2 falls in the 1-4 gap → score 0.00.
+// Uses text/plain (CORS-safelisted) to be browser-realistic for no-cors.
+type PostNoCORSTwoHeaderStrategy struct{}
+
+func (s *PostNoCORSTwoHeaderStrategy) Name() string      { return "post_nocors_two_header" }
+func (s *PostNoCORSTwoHeaderStrategy) Fidelity() float64 { return 0.15 }
+
+func (s *PostNoCORSTwoHeaderStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	applyPostFetch(req, targetURL, map[string]bool{
+		constants.HeaderTimingData: true,
+		constants.HeaderAudioData:  true,
+	}, "no-cors", "same-site", "text/plain;charset=UTF-8", false)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy F2: PostCrossSiteThreeHeaderStrategy (fidelity = 0.20)
+// ─────────────────────────────────────────────────────────────────────────────
+// POST with cross-site and 3 post-load headers (Behavioral + Timing + Audio).
+// runtimeHeaderCount=3 > 2 → skips the cherry-pick gate (runtimeHeaderCount <= 2).
+// runtimeHeaderCount=3 < requiredRuntimeHeaders(4 for cors mode) → skips general gate.
+// jsFP=0 → no isomorphic cross-validation, no missing-data penalties.
+type PostCrossSiteThreeHeaderStrategy struct{}
+
+func (s *PostCrossSiteThreeHeaderStrategy) Name() string      { return "post_cross_site_three_header" }
+func (s *PostCrossSiteThreeHeaderStrategy) Fidelity() float64 { return 0.20 }
+
+func (s *PostCrossSiteThreeHeaderStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	applyPostFetch(req, targetURL, map[string]bool{
+		constants.HeaderBehavioralData: true,
+		constants.HeaderTimingData:     true,
+		constants.HeaderAudioData:      true,
+	}, "cors", "cross-site", "application/json", true)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy F3: PostSameSiteThreeHeaderStrategy (fidelity = 0.20)
+// ─────────────────────────────────────────────────────────────────────────────
+// POST with same-site and 3 post-load headers (Behavioral + Timing + Audio).
+// runtimeHeaderCount=3 > 2 → skips cherry-pick gate.
+// mode=cors → requiredRuntimeHeaders stays at 4, so 3 < 4 skips general gate.
+type PostSameSiteThreeHeaderStrategy struct{}
+
+func (s *PostSameSiteThreeHeaderStrategy) Name() string      { return "post_same_site_three_header" }
+func (s *PostSameSiteThreeHeaderStrategy) Fidelity() float64 { return 0.20 }
+
+func (s *PostSameSiteThreeHeaderStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	applyPostFetch(req, targetURL, map[string]bool{
+		constants.HeaderBehavioralData: true,
+		constants.HeaderTimingData:     true,
+		constants.HeaderAudioData:      true,
+	}, "cors", "same-site", "application/json", true)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy F4: PostNoneContextTwoHeaderStrategy (fidelity = 0.15)
+// ─────────────────────────────────────────────────────────────────────────────
+// POST with site=none and 2 post-load headers (Behavioral + Audio).
+// None-context POST gates only check runtimeHeaderCount>=4 and ==0.
+// runtimeHeaderCount=2 falls in the 1-3 gap → score 0.00.
+type PostNoneContextTwoHeaderStrategy struct{}
+
+func (s *PostNoneContextTwoHeaderStrategy) Name() string      { return "post_none_context_two_header" }
+func (s *PostNoneContextTwoHeaderStrategy) Fidelity() float64 { return 0.15 }
+
+func (s *PostNoneContextTwoHeaderStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	applyPostFetch(req, targetURL, map[string]bool{
+		constants.HeaderBehavioralData: true,
+		constants.HeaderAudioData:      true,
+	}, "cors", "none", "application/json", true)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-series: Same-origin POST with truncated post-load headers
+// ─────────────────────────────────────────────────────────────────────────────
+// The same-origin telemetry block (sub-check 7) only has POST gates for:
+//   - postLoadHeaderBytes >= 1536 (catches large header payloads)
+//   - postLoadHeaderCount >= 3 && postLoadHeaderBytes >= 2048 (bulk payload)
+// There are NO runtimeHeaderCount-based POST gates in the same-origin block.
+// By truncating header values to keep total postLoadHeaderBytes < 1536, and
+// using jsFP=0 (no missing-data penalties), we bypass all same-origin gates.
+// The catchall at line 2890 requires runtimeHeaderCount==0 → skipped with 3.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Strategy G1: PostSameOriginSmallStrategy (fidelity = 0.20)
+// ─────────────────────────────────────────────────────────────────────────────
+// POST with same-origin and 3 truncated post-load headers (Behavioral + Timing + Audio).
+// Total postLoadHeaderBytes kept under 1536 by truncating each to ~400 bytes.
+type PostSameOriginSmallStrategy struct{}
+
+func (s *PostSameOriginSmallStrategy) Name() string      { return "post_same_origin_small" }
+func (s *PostSameOriginSmallStrategy) Fidelity() float64 { return 0.20 }
+
+func (s *PostSameOriginSmallStrategy) Apply(req *http.Request, _ *RequestGenerator, targetURL string) {
+	applySmallPostFetch(req, targetURL, map[string]bool{
+		constants.HeaderBehavioralData: true,
+		constants.HeaderTimingData:     true,
+		constants.HeaderAudioData:      true,
+	}, "cors", "same-origin", "application/json", true)
+}
+
+// applySmallPostFetch is like applyPostFetch but truncates kept header values
+// to ensure total postLoadHeaderBytes stays under 1536. This evades the
+// same-origin block's byte-based detection gates.
+func applySmallPostFetch(req *http.Request, targetURL string, keepHeaders map[string]bool, mode, site, contentType string, includeOrigin bool) {
+	// First apply normal POST fetch shaping
+	applyPostFetch(req, targetURL, keepHeaders, mode, site, contentType, includeOrigin)
+
+	// Then truncate kept runtime headers to ~400 bytes each (total < 1536)
+	const maxHeaderBytes = 400
+	for h := range keepHeaders {
+		val := req.Header.Get(h)
+		if len(val) > maxHeaderBytes {
+			req.Header.Set(h, val[:maxHeaderBytes])
+		}
+	}
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Strategy C1: ChromeSameOriginFetchStrategy (fidelity = 0.50) [LEGACY - now caught]
 // ─────────────────────────────────────────────────────────────────────────────
 type ChromeSameOriginFetchStrategy struct{}
@@ -1209,9 +1439,17 @@ func StrategiesForURL(targetURL string) []EvasionStrategy {
 
 	switch urlType {
 	case URLTypeTelemetry:
-		// E-series: 1 post-load header only → postLoadHeaderCount=1 < 2,
-		// bypasses cherry-pick gate AND runtime bundle gate.
+		// F-series: POST-based strategies exploiting POST detection gaps.
+		// Prioritized first — these target confirmed gaps in POST gate coverage.
 		return []EvasionStrategy{
+			// G-series: Same-origin POST with truncated headers (bypasses byte-based gates)
+			&PostSameOriginSmallStrategy{},
+			// F-series: POST-based strategies (now caught by mid-range/cherry-pick gates)
+			&PostNoCORSTwoHeaderStrategy{},
+			&PostCrossSiteThreeHeaderStrategy{},
+			&PostSameSiteThreeHeaderStrategy{},
+			&PostNoneContextTwoHeaderStrategy{},
+			// E-series: 1 post-load GET header (now caught by postload cherry-pick)
 			&SingleHeaderSameOriginStrategy{},
 			&SingleHeaderCrossSiteStrategy{},
 			&SingleHeaderNoCORSStrategy{},
@@ -1223,8 +1461,7 @@ func StrategiesForURL(targetURL string) []EvasionStrategy {
 			&ChromeSameOriginFetchStrategy{},
 			&ChromeCrossSiteFetchStrategy{},
 			&ChromeNoCORSBeaconStrategy{},
-			// Exotic dest strategies — bypass dest=empty/document gates but may
-			// be caught by the exotic dest + telemetry URL gate
+			// Exotic dest strategies
 			&IframeNavigationStrategy{},
 			&ScriptFetchStrategy{},
 			&ImagePixelStrategy{},
@@ -1246,10 +1483,15 @@ func StrategiesForURL(targetURL string) []EvasionStrategy {
 			&SelectiveStripStrategy{},
 		}
 	default:
-		// Normal page URLs — document navigation first, E/D/C-series + exotic as fallback
+		// Normal page URLs — document navigation first, F/E/D/C-series + exotic as fallback
 		return []EvasionStrategy{
 			&SendBeaconStrategy{},
 			&RealBrowserStrategy{},
+			&PostSameOriginSmallStrategy{},
+			&PostNoCORSTwoHeaderStrategy{},
+			&PostCrossSiteThreeHeaderStrategy{},
+			&PostSameSiteThreeHeaderStrategy{},
+			&PostNoneContextTwoHeaderStrategy{},
 			&SingleHeaderSameOriginStrategy{},
 			&SingleHeaderCrossSiteStrategy{},
 			&SingleHeaderNoCORSStrategy{},

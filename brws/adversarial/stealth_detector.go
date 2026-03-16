@@ -1836,6 +1836,25 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		// appears to come from a bookmarklet, extension, or ServiceWorker. Combined
 		// with zero runtime headers and a browser UA, this is the shape of synthetic
 		// beacon generation that strips provenance to evade gate-specific checks.
+		if req.Method == http.MethodPost && runtimeHeaderCount >= 1 && runtimeHeaderCount <= 3 {
+			// Mid-range none-context POST: 1-3 runtime headers with site=none.
+			// A POST from no referrer context (bookmarklet, extension, SW) with a
+			// partial set of runtime headers is the shape of adaptive evasion —
+			// the F-series strategies send 2-3 post-load headers with site=none to
+			// slip between the >=4 and ==0 gates. Real browser extensions that POST
+			// telemetry either send the full runtime set or none at all.
+			ua := strings.ToLower(req.Header.Get("User-Agent"))
+			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+			hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
+
+			if isBrowserUA && !hasSecChUa {
+				vec.Score += 0.62
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"none_context_post_mid_range_headers: %d runtime/%d post_load headers on none-context POST",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
+		}
+
 		if req.Method == http.MethodPost && runtimeHeaderCount == 0 {
 			ua := strings.ToLower(req.Header.Get("User-Agent"))
 			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
@@ -1844,7 +1863,6 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 				vec.Score += 0.38
 				vec.Indicators = append(vec.Indicators, "none_context_zero_header_synthetic_beacon")
 
-				// No Origin on a POST is unusual — real browser fetch() always sends Origin on POST.
 				if req.Header.Get("Origin") == "" {
 					vec.Score += 0.15
 					vec.Indicators = append(vec.Indicators, "none_context_post_missing_origin")
@@ -2000,7 +2018,7 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 		// For 1-2 headers: check if ONLY post-load headers (Behavioral, Timing)
 		// are present without any JS fingerprint headers (Navigator, WebGL, etc.).
 		// Real SDKs that collect behavioral/timing data also collect navigator.
-		if req.Method == http.MethodPost && runtimeHeaderCount <= 2 {
+		if req.Method == http.MethodPost && runtimeHeaderCount <= 3 {
 			ua := strings.ToLower(req.Header.Get("User-Agent"))
 			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
 			jsFingerprintCount := countPresentHeaders(req, []string{
@@ -2041,12 +2059,13 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 						vec.Score += 0.12
 						vec.Indicators = append(vec.Indicators, "same_site_zero_header_missing_referer")
 					}
-				} else if runtimeHeaderCount > 0 && runtimeHeaderCount <= 2 && jsFingerprintCount == 0 {
+				} else if runtimeHeaderCount > 0 && runtimeHeaderCount <= 3 && jsFingerprintCount == 0 {
 					// Cherry-picked post-load headers without JS fingerprints.
-					// Behavioral + Timing without Navigator = selective header
-					// evasion to dodge both zero-header and >= 3-header gates.
-					// Score 0.50 needed to survive adaptive scorer dilution
-					// (single-vector at 0.35 → final ≈ 0.28, below threshold).
+					// 1-3 post-load headers (Behavioral, Timing, Audio) without any
+					// JS fingerprint headers (Navigator, WebGL, etc.) is selective
+					// header evasion. Widened from <=2 to <=3 to catch F-series
+					// 3-header POST strategies that exploit the gap between the
+					// <=2 cherry-pick and >=4 general gates.
 					vec.Score += 0.50
 					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
 						"same_site_cherry_picked_postload_headers: %d runtime_headers but 0 js_fingerprint_headers",
@@ -2284,18 +2303,24 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 					vec.Indicators = append(vec.Indicators, "nocors_body_missing_runtime_payload")
 				}
 			}
+		} else if req.Method == http.MethodPost && runtimeHeaderCount >= 1 && runtimeHeaderCount <= 4 {
+			// Mid-range no-cors POST: 1-4 runtime headers on a no-cors POST.
+			// No-cors mode restricts custom headers — browsers cannot add X-* headers
+			// on no-cors requests. The presence of 1-4 runtime headers on a no-cors POST
+			// is structurally impossible in a real browser, making this a strong signal
+			// of programmatic request generation that forgot to switch to cors mode.
+			ua := strings.ToLower(req.Header.Get("User-Agent"))
+			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+			hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
+
+			if isBrowserUA && !hasSecChUa {
+				vec.Score += 0.68
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"nocors_post_mid_range_runtime_headers: %d runtime/%d post_load headers on no-cors POST",
+					runtimeHeaderCount, postLoadHeaderCount))
+			}
 		} else if req.Method == http.MethodPost && runtimeHeaderCount == 0 {
 			// Zero-header no-cors POST: synthetic sendBeacon pattern.
-			// A no-cors POST with browser UA but zero runtime headers is structurally
-			// suspicious — it claims to be an analytics beacon but carries none of the
-			// runtime fingerprint data that would justify a server-side POST. Real
-			// sendBeacon fire-and-forget beacons exist, but they are indistinguishable
-			// from synthetic generation at the HTTP level, and the combination of:
-			//   - browser UA with zero runtime headers
-			//   - same-site provenance claim
-			//   - CORS-safelisted content type
-			//   - small body without runtime keywords
-			// is the exact shape of programmatic beacon mimicry.
 			ua := strings.ToLower(req.Header.Get("User-Agent"))
 			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
 			hasAccept := req.Header.Get("Accept") != ""
@@ -2629,6 +2654,26 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 				postLoadHeaderCount, jsFingerprintCount))
 		}
 
+		// Same-origin POST cherry-pick: post-load headers without JS fingerprints.
+		// Mirrors the same-site/cross-site cherry-pick gates. A same-origin POST
+		// with 1-3 post-load headers (Behavioral, Timing, Audio) but zero JS
+		// fingerprint headers (Navigator, WebGL, etc.) is the shape of adaptive
+		// evasion that truncates headers to stay under the byte-based gates.
+		// Real analytics POSTs from browser JS either send the full runtime set
+		// or send the data in the body, not in selective headers.
+		if req.Method == http.MethodPost && postLoadHeaderCount >= 1 && postLoadHeaderCount <= 4 && jsFingerprintCount == 0 && (telemetryTarget || apiLikeHost) {
+			ua := strings.ToLower(req.Header.Get("User-Agent"))
+			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+			hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
+
+			if isBrowserUA && !hasSecChUa {
+				vec.Score += 0.58
+				vec.Indicators = append(vec.Indicators, fmt.Sprintf(
+					"same_origin_post_cherry_picked_postload: %d post_load/%d jsFP headers on telemetry POST",
+					postLoadHeaderCount, jsFingerprintCount))
+			}
+		}
+
 		if req.Method == http.MethodPost && postLoadHeaderBytes >= 1536 {
 			vec.Score += 0.36
 			vec.Indicators = append(vec.Indicators, fmt.Sprintf(
@@ -2764,7 +2809,7 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 			constants.HeaderCanvasFingerprint,
 		})
 
-		if runtimeHeaderCount <= 2 {
+		if runtimeHeaderCount <= 4 {
 			ua := strings.ToLower(req.Header.Get("User-Agent"))
 			isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
 			jsFingerprintCount := countPresentHeaders(req, []string{
@@ -2795,6 +2840,8 @@ func (sd *StealthDetector) analyzeCrossVectorConsistency(req *http.Request) *Det
 					}
 				} else if runtimeHeaderCount > 0 && jsFingerprintCount == 0 {
 					// Cherry-picked post-load headers on cross-site POST.
+					// Widened from <=2 to <=4 to catch F-series 3-header POST
+					// strategies that slip between the old <=2 and >=4 gates.
 					vec.Score += 0.50
 					vec.Indicators = append(vec.Indicators, fmt.Sprintf(
 						"cross_site_cherry_picked_postload_headers: %d runtime_headers but 0 js_fingerprint_headers",

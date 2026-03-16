@@ -612,12 +612,8 @@ func TestSingleHeaderStrategiesBlockedOnTelemetryURLs(t *testing.T) {
 }
 
 // TestURLAwareFSMExhaustsOnTelemetryURL verifies the URL-aware FSM exhausts
-// on telemetry URLs — every strategy family (C/D/E-series header-carrying,
-// exotic dest, and zero-header document navigation) is caught by the shield.
-// Document navigation to telemetry endpoints is inherently suspicious
-// (no real user navigates to /api/telemetry as a page).
-// This means HTTP-level evasion has converged: telemetry targets REQUIRE
-// browser-mode escalation (Chromium engine with real JS/DOM execution).
+// on telemetry URLs — all strategy families (G/F-series POST, E/D/C-series GET,
+// exotic dest, and document navigation) are caught by the shield.
 func TestURLAwareFSMExhaustsOnTelemetryURL(t *testing.T) {
 	shield := adversarial.NewStealthDetector()
 	profile := behavior.ChromeWindowsProfile()
@@ -650,10 +646,112 @@ func TestURLAwareFSMExhaustsOnTelemetryURL(t *testing.T) {
 	if fsm.Converged() {
 		t.Error("URL-aware FSM should not converge — requires browser-mode escalation")
 	}
-
-	// Verify the FSM recommends escalation to browser mode
 	if !fsm.ShouldEscalate() {
 		t.Error("FSM should recommend escalation after exhausting all strategies")
+	}
+}
+
+// TestGSeriesBlockedOnTelemetryURLs verifies the G-series same-origin POST
+// is now caught by the same-origin post cherry-pick gate.
+func TestGSeriesBlockedOnTelemetryURLs(t *testing.T) {
+	shield := adversarial.NewStealthDetector()
+	profile := behavior.ChromeWindowsProfile()
+
+	s := &behavior.PostSameOriginSmallStrategy{}
+	detections := 0
+	var totalScore float64
+	trials := 20
+
+	for i := 0; i < trials; i++ {
+		config := behavior.MaxEvasionConfig(profile)
+		config.EvasionStrategy = s
+		gen := behavior.NewRequestGenerator(config)
+		req := gen.GenerateRequest("https://api.example.com/telemetry")
+		result := shield.AnalyzeRequest(req, nil)
+
+		totalScore += result.Score
+		if result.IsBot {
+			detections++
+		}
+
+		if i == 0 {
+			t.Logf("  vectors: %d, total_score=%.3f", len(result.Vectors), result.Score)
+			for _, v := range result.Vectors {
+				t.Logf("    %s: score=%.3f weight=%.2f detected=%v indicators=%v",
+					v.Name, v.Score, v.Weight, v.Detected, v.Indicators)
+			}
+		}
+	}
+
+	avgScore := totalScore / float64(trials)
+	detRate := float64(detections) / float64(trials)
+
+	t.Logf("%-30s detection=%.0f%% avg_score=%.3f", s.Name(), detRate*100, avgScore)
+
+	if detRate < 0.95 {
+		t.Errorf("G-series strategy %q detected %.0f%% (want >= 95%%)", s.Name(), detRate*100)
+	}
+	if avgScore < 0.40 {
+		t.Errorf("G-series strategy %q avg_score=%.3f (want >= 0.40)", s.Name(), avgScore)
+	}
+}
+
+// TestPostFSeriesBlockedOnTelemetryURLs verifies that F-series POST strategies
+// are now caught by the hardened shield POST gates:
+//   - No-CORS POST: mid-range gate catches 1-4 headers
+//   - Cross-site POST: cherry-pick widened to <=4
+//   - Same-site POST: cherry-pick widened to <=3
+//   - None-context POST: mid-range gate catches 1-3 headers
+func TestPostFSeriesBlockedOnTelemetryURLs(t *testing.T) {
+	shield := adversarial.NewStealthDetector()
+	profile := behavior.ChromeWindowsProfile()
+
+	strategies := []behavior.EvasionStrategy{
+		&behavior.PostNoCORSTwoHeaderStrategy{},
+		&behavior.PostCrossSiteThreeHeaderStrategy{},
+		&behavior.PostSameSiteThreeHeaderStrategy{},
+		&behavior.PostNoneContextTwoHeaderStrategy{},
+	}
+
+	for _, s := range strategies {
+		t.Run(s.Name(), func(t *testing.T) {
+			detections := 0
+			var totalScore float64
+			trials := 20
+
+			for i := 0; i < trials; i++ {
+				config := behavior.MaxEvasionConfig(profile)
+				config.EvasionStrategy = s
+				gen := behavior.NewRequestGenerator(config)
+				req := gen.GenerateRequest("https://api.example.com/telemetry")
+				result := shield.AnalyzeRequest(req, nil)
+
+				totalScore += result.Score
+				if result.IsBot {
+					detections++
+				}
+
+				if i == 0 {
+					t.Logf("  vectors: %d, total_score=%.3f", len(result.Vectors), result.Score)
+					for _, v := range result.Vectors {
+						t.Logf("    %s: score=%.3f weight=%.2f detected=%v indicators=%v",
+							v.Name, v.Score, v.Weight, v.Detected, v.Indicators)
+					}
+				}
+			}
+
+			avgScore := totalScore / float64(trials)
+			detRate := float64(detections) / float64(trials)
+
+			t.Logf("%-30s detection=%.0f%% avg_score=%.3f", s.Name(), detRate*100, avgScore)
+
+			if detRate < 0.95 {
+				t.Errorf("F-series strategy %q detected %.0f%% (want >= 95%%)", s.Name(), detRate*100)
+			}
+			if avgScore < 0.40 {
+				t.Errorf("F-series strategy %q avg_score=%.3f (want >= 0.40)", s.Name(), avgScore)
+			}
+		})
 	}
 }
 
@@ -676,9 +774,7 @@ func TestURLClassification(t *testing.T) {
 	}
 
 	telemetryStrategies := map[string]bool{
-		"single_header_same_origin": true,
-		"single_header_cross_site":  true,
-		"single_header_nocors":      true,
+		"post_same_origin_small": true,
 	}
 
 	for _, tt := range tests {
