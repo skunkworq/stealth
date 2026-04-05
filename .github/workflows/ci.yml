@@ -44,6 +44,10 @@ jobs:
         run: cd lab-ui && npm ci
       - name: Build lab-ui static assets
         run: make lab-ui
+      - name: Build Rust libraries (stealth_sniffer, tlsfprint)
+        run: |
+          cd brws/sniffer/rust && cargo build --release
+          cd ../../tlsfprint/rust && cargo build --release
 
       # Install golangci-lint from source so it is built against the same
       # go toolchain as the module under test. The published binaries from
@@ -83,6 +87,10 @@ jobs:
         run: cd lab-ui && npm ci
       - name: Build lab-ui static assets
         run: make lab-ui
+      - name: Build Rust libraries (stealth_sniffer, tlsfprint)
+        run: |
+          cd brws/sniffer/rust && cargo build --release
+          cd ../../tlsfprint/rust && cargo build --release
 
       - name: Build all packages
         run: go build ./...
@@ -124,6 +132,10 @@ jobs:
         run: cd lab-ui && npm ci
       - name: Build lab-ui static assets
         run: make lab-ui
+      - name: Build Rust libraries (stealth_sniffer, tlsfprint)
+        run: |
+          cd brws/sniffer/rust && cargo build --release
+          cd ../../tlsfprint/rust && cargo build --release
 
       - name: Run tests
         run: go test -count=1 -timeout 180s ./...
@@ -154,6 +166,10 @@ jobs:
         run: cd lab-ui && npm ci
       - name: Build lab-ui static assets
         run: make lab-ui
+      - name: Build Rust libraries (stealth_sniffer, tlsfprint)
+        run: |
+          cd brws/sniffer/rust && cargo build --release
+          cd ../../tlsfprint/rust && cargo build --release
 
       - name: Generate coverage
         run: go test -coverprofile=coverage.out -covermode=atomic -timeout 180s ./...
