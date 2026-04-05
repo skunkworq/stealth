@@ -38,7 +38,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          # cache: "npm" disabled on self-hosted (1.7GB cache download blows job timeout)
           cache-dependency-path: lab-ui/package-lock.json
 
       - name: Install lab-ui dependencies
@@ -81,7 +81,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          # cache: "npm" disabled on self-hosted (1.7GB cache download blows job timeout)
           cache-dependency-path: lab-ui/package-lock.json
 
       - name: Install lab-ui dependencies
@@ -126,7 +126,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          # cache: "npm" disabled on self-hosted (1.7GB cache download blows job timeout)
           cache-dependency-path: lab-ui/package-lock.json
 
       - name: Install lab-ui dependencies
@@ -160,7 +160,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: "npm"
+          # cache: "npm" disabled on self-hosted (1.7GB cache download blows job timeout)
           cache-dependency-path: lab-ui/package-lock.json
 
       - name: Install lab-ui dependencies
