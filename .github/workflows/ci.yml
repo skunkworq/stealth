@@ -12,6 +12,15 @@ concurrency:
 
 env:
   GO_VERSION: "1.26"
+  NODE_VERSION: "20"
+
+# Shared preconditions for every Go job:
+#   1. The `brws/lab/static/` tree is generated from `lab-ui/` (Next.js) and
+#      is gitignored. Every job that compiles code importing brws/lab must
+#      run `make lab-ui` first, otherwise the `//go:embed static/*` directive
+#      in brws/lab/enhanced_server.go fails with "pattern static/*: no
+#      matching files found".
+#   2. Node.js 20 is required to run `next build`.
 
 jobs:
   lint:
@@ -25,11 +34,28 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
-      - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+      - uses: actions/setup-node@v4
         with:
-          version: latest
-          args: --timeout=5m
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: lab-ui/package-lock.json
+
+      - name: Build lab-ui static assets
+        run: make lab-ui
+
+      # Install golangci-lint from source so it is built against the same
+      # go toolchain as the module under test. The published binaries from
+      # golangci/golangci-lint-action@v6 lag behind newer Go releases and
+      # fail with "Go language version (goX) used to build golangci-lint
+      # is lower than the targeted Go version" when the module's go.mod
+      # advances ahead of the action's release cadence.
+      - name: Install golangci-lint from source
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: golangci-lint
+        run: golangci-lint run --timeout=5m ./...
 
       - name: go vet
         run: go vet ./...
@@ -44,6 +70,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: lab-ui/package-lock.json
+
+      - name: Build lab-ui static assets
+        run: make lab-ui
 
       - name: Build all packages
         run: go build ./...
@@ -75,6 +110,15 @@ jobs:
           go-version: ${{ env.GO_VERSION }}
           cache: true
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: lab-ui/package-lock.json
+
+      - name: Build lab-ui static assets
+        run: make lab-ui
+
       - name: Run tests
         run: go test -count=1 -timeout 180s ./...
 
@@ -93,6 +137,15 @@ jobs:
         with:
           go-version: ${{ env.GO_VERSION }}
           cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: lab-ui/package-lock.json
+
+      - name: Build lab-ui static assets
+        run: make lab-ui
 
       - name: Generate coverage
         run: go test -coverprofile=coverage.out -covermode=atomic -timeout 180s ./...
