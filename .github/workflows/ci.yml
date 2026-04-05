@@ -40,6 +40,8 @@ jobs:
           cache: "npm"
           cache-dependency-path: lab-ui/package-lock.json
 
+      - name: Install lab-ui dependencies
+        run: cd lab-ui && npm ci
       - name: Build lab-ui static assets
         run: make lab-ui
 
@@ -77,6 +79,8 @@ jobs:
           cache: "npm"
           cache-dependency-path: lab-ui/package-lock.json
 
+      - name: Install lab-ui dependencies
+        run: cd lab-ui && npm ci
       - name: Build lab-ui static assets
         run: make lab-ui
 
@@ -116,6 +120,8 @@ jobs:
           cache: "npm"
           cache-dependency-path: lab-ui/package-lock.json
 
+      - name: Install lab-ui dependencies
+        run: cd lab-ui && npm ci
       - name: Build lab-ui static assets
         run: make lab-ui
 
@@ -144,6 +150,8 @@ jobs:
           cache: "npm"
           cache-dependency-path: lab-ui/package-lock.json
 
+      - name: Install lab-ui dependencies
+        run: cd lab-ui && npm ci
       - name: Build lab-ui static assets
         run: make lab-ui
 
