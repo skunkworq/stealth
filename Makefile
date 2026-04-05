@@ -35,8 +35,12 @@ all: build
 lab-ui: ## Build the React UI and embed into Go static dir
 	@echo "Building lab-ui..."
 	@cd lab-ui && npm run build --silent
+	@# brws/lab/static/ is gitignored (build artifact). Make sure the dir
+	@# exists on a fresh clone (CI) so `cp -r` below doesn't fail with
+	@# "brws/lab/static: Not a directory".
+	@mkdir -p brws/lab/static
 	@rm -rf brws/lab/static/_next brws/lab/static/_not-found
-	@cp -r lab-ui/out/* brws/lab/static/
+	@cp -r lab-ui/out/. brws/lab/static/
 	@rm -rf brws/lab/static/_not-found brws/lab/static/_not-found.html brws/lab/static/__next.*
 	@echo "✓ UI built and copied to brws/lab/static/"
 
