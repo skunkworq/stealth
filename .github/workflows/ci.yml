@@ -47,6 +47,10 @@ jobs:
         run: make lab-ui
       - name: Build Rust libraries (stealth_sniffer, tlsfprint)
         run: |
+          # Use absolute path so the step works even when the runner PATH
+          # doesn't have cargo (self-hosted runners that haven't been
+          # recycled since cargo was added to .path).
+          export PATH="$HOME/.cargo/bin:$PATH"
           cd brws/sniffer/rust && cargo build --release
           cd ../../tlsfprint/rust && cargo build --release
 
@@ -90,6 +94,10 @@ jobs:
         run: make lab-ui
       - name: Build Rust libraries (stealth_sniffer, tlsfprint)
         run: |
+          # Use absolute path so the step works even when the runner PATH
+          # doesn't have cargo (self-hosted runners that haven't been
+          # recycled since cargo was added to .path).
+          export PATH="$HOME/.cargo/bin:$PATH"
           cd brws/sniffer/rust && cargo build --release
           cd ../../tlsfprint/rust && cargo build --release
 
@@ -135,6 +143,10 @@ jobs:
         run: make lab-ui
       - name: Build Rust libraries (stealth_sniffer, tlsfprint)
         run: |
+          # Use absolute path so the step works even when the runner PATH
+          # doesn't have cargo (self-hosted runners that haven't been
+          # recycled since cargo was added to .path).
+          export PATH="$HOME/.cargo/bin:$PATH"
           cd brws/sniffer/rust && cargo build --release
           cd ../../tlsfprint/rust && cargo build --release
 
@@ -169,6 +181,10 @@ jobs:
         run: make lab-ui
       - name: Build Rust libraries (stealth_sniffer, tlsfprint)
         run: |
+          # Use absolute path so the step works even when the runner PATH
+          # doesn't have cargo (self-hosted runners that haven't been
+          # recycled since cargo was added to .path).
+          export PATH="$HOME/.cargo/bin:$PATH"
           cd brws/sniffer/rust && cargo build --release
           cd ../../tlsfprint/rust && cargo build --release
 
