@@ -16,7 +16,7 @@ env:
 jobs:
   lint:
     name: Lint
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: [self-hosted, cuttlefish]
     steps:
       - uses: actions/checkout@v4
 
@@ -36,7 +36,7 @@ jobs:
 
   build:
     name: Build
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+    runs-on: [self-hosted, cuttlefish]
     steps:
       - uses: actions/checkout@v4
 
@@ -66,7 +66,7 @@ jobs:
 
   test:
     name: Test
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: [self-hosted, cuttlefish]
     steps:
       - uses: actions/checkout@v4
 
@@ -83,7 +83,7 @@ jobs:
 
   test-coverage:
     name: Coverage
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: [self-hosted, cuttlefish]
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
