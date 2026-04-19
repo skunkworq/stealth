@@ -457,6 +457,18 @@ This is the living reference of all detection vectors implemented in the adversa
 
 ---
 
+### Phase 36: Accept Header vs Sec-Fetch-Dest Consistency
+| Property | Details |
+|---|---|
+| **Context** | Navigation vs XHR have different Accept headers. A real browser sends `text/html,...` for document navigation, but generic headers like `*/*` or `application/json` for API data fetches. |
+| **Sword check** | `accept_dest_mismatch_missing_html`, `accept_dest_mismatch_static_document` |
+| **Detection logic** | Flags requests explicitly claiming `Sec-Fetch-Dest` target type but possessing incongruent HTTP `Accept` profiles (typically due to naive static request templates across all HTTP sessions). |
+| **Shield fix** | Updates `RequestGeneratorConfig` to dynamically bind `*/*` if target is API (e.g. `empty` or `cors`). |
+| **Mutation** | `mutateFixAcceptDest` → toggles `EvadeAcceptDestConsistency` config. |
+| **Fired checks** | `accept_dest_mismatch_missing_html`, `accept_dest_mismatch_static_document` |
+
+---
+
 ### Future Vectors to Explore
 
 When identifying new detection gaps, consider these not-yet-implemented vectors:
@@ -466,7 +478,6 @@ When identifying new detection gaps, consider these not-yet-implemented vectors:
 | **TLS** | JA4 hash allowlist | Maintain allowlist of known Chrome JA4 hashes; flag unknown hashes |
 | **TLS** | Post-quantum extensions | Chrome 124+ sends X25519Kyber768 — absence on modern Chrome UA is suspicious |
 | **HTTP** | Header ordering | Real Chrome sends headers in specific order; Go's `net/http` alphabetizes them |
-| **HTTP** | `Accept` header variations | Navigation vs XHR have different Accept headers; static Accept across all requests is suspicious |
 | **Canvas** | IDAT entropy threshold | Noise-injected canvas has higher entropy than real GPU-rendered canvas |
 | **Canvas** | Deterministic hash | Same canvas hash across sessions indicates no GPU variation |
 | **WebGL** | Extension count ranges | Chrome on Win typically has 30-40 WebGL extensions; < 20 is suspicious |

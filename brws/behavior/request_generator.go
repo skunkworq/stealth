@@ -89,6 +89,7 @@ type RequestGeneratorConfig struct {
 	EvadeMathPrecision         bool             // Phase 95: ensure floating point / math precision consistency
 	EvadeUADataDeep            bool             // Phase 96: ensure navigator.userAgentData high-entropy correlation
 	EvadeRequestProvenance     bool             // Phase 97: model request as same-origin telemetry submission, not initial navigation
+	EvadeAcceptDestConsistency bool             // Phase 98: ensure Accept vs Sec-Fetch-Dest consistency
 	EvasionStrategy            EvasionStrategy  // Adaptive strategy (overrides EvadeRequestProvenance if set)
 	ForceDetections            bool             // Overrides random chance to always trigger checks (for tests)
 }
@@ -160,6 +161,7 @@ func MaxEvasionConfig(profile *BrowserProfile) *RequestGeneratorConfig {
 		EvadeMathPrecision:         true,
 		EvadeUADataDeep:            true,
 		EvadeRequestProvenance:     true,
+		EvadeAcceptDestConsistency: true,
 		EvasionStrategy:            &SendBeaconStrategy{},
 	}
 }
@@ -559,7 +561,13 @@ func (rg *RequestGenerator) GenerateOrderedHeaders() []headerPair {
 	}
 	add("Upgrade-Insecure-Requests", "1")
 	add("User-Agent", rg.profile.UserAgent)
-	add("Accept", rg.profile.Accept)
+	accept := rg.profile.Accept
+	if rg.config != nil && rg.config.EvadeAcceptDestConsistency {
+		if rg.profile.SecFetchDest == "empty" || rg.profile.SecFetchDest == "cors" {
+			accept = "*/*"
+		}
+	}
+	add("Accept", accept)
 	if rg.profile.Browser == "chrome" {
 		add("Priority", "u=0, i")
 	}
@@ -644,7 +652,13 @@ func (rg *RequestGenerator) GenerateHeaders() http.Header {
 // setHTTPHeaders sets standard browser headers and Client Hints from the profile.
 func (rg *RequestGenerator) setHTTPHeaders(h http.Header) {
 	h.Set("User-Agent", rg.profile.UserAgent)
-	h.Set("Accept", rg.profile.Accept)
+	accept := rg.profile.Accept
+	if rg.config != nil && rg.config.EvadeAcceptDestConsistency {
+		if rg.profile.SecFetchDest == "empty" || rg.profile.SecFetchDest == "cors" {
+			accept = "*/*"
+		}
+	}
+	h.Set("Accept", accept)
 	h.Set("Accept-Language", rg.profile.AcceptLanguage)
 	h.Set("Accept-Encoding", rg.profile.AcceptEncoding)
 	h.Set("Connection", "keep-alive")

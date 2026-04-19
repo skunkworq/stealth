@@ -77,6 +77,7 @@ func (ia *IsomorphicAnalyzer) Analyze(req *http.Request, httpInfo *HTTPFingerpri
 	}
 
 	indicators = ia.checkHeaderOrder(httpInfo, vec, indicators)
+	indicators = ia.checkAcceptDestConsistency(httpInfo, vec, indicators)
 	indicators = ia.checkConnectionTimingCoherence(req, vec, indicators)
 
 	if behavData != nil {
@@ -970,6 +971,54 @@ func (ia *IsomorphicAnalyzer) checkConnectionTimingCoherence(req *http.Request, 
 				}
 			}
 		}
+	}
+
+	return indicators
+}
+
+func (ia *IsomorphicAnalyzer) checkAcceptDestConsistency(httpInfo *HTTPFingerprintInfo, vec *DetectionVector, indicators []string) []string {
+	if httpInfo.Accept == "" || httpInfo.SecFetchDest == "" {
+		return indicators
+	}
+
+	isDocument := httpInfo.SecFetchDest == "document"
+	isXHR := httpInfo.SecFetchDest == "empty" || httpInfo.SecFetchDest == "cors"
+
+	acceptLower := strings.ToLower(httpInfo.Accept)
+	hasHTML := strings.HasPrefix(acceptLower, "text/html")
+
+	if isDocument && !hasHTML {
+		name := "accept_dest_mismatch_missing_html"
+		indicators = append(indicators, name)
+		vec.Score += 0.40
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        name,
+			Fired:       true,
+			Weight:      0.40,
+			Score:       0.40,
+			Field:       "Accept vs Sec-Fetch-Dest",
+			Actual:      fmt.Sprintf("Dest: %s, Accept: %s", httpInfo.SecFetchDest, httpInfo.Accept),
+			Expected:    "text/html,... for document destinations",
+			Severity:    "high",
+			Description: "Top-level document navigations must request HTML formats explicitly.",
+		})
+	}
+
+	if isXHR && hasHTML {
+		name := "accept_dest_mismatch_static_document"
+		indicators = append(indicators, name)
+		vec.Score += 0.35
+		vec.CheckReports = append(vec.CheckReports, CheckReport{
+			Name:        name,
+			Fired:       true,
+			Weight:      0.35,
+			Score:       0.35,
+			Field:       "Accept vs Sec-Fetch-Dest",
+			Actual:      fmt.Sprintf("Dest: %s, Accept: %s", httpInfo.SecFetchDest, httpInfo.Accept),
+			Expected:    "*/* or application/json for XHR data fetches",
+			Severity:    "high",
+			Description: "API fetches should not use the browser's rich HTML Accept header.",
+		})
 	}
 
 	return indicators

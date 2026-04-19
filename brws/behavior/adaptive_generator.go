@@ -461,6 +461,10 @@ func (ag *AdaptiveRequestGenerator) registerMutations() {
 	ag.mutations["inconsistent_userAgentData_arch"] = mutateFixUADataDeep
 	ag.mutations["inconsistent_userAgentData_bitness"] = mutateFixUADataDeep
 	ag.mutations["inconsistent_userAgentData_fullVersionList"] = mutateFixUADataDeep
+
+	// Phase 98: Accept vs Sec-Fetch-Dest
+	ag.mutations["accept_dest_mismatch_missing_html"] = mutateFixAcceptDest
+	ag.mutations["accept_dest_mismatch_static_document"] = mutateFixAcceptDest
 }
 
 // rebuild reconstructs the base generator from the current config.
@@ -1285,6 +1289,11 @@ func mutateFixMathPrecision(ag *AdaptiveRequestGenerator) {
 
 func mutateFixUADataDeep(ag *AdaptiveRequestGenerator) {
 	ag.config.EvadeUADataDeep = true
+	ag.rebuild()
+}
+
+func mutateFixAcceptDest(ag *AdaptiveRequestGenerator) {
+	ag.config.EvadeAcceptDestConsistency = true
 	ag.rebuild()
 }
 
