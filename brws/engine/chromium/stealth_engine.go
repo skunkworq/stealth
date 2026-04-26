@@ -328,6 +328,11 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	viewportWidth := int64(s.stealthOpts.ViewportWidth)
 	viewportHeight := int64(s.stealthOpts.ViewportHeight)
 
+	// StealthPlus: grant all browser permissions to remove prompts
+	if s.config.StealthPlus {
+		_ = s.GrantAllPermissions(tabCtx)
+	}
+
 	// Build actions
 	actions := []chromedp.Action{
 		network.Enable(),
@@ -418,7 +423,19 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	// Execute script if requested
 	var scriptResult interface{}
 	if req.ScriptToExecute != "" {
-		actions = append(actions, chromedp.Evaluate(req.ScriptToExecute, &scriptResult))
+		if s.config.StealthPlus {
+			// StealthPlus: use user-gesture evaluation to unlock gated APIs
+			actions = append(actions, chromedp.ActionFunc(func(c context.Context) error {
+				res, err := s.EvaluateWithGesture(c, req.ScriptToExecute)
+				if err != nil {
+					return err
+				}
+				scriptResult = res
+				return nil
+			}))
+		} else {
+			actions = append(actions, chromedp.Evaluate(req.ScriptToExecute, &scriptResult))
+		}
 	}
 
 	// Get page content
@@ -526,6 +543,10 @@ func (s *StealthEngine) Mouse(x, y float64) error {
 	js := sim.MoveTo(x, y)
 
 	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	if s.config.StealthPlus {
+		_, err := s.EvaluateWithGesture(tabCtx, js)
+		return err
+	}
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 
@@ -535,6 +556,10 @@ func (s *StealthEngine) Click(x, y float64) error {
 	js := sim.ClickAt(x, y)
 
 	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	if s.config.StealthPlus {
+		_, err := s.EvaluateWithGesture(tabCtx, js)
+		return err
+	}
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 
@@ -544,6 +569,10 @@ func (s *StealthEngine) Type(text string) error {
 	js := sim.Type(text)
 
 	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	if s.config.StealthPlus {
+		_, err := s.EvaluateWithGesture(tabCtx, js)
+		return err
+	}
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 
@@ -553,6 +582,10 @@ func (s *StealthEngine) Scroll(pixels float64) error {
 	js := sim.ScrollDown(pixels)
 
 	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	if s.config.StealthPlus {
+		_, err := s.EvaluateWithGesture(tabCtx, js)
+		return err
+	}
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 
@@ -562,6 +595,10 @@ func (s *StealthEngine) ScrollTo(y float64) error {
 	js := sim.ScrollTo(y)
 
 	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	if s.config.StealthPlus {
+		_, err := s.EvaluateWithGesture(tabCtx, js)
+		return err
+	}
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 

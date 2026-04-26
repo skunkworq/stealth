@@ -98,6 +98,12 @@ type StealthConfig struct {
 	VideoSync       bool
 	PermissionsSync bool
 	TimezoneSync    bool
+
+	// StealthPlus enables advanced anti-detection features inspired by nodriver:
+	// shadow-DOM expert mode, user-gesture evaluation, permission grants,
+	// and raw CDP escape hatch.  Does NOT include tab management or
+	// visual/template-based CAPTCHA solving.
+	StealthPlus bool
 }
 
 // BehaviorConfig configures human behavior simulation.

@@ -69,6 +69,11 @@ type StealthConfig struct {
 
 	// Spoof local LAN IPs in HTTP headers
 	SpoofLocalIPs bool
+
+	// StealthPlus enables advanced nodriver-inspired anti-detection features:
+	// shadow-DOM expert mode, user-gesture evaluation, permission grants,
+	// and raw CDP escape hatch.
+	StealthPlus bool
 }
 
 // DefaultStealthConfig returns a default stealth configuration
@@ -832,6 +837,30 @@ window.navigator.permissions.query = function(parameters) {
 	// --- Phase 23: WebRTC Leak Prevention ---
 	if config.WebRTC != nil {
 		script += "\n" + GenerateWebRTCScript(config.WebRTC)
+	}
+
+	// --- StealthPlus: Shadow DOM Expert Mode ---
+	// Forces all shadow roots into "open" mode so automation can query
+	// inside them.  WARNING: this is detectable via attachShadow.toString()
+	// checks; only enable when StealthPlus is active.
+	if config.StealthPlus {
+		script += "\n" + `
+	// StealthPlus: Shadow DOM Expert Mode
+	(function() {
+		const _origAttachShadow = Element.prototype.attachShadow;
+		Element.prototype.attachShadow = function(init) {
+			if (init && typeof init === 'object') {
+				init = Object.assign({}, init, { mode: 'open' });
+			}
+			return _origAttachShadow.call(this, init);
+		};
+		// Preserve toString appearance where possible
+		try {
+			Element.prototype.attachShadow.toString = function() {
+				return 'function attachShadow() { [native code] }';
+			};
+		} catch(e) {}
+	})();`
 	}
 
 	return script
