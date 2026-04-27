@@ -15,6 +15,7 @@ import (
 	"github.com/skunkworq/stealth/brws/behavior"
 	"github.com/skunkworq/stealth/brws/challenge"
 	"github.com/skunkworq/stealth/brws/engine"
+	"github.com/skunkworq/stealth/brws/engine/chromium"
 	"github.com/skunkworq/stealth/brws/engine/proxy"
 	wf "github.com/skunkworq/stealth/brws/engine/waterfall"
 	"github.com/skunkworq/stealth/brws/instrumentation"
@@ -501,6 +502,75 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		FinalURL: resp.FinalURL,
 		Trace:    resp.Trace,
 	}, nil
+}
+
+// NavigateWithReferrer performs a navigation with an explicit referrer.
+// When the underlying engine is a Chromium StealthEngine with StealthPlus
+// enabled, this sets both the HTTP Referer header and document.referrer.
+func (c *Client) NavigateWithReferrer(ctx context.Context, url string, referrer string) (*Response, error) {
+	c.logger.Info("navigating with referrer", "url", url, "referrer", referrer)
+
+	activeEngine := c.activeEngine()
+	resp, err := activeEngine.Do(ctx, &engine.Request{
+		URL:      url,
+		Referrer: referrer,
+		Timeout:  c.options.Timeout,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &Response{
+		Status:   resp.Status,
+		Headers:  resp.Headers,
+		Body:     resp.Body,
+		FinalURL: resp.FinalURL,
+		Trace:    resp.Trace,
+	}, nil
+}
+
+// NavigateWithSearchProfile navigates to url using a pre-built search engine
+// referrer profile.  Supported profiles: "google", "bing", "duckduckgo", "random".
+// When the engine is a Chromium StealthEngine and StealthPlus is enabled, the
+// full profile (referrer + sessionStorage seeding) is applied via CDP.
+func (c *Client) NavigateWithSearchProfile(ctx context.Context, url string, profile string) (*Response, error) {
+	c.logger.Info("navigating with search profile", "url", url, "profile", profile)
+
+	// Extract domain for profile construction
+	domain := url
+	if idx := strings.Index(domain, "://"); idx != -1 {
+		domain = domain[idx+3:]
+	}
+	if idx := strings.Index(domain, "/"); idx != -1 {
+		domain = domain[:idx]
+	}
+
+	var navProfile chromium.NavigationProfile
+	switch strings.ToLower(profile) {
+	case "google":
+		navProfile = chromium.GoogleSearchProfile(domain)
+	case "bing":
+		navProfile = chromium.BingSearchProfile(domain)
+	case "duckduckgo", "ddg":
+		navProfile = chromium.DuckDuckGoSearchProfile(domain)
+	case "random":
+		navProfile = chromium.RandomSearchProfile(domain)
+	default:
+		return nil, fmt.Errorf("unknown search profile: %s (use google, bing, duckduckgo, random)", profile)
+	}
+
+	// If the engine supports full profile navigation (StealthPlus Chromium),
+	// apply the complete profile (referrer + sessionStorage seeding).
+	if stealthEng, ok := c.engine.(*chromium.StealthEngine); ok {
+		if err := stealthEng.NavigateWithProfile(ctx, url, navProfile); err != nil {
+			return nil, fmt.Errorf("profile navigation failed: %w", err)
+		}
+		// After profile navigation, fetch the page content to return a Response
+		return c.Navigate(ctx, url)
+	}
+
+	// Fallback: just use the referrer via the generic engine interface
+	return c.NavigateWithReferrer(ctx, url, navProfile.Referrer)
 }
 
 // isCaptchaResponse returns true if the response contains a captcha/challenge.

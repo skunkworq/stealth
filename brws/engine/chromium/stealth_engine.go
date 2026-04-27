@@ -409,8 +409,17 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		}
 	})
 
-	// Navigate
-	actions = append(actions, chromedp.Navigate(req.URL))
+	// Navigate — with referrer when StealthPlus is enabled
+	if s.config.StealthPlus && req.Referrer != "" {
+		actions = append(actions, chromedp.ActionFunc(func(c context.Context) error {
+			_, _, err := page.Navigate(req.URL).
+				WithReferrer(req.Referrer).
+				Do(c)
+			return err
+		}))
+	} else {
+		actions = append(actions, chromedp.Navigate(req.URL))
+	}
 
 	// Wait for body or pre (JSON endpoints)
 	actions = append(actions, chromedp.WaitReady("body, pre"))

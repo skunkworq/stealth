@@ -59,6 +59,7 @@ type Request struct {
 	Viewport          *Viewport         // Browser viewport settings
 	UserAgent         string            // Override User-Agent
 	ExtraHeaders      map[string]string // Additional headers to inject
+	Referrer          string            // Navigation referrer for history/context simulation (StealthPlus)
 }
 
 // Viewport defines browser viewport dimensions.
