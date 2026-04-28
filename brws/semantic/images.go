@@ -8,8 +8,8 @@ import (
 	"golang.org/x/net/html"
 )
 
-// extractImagesFromDoc extracts images from the HTML document.
-func extractImagesFromDoc(doc *html.Node, pageURL string) []ImageRef {
+// ExtractImagesFromDoc extracts images from the HTML document.
+func ExtractImagesFromDoc(doc *html.Node, pageURL string) []ImageRef {
 	var images []ImageRef
 	body := findElement(doc, "body")
 	if body == nil {

@@ -7,7 +7,7 @@ writing Go code.
 
 Quick start::
 
-    from pybrwslab import Brwslab, Stealth, Semantic
+    from pybrwslab import Agent, Brwslab, Stealth, Semantic
 
     # Fetch with stealth
     br = Brwslab()
@@ -18,6 +18,19 @@ Quick start::
     sem = Semantic()
     tree = sem.extract("https://example.com", format="json")
     print(tree.title)
+
+    # Browser agent loop
+    agent = Agent(session_dir="/tmp/agent-session")
+    ctx = agent.observe("https://example.com")
+    print(ctx["formatted"])
+
+    # Semantic agent observation (hierarchical page summary)
+    ctx = agent.observe(
+        "https://example.com",
+        semantic=True,
+        format="semantic",
+    )
+    print(ctx["snapshot"]["semantic_tree"]["root_nodes"][0]["summary"])
 
     # Start fingerprint lab
     from pybrwslab import Labd
@@ -34,6 +47,7 @@ Before using, build the Go binaries::
     go build -o build/stealth  ./cmd/stealth
     go build -o build/semantic ./cmd/semantic
     go build -o build/labd     ./cmd/labd
+    go build -o build/agent    ./cmd/agent
 
 Then either install the wrappers into the same directory or add
 ``build/`` to your ``PATH``.
@@ -42,12 +56,14 @@ Then either install the wrappers into the same directory or add
 from __future__ import annotations
 
 from ._base import BrwslabError, FetchResult
+from .agent import Agent
 from .brwslab import Brwslab
 from .labd import Labd
 from .semantic import Semantic, SemanticTree, SemanticNode, CompressionStats
 from .stealth import Stealth
 
 __all__ = [
+    "Agent",
     "Brwslab",
     "BrwslabError",
     "CompressionStats",

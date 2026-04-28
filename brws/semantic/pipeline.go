@@ -83,7 +83,7 @@ func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *
 		StructuralHash:    structuralHash,
 		IsDynamic:         false,
 		Children:          nodes,
-		Images:            extractImagesFromDoc(doc, url),
+		Images:            ExtractImagesFromDoc(doc, url),
 		DOMSelector:       "body",
 		TokenCount:        EstimateTokens(title),
 		SubtreeTokenCount: compressedTokenCount,

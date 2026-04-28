@@ -167,7 +167,7 @@ func BenchmarkImageExtraction(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		_ = extractImagesFromDoc(doc, "https://example.com")
+		_ = ExtractImagesFromDoc(doc, "https://example.com")
 	}
 }
 
