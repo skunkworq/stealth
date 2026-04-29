@@ -14,16 +14,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/adversarial/captcha"
-	"github.com/skunkworq/stealth/brws/behavior"
-	"github.com/skunkworq/stealth/brws/constants"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/stealth/captcha"
+	"github.com/skunkworq/stealth/brws/stealth/behavior"
+	"github.com/skunkworq/stealth/brws/core/constants"
 )
 
 // TestCaptchaAutoSolveEndToEnd tests the full captcha flow:
 // bare HTTP request → shield triggers captcha → sword detects → solve → verify
 func TestCaptchaAutoSolveEndToEnd(t *testing.T) {
-	as := adversarial.NewAdvancedStealthServer()
+	as := challenge.NewAdvancedStealthServer()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/detect", as.HandleRequest)
@@ -111,7 +111,7 @@ func TestCaptchaAutoSolveEndToEnd(t *testing.T) {
 }
 
 // testVerifySeparately creates a challenge directly and tests the verify flow
-func testVerifySeparately(t *testing.T, as *adversarial.AdvancedStealthServer, baseURL string) {
+func testVerifySeparately(t *testing.T, as *challenge.AdvancedStealthServer, baseURL string) {
 	t.Helper()
 
 	// Create a text challenge directly
@@ -138,7 +138,7 @@ func testVerifySeparately(t *testing.T, as *adversarial.AdvancedStealthServer, b
 
 // TestValidateChallengeRejectsWrongAnswer tests that the shield rejects wrong answers.
 func TestValidateChallengeRejectsWrongAnswer(t *testing.T) {
-	as := adversarial.NewAdvancedStealthServer()
+	as := challenge.NewAdvancedStealthServer()
 
 	// Create a text challenge
 	challenge, err := as.CaptchaShield.CreateChallenge("test-session", nil, "text")
@@ -182,7 +182,7 @@ func TestValidateChallengeRejectsWrongAnswer(t *testing.T) {
 // TestHandleRequestIncludesImage verifies that the captcha challenge_data contains
 // the image but NOT the answer text (security property).
 func TestHandleRequestIncludesImage(t *testing.T) {
-	as := adversarial.NewAdvancedStealthServer()
+	as := challenge.NewAdvancedStealthServer()
 
 	// Create a text challenge directly and verify the data filtering works
 	challenge, err := as.CaptchaShield.CreateChallenge("test-image", nil, "text")
@@ -316,7 +316,7 @@ func TestSwordTimezonePresent(t *testing.T) {
 // After shield upgrade (checks 20-24), the sword should be detected >= 70% of
 // the time across multiple trials (stochastic behavioral generation).
 func TestSwordEvadesFully(t *testing.T) {
-	detector := adversarial.NewStealthDetector()
+	detector := challenge.NewStealthDetector()
 
 	const trials = 20
 	detections := 0
@@ -362,7 +362,7 @@ func TestGenerateHumanEventsPassesBotScorer(t *testing.T) {
 		events := solver.GenerateHumanEvents(4000)
 
 		// Build a trace and score it
-		tracer := adversarial.NewCaptchaTracer()
+		tracer := challenge.NewCaptchaTracer()
 		trace := tracer.CreateTrace("test-events-"+string(rune('0'+trial)), "test-session", "text")
 		for _, ev := range events {
 			tracer.AddEvent(trace.ChallengeID, ev)
@@ -393,7 +393,7 @@ func TestGenerateHumanEventsPassesBehavioralAnalyzer(t *testing.T) {
 		// Build EnhancedBehavioralEvents directly
 		enhanced := buildEnhancedFromCaptchaEvents(events)
 
-		analyzer := adversarial.NewBehavioralAnalyzer(nil)
+		analyzer := challenge.NewBehavioralAnalyzer(nil)
 		result := analyzer.Analyze(enhanced)
 
 		// After shield upgrade (checks 20-24), captcha events trigger many behavioral
@@ -465,7 +465,7 @@ func TestTemplateSolverAccuracy(t *testing.T) {
 // TestCaptchaSolveEndToEndWithRealSolver tests the full captcha flow
 // without cheating: shield → template-solve → verify → token
 func TestCaptchaSolveEndToEndWithRealSolver(t *testing.T) {
-	as := adversarial.NewAdvancedStealthServer()
+	as := challenge.NewAdvancedStealthServer()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/detect", as.HandleRequest)
@@ -519,7 +519,7 @@ func TestCaptchaSolveEndToEndWithRealSolver(t *testing.T) {
 // TestSessionTokenBypassesCaptcha verifies that a valid captcha token reduces
 // the detection score and skips the captcha challenge.
 func TestSessionTokenBypassesCaptcha(t *testing.T) {
-	as := adversarial.NewAdvancedStealthServer()
+	as := challenge.NewAdvancedStealthServer()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/detect", as.HandleRequest)
@@ -583,15 +583,15 @@ func TestSessionTokenBypassesCaptcha(t *testing.T) {
 
 // buildEnhancedFromCaptchaEvents converts CaptchaEvents into EnhancedBehavioralEvents
 // for direct analyzer testing.
-func buildEnhancedFromCaptchaEvents(events []adversarial.CaptchaEvent) *adversarial.EnhancedBehavioralEvents {
-	enhanced := &adversarial.EnhancedBehavioralEvents{
+func buildEnhancedFromCaptchaEvents(events []challenge.CaptchaEvent) *challenge.EnhancedBehavioralEvents {
+	enhanced := &challenge.EnhancedBehavioralEvents{
 		MouseTimestamps:  make([]int64, 0),
 		ScrollTimestamps: make([]int64, 0),
 		TypingTimestamps: make([]int64, 0),
-		MousePositions:   make([]adversarial.Position, 0),
+		MousePositions:   make([]challenge.Position, 0),
 		MouseVelocities:  make([]float64, 0),
 		ClickTimestamps:  make([]int64, 0),
-		ClickPositions:   make([]adversarial.Position, 0),
+		ClickPositions:   make([]challenge.Position, 0),
 		ScrollDeltas:     make([]float64, 0),
 	}
 
@@ -603,7 +603,7 @@ func buildEnhancedFromCaptchaEvents(events []adversarial.CaptchaEvent) *adversar
 		switch ev.Type {
 		case "mousemove":
 			enhanced.MouseTimestamps = append(enhanced.MouseTimestamps, ev.Timestamp)
-			enhanced.MousePositions = append(enhanced.MousePositions, adversarial.Position{X: ev.X, Y: ev.Y})
+			enhanced.MousePositions = append(enhanced.MousePositions, challenge.Position{X: ev.X, Y: ev.Y})
 			if !first && ev.Timestamp > prevTS {
 				dx := ev.X - prevX
 				dy := ev.Y - prevY
@@ -623,7 +623,7 @@ func buildEnhancedFromCaptchaEvents(events []adversarial.CaptchaEvent) *adversar
 			enhanced.ScrollDeltas = append(enhanced.ScrollDeltas, ev.Delta)
 		case "click":
 			enhanced.ClickTimestamps = append(enhanced.ClickTimestamps, ev.Timestamp)
-			enhanced.ClickPositions = append(enhanced.ClickPositions, adversarial.Position{X: ev.X, Y: ev.Y})
+			enhanced.ClickPositions = append(enhanced.ClickPositions, challenge.Position{X: ev.X, Y: ev.Y})
 		}
 	}
 

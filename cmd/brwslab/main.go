@@ -15,14 +15,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/skunkworq/stealth/brws/config"
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/chromium"
-	_ "github.com/skunkworq/stealth/brws/engine/firefox"
-	_ "github.com/skunkworq/stealth/brws/engine/native"
-	_ "github.com/skunkworq/stealth/brws/engine/webkit"
-	"github.com/skunkworq/stealth/brws/lab"
-	"github.com/skunkworq/stealth/brws/session"
+	"github.com/skunkworq/stealth/brws/core/config"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/chromium"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/firefox"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/webkit"
+	"github.com/skunkworq/stealth/brws/fingerprint/lab"
+	"github.com/skunkworq/stealth/brws/stealth/profile/session"
 )
 
 var (

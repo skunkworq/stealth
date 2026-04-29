@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/native"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
 )
 
 var (

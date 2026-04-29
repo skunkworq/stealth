@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/content/semantic"
 )
 
 func main() {

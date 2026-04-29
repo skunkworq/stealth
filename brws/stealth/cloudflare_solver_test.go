@@ -8,12 +8,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 // mountCloudflareServer creates a test server with all Cloudflare challenge endpoints.
-func mountCloudflareServer() (*httptest.Server, *adversarial.CloudflareChallenger) {
-	cc := adversarial.NewCloudflareChallenger(nil, nil)
+func mountCloudflareServer() (*httptest.Server, *challenge.CloudflareChallenger) {
+	cc := challenge.NewCloudflareChallenger(nil, nil)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/cloudflare/init", cc.HandleInit)
@@ -53,7 +53,7 @@ type turnstilePlanSummary struct {
 	eventSpanMs       int64
 }
 
-func summarizeTurnstilePlan(events []adversarial.CaptchaEvent) turnstilePlanSummary {
+func summarizeTurnstilePlan(events []challenge.CaptchaEvent) turnstilePlanSummary {
 	summary := turnstilePlanSummary{timestampsSorted: true}
 	if len(events) == 0 {
 		return summary
@@ -432,7 +432,7 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 
 	testCases := []struct {
 		name            string
-		cfg             *adversarial.TurnstileWidgetConfig
+		cfg             *challenge.TurnstileWidgetConfig
 		wantVariant     string
 		minMoveCount    int
 		minIntervalBins int
@@ -454,8 +454,8 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 		},
 		{
 			name: "hold",
-			cfg: &adversarial.TurnstileWidgetConfig{
-				Interaction: adversarial.TurnstileInteractionConfig{
+			cfg: &challenge.TurnstileWidgetConfig{
+				Interaction: challenge.TurnstileInteractionConfig{
 					Type:           "hold",
 					RequiredHoldMs: 900,
 				},
@@ -470,8 +470,8 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 		},
 		{
 			name: "drag",
-			cfg: &adversarial.TurnstileWidgetConfig{
-				Interaction: adversarial.TurnstileInteractionConfig{
+			cfg: &challenge.TurnstileWidgetConfig{
+				Interaction: challenge.TurnstileInteractionConfig{
 					Type:                   "drag",
 					RequiredDragDistancePx: 160,
 					RequiredDragEventCount: 6,
@@ -487,8 +487,8 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 		},
 		{
 			name: "precision",
-			cfg: &adversarial.TurnstileWidgetConfig{
-				Interaction: adversarial.TurnstileInteractionConfig{
+			cfg: &challenge.TurnstileWidgetConfig{
+				Interaction: challenge.TurnstileInteractionConfig{
 					Type:                     "drag_precision",
 					RequiredDragDistancePx:   162,
 					RequiredDragEventCount:   8,
@@ -614,8 +614,8 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 
 func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
 	solver := NewCloudflareSolverClient()
-	cfg := &adversarial.TurnstileWidgetConfig{
-		Interaction: adversarial.TurnstileInteractionConfig{
+	cfg := &challenge.TurnstileWidgetConfig{
+		Interaction: challenge.TurnstileInteractionConfig{
 			Type:                   "drag",
 			RequiredDragDistancePx: 160,
 			RequiredDragEventCount: 6,
@@ -626,8 +626,8 @@ func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
 	second := solver.buildTurnstileInteractionPlan(cfg)
 
 	firstJSON, err := json.Marshal(struct {
-		Proof  *adversarial.TurnstileInteractionProof `json:"proof"`
-		Events []adversarial.CaptchaEvent             `json:"events"`
+		Proof  *challenge.TurnstileInteractionProof `json:"proof"`
+		Events []challenge.CaptchaEvent             `json:"events"`
 	}{
 		Proof:  first.interactionProof,
 		Events: first.events,
@@ -636,8 +636,8 @@ func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
 		t.Fatalf("marshal first plan: %v", err)
 	}
 	secondJSON, err := json.Marshal(struct {
-		Proof  *adversarial.TurnstileInteractionProof `json:"proof"`
-		Events []adversarial.CaptchaEvent             `json:"events"`
+		Proof  *challenge.TurnstileInteractionProof `json:"proof"`
+		Events []challenge.CaptchaEvent             `json:"events"`
 	}{
 		Proof:  second.interactionProof,
 		Events: second.events,
@@ -754,7 +754,7 @@ func TestBotBehavioralRejection(t *testing.T) {
 		"session_id":  initResp.SessionID,
 		"solution":    powSolution,
 		"fingerprint": fp,
-		"events":      []adversarial.CaptchaEvent{}, // empty!
+		"events":      []challenge.CaptchaEvent{}, // empty!
 	})
 
 	// Use the solver's httpClient which has the __cf_bm cookie from init

@@ -8,15 +8,15 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 // mountReCaptchaServer creates an AdvancedStealthServer with all detection +
 // reCAPTCHA v2/v3 endpoints mounted and returns a test HTTP server.
-func mountReCaptchaServer(t *testing.T) (*adversarial.AdvancedStealthServer, *httptest.Server) {
+func mountReCaptchaServer(t *testing.T) (*challenge.AdvancedStealthServer, *httptest.Server) {
 	t.Helper()
 
-	as := adversarial.NewAdvancedStealthServer()
+	as := challenge.NewAdvancedStealthServer()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/detect", as.HandleRequest)

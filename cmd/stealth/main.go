@@ -23,11 +23,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/native"
-	"github.com/skunkworq/stealth/brws/lab"
-	"github.com/skunkworq/stealth/brws/semantic"
-	"github.com/skunkworq/stealth/brws/spider"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	"github.com/skunkworq/stealth/brws/fingerprint/lab"
+	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/crawl/spider"
 )
 
 var (

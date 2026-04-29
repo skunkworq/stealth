@@ -10,20 +10,19 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
+	"github.com/skunkworq/stealth/brws/stealth/behavior"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/behavior"
-	"github.com/skunkworq/stealth/brws/challenge"
-	"github.com/skunkworq/stealth/brws/engine"
-	"github.com/skunkworq/stealth/brws/engine/chromium"
-	"github.com/skunkworq/stealth/brws/engine/proxy"
-	wf "github.com/skunkworq/stealth/brws/engine/waterfall"
-	"github.com/skunkworq/stealth/brws/instrumentation"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	"github.com/skunkworq/stealth/brws/browser/engine/chromium"
+	pool "github.com/skunkworq/stealth/brws/network/proxy/pool"
+	wf "github.com/skunkworq/stealth/brws/browser/engine/waterfall"
+	"github.com/skunkworq/stealth/brws/core/instrumentation"
 	"github.com/skunkworq/stealth/brws/ml"
-	"github.com/skunkworq/stealth/brws/semantic"
-	"github.com/skunkworq/stealth/brws/session"
-	"github.com/skunkworq/stealth/brws/solver"
-	"github.com/skunkworq/stealth/brws/stealth/challengefsm"
+	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/stealth/profile/session"
+	"github.com/skunkworq/stealth/brws/stealth/captcha/solver"
+	challengefsm "github.com/skunkworq/stealth/brws/stealth/challenge/fsm"
 )
 
 // Client is the main entry point for the stealth browser automation library.
@@ -39,13 +38,13 @@ type Client struct {
 
 	// Anti-bot escalation
 	waterfall         *wf.Waterfall
-	tierTracker       *proxy.TierTracker
+	tierTracker       *pool.TierTracker
 	escalation        *EscalationConfig
 	evasionFSM        *behavior.AdaptiveEvasionFSM
 	evasionFSMEnabled bool
 
 	// Captcha solving with trace replay
-	traceLibrary *adversarial.TraceLibrary
+	traceLibrary *challenge.TraceLibrary
 
 	logger       *instrumentation.Logger
 	tracer       *instrumentation.Tracer
@@ -70,7 +69,7 @@ type Config struct {
 	// Anti-bot escalation
 	Escalation         *EscalationConfig
 	WaterfallEngine    *wf.Waterfall
-	TieredProxies      []proxy.TieredProxy
+	TieredProxies      []pool.TieredProxy
 	EvasionFSMDisabled bool // Set true to disable the adaptive evasion FSM (enabled by default)
 
 	// Trace-based captcha solving
@@ -252,9 +251,9 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 	if cfg.WaterfallEngine != nil {
 		waterfallEng = cfg.WaterfallEngine
 	}
-	var tierTracker *proxy.TierTracker
+	var tierTracker *pool.TierTracker
 	if len(cfg.TieredProxies) > 0 {
-		tierTracker = proxy.NewTierTracker(cfg.TieredProxies)
+		tierTracker = pool.NewTierTracker(cfg.TieredProxies)
 	}
 	escalation := cfg.Escalation
 	if escalation == nil {
@@ -271,9 +270,9 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 	var evasionFSM *behavior.AdaptiveEvasionFSM
 
 	// Load trace library for replay-based captcha solving
-	var traceLib *adversarial.TraceLibrary
+	var traceLib *challenge.TraceLibrary
 	if cfg.TraceDataDir != "" {
-		traceLib = adversarial.NewTraceLibrary(cfg.TraceDataDir)
+		traceLib = challenge.NewTraceLibrary(cfg.TraceDataDir)
 		if err := traceLib.LoadAll(); err != nil {
 			logger.Warn("failed to load trace library", "error", err)
 		} else {
@@ -605,7 +604,7 @@ func (c *Client) attemptCaptchaSolve(ctx context.Context, targetURL string, resp
 	}
 
 	// Generate trace-based events if trace library has recordings
-	var traceEvents []adversarial.CaptchaEvent
+	var traceEvents []challenge.CaptchaEvent
 	if c.traceLibrary != nil && c.traceLibrary.Count() > 0 {
 		rng := rand.New(rand.NewSource(time.Now().UnixNano()))
 		// Try to find a matching trace for the challenge type
@@ -782,7 +781,7 @@ type EscalationMetricsSnapshot struct {
 	WaterfallErrors map[string]int64 `json:"waterfall_errors,omitempty"`
 
 	// Per-domain proxy tier state
-	TierStats map[string]proxy.DomainTierSnapshot `json:"tier_stats,omitempty"`
+	TierStats map[string]pool.DomainTierSnapshot `json:"tier_stats,omitempty"`
 
 	// Evasion FSM state
 	FSMExhausted        bool   `json:"fsm_exhausted"`
@@ -866,7 +865,7 @@ func (c *Client) registerSolvers(registry *challengefsm.SolverRegistry) {
 				}, nil
 			},
 			c.captchaSolver.SubmitSolution,
-			func(solveTimeMs int64, solution string) []adversarial.CaptchaEvent {
+			func(solveTimeMs int64, solution string) []challenge.CaptchaEvent {
 				return c.captchaSolver.GenerateHumanEvents(solveTimeMs, HumanEventOpts{Solution: solution})
 			},
 			c.captchaSolver.LastToken,
@@ -884,7 +883,7 @@ func (c *Client) registerSolvers(registry *challengefsm.SolverRegistry) {
 	// 4. Dynamic solver (catch-all, registered last for lowest priority)
 	// Uses challenge classification + trace replay for unknown challenge types.
 	if c.traceLibrary != nil && c.traceLibrary.Count() > 0 {
-		dynSolver := adversarial.NewDynamicSolver(c.traceLibrary, c.config.TraceDataDir)
+		dynSolver := challenge.NewDynamicSolver(c.traceLibrary, c.config.TraceDataDir)
 		dynamicFSM := challengefsm.NewDynamicFSMSolver(dynSolver, c.engine)
 		registry.Register(dynamicFSM)
 		c.logger.Info("registered dynamic FSM solver", "traces", c.traceLibrary.Count())
@@ -1008,20 +1007,20 @@ func WithTracing(enabled bool) Option {
 }
 
 // detectCFChallenge checks if the response is a Cloudflare challenge page.
-func (c *Client) detectCFChallenge(resp *engine.Response) *adversarial.CloudflareChallenge {
+func (c *Client) detectCFChallenge(resp *engine.Response) *challenge.CloudflareChallenge {
 	httpHeaders := make(http.Header)
 	for k, vals := range resp.Headers {
 		for _, v := range vals {
 			httpHeaders.Add(k, v)
 		}
 	}
-	return adversarial.DetectChallenge(resp.Status, httpHeaders, resp.Body)
+	return challenge.DetectChallenge(resp.Status, httpHeaders, resp.Body)
 }
 
 // solveCFChallenge attempts to solve a detected CF challenge and retry the request.
-func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *engine.Response, ch *adversarial.CloudflareChallenge) (*engine.Response, error) {
+func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *engine.Response, ch *challenge.CloudflareChallenge) (*engine.Response, error) {
 	switch ch.Type {
-	case adversarial.ChallengeJS, adversarial.ChallengeManaged:
+	case challenge.ChallengeJS, challenge.ChallengeManaged:
 		// Extract PoW params from the challenge page body
 		if ch.PoWParams == nil {
 			return nil, fmt.Errorf("no PoW params in challenge page")
@@ -1034,9 +1033,9 @@ func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *e
 		}
 
 		// For managed challenges, also generate fingerprint + behavioral events
-		var fp *adversarial.FingerprintPayload
-		var events []adversarial.CaptchaEvent
-		if ch.Type == adversarial.ChallengeManaged {
+		var fp *challenge.FingerprintPayload
+		var events []challenge.CaptchaEvent
+		if ch.Type == challenge.ChallengeManaged {
 			fp = c.cfSolver.generateFingerprint()
 			events = c.cfSolver.eventGen.GenerateHumanEvents(5000)
 		}
@@ -1062,7 +1061,7 @@ func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *e
 		}
 		return c.engine.Do(ctx, retryReq)
 
-	case adversarial.ChallengeBlocked:
+	case challenge.ChallengeBlocked:
 		return nil, fmt.Errorf("hard blocked by Cloudflare (403, no challenge to solve)")
 
 	default:

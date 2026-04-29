@@ -3,13 +3,13 @@ package main
 import (
 	"fmt"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/behavior"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/stealth/behavior"
 )
 
 func main() {
 	profile := behavior.ChromeWindowsProfile()
-	detector := adversarial.NewStealthDetector()
+	detector := challenge.NewStealthDetector()
 
 	// Create adaptive generator
 	gen := behavior.NewAdaptiveRequestGenerator(&behavior.RequestGeneratorConfig{

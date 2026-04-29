@@ -11,12 +11,12 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/skunkworq/stealth/brws/benchmark"
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/chromium"
-	_ "github.com/skunkworq/stealth/brws/engine/firefox"
-	_ "github.com/skunkworq/stealth/brws/engine/native"
-	_ "github.com/skunkworq/stealth/brws/engine/webkit"
+	"github.com/skunkworq/stealth/brws/fingerprint/bench"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/chromium"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/firefox"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/webkit"
 )
 
 var (

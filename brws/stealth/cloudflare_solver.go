@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/behavior"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/stealth/behavior"
 )
 
 // CloudflareSolverClient solves lab-reproduced Cloudflare challenges.
@@ -31,7 +31,7 @@ type CloudflareSolverClient struct {
 	eventGen          *CaptchaSolver
 	rng               *rand.Rand
 	maxIterations     int64
-	pinnedFingerprint *adversarial.FingerprintPayload
+	pinnedFingerprint *challenge.FingerprintPayload
 	pinnedProfile     *behavior.BrowserProfile
 }
 
@@ -42,9 +42,9 @@ type CloudflareSolveResult struct {
 	Passed           bool                            `json:"passed"`
 	ClearanceCookie  *http.Cookie                    `json:"clearance_cookie,omitempty"`
 	TurnstileToken   string                          `json:"turnstile_token,omitempty"`
-	Turnstile        *adversarial.LabTurnstileToken  `json:"turnstile,omitempty"`
-	WidgetTelemetry  *adversarial.WidgetTelemetry    `json:"widget_telemetry,omitempty"`
-	Verification     *adversarial.VerificationResult `json:"verification,omitempty"`
+	Turnstile        *challenge.LabTurnstileToken  `json:"turnstile,omitempty"`
+	WidgetTelemetry  *challenge.WidgetTelemetry    `json:"widget_telemetry,omitempty"`
+	Verification     *challenge.VerificationResult `json:"verification,omitempty"`
 	PoWTimeMs        int64                           `json:"pow_time_ms"`
 	TotalTimeMs      int64                           `json:"total_time_ms"`
 	PoWIterations    int64                           `json:"pow_iterations"`
@@ -73,11 +73,11 @@ type cfInitResp struct {
 	SessionID           string                             `json:"session_id"`
 	Type                string                             `json:"type"`
 	RayID               string                             `json:"ray_id"`
-	PoW                 *adversarial.PoWChallenge          `json:"pow"`
+	PoW                 *challenge.PoWChallenge          `json:"pow"`
 	RequiresFingerprint bool                               `json:"requires_fingerprint"`
 	RequiresBehavioral  bool                               `json:"requires_behavioral"`
 	SiteKey             string                             `json:"site_key,omitempty"`
-	Turnstile           *adversarial.TurnstileWidgetConfig `json:"turnstile,omitempty"`
+	Turnstile           *challenge.TurnstileWidgetConfig `json:"turnstile,omitempty"`
 }
 
 // cfSolveResp mirrors the server's solve response.
@@ -88,8 +88,8 @@ type cfSolveResp struct {
 	SolveMs         int64                          `json:"solve_ms,omitempty"`
 	CfClearance     string                         `json:"cf_clearance,omitempty"`
 	TurnstileToken  string                         `json:"turnstile_token,omitempty"`
-	Turnstile       *adversarial.LabTurnstileToken `json:"turnstile,omitempty"`
-	WidgetTelemetry *adversarial.WidgetTelemetry   `json:"widget_telemetry,omitempty"`
+	Turnstile       *challenge.LabTurnstileToken `json:"turnstile,omitempty"`
+	WidgetTelemetry *challenge.WidgetTelemetry   `json:"widget_telemetry,omitempty"`
 }
 
 // TurnstileFlowOptions controls how the owned-environment Turnstile flow is exercised.
@@ -100,8 +100,8 @@ type TurnstileFlowOptions struct {
 }
 
 type turnstileInteractionPlan struct {
-	interactionProof *adversarial.TurnstileInteractionProof
-	events           []adversarial.CaptchaEvent
+	interactionProof *challenge.TurnstileInteractionProof
+	events           []challenge.CaptchaEvent
 }
 
 type turnstileApproachProfile struct {
@@ -465,7 +465,7 @@ func (cs *CloudflareSolverClient) postTurnstileCallback(baseURL, rayID, sessionI
 	return nil
 }
 
-func (cs *CloudflareSolverClient) postTurnstileInteraction(baseURL, rayID, sessionID string, proof *adversarial.TurnstileInteractionProof) error {
+func (cs *CloudflareSolverClient) postTurnstileInteraction(baseURL, rayID, sessionID string, proof *challenge.TurnstileInteractionProof) error {
 	if proof == nil {
 		return nil
 	}
@@ -521,7 +521,7 @@ func (cs *CloudflareSolverClient) initChallenge(baseURL, challengeType string, s
 }
 
 // solvePoW performs the SHA-256 hashcash loop.
-func (cs *CloudflareSolverClient) solvePoW(prefix string, difficulty int) (*adversarial.PoWSolution, error) {
+func (cs *CloudflareSolverClient) solvePoW(prefix string, difficulty int) (*challenge.PoWSolution, error) {
 	start := time.Now()
 
 	for i := int64(0); i < cs.maxIterations; i++ {
@@ -530,7 +530,7 @@ func (cs *CloudflareSolverClient) solvePoW(prefix string, difficulty int) (*adve
 		hash := sha256.Sum256([]byte(data))
 
 		if hasLeadingZeroBits(hash[:], difficulty) {
-			return &adversarial.PoWSolution{
+			return &challenge.PoWSolution{
 				Nonce:      nonce,
 				Hash:       hex.EncodeToString(hash[:]),
 				Iterations: i + 1,
@@ -598,7 +598,7 @@ func timezoneToOffset(tz string) int {
 // generateFingerprint returns a session-pinned fingerprint. On the first call it
 // selects a random browser profile and generates hardware parameters that are
 // then reused for all subsequent calls, ensuring session consistency (P7.2).
-func (cs *CloudflareSolverClient) generateFingerprint() *adversarial.FingerprintPayload {
+func (cs *CloudflareSolverClient) generateFingerprint() *challenge.FingerprintPayload {
 	if cs.pinnedFingerprint != nil {
 		return cs.pinnedFingerprint
 	}
@@ -677,7 +677,7 @@ func (cs *CloudflareSolverClient) generateFingerprint() *adversarial.Fingerprint
 		renderer = profile.WebGLRenderers[cs.rng.Intn(len(profile.WebGLRenderers))]
 	}
 
-	cs.pinnedFingerprint = &adversarial.FingerprintPayload{
+	cs.pinnedFingerprint = &challenge.FingerprintPayload{
 		CanvasHash:          canvasHash,
 		WebGLVendor:         profile.WebGLVendor,
 		WebGLRenderer:       renderer,
@@ -707,22 +707,22 @@ func (cs *CloudflareSolverClient) ResetFingerprint() {
 // Used by the auto-solve flow when Navigate() encounters a CF challenge.
 func (cs *CloudflareSolverClient) submitSolution(
 	baseURL string,
-	ch *adversarial.CloudflareChallenge,
-	solution *adversarial.PoWSolution,
-	fp *adversarial.FingerprintPayload,
-	events []adversarial.CaptchaEvent,
+	ch *challenge.CloudflareChallenge,
+	solution *challenge.PoWSolution,
+	fp *challenge.FingerprintPayload,
+	events []challenge.CaptchaEvent,
 ) (*http.Cookie, error) {
 	var endpoint string
 	var payload map[string]interface{}
 
 	switch ch.Type {
-	case adversarial.ChallengeJS:
+	case challenge.ChallengeJS:
 		endpoint = baseURL + "/api/cloudflare/solve/js"
 		payload = map[string]interface{}{
 			"session_id": ch.RayID,
 			"solution":   solution,
 		}
-	case adversarial.ChallengeManaged:
+	case challenge.ChallengeManaged:
 		endpoint = baseURL + "/api/cloudflare/solve/managed"
 		payload = map[string]interface{}{
 			"session_id":  ch.RayID,
@@ -758,7 +758,7 @@ func extractCfClearanceCookie(resp *http.Response) *http.Cookie {
 	return nil
 }
 
-func (cs *CloudflareSolverClient) buildTurnstileSnapshot() *adversarial.TurnstileClientSnapshot {
+func (cs *CloudflareSolverClient) buildTurnstileSnapshot() *challenge.TurnstileClientSnapshot {
 	if cs.pinnedFingerprint == nil || cs.pinnedProfile == nil {
 		cs.generateFingerprint()
 	}
@@ -766,7 +766,7 @@ func (cs *CloudflareSolverClient) buildTurnstileSnapshot() *adversarial.Turnstil
 	profile := cs.pinnedProfile
 	fp := cs.pinnedFingerprint
 	if profile == nil || fp == nil {
-		return &adversarial.TurnstileClientSnapshot{
+		return &challenge.TurnstileClientSnapshot{
 			UserAgent:           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
 			Language:            "en-US",
 			Languages:           []string{"en-US", "en"},
@@ -785,7 +785,7 @@ func (cs *CloudflareSolverClient) buildTurnstileSnapshot() *adversarial.Turnstil
 		language = profile.Languages[0]
 	}
 
-	return &adversarial.TurnstileClientSnapshot{
+	return &challenge.TurnstileClientSnapshot{
 		UserAgent:           profile.UserAgent,
 		Language:            language,
 		Languages:           append([]string(nil), profile.Languages...),
@@ -801,9 +801,9 @@ func (cs *CloudflareSolverClient) buildTurnstileSnapshot() *adversarial.Turnstil
 	}
 }
 
-func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial.TurnstileWidgetConfig) *turnstileInteractionPlan {
+func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *challenge.TurnstileWidgetConfig) *turnstileInteractionPlan {
 	builder := newTurnstileTraceBuilder()
-	proof := &adversarial.TurnstileInteractionProof{
+	proof := &challenge.TurnstileInteractionProof{
 		Type:           "checkbox",
 		Completed:      true,
 		CheckboxClicks: 1,
@@ -870,7 +870,7 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 			downY+cs.turnstileJitter(1.2),
 		)
 		builder.addPointer(cs.turnstileDelay(20, 42), "click", up.X+cs.turnstileJitter(0.8), up.Y+cs.turnstileJitter(0.8))
-		proof = &adversarial.TurnstileInteractionProof{
+		proof = &challenge.TurnstileInteractionProof{
 			Type:           "hold",
 			Completed:      true,
 			HoldDurationMs: int(up.Timestamp - down.Timestamp),
@@ -946,7 +946,7 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 		lastMoveX := down.X
 		dragMoveCount := 0
 		lastMoveTS := down.Timestamp
-		recordMove := func(delayMs int64, x, y float64) adversarial.CaptchaEvent {
+		recordMove := func(delayMs int64, x, y float64) challenge.CaptchaEvent {
 			move := builder.addPointer(delayMs, "mousemove", x, y)
 			dragMoveCount++
 			if move.X > maxDragX {
@@ -1006,7 +1006,7 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 			finalMove.Y+cs.turnstileJitter(0.4),
 		)
 		builder.addPointer(cs.turnstileDelay(24, 46), "click", up.X+cs.turnstileJitter(0.5), up.Y+cs.turnstileJitter(0.5))
-		proof = &adversarial.TurnstileInteractionProof{
+		proof = &challenge.TurnstileInteractionProof{
 			Type:              "drag_precision",
 			Completed:         true,
 			DragDistancePx:    int(math.Round(maxDragX - down.X)),
@@ -1077,7 +1077,7 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *adversarial
 		upY := down.Y + cs.turnstileJitter(1.0)
 		builder.addPointer(cs.turnstileDelay(90, 160), "mouseup", upX, upY)
 		builder.addPointer(cs.turnstileDelay(18, 36), "click", upX+cs.turnstileJitter(0.7), upY+cs.turnstileJitter(0.7))
-		proof = &adversarial.TurnstileInteractionProof{
+		proof = &challenge.TurnstileInteractionProof{
 			Type:           "drag",
 			Completed:      true,
 			DragDistancePx: int(math.Round(maxDragX - down.X)),
@@ -1198,22 +1198,22 @@ func (cs *CloudflareSolverClient) turnstileJitter(amplitude float64) float64 {
 type turnstileTraceBuilder struct {
 	base   int64
 	cursor int64
-	events []adversarial.CaptchaEvent
+	events []challenge.CaptchaEvent
 }
 
 func newTurnstileTraceBuilder() *turnstileTraceBuilder {
 	return &turnstileTraceBuilder{
 		base:   time.Now().UnixMilli(),
-		events: make([]adversarial.CaptchaEvent, 0, 16),
+		events: make([]challenge.CaptchaEvent, 0, 16),
 	}
 }
 
-func (tb *turnstileTraceBuilder) addPointer(delayMs int64, eventType string, x, y float64) adversarial.CaptchaEvent {
+func (tb *turnstileTraceBuilder) addPointer(delayMs int64, eventType string, x, y float64) challenge.CaptchaEvent {
 	if delayMs < 0 {
 		delayMs = 0
 	}
 	tb.cursor += delayMs
-	event := adversarial.CaptchaEvent{
+	event := challenge.CaptchaEvent{
 		Type:      eventType,
 		Timestamp: tb.base + tb.cursor,
 		ElapsedMs: tb.cursor,
@@ -1229,7 +1229,7 @@ func (tb *turnstileTraceBuilder) addWheel(delayMs int64, delta float64) {
 		delayMs = 0
 	}
 	tb.cursor += delayMs
-	tb.events = append(tb.events, adversarial.CaptchaEvent{
+	tb.events = append(tb.events, challenge.CaptchaEvent{
 		Type:      "wheel",
 		Timestamp: tb.base + tb.cursor,
 		ElapsedMs: tb.cursor,

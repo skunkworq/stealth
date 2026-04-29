@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 // mountProtectedServer creates a test server with CF protection wrapping actual content.
-func mountProtectedServer(content string) (*httptest.Server, *adversarial.CloudflareChallenger) {
-	cc := adversarial.NewCloudflareChallenger(nil, nil)
+func mountProtectedServer(content string) (*httptest.Server, *challenge.CloudflareChallenger) {
+	cc := challenge.NewCloudflareChallenger(nil, nil)
 
 	mux := http.NewServeMux()
 
@@ -162,12 +162,12 @@ func TestDetectCFChallenge_FromResponse(t *testing.T) {
   </div>
 </body></html>`)
 
-	ch := adversarial.DetectChallenge(503, headers, body)
+	ch := challenge.DetectChallenge(503, headers, body)
 
 	if ch == nil {
 		t.Fatal("expected challenge to be detected")
 	}
-	if ch.Type != adversarial.ChallengeManaged {
+	if ch.Type != challenge.ChallengeManaged {
 		t.Errorf("expected managed challenge, got %s", ch.Type)
 	}
 	if ch.RayID != "abc123-LAB" {
@@ -192,7 +192,7 @@ func TestDetectCFChallenge_NonCF_ReturnsNil(t *testing.T) {
 	}
 	body := []byte(`<html><body>Normal page</body></html>`)
 
-	ch := adversarial.DetectChallenge(200, headers, body)
+	ch := challenge.DetectChallenge(200, headers, body)
 	if ch != nil {
 		t.Errorf("expected nil for non-CF page, got %s", ch)
 	}
@@ -205,11 +205,11 @@ func TestDetectCFChallenge_HardBlock(t *testing.T) {
 	}
 	body := []byte(`<html><body>Access denied</body></html>`)
 
-	ch := adversarial.DetectChallenge(403, headers, body)
+	ch := challenge.DetectChallenge(403, headers, body)
 	if ch == nil {
 		t.Fatal("expected blocked challenge to be detected")
 	}
-	if ch.Type != adversarial.ChallengeBlocked {
+	if ch.Type != challenge.ChallengeBlocked {
 		t.Errorf("expected blocked, got %s", ch.Type)
 	}
 }
@@ -233,8 +233,8 @@ func TestSolverSubmitSolution_JSChallenge(t *testing.T) {
 	}
 
 	// Use submitSolution
-	ch := &adversarial.CloudflareChallenge{
-		Type:  adversarial.ChallengeJS,
+	ch := &challenge.CloudflareChallenge{
+		Type:  challenge.ChallengeJS,
 		RayID: initResp.SessionID,
 	}
 	cookie, err := solver.submitSolution(ts.URL, ch, powSolution, nil, nil)
@@ -276,8 +276,8 @@ func TestSolverSubmitSolution_ManagedChallenge(t *testing.T) {
 		fp := solver.generateFingerprint()
 		events := solver.eventGen.GenerateHumanEvents(5000)
 
-		ch := &adversarial.CloudflareChallenge{
-			Type:  adversarial.ChallengeManaged,
+		ch := &challenge.CloudflareChallenge{
+			Type:  challenge.ChallengeManaged,
 			RayID: initResp.SessionID,
 		}
 		cookie, err := solver.submitSolution(ts.URL, ch, powSolution, fp, events)
@@ -295,11 +295,11 @@ func TestSolverSubmitSolution_ManagedChallenge(t *testing.T) {
 }
 
 func TestChallengeEscalation(t *testing.T) {
-	cc := adversarial.NewCloudflareChallenger(nil, nil)
+	cc := challenge.NewCloudflareChallenger(nil, nil)
 
 	// Create a JS challenge
 	session := cc.CreateJSChallenge("esc_test", 0.5)
-	if session.State != adversarial.StatePending {
+	if session.State != challenge.StatePending {
 		t.Errorf("expected pending, got %s", session.State)
 	}
 
@@ -308,13 +308,13 @@ func TestChallengeEscalation(t *testing.T) {
 	if escalated == nil {
 		t.Fatal("expected escalated session")
 	}
-	if escalated.Type != adversarial.ChallengeManaged {
+	if escalated.Type != challenge.ChallengeManaged {
 		t.Errorf("expected managed after escalation, got %s", escalated.Type)
 	}
-	if escalated.EscalatedFrom != string(adversarial.ChallengeJS) {
+	if escalated.EscalatedFrom != string(challenge.ChallengeJS) {
 		t.Errorf("expected escalated from js_challenge, got %s", escalated.EscalatedFrom)
 	}
-	if escalated.State != adversarial.StateEscalated {
+	if escalated.State != challenge.StateEscalated {
 		t.Errorf("expected escalated state, got %s", escalated.State)
 	}
 
@@ -323,7 +323,7 @@ func TestChallengeEscalation(t *testing.T) {
 	if blocked == nil {
 		t.Fatal("expected blocked session")
 	}
-	if blocked.Type != adversarial.ChallengeBlocked {
+	if blocked.Type != challenge.ChallengeBlocked {
 		t.Errorf("expected blocked after double escalation, got %s", blocked.Type)
 	}
 
@@ -331,17 +331,17 @@ func TestChallengeEscalation(t *testing.T) {
 }
 
 func TestSolveTimeBounds_TooFast(t *testing.T) {
-	cc := adversarial.NewCloudflareChallenger(nil, nil)
+	cc := challenge.NewCloudflareChallenger(nil, nil)
 
 	// Create a managed challenge and immediately try to solve
 	session := cc.CreateManagedChallenge("fast_test", 0.3)
 
-	solution, err := adversarial.SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, 50_000_000)
+	solution, err := challenge.SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, 50_000_000)
 	if err != nil {
 		t.Fatalf("PoW failed: %v", err)
 	}
 
-	fp := &adversarial.FingerprintPayload{
+	fp := &challenge.FingerprintPayload{
 		CanvasHash:          "test",
 		WebGLVendor:         "Google Inc.",
 		WebGLRenderer:       "ANGLE",
@@ -363,14 +363,14 @@ func TestSolveTimeBounds_TooFast(t *testing.T) {
 }
 
 func TestSessionStateTracking(t *testing.T) {
-	cc := adversarial.NewCloudflareChallenger(nil, nil)
+	cc := challenge.NewCloudflareChallenger(nil, nil)
 
 	session := cc.CreateJSChallenge("state_test", 0.3)
-	if session.State != adversarial.StatePending {
+	if session.State != challenge.StatePending {
 		t.Errorf("initial state should be pending, got %s", session.State)
 	}
 
-	solution, _ := adversarial.SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, 50_000_000)
+	solution, _ := challenge.SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, 50_000_000)
 	_, err := cc.CompleteChallengeJS("state_test", solution)
 	if err != nil {
 		t.Fatalf("solve failed: %v", err)
@@ -380,7 +380,7 @@ func TestSessionStateTracking(t *testing.T) {
 	if !ok {
 		t.Fatal("session not found")
 	}
-	if solved.State != adversarial.StateSolved {
+	if solved.State != challenge.StateSolved {
 		t.Errorf("expected solved state, got %s", solved.State)
 	}
 	if !solved.Passed {
@@ -456,7 +456,7 @@ func TestRealisticHeaders_SolveRejection(t *testing.T) {
 }
 
 func TestCFBMCookie_Generated(t *testing.T) {
-	cc := adversarial.NewCloudflareChallenger(nil, nil)
+	cc := challenge.NewCloudflareChallenger(nil, nil)
 
 	session := cc.CreateManagedChallenge("cfbm_test", 0.5)
 	if session.CFBMValue == "" {
@@ -618,7 +618,7 @@ func TestSolverFingerprint_TimezoneMatchesProfile(t *testing.T) {
 func TestSolverFingerprint_PassesShieldDriftCheck(t *testing.T) {
 	// Verify that the pinned fingerprint produces zero drift when submitted twice
 	// to the shield's fingerprint validator
-	cc := adversarial.NewCloudflareChallenger(nil, nil)
+	cc := challenge.NewCloudflareChallenger(nil, nil)
 	cc.CreateManagedChallenge("pinned-test", 0.5)
 
 	solver := NewCloudflareSolverClient()

@@ -6,7 +6,7 @@ dist/
 *.so
 *.dylib
 labd
-brws/lab/static/
+brws/fingerprint/lab/static/
 # Test binary
 *.test
 docs/

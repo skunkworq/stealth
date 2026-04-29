@@ -15,9 +15,9 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 
-	"github.com/skunkworq/stealth/brws/pipeline"
-	"github.com/skunkworq/stealth/brws/semantic"
-	"github.com/skunkworq/stealth/brws/telemetry"
+	"github.com/skunkworq/stealth/brws/crawl/pipeline"
+	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/core/telemetry"
 )
 
 func main() {

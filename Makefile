@@ -35,14 +35,14 @@ all: build
 lab-ui: ## Build the React UI and embed into Go static dir
 	@echo "Building lab-ui..."
 	@cd lab-ui && npm run build --silent
-	@# brws/lab/static/ is gitignored (build artifact). Make sure the dir
+	@# brws/fingerprint/lab/static/ is gitignored (build artifact). Make sure the dir
 	@# exists on a fresh clone (CI) so `cp -r` below doesn't fail with
-	@# "brws/lab/static: Not a directory".
-	@mkdir -p brws/lab/static
-	@rm -rf brws/lab/static/_next brws/lab/static/_not-found
-	@cp -r lab-ui/out/. brws/lab/static/
-	@rm -rf brws/lab/static/_not-found brws/lab/static/_not-found.html brws/lab/static/__next.*
-	@echo "✓ UI built and copied to brws/lab/static/"
+	@# "brws/fingerprint/lab/static: Not a directory".
+	@mkdir -p brws/fingerprint/lab/static
+	@rm -rf brws/fingerprint/lab/static/_next brws/fingerprint/lab/static/_not-found
+	@cp -r lab-ui/out/. brws/fingerprint/lab/static/
+	@rm -rf brws/fingerprint/lab/static/_not-found brws/fingerprint/lab/static/_not-found.html brws/fingerprint/lab/static/__next.*
+	@echo "✓ UI built and copied to brws/fingerprint/lab/static/"
 
 run: kill-ports lab-ui $(LABD_BINARY) certs ## Build everything and run (UI + HTTPS + proxy)
 	@echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -77,7 +77,7 @@ rust-sniffer:
 	@cd brws/sniffer/rust && cargo build --release
 	@echo "✓ Built rust sniffer"
 
-$(LABD_BINARY): rust-sniffer $(shell find brws/lab brws/adversarial cmd/labd -name '*.go' 2>/dev/null) brws/lab/static/index.html
+$(LABD_BINARY): rust-sniffer $(shell find brws/lab brws/adversarial cmd/labd -name '*.go' 2>/dev/null) brws/fingerprint/lab/static/index.html
 	@echo "Building labd..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(LABD_SRC)

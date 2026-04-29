@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 // TestCloudflareOnExampleCom fetches example.com, runs CF detection on the
@@ -28,25 +28,25 @@ func TestCloudflareOnExampleCom(t *testing.T) {
 			resp.StatusCode, resp.Header.Get("Server"), resp.Header.Get("Cf-Ray"), len(body))
 
 		// Run DetectChallenge on the real response
-		challenge := adversarial.DetectChallenge(resp.StatusCode, resp.Header, body)
-		if challenge != nil {
+		cfChallenge := challenge.DetectChallenge(resp.StatusCode, resp.Header, body)
+		if cfChallenge != nil {
 			t.Logf("Cloudflare challenge detected: type=%s ray=%s sitekey=%s",
-				challenge.Type, challenge.RayID, challenge.SiteKey)
-			if challenge.PoWParams != nil {
+				cfChallenge.Type, cfChallenge.RayID, cfChallenge.SiteKey)
+			if cfChallenge.PoWParams != nil {
 				t.Logf("  PoW params: prefix=%s... difficulty=%d algo=%s",
-					challenge.PoWParams.Prefix[:16], challenge.PoWParams.Difficulty, challenge.PoWParams.Algorithm)
+					cfChallenge.PoWParams.Prefix[:16], cfChallenge.PoWParams.Difficulty, cfChallenge.PoWParams.Algorithm)
 			}
 		} else {
 			t.Log("No Cloudflare challenge on example.com (expected — it's not behind CF)")
 		}
 
-		isCF := adversarial.IsCloudflarePage(resp.Header)
+		isCF := challenge.IsCloudflarePage(resp.Header)
 		t.Logf("IsCloudflarePage: %v", isCF)
 
 		// ── Phase 2: Run CloudflareDetector analysis on example.com request ──
 		t.Log("\n=== Phase 2: CloudflareDetector signal analysis ===")
 
-		cfDetector := adversarial.NewCloudflareDetector()
+		cfDetector := challenge.NewCloudflareDetector()
 
 		probeReq, _ := http.NewRequest(http.MethodGet, "https://example.com", nil)
 		probeReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9")
@@ -138,7 +138,7 @@ func TestCloudflareOnExampleCom(t *testing.T) {
 		challengeResp.Header.Get("Cf-Ray"))
 
 	// Run DetectChallenge on the lab page — should find a managed challenge
-	labChallenge := adversarial.DetectChallenge(
+	labChallenge := challenge.DetectChallenge(
 		challengeResp.StatusCode, challengeResp.Header, challengeBody)
 	if labChallenge == nil {
 		t.Fatal("DetectChallenge should detect the lab challenge page")
@@ -163,8 +163,8 @@ func TestCloudflareOnExampleCom(t *testing.T) {
 }
 
 // mountCloudflareLabServer creates a full lab server with all CF endpoints.
-func mountCloudflareLabServer() (*httptest.Server, *adversarial.CloudflareChallenger) {
-	cc := adversarial.NewCloudflareChallenger(nil, nil)
+func mountCloudflareLabServer() (*httptest.Server, *challenge.CloudflareChallenger) {
+	cc := challenge.NewCloudflareChallenger(nil, nil)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/cloudflare/challenge", cc.HandleChallengePage)

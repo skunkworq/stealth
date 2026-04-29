@@ -8,9 +8,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/native"
-	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	"github.com/skunkworq/stealth/brws/content/semantic"
 )
 
 var (

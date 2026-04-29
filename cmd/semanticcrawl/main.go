@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/semantic"
-	"github.com/skunkworq/stealth/brws/spider"
+	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/crawl/spider"
 )
 
 func main() {

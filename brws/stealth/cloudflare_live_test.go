@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/native"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
 )
 
 // findProjectRoot returns the absolute path to the project root.

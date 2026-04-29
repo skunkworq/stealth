@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/semantic"
-	"github.com/skunkworq/stealth/brws/semantic/index"
+	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/semantic/index"
 )
 
 func TestMCPServerInit(t *testing.T) {

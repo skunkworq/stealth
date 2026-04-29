@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/behavior"
+	"github.com/skunkworq/stealth/brws/stealth/behavior"
 )
 
 // BehavioralTracker accumulates mouse, keyboard, and scroll events during a

@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 const (
@@ -24,7 +24,7 @@ const cloudflareTurnstileSiteVerifyURL = "https://challenges.cloudflare.com/turn
 
 // TurnstileVerifier verifies a Turnstile token in an owned environment.
 type TurnstileVerifier interface {
-	Verify(ctx context.Context, token string) (*adversarial.VerificationResult, error)
+	Verify(ctx context.Context, token string) (*challenge.VerificationResult, error)
 }
 
 // LabTurnstileVerifier verifies tokens issued by the local lab harness.
@@ -36,7 +36,7 @@ type LabTurnstileVerifier struct {
 }
 
 // Verify posts the supplied token to the lab's siteverify endpoint.
-func (v *LabTurnstileVerifier) Verify(ctx context.Context, token string) (*adversarial.VerificationResult, error) {
+func (v *LabTurnstileVerifier) Verify(ctx context.Context, token string) (*challenge.VerificationResult, error) {
 	endpoint := strings.TrimRight(v.BaseURL, "/") + "/turnstile/v0/siteverify"
 	return verifyTurnstileToken(ctx, v.httpClient(), endpoint, v.Secret, token, v.Hostname)
 }
@@ -56,7 +56,7 @@ type CloudflareTestModeVerifier struct {
 }
 
 // Verify posts the supplied token to Cloudflare's official siteverify endpoint.
-func (v *CloudflareTestModeVerifier) Verify(ctx context.Context, token string) (*adversarial.VerificationResult, error) {
+func (v *CloudflareTestModeVerifier) Verify(ctx context.Context, token string) (*challenge.VerificationResult, error) {
 	endpoint := strings.TrimSpace(v.Endpoint)
 	if endpoint == "" {
 		endpoint = cloudflareTurnstileSiteVerifyURL
@@ -87,7 +87,7 @@ func verifyTurnstileToken(
 	secret string,
 	token string,
 	hostname string,
-) (*adversarial.VerificationResult, error) {
+) (*challenge.VerificationResult, error) {
 	if strings.TrimSpace(endpoint) == "" {
 		return nil, fmt.Errorf("turnstile verifier requires an endpoint")
 	}
@@ -127,7 +127,7 @@ func verifyTurnstileToken(
 		return nil, fmt.Errorf("decode siteverify response: %w", err)
 	}
 
-	return &adversarial.VerificationResult{
+	return &challenge.VerificationResult{
 		Success:     verifyResp.Success,
 		ChallengeTS: verifyResp.ChallengeTS,
 		Hostname:    verifyResp.Hostname,

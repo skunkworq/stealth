@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/adversarial/captcha"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/stealth/captcha"
 )
 
 // CaptchaSolver detects and auto-solves captcha challenges from shield responses.
@@ -175,7 +175,7 @@ func (cs *CaptchaSolver) SolveFromResponse(body []byte, headers map[string][]str
 
 // SubmitSolution posts the captcha solution to the shield's verify endpoint.
 // Returns (solved, token, error). The token can be used for subsequent requests.
-func (cs *CaptchaSolver) SubmitSolution(verifyURL, challengeID, solution string, events []adversarial.CaptchaEvent) (bool, error) {
+func (cs *CaptchaSolver) SubmitSolution(verifyURL, challengeID, solution string, events []challenge.CaptchaEvent) (bool, error) {
 	reqBody := map[string]interface{}{
 		"challenge_id": challengeID,
 		"solution":     solution,
@@ -238,9 +238,9 @@ type HumanEventOpts struct {
 // is explicitly clamped above 8 px/s.
 // Micro-tremors: 0.5-2.5px jitter events with 5-15ms intervals after ~20%
 // of path points.
-func (cs *CaptchaSolver) GenerateHumanEvents(solveTimeMs int64, opts ...HumanEventOpts) []adversarial.CaptchaEvent {
-	mouseEvents := make([]adversarial.CaptchaEvent, 0, 50)
-	otherEvents := make([]adversarial.CaptchaEvent, 0, 30)
+func (cs *CaptchaSolver) GenerateHumanEvents(solveTimeMs int64, opts ...HumanEventOpts) []challenge.CaptchaEvent {
+	mouseEvents := make([]challenge.CaptchaEvent, 0, 50)
+	otherEvents := make([]challenge.CaptchaEvent, 0, 30)
 	baseTime := time.Now().UnixMilli()
 
 	// Landmark positions
@@ -280,7 +280,7 @@ func (cs *CaptchaSolver) GenerateHumanEvents(solveTimeMs int64, opts ...HumanEve
 	// --- Scroll events (3-5 total, varied deltas) ---
 	for i := 0; i < 1+cs.rng.Intn(2); i++ {
 		otherCursor += cs.logNormalDuration(200, 100)
-		otherEvents = append(otherEvents, adversarial.CaptchaEvent{
+		otherEvents = append(otherEvents, challenge.CaptchaEvent{
 			Type: "scroll", Timestamp: baseTime + int64(otherCursor), ElapsedMs: int64(otherCursor),
 			Delta: 80.0 + cs.rng.Float64()*120,
 		})
@@ -290,7 +290,7 @@ func (cs *CaptchaSolver) GenerateHumanEvents(solveTimeMs int64, opts ...HumanEve
 	otherCursor += cs.logNormalDuration(200, 80)
 	clickX := inputX + cs.rng.Float64()*8.37
 	clickY := inputY + cs.rng.Float64()*5.82
-	otherEvents = append(otherEvents, adversarial.CaptchaEvent{
+	otherEvents = append(otherEvents, challenge.CaptchaEvent{
 		Type: "click", Timestamp: baseTime + int64(otherCursor), ElapsedMs: int64(otherCursor),
 		X: clickX, Y: clickY,
 	})
@@ -311,11 +311,11 @@ func (cs *CaptchaSolver) GenerateHumanEvents(solveTimeMs int64, opts ...HumanEve
 			key = string(solution[i])
 		}
 		otherCursor += cs.logNormalDuration(120, 55)
-		otherEvents = append(otherEvents, adversarial.CaptchaEvent{
+		otherEvents = append(otherEvents, challenge.CaptchaEvent{
 			Type: "keydown", Timestamp: baseTime + int64(otherCursor), ElapsedMs: int64(otherCursor), Key: key,
 		})
 		holdTime := 30 + cs.rng.Float64()*50
-		otherEvents = append(otherEvents, adversarial.CaptchaEvent{
+		otherEvents = append(otherEvents, challenge.CaptchaEvent{
 			Type: "keyup", Timestamp: baseTime + int64(otherCursor+holdTime), ElapsedMs: int64(otherCursor + holdTime), Key: key,
 		})
 		if (i == 1 || i == 3) && cs.rng.Float64() < 0.7 {
@@ -326,7 +326,7 @@ func (cs *CaptchaSolver) GenerateHumanEvents(solveTimeMs int64, opts ...HumanEve
 	// --- More scroll events (2-3, varied deltas) ---
 	for i := 0; i < 2+cs.rng.Intn(2); i++ {
 		otherCursor += cs.logNormalDuration(300, 150)
-		otherEvents = append(otherEvents, adversarial.CaptchaEvent{
+		otherEvents = append(otherEvents, challenge.CaptchaEvent{
 			Type: "scroll", Timestamp: baseTime + int64(otherCursor), ElapsedMs: int64(otherCursor),
 			Delta: 80.0 + cs.rng.Float64()*120,
 		})
@@ -334,7 +334,7 @@ func (cs *CaptchaSolver) GenerateHumanEvents(solveTimeMs int64, opts ...HumanEve
 
 	// --- Submit click (sub-pixel) ---
 	otherCursor += cs.logNormalDuration(80, 35)
-	otherEvents = append(otherEvents, adversarial.CaptchaEvent{
+	otherEvents = append(otherEvents, challenge.CaptchaEvent{
 		Type: "click", Timestamp: baseTime + int64(otherCursor), ElapsedMs: int64(otherCursor),
 		X: submitX + cs.rng.Float64()*3.14, Y: submitY + cs.rng.Float64()*2.71,
 	})
@@ -343,7 +343,7 @@ func (cs *CaptchaSolver) GenerateHumanEvents(solveTimeMs int64, opts ...HumanEve
 	// Mouse events first (contiguous block), then non-mouse events.
 	// The analyzer extracts MouseTimestamps from "mousemove" events in array
 	// order, so this guarantees no cross-phase gap in the interval sequence.
-	events := make([]adversarial.CaptchaEvent, 0, len(mouseEvents)+len(otherEvents))
+	events := make([]challenge.CaptchaEvent, 0, len(mouseEvents)+len(otherEvents))
 	events = append(events, mouseEvents...)
 	events = append(events, otherEvents...)
 
@@ -353,7 +353,7 @@ func (cs *CaptchaSolver) GenerateHumanEvents(solveTimeMs int64, opts ...HumanEve
 // emitMouseSegment generates mouse events along a cubic Bézier curve segment
 // with log-normal intervals, path noise, and interleaved micro-tremors.
 func (cs *CaptchaSolver) emitMouseSegment(
-	events *[]adversarial.CaptchaEvent,
+	events *[]challenge.CaptchaEvent,
 	baseTime int64, cursor, prevX, prevY *float64,
 	numPoints int,
 	p0X, p0Y, cp1X, cp1Y, cp2X, cp2Y, p3X, p3Y float64,
@@ -387,7 +387,7 @@ func (cs *CaptchaSolver) emitMouseSegment(
 		}
 
 		*cursor += interval
-		*events = append(*events, adversarial.CaptchaEvent{
+		*events = append(*events, challenge.CaptchaEvent{
 			Type: "mousemove", Timestamp: baseTime + int64(*cursor), ElapsedMs: int64(*cursor), X: x, Y: y,
 		})
 
@@ -398,7 +398,7 @@ func (cs *CaptchaSolver) emitMouseSegment(
 			tx := x + math.Cos(angle)*tremDist
 			ty := y + math.Sin(angle)*tremDist
 			*cursor += 5 + cs.rng.Float64()*10
-			*events = append(*events, adversarial.CaptchaEvent{
+			*events = append(*events, challenge.CaptchaEvent{
 				Type: "mousemove", Timestamp: baseTime + int64(*cursor), ElapsedMs: int64(*cursor), X: tx, Y: ty,
 			})
 			*prevX, *prevY = tx, ty

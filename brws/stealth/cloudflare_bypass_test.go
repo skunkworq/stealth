@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/native" // register native engine
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native" // register native engine
 )
 
 // TestCloudflareBypass_RealWorld demonstrates the full bypass flow:
@@ -43,12 +43,12 @@ func TestCloudflareBypass_RealWorld(t *testing.T) {
 				bareBody, _ := io.ReadAll(bareResp.Body)
 				bareResp.Body.Close()
 
-				challenge := adversarial.DetectChallenge(bareResp.StatusCode, bareResp.Header, bareBody)
-				isCF := adversarial.IsCloudflarePage(bareResp.Header)
+				cfChallenge := challenge.DetectChallenge(bareResp.StatusCode, bareResp.Header, bareBody)
+				isCF := challenge.IsCloudflarePage(bareResp.Header)
 
-				if challenge != nil {
+				if cfChallenge != nil {
 					t.Logf("  CHALLENGED: status=%d type=%s ray=%s cf=%v body=%d",
-						bareResp.StatusCode, challenge.Type, challenge.RayID, isCF, len(bareBody))
+						bareResp.StatusCode, cfChallenge.Type, cfChallenge.RayID, isCF, len(bareBody))
 				} else if bareResp.StatusCode != 200 {
 					t.Logf("  BLOCKED: status=%d cf=%v body=%d",
 						bareResp.StatusCode, isCF, len(bareBody))
@@ -89,15 +89,15 @@ func TestCloudflareBypass_RealWorld(t *testing.T) {
 				}
 			}
 
-			challenge := adversarial.DetectChallenge(resp.Status, httpHeaders, resp.Body)
-			isCF := adversarial.IsCloudflarePage(httpHeaders)
+			cfChallenge := challenge.DetectChallenge(resp.Status, httpHeaders, resp.Body)
+			isCF := challenge.IsCloudflarePage(httpHeaders)
 
 			t.Logf("  status=%d proto=%s cf=%v ray=%s body=%d",
 				resp.Status, resp.Protocol, isCF, httpHeaders.Get("Cf-Ray"), len(resp.Body))
 
 			// --- Phase 3: Verify bypass ---
-			if challenge != nil {
-				t.Errorf("  FAIL: still challenged with stealth: type=%s", challenge.Type)
+			if cfChallenge != nil {
+				t.Errorf("  FAIL: still challenged with stealth: type=%s", cfChallenge.Type)
 				return
 			}
 			if resp.Status != 200 {
@@ -198,8 +198,8 @@ func TestCloudflareBypass_ExampleCom(t *testing.T) {
 			}
 
 			// Detect challenge
-			challenge := adversarial.DetectChallenge(statusCode, headers, body)
-			isCF := adversarial.IsCloudflarePage(headers)
+			cfChallenge := challenge.DetectChallenge(statusCode, headers, body)
+			isCF := challenge.IsCloudflarePage(headers)
 			cfMitigated := headers.Get("Cf-Mitigated")
 
 			bodyStr := string(body)
@@ -207,8 +207,8 @@ func TestCloudflareBypass_ExampleCom(t *testing.T) {
 			hasExampleDomain := strings.Contains(bodyStr, "Example Domain")
 
 			result := "PASS"
-			if challenge != nil {
-				result = fmt.Sprintf("CHALLENGED(%s)", challenge.Type)
+			if cfChallenge != nil {
+				result = fmt.Sprintf("CHALLENGED(%s)", cfChallenge.Type)
 			} else if statusCode != 200 {
 				result = fmt.Sprintf("BLOCKED(%d)", statusCode)
 			}

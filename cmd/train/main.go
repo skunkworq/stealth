@@ -21,7 +21,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skunkworq/stealth/brws/ml"
-	"github.com/skunkworq/stealth/brws/ml/datagen"
+	"github.com/skunkworq/stealth/brws/fingerprint/train/datagen"
 )
 
 var version = "0.1.0"

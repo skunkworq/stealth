@@ -7,7 +7,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/skunkworq/stealth/brws/config"
+	"github.com/skunkworq/stealth/brws/core/config"
 )
 
 func main() {

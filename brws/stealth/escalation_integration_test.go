@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/engine"
-	wf "github.com/skunkworq/stealth/brws/engine/waterfall"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	wf "github.com/skunkworq/stealth/brws/browser/engine/waterfall"
 )
 
 // stubEngine is a test double that returns a fixed response.

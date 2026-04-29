@@ -20,7 +20,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 
-	"github.com/skunkworq/stealth/brws/ml/datagen"
+	"github.com/skunkworq/stealth/brws/fingerprint/train/datagen"
 )
 
 var (

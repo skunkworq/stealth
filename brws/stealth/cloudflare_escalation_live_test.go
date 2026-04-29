@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/chromium"
-	_ "github.com/skunkworq/stealth/brws/engine/native"
-	wf "github.com/skunkworq/stealth/brws/engine/waterfall"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/chromium"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	wf "github.com/skunkworq/stealth/brws/browser/engine/waterfall"
 )
 
 // TestCloudflare_WaterfallEscalation tests the full escalation path:

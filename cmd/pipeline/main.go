@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/pipeline"
-	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/crawl/pipeline"
+	"github.com/skunkworq/stealth/brws/content/semantic"
 )
 
 func main() {

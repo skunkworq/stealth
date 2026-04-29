@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/chromium"
-	_ "github.com/skunkworq/stealth/brws/engine/native"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/chromium"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
 )
 
 // TestCloudflare_AnalyzeChallengePages fetches sites that serve JS challenges
@@ -79,7 +79,7 @@ func TestCloudflare_AnalyzeChallengePages(t *testing.T) {
 			for k, v := range resp.Headers {
 				httpHeaders[k] = v
 			}
-			sig := adversarial.ClassifyChallenge(resp.Body, httpHeaders)
+			sig := challenge.ClassifyChallenge(resp.Body, httpHeaders)
 			t.Logf("  Classifier: provider=%s interaction=%s confidence=%.2f",
 				sig.Provider, sig.Interaction, sig.Confidence)
 

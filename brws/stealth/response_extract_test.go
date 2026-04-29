@@ -3,7 +3,7 @@ package stealth
 import (
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/semantic"
+	"github.com/skunkworq/stealth/brws/content/semantic"
 )
 
 const testHTML = `<!DOCTYPE html>

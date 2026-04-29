@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/adversarial"
-	"github.com/skunkworq/stealth/brws/engine"
-	_ "github.com/skunkworq/stealth/brws/engine/native" // register native engine
-	"github.com/skunkworq/stealth/brws/engine/profiles"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/native" // register native engine
+	"github.com/skunkworq/stealth/brws/stealth/profile"
 )
 
 // cfTarget is a site to test against.
@@ -147,7 +147,7 @@ func TestCloudflareDetection_SelfAnalysis(t *testing.T) {
 	t.Log("=== Self-Analysis: CloudflareDetector scoring our own profiles ===")
 	t.Log("")
 
-	cfDetector := adversarial.NewCloudflareDetector()
+	cfDetector := challenge.NewCloudflareDetector()
 
 	for _, profileName := range profiles.AvailableProfiles() {
 		profile := profiles.GetByName(profileName)
@@ -298,14 +298,14 @@ func probeWithHTTPClient(t *testing.T, client *http.Client, target cfTarget, con
 	result.BodySize = len(body)
 	result.Protocol = resp.Proto
 	result.RayID = resp.Header.Get("Cf-Ray")
-	result.IsCF = adversarial.IsCloudflarePage(resp.Header)
+	result.IsCF = challenge.IsCloudflarePage(resp.Header)
 
 	// Run challenge detection
-	challenge := adversarial.DetectChallenge(resp.StatusCode, resp.Header, body)
-	if challenge != nil {
-		result.Challenged = challenge.Type != adversarial.ChallengeBlocked
-		result.Blocked = challenge.Type == adversarial.ChallengeBlocked
-		result.ChallengeType = string(challenge.Type)
+	cfChallenge := challenge.DetectChallenge(resp.StatusCode, resp.Header, body)
+	if cfChallenge != nil {
+		result.Challenged = cfChallenge.Type != challenge.ChallengeBlocked
+		result.Blocked = cfChallenge.Type == challenge.ChallengeBlocked
+		result.ChallengeType = string(cfChallenge.Type)
 	}
 
 	logProbeResult(t, result)
@@ -348,14 +348,14 @@ func probeWithEngine(t *testing.T, eng engine.Engine, target cfTarget, configNam
 	}
 	result.Headers = httpHeaders
 	result.RayID = httpHeaders.Get("Cf-Ray")
-	result.IsCF = adversarial.IsCloudflarePage(httpHeaders)
+	result.IsCF = challenge.IsCloudflarePage(httpHeaders)
 
 	// Run challenge detection
-	challenge := adversarial.DetectChallenge(resp.Status, httpHeaders, resp.Body)
-	if challenge != nil {
-		result.Challenged = challenge.Type != adversarial.ChallengeBlocked
-		result.Blocked = challenge.Type == adversarial.ChallengeBlocked
-		result.ChallengeType = string(challenge.Type)
+	cfChallenge := challenge.DetectChallenge(resp.Status, httpHeaders, resp.Body)
+	if cfChallenge != nil {
+		result.Challenged = cfChallenge.Type != challenge.ChallengeBlocked
+		result.Blocked = cfChallenge.Type == challenge.ChallengeBlocked
+		result.ChallengeType = string(cfChallenge.Type)
 	}
 
 	logProbeResult(t, result)

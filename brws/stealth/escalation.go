@@ -3,10 +3,10 @@ package stealth
 import (
 	"context"
 
-	"github.com/skunkworq/stealth/brws/engine"
-	"github.com/skunkworq/stealth/brws/engine/proxy"
-	wf "github.com/skunkworq/stealth/brws/engine/waterfall"
-	"github.com/skunkworq/stealth/brws/session"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	pool "github.com/skunkworq/stealth/brws/network/proxy/pool"
+	wf "github.com/skunkworq/stealth/brws/browser/engine/waterfall"
+	"github.com/skunkworq/stealth/brws/stealth/profile/session"
 )
 
 // BanSignalStatus maps HTTP status codes to ban signal reasons.
@@ -110,7 +110,7 @@ func WithWaterfall(w *wf.Waterfall) Option {
 }
 
 // WithTieredProxies configures per-domain proxy tier escalation.
-func WithTieredProxies(tiers []proxy.TieredProxy) Option {
+func WithTieredProxies(tiers []pool.TieredProxy) Option {
 	return func(c *Config) {
 		c.TieredProxies = tiers
 	}
