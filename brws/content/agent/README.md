@@ -1,4 +1,4 @@
-# `brws/agent` — Browser Automation Agent Framework
+# `brws/content/agent` — Browser Automation Agent Framework
 
 A compartmentalized, observation-action loop for browser automation. Designed for two primary use cases:
 
@@ -174,7 +174,7 @@ import (
     "fmt"
 
     "github.com/chromedp/chromedp"
-    "github.com/skunkworq/stealth/brws/agent"
+    "github.com/skunkworq/stealth/brws/content/agent"
 )
 
 func main() {
@@ -531,7 +531,7 @@ import (
     "log"
 
     "github.com/chromedp/chromedp"
-    "github.com/skunkworq/stealth/brws/agent"
+    "github.com/skunkworq/stealth/brws/content/agent"
 )
 
 func scrapePage(url string) (*agent.PageSnapshot, error) {
@@ -632,7 +632,7 @@ import (
     "strings"
 
     "github.com/chromedp/chromedp"
-    "github.com/skunkworq/stealth/brws/agent"
+    "github.com/skunkworq/stealth/brws/content/agent"
 )
 
 // Mock LLM — replace with real API call
