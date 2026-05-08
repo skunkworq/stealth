@@ -22,6 +22,22 @@ func ToSemantic(raw *RawExtractionResult) SemanticResult {
 		Metadata:        cloneMap(raw.Metadata),
 		Extractions:     make([]semantic.ExtractionItem, 0, len(raw.Extractions)),
 	}
+	// Only populate Usage when something material was reported. An empty
+	// struct still renders as `"usage":{}` in JSON which would clutter
+	// callers that never enabled a usage-reporting provider.
+	if raw.Usage.TotalTokens > 0 || raw.Usage.LatencyMs > 0 || raw.Usage.Provider != "" {
+		out.Usage = &semantic.ExtractionUsage{
+			Provider:          raw.Usage.Provider,
+			Model:             raw.Usage.Model,
+			InputTokens:       raw.Usage.InputTokens,
+			OutputTokens:      raw.Usage.OutputTokens,
+			TotalTokens:       raw.Usage.TotalTokens,
+			CachedInputTokens: raw.Usage.CachedInputTokens,
+			ReasoningTokens:   raw.Usage.ReasoningTokens,
+			LatencyMs:         raw.Usage.LatencyMs,
+			CostUSD:           raw.Usage.CostUSD,
+		}
+	}
 
 	for _, ext := range raw.Extractions {
 		item := semantic.ExtractionItem{

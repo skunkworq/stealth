@@ -36,6 +36,54 @@ const AttributeSuffix = "_attributes"
 type ScoredOutput struct {
 	Score  float64
 	Output string
+	// Usage carries token-count and timing metadata for this single
+	// inference call. nil when the provider does not report usage (e.g.
+	// Ollama, custom test stubs). Populated by Gemini / OpenAI / DeepSeek.
+	Usage *InferenceUsage
+}
+
+// InferenceUsage is the token-and-timing telemetry for one model call.
+// Captured per prompt because each prompt maps to one underlying API call
+// (and therefore one billing event) in every supported provider. Aggregated
+// upward into RawExtractionResult.Usage so callers can attribute cost per
+// extraction without piecing the data together themselves.
+type InferenceUsage struct {
+	Provider          string
+	Model             string
+	InputTokens       int64
+	OutputTokens      int64
+	TotalTokens       int64
+	CachedInputTokens int64 // populated by providers that report prompt-cache hits (Gemini, OpenAI). Otherwise 0.
+	ReasoningTokens   int64 // populated by reasoning models (deepseek-reasoner, o1-style). Otherwise 0.
+	LatencyMs         int64
+	// Cost is the USD cost of this call when the provider response includes
+	// it; otherwise 0. Most providers don't return cost — leave 0 and let
+	// downstream pricing tables compute it from token counts.
+	CostUSD float64
+}
+
+// Add accumulates other into u. Used to roll per-prompt usage up to per-pass
+// and per-document aggregates. Receiver fields with provider/model strings
+// keep the most-recent non-empty value (mixing models in one extraction is
+// already a misconfig — but we don't want to lose attribution for the first
+// call by overwriting with "").
+func (u *InferenceUsage) Add(other *InferenceUsage) {
+	if other == nil {
+		return
+	}
+	if other.Provider != "" {
+		u.Provider = other.Provider
+	}
+	if other.Model != "" {
+		u.Model = other.Model
+	}
+	u.InputTokens += other.InputTokens
+	u.OutputTokens += other.OutputTokens
+	u.TotalTokens += other.TotalTokens
+	u.CachedInputTokens += other.CachedInputTokens
+	u.ReasoningTokens += other.ReasoningTokens
+	u.LatencyMs += other.LatencyMs
+	u.CostUSD += other.CostUSD
 }
 
 // CharInterval is a character span in source text.
@@ -127,6 +175,11 @@ type RawExtractionResult struct {
 	ModelID         string
 	Provider        string
 	Metadata        map[string]any
+	// Usage is the sum of all per-prompt InferenceUsage observed during
+	// extraction (across passes, batches, and chunks). Zero-valued when no
+	// provider reported usage. Callers wanting per-call detail rather than
+	// totals can drill into the per-pass usage in Metadata["usage_history"].
+	Usage InferenceUsage
 }
 
 // Extractor defines the provider-facing interface.

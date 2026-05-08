@@ -131,6 +131,12 @@ func ExtractRaw(ctx context.Context, input string, opts ...Option) (*RawExtracti
 	}
 
 	allPassExtractions := make([][]Extraction, 0, options.ExtractionPasses)
+	// Per-prompt usage records, preserved in extraction order so callers
+	// debugging cost outliers can reconstruct which chunk produced which
+	// token count. Only populated when the underlying provider reports
+	// usage — Gemini and OpenAI/DeepSeek do; Ollama does not.
+	usageHistory := make([]InferenceUsage, 0)
+	var totalUsage InferenceUsage
 	for pass := 0; pass < options.ExtractionPasses; pass++ {
 		promptBuilder := newContextAwarePromptBuilder(promptGen, options.ContextWindowChars)
 		chunkIter, err := NewChunkIterator(tokenized, options.MaxCharBuffer, options.Tokenizer, document)
@@ -179,6 +185,11 @@ func ExtractRaw(ctx context.Context, input string, opts ...Option) (*RawExtracti
 					return nil, &InferenceOutputError{newErr("extract", "empty scored output entry")}
 				}
 
+				if u := scoredOutputs[i][0].Usage; u != nil {
+					usageHistory = append(usageHistory, *u)
+					totalUsage.Add(u)
+				}
+
 				chunk := batch[i]
 				chunkText, err := chunk.ChunkText()
 				if err != nil {
@@ -208,6 +219,19 @@ func ExtractRaw(ctx context.Context, input string, opts ...Option) (*RawExtracti
 	}
 
 	merged := mergeNonOverlappingExtractions(allPassExtractions)
+	metadata := map[string]any{
+		"format_type":  options.FormatType,
+		"fence_output": model.RequiresFenceOutput(),
+	}
+	if len(usageHistory) > 0 {
+		metadata["usage_history"] = usageHistory
+	}
+	if totalUsage.Provider == "" {
+		totalUsage.Provider = providerName
+	}
+	if totalUsage.Model == "" {
+		totalUsage.Model = modelID
+	}
 	return &RawExtractionResult{
 		DocumentID:      document.id(),
 		Text:            text,
@@ -217,10 +241,8 @@ func ExtractRaw(ctx context.Context, input string, opts ...Option) (*RawExtracti
 		PassesPerformed: options.ExtractionPasses,
 		ModelID:         modelID,
 		Provider:        providerName,
-		Metadata: map[string]any{
-			"format_type":  options.FormatType,
-			"fence_output": model.RequiresFenceOutput(),
-		},
+		Metadata:        metadata,
+		Usage:           totalUsage,
 	}, nil
 }
 

@@ -43,6 +43,16 @@ func registerBuiltins() {
 		`^gpt-5`,
 		`^gpt5\.`,
 	})
+	// Hosted DeepSeek API (OpenAI-compatible). Priority 20 outranks the
+	// Ollama "^deepseek" / "^deepseek-ai/" patterns below so plain
+	// "deepseek-chat" / "deepseek-reasoner" route to api.deepseek.com.
+	// To run a DeepSeek model LOCALLY via Ollama, use a name Ollama
+	// recognizes (e.g. "deepseek-r1:7b") which won't match these patterns.
+	_ = registerProviderWithPatterns("deepseek", DeepSeek, 20, []string{
+		`^deepseek-chat$`,
+		`^deepseek-reasoner$`,
+		`^deepseek-coder$`,
+	})
 	_ = registerProviderWithPatterns("ollama", Ollama, 10, []string{
 		`^gemma`,
 		`^llama`,
@@ -207,6 +217,11 @@ type openAIExtractor struct {
 	baseURL      string
 	organization string
 	client       *http.Client
+	// providerName labels the underlying provider for usage telemetry.
+	// Defaults to "openai" but factories that share this implementation
+	// (DeepSeek today; potential others later) override it so per-provider
+	// pricing tables and cost dashboards aren't fooled by a shared codepath.
+	providerName string
 }
 
 // OpenAI creates an OpenAI-backed extractor.
@@ -230,6 +245,13 @@ func OpenAI(_ context.Context, cfg ModelConfig) (Extractor, error) {
 	temperature := floatFrom(cfg.ProviderKwargs["timeout_seconds"], 30)
 	client := &http.Client{Timeout: time.Duration(temperature) * time.Second}
 
+	providerName := strings.ToLower(strings.TrimSpace(cfg.Provider))
+	if providerName == "" {
+		providerName = strings.ToLower(strings.TrimSpace(cfg.ProviderClass))
+	}
+	if providerName == "" {
+		providerName = "openai"
+	}
 	return &openAIExtractor{
 		baseExtractor: baseExtractor{
 			formatType:   format,
@@ -241,6 +263,7 @@ func OpenAI(_ context.Context, cfg ModelConfig) (Extractor, error) {
 		baseURL:      strings.TrimRight(baseURL, "/"),
 		organization: stringOr(cfg.ProviderKwargs["organization"], ""),
 		client:       client,
+		providerName: providerName,
 	}, nil
 }
 
@@ -251,6 +274,7 @@ func (o *openAIExtractor) Infer(ctx context.Context, prompts []string, options m
 
 	out := make([][]ScoredOutput, 0, len(prompts))
 	for _, prompt := range prompts {
+		callStart := time.Now()
 		payload := map[string]any{
 			"model": o.modelID,
 			"messages": []map[string]string{
@@ -304,6 +328,21 @@ func (o *openAIExtractor) Infer(ctx context.Context, prompts []string, options m
 					Content string `json:"content"`
 				} `json:"message"`
 			} `json:"choices"`
+			Model string `json:"model"`
+			Usage struct {
+				PromptTokens        int64 `json:"prompt_tokens"`
+				CompletionTokens    int64 `json:"completion_tokens"`
+				TotalTokens         int64 `json:"total_tokens"`
+				PromptTokensDetails struct {
+					CachedTokens int64 `json:"cached_tokens"`
+				} `json:"prompt_tokens_details"`
+				CompletionTokensDetails struct {
+					ReasoningTokens int64 `json:"reasoning_tokens"`
+				} `json:"completion_tokens_details"`
+				// DeepSeek-specific fields (not in vanilla OpenAI but the
+				// JSON decoder ignores unknown fields safely):
+				PromptCacheHitTokens int64 `json:"prompt_cache_hit_tokens"`
+			} `json:"usage"`
 		}
 		if err := json.Unmarshal(data, &parsed); err != nil {
 			return nil, err
@@ -311,7 +350,29 @@ func (o *openAIExtractor) Infer(ctx context.Context, prompts []string, options m
 		if len(parsed.Choices) == 0 {
 			return nil, &InferenceOutputError{newErr("openai_infer", "no choices in response")}
 		}
-		out = append(out, []ScoredOutput{{Score: 1.0, Output: parsed.Choices[0].Message.Content}})
+		providerName := o.providerName
+		if providerName == "" {
+			providerName = "openai"
+		}
+		cached := parsed.Usage.PromptTokensDetails.CachedTokens
+		if cached == 0 {
+			cached = parsed.Usage.PromptCacheHitTokens // DeepSeek
+		}
+		modelID := parsed.Model
+		if modelID == "" {
+			modelID = o.modelID
+		}
+		usage := &InferenceUsage{
+			Provider:          providerName,
+			Model:             modelID,
+			InputTokens:       parsed.Usage.PromptTokens,
+			OutputTokens:      parsed.Usage.CompletionTokens,
+			TotalTokens:       parsed.Usage.TotalTokens,
+			CachedInputTokens: cached,
+			ReasoningTokens:   parsed.Usage.CompletionTokensDetails.ReasoningTokens,
+			LatencyMs:         time.Since(callStart).Milliseconds(),
+		}
+		out = append(out, []ScoredOutput{{Score: 1.0, Output: parsed.Choices[0].Message.Content, Usage: usage}})
 	}
 
 	return out, nil
@@ -374,6 +435,7 @@ func (g *geminiExtractor) Infer(ctx context.Context, prompts []string, options m
 	out := make([][]ScoredOutput, 0, len(prompts))
 
 	for _, prompt := range prompts {
+		callStart := time.Now()
 		generationConfig := map[string]any{}
 		applyGeminiOptions(generationConfig, options)
 		if g.formatType == FormatTypeJSON {
@@ -423,6 +485,13 @@ func (g *geminiExtractor) Infer(ctx context.Context, prompts []string, options m
 					} `json:"parts"`
 				} `json:"content"`
 			} `json:"candidates"`
+			UsageMetadata struct {
+				PromptTokenCount        int64 `json:"promptTokenCount"`
+				CandidatesTokenCount    int64 `json:"candidatesTokenCount"`
+				TotalTokenCount         int64 `json:"totalTokenCount"`
+				CachedContentTokenCount int64 `json:"cachedContentTokenCount"`
+				ThoughtsTokenCount      int64 `json:"thoughtsTokenCount"`
+			} `json:"usageMetadata"`
 		}
 		if err := json.Unmarshal(data, &parsed); err != nil {
 			return nil, err
@@ -430,7 +499,17 @@ func (g *geminiExtractor) Infer(ctx context.Context, prompts []string, options m
 		if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
 			return nil, &InferenceOutputError{newErr("gemini_infer", "no candidate content in response")}
 		}
-		out = append(out, []ScoredOutput{{Score: 1.0, Output: parsed.Candidates[0].Content.Parts[0].Text}})
+		usage := &InferenceUsage{
+			Provider:          "gemini",
+			Model:             g.modelID,
+			InputTokens:       parsed.UsageMetadata.PromptTokenCount,
+			OutputTokens:      parsed.UsageMetadata.CandidatesTokenCount,
+			TotalTokens:       parsed.UsageMetadata.TotalTokenCount,
+			CachedInputTokens: parsed.UsageMetadata.CachedContentTokenCount,
+			ReasoningTokens:   parsed.UsageMetadata.ThoughtsTokenCount,
+			LatencyMs:         time.Since(callStart).Milliseconds(),
+		}
+		out = append(out, []ScoredOutput{{Score: 1.0, Output: parsed.Candidates[0].Content.Parts[0].Text, Usage: usage}})
 	}
 
 	return out, nil
@@ -718,4 +797,30 @@ func (cfg ModelConfig) modelOrDefault(defaultModel string) string {
 		return cfg.ModelID
 	}
 	return defaultModel
+}
+
+// DeepSeek is a thin wrapper that returns an OpenAI-compatible extractor
+// pointed at api.deepseek.com. DeepSeek's hosted API mirrors the OpenAI
+// chat-completions surface so we reuse OpenAI's request/response code
+// rather than duplicating it. The factory injects the right base_url
+// before delegating, and reads DEEPSEEK_API_KEY from ProviderKwargs as
+// a convenience alias for `api_key`.
+//
+// Local Ollama-hosted DeepSeek models (e.g. `deepseek-r1:7b`) still
+// route through the Ollama provider — they don't match this provider's
+// patterns (`^deepseek-(chat|reasoner|coder)$`).
+func DeepSeek(ctx context.Context, cfg ModelConfig) (Extractor, error) {
+	if cfg.ProviderKwargs == nil {
+		cfg.ProviderKwargs = map[string]any{}
+	}
+	if _, set := cfg.ProviderKwargs["base_url"]; !set {
+		cfg.ProviderKwargs["base_url"] = "https://api.deepseek.com"
+	}
+	// Allow callers to set DEEPSEEK_API_KEY env var via ProviderKwargs alias.
+	if cfg.apiKey() == "" {
+		if alt := stringOr(cfg.ProviderKwargs["deepseek_api_key"], ""); alt != "" {
+			cfg.ProviderKwargs["api_key"] = alt
+		}
+	}
+	return OpenAI(ctx, cfg)
 }
