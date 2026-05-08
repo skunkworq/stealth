@@ -319,18 +319,121 @@ func (r *ResNetBlock) Forward(x [][][]float64) [][][]float64 {
 }
 
 func (c *Conv2DLayer) forward(x [][][]float64) [][][]float64 {
-	return x
+	if len(x) == 0 || len(x[0]) == 0 || len(x[0][0]) == 0 {
+		return x
+	}
+
+	inChannels := len(x)
+	inHeight := len(x[0])
+	inWidth := len(x[0][0])
+	outChannels := len(c.Weights)
+	if outChannels == 0 {
+		return x
+	}
+
+	// Derive kernel dimensions from flattened weight storage.
+	kernelElements := len(c.Weights[0][0])
+	kernelSize := int(math.Sqrt(float64(kernelElements)))
+	var kernelHeight, kernelWidth int
+	if kernelSize*kernelSize == kernelElements {
+		kernelHeight, kernelWidth = kernelSize, kernelSize
+	} else {
+		kernelHeight, kernelWidth = 1, kernelElements
+	}
+
+	pad := c.Padding
+	stride := c.Stride
+	outHeight := (inHeight+2*pad-kernelHeight)/stride + 1
+	outWidth := (inWidth+2*pad-kernelWidth)/stride + 1
+	if outHeight <= 0 || outWidth <= 0 {
+		return x
+	}
+
+	// Allocate output tensor.
+	output := make([][][]float64, outChannels)
+	for oc := range output {
+		output[oc] = make([][]float64, outHeight)
+		for h := range output[oc] {
+			output[oc][h] = make([]float64, outWidth)
+		}
+	}
+
+	// Perform convolution: for each output channel and spatial position,
+	// sum over input channels and kernel elements.
+	for oc := 0; oc < outChannels; oc++ {
+		for oh := 0; oh < outHeight; oh++ {
+			for ow := 0; ow < outWidth; ow++ {
+				sum := c.Bias[oc]
+				for ic := 0; ic < inChannels; ic++ {
+					for kh := 0; kh < kernelHeight; kh++ {
+						for kw := 0; kw < kernelWidth; kw++ {
+							ih := oh*stride + kh - pad
+							iw := ow*stride + kw - pad
+							if ih >= 0 && ih < inHeight && iw >= 0 && iw < inWidth {
+								wIdx := kh*kernelWidth + kw
+								sum += c.Weights[oc][ic][wIdx] * x[ic][ih][iw]
+							}
+						}
+					}
+				}
+				output[oc][oh][ow] = sum
+			}
+		}
+	}
+
+	return output
 }
 
 func (b *BatchNormLayer) forward(x [][][]float64) [][][]float64 {
-	return x
+	if len(x) == 0 {
+		return x
+	}
+
+	channels := len(x)
+	height := len(x[0])
+	if height == 0 {
+		return x
+	}
+	width := len(x[0][0])
+
+	output := make([][][]float64, channels)
+	for c := 0; c < channels; c++ {
+		output[c] = make([][]float64, height)
+		for h := 0; h < height; h++ {
+			output[c][h] = make([]float64, width)
+			for w := 0; w < width; w++ {
+				normalized := (x[c][h][w] - b.Mean[c]) / math.Sqrt(b.Variance[c]+b.Epsilon)
+				output[c][h][w] = b.Gamma[c]*normalized + b.Beta[c]
+			}
+		}
+	}
+
+	return output
 }
 
 func addTensors(a, b [][][]float64) [][][]float64 {
 	if len(a) != len(b) {
 		return a
 	}
-	return a
+
+	output := make([][][]float64, len(a))
+	for i := range a {
+		if len(a[i]) != len(b[i]) {
+			return a
+		}
+		output[i] = make([][]float64, len(a[i]))
+		for j := range a[i] {
+			if len(a[i][j]) != len(b[i][j]) {
+				return a
+			}
+			output[i][j] = make([]float64, len(a[i][j]))
+			for k := range a[i][j] {
+				output[i][j][k] = a[i][j][k] + b[i][j][k]
+			}
+		}
+	}
+
+	return output
 }
 
 // CNNModel represents a convolutional neural network model.
