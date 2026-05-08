@@ -400,7 +400,7 @@ User: "Research: What is NVIDIA's current stock price?"
 import (
     "context"
     "github.com/skunkworq/stealth/brws/engine"
-    _ "github.com/skunkworq/stealth/brws/engine/native"
+    _ "github.com/skunkworq/stealth/brws/browser/engine/native"
 )
 
 eng, _ := engine.New("native", engine.Options{Stealth: true})
@@ -645,14 +645,22 @@ stealth train --urls https://google.com,https://github.com --output training-dat
 | `semantic` | `cmd/semantic` | Extract semantic trees from URLs |
 | `semantic-server` | `cmd/semantic-server` | HTTP API for semantic extraction |
 | `semantic-mcp` | `cmd/semantic-mcp` | MCP server for Claude Desktop |
+| `semanticcrawl` | `cmd/semanticcrawl` | Semantic crawler with LLM extraction |
 | `stealth-mcp` | `cmd/stealth-mcp` | MCP server for stealth operations |
 | `labd` | `cmd/labd` | Fingerprint lab daemon |
 | `agent` | `cmd/agent` | Browser automation — observe, execute, step |
+| `extract` | `cmd/extract` | Structured content extraction CLI |
 | `train` | `cmd/train` | ML training data generation |
+| `ml_datagen` | `cmd/ml_datagen` | ML dataset generation |
 | `benchmark` | `cmd/benchmark` | Performance benchmarks |
 | `evalbench` | `cmd/evalbench` | Evaluation suite |
+| `eval_e2e` | `cmd/eval_e2e` | End-to-end evaluation |
+| `vecbench` | `cmd/vecbench` | Vector/benchmark tooling |
+| `scanciphers` | `cmd/scanciphers` | TLS cipher scanner |
 | `crawl` | `cmd/crawl` | Standalone crawler |
 | `pipeline` | `cmd/pipeline` | Processing pipeline |
+| `test_realworld` | `cmd/test_realworld` | Real-world integration tests |
+| `test_semantic` | `cmd/test_semantic` | Semantic pipeline tests |
 | `gencert` | `cmd/gencert` | TLS cert generation for MITM |
 
 ---

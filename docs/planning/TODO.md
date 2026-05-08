@@ -5,64 +5,63 @@ Based on analysis of Scrapy and Scrapling frameworks.
 ## Priority 0 - Core Framework
 
 ### P0.1 Spider Framework
-- [x] `brws/spider/spider.go` - Base Spider with callbacks
-- [x] `brws/spider/scheduler.go` - Priority queue with disk persistence
-- [x] `brws/spider/settings.go` - Settings interface with defaults
-- [x] `brws/spider/crawler.go` - Crawler implementation
-- [x] `brws/spider/middleware.go` - Middleware chain
-- [x] `brws/spider/pipeline.go` - Item pipelines + stats
-- [x] `brws/engine/response_types.go` - HtmlResponse with CSS/XPath
+- [x] `brws/crawl/spider/spider.go` - Base Spider with callbacks
+- [x] `brws/crawl/spider/scheduler.go` - Priority queue with disk persistence
+- [x] `brws/crawl/spider/settings.go` - Settings interface with defaults
+- [x] `brws/crawl/spider/crawler.go` - Crawler implementation
+- [x] `brws/crawl/spider/middleware.go` - Middleware chain
+- [x] `brws/crawl/spider/pipeline.go` - Item pipelines + stats
+- [x] `brws/browser/engine/response_types.go` - HtmlResponse with CSS/XPath
 
 ### P0.2 Item Pipeline
-- [x] `brws/spider/pipeline.go` - Pipeline manager in spider package
+- [x] `brws/crawl/spider/pipeline.go` - Pipeline manager in spider package
 
 ---
 
 ## Priority 1 - Essential Components
 
 ### P1.1 Link Extraction
-- [x] `brws/extractors/links.go` - LinkExtractor with CSS/XPath
-- [x] `brws/extractors/sitemap.go` - Sitemap parsing
+- [x] Link extraction with CSS/XPath (consolidated into crawl/spider)
+- [x] Sitemap parsing (consolidated into crawl/spider)
 
 ### P1.2 Middleware System
-- [x] `brws/spider/middleware.go` - Built-in middlewares (Retry, UserAgent, Redirect)
+- [x] `brws/crawl/spider/middleware.go` - Built-in middlewares (Retry, UserAgent, Redirect)
 
 ### P1.3 Settings System
-- [x] `brws/spider/settings.go` - Priority-based settings with 40+ defaults
+- [x] `brws/crawl/spider/settings.go` - Priority-based settings with 40+ defaults
 
 ### P1.4 Request/Response Objects
-- [x] `brws/engine/request_advanced.go` - FormRequest, JsonRequest
-- [x] `brws/engine/response_types.go` - TextResponse, HtmlResponse
+- [x] `brws/browser/engine/request_advanced.go` - FormRequest, JsonRequest
+- [x] `brws/browser/engine/response_types.go` - TextResponse, HtmlResponse
 
 ---
 
 ## Priority 2 - CLI & UX
 
 ### P2.1 Signals
-- [x] `brws/signals/manager.go` - Event emitter system
-- [x] `brws/signals/types.go` - Signal types
+- [x] `brws/core/signals/manager.go` - Event emitter system
+- [x] `brws/core/signals/types.go` - Signal types
 
 ### P2.2 Commands
 - [x] `cmd/stealth/main.go` - Main CLI with crawl, list, shell commands
 
 ### P2.3 Data Export
-- [x] `brws/export/exporter.go` - Exporter interface
-- [x] `brws/export/json.go` - JSON exporter
-- [x] `brws/export/csv.go` - CSV exporter
+- [x] Exporter interface (consolidated into crawl/spider/pipeline.go)
+- [x] JSON/CSV export (consolidated into crawl/spider/pipeline.go)
 
 ---
 
 ## Priority 3 - Advanced Features
 
 ### P3.1 Duplicate Filtering
-- [x] `brws/spider/scheduler.go` - Built into scheduler
+- [x] `brws/crawl/spider/scheduler.go` - Built into scheduler
 
 ### P3.2 Extension System
-- [x] `brws/extension/manager.go` - Extension loader
+- [x] Extension system (consolidated into crawl/spider)
 
 ### P3.3 Adaptive Parsing (Scrapling Feature)
-- [x] `brws/adaptive/tracker.go` - Element property tracking
-- [x] `brws/adaptive/storage.go` - SQLite persistence
+- [x] Element property tracking (consolidated into content/semantic)
+- [x] SQLite persistence (consolidated into content/semantic/cache.go)
 
 ---
 
@@ -118,9 +117,9 @@ Based on analysis of Scrapy and Scrapling frameworks.
 ## Cloudflare Shield/Sword — Completed Phases
 
 ### Phase 1-4: CF Challenge Reproduction + Solver (Complete)
-- [x] `brws/adversarial/cloudflare.go` — DetectChallenge (JS/Managed/Turnstile/Blocked)
-- [x] `brws/adversarial/cloudflare_challenge.go` — CloudflareChallenger with PoW, fingerprint, behavioral validation
-- [x] `brws/adversarial/cloudflare_handler.go` — HTTP handlers (init, solve/js, solve/managed, solve/turnstile, verify)
+- [x] `brws/stealth/challenge/cloudflare.go` — DetectChallenge (JS/Managed/Turnstile/Blocked)
+- [x] `brws/stealth/challenge/cloudflare_challenge.go` — CloudflareChallenger with PoW, fingerprint, behavioral validation
+- [x] `brws/stealth/challenge/cloudflare_handler.go` — HTTP handlers (init, solve/js, solve/managed, solve/turnstile, verify)
 - [x] `brws/stealth/cloudflare_solver.go` — SolveJSChallenge, SolveManagedChallenge, SolveTurnstile
 - [x] uTLS + HTTP/2 integration confirmed 100% bypass on real CF sites
 
@@ -147,7 +146,7 @@ Based on analysis of Scrapy and Scrapling frameworks.
 The single biggest gap: every request generates fresh random hardware fingerprints. Fixed by binding fingerprints to sessions (shield) and pinning fingerprints per client instance (sword).
 
 ### P7.1 Shield: Session Fingerprint Binding
-- [x] `brws/adversarial/cloudflare_challenge.go` — `BoundFingerprint` + `FingerprintDrift` fields on `CloudflareChallengeSession`
+- [x] `brws/stealth/challenge/cloudflare_challenge.go` — `BoundFingerprint` + `FingerprintDrift` fields on `CloudflareChallengeSession`
 - [x] `ValidateFingerprint()` binds first-seen fingerprint, detects drift on subsequent calls
 - [x] `fingerprintDrift()` scores 9 hardware dimensions (canvas, GPU, platform, cores, memory, screen, timezone, color depth)
 - [x] `GetFingerprintDrift()` API for querying session drift score
@@ -174,11 +173,11 @@ The single biggest gap: every request generates fresh random hardware fingerprin
 Concrete bugs that were trivially detectable. Each fix closes a detection vector.
 
 ### P8.1 Canvas PNG CRC Checksums
-- [x] `brws/behavior/request_generator.go` — Computed CRC32 for IHDR and IDAT chunks using `hash/crc32`
+- [x] `brws/stealth/behavior/request_generator.go` — Computed CRC32 for IHDR and IDAT chunks using `hash/crc32`
 - [x] Test: decoded PNG has non-zero CRC bytes
 
 ### P8.2 Timing baseURL Hardcoded to `example.com`
-- [x] `brws/behavior/request_generator.go` — Added `targetURL` field + `SetTargetURL()`, `GenerateRequest()` sets it
+- [x] `brws/stealth/behavior/request_generator.go` — Added `targetURL` field + `SetTargetURL()`, `GenerateRequest()` sets it
 - [x] Timing referrers now use actual target URL instead of example.com
 - [x] Test: timing data references target URL when set
 
@@ -188,7 +187,7 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
 - [x] Test: 8 known timezones + unknown fallback
 
 ### P8.4 Firefox/Safari Profiles with Chrome Client Hints
-- [x] `brws/engine/profiles/profiles.go` — Cleared `SecChUa*` + `SecFetch*` from Firefox and Safari profiles
+- [x] `brws/stealth/profile/profiles.go` — Cleared `SecChUa*` + `SecFetch*` from Firefox and Safari profiles
 - [x] Also fixed `GetFirefox120Mac()` (was already fixed) and Safari mobile
 
 ### P8.5 CF Solver Canvas Hash Pattern
@@ -200,14 +199,14 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
 ## Phase 9 — HTTP/2 Deep Fingerprint Evasion (Tier 2) ✅ COMPLETE
 
 ### P9.1 Profile-Aware HTTP/2 Transport
-- [x] `brws/engine/native/native.go` — Added `h2Profile` struct with Chrome/Firefox HTTP/2 settings
+- [x] `brws/browser/engine/native/native.go` — Added `h2Profile` struct with Chrome/Firefox HTTP/2 settings
 - [x] `uTLSRoundTripper` now selects h2Profile based on TLS fingerprint (Chrome vs Firefox)
 - [x] `getH2Transport()` sets MaxHeaderListSize, MaxDecoderHeaderTableSize, MaxReadFrameSize per profile
 - [x] Chrome: 262144/65536/16384, Firefox: 0/131072/16384
 - [x] Note: INITIAL_WINDOW_SIZE (Chrome 6MB vs Go 4MB) cannot be overridden in `http2.Transport`; `CustomHTTP2Transport` provides full control
 
 ### P9.2 PRIORITY Frame Spoofing
-- [x] `brws/engine/spoof/http2_custom.go` — Added PriorityWeight, PriorityExclusive, PriorityDependsOn, SendPriority fields
+- [x] `brws/browser/engine/spoof/http2_custom.go` — Added PriorityWeight, PriorityExclusive, PriorityDependsOn, SendPriority fields
 - [x] Chrome: weight=255, exclusive=true, depends on stream 0, embedded in HEADERS frame
 - [x] Firefox: SendPriority=false (uses urgency-based RFC 9218 priority instead)
 
@@ -217,7 +216,7 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
 - [x] readResponse enhanced: multi-frame body assembly, GOAWAY/SETTINGS/WindowUpdate handling
 
 ### P9 Tests
-- [x] 11 tests in `brws/engine/spoof/http2_custom_test.go`
+- [x] 11 tests in `brws/browser/engine/spoof/http2_custom_test.go`
 - [x] Chrome vs Firefox SETTINGS values, window sizes, pseudo-header order, PRIORITY config
 - [x] Header encoding for both Chrome and Firefox profiles
 
@@ -314,7 +313,7 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
 ### Phase 13 — CAPTCHA CNN + Sequence Model
 
 #### P13.1 CNN Character Classifier
-- [ ] Train CNN model in `brws/adversarial/captcha/model.go` (architecture exists, forward() is stub)
+- [ ] Train CNN model in `brws/stealth/captcha/model.go` (architecture exists, forward() is stub)
 - [ ] Character-level classification with 10k+ images per difficulty level
 - [ ] Use `captcha.Generator` to create infinite labeled training data
 - [ ] Target: >95% accuracy on medium difficulty, >80% on hard
@@ -327,7 +326,7 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
 - [ ] Train on synthetic data with rotation/overlap augmentation
 
 #### P13.3 Contrastive Learning Fix
-- [ ] Fix broken `ContrastiveSolver` in `brws/adversarial/captcha/solver.go`
+- [ ] Fix broken `ContrastiveSolver` in `brws/stealth/captcha/solver.go`
 - [ ] Proper Gaussian RNG (replace uniform with Box-Muller)
 - [ ] NT-Xent loss with negative sampling (temperature-scaled cosine similarity)
 - [ ] Working backprop + optimizer step
@@ -391,7 +390,7 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                     PIPELINE LAYER                           │
-│                  brws/pipeline/                              │
+│                  brws/crawl/pipeline/                              │
 │                                                              │
 │   Pipeline.ProcessURL ─▶ fetch → extract → embed            │
 │   Pipeline.ProcessBatch (concurrent)                        │
@@ -403,7 +402,7 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                     SEMANTIC LAYER                           │
-│                  brws/semantic/                              │
+│                  brws/content/semantic/                              │
 │                                                              │
 │   pipeline.go - DOM chunking + LLM compression              │
 │   cache.go - SQLite content-hash cache                      │
@@ -416,7 +415,7 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                   OBSERVABILITY LAYER                        │
-│                  brws/observability/                         │
+│                  brws/core/observability/                         │
 │                                                              │
 │   InMemoryCollector - Counters, Gauges, Histograms          │
 │   Timer helpers for duration tracking                       │

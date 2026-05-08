@@ -108,7 +108,7 @@ The refactoring of behavioral_analyzer.go removed many of the original 33 checks
 This is the largest file and still needs to be split. Suggested structure:
 
 ```
-brws/adversarial/
+brws/stealth/challenge/
 ├── detector.go              # Core detector (~150 lines)
 ├── detector_config.go       # Configuration (~70 lines) - ✅ Extracted
 ├── detector_server.go       # HTTP server (~200 lines)
@@ -138,14 +138,14 @@ brws/adversarial/
 
 | File | Lines | Priority |
 |------|-------|----------|
-| `adversarial/stealth_detector.go` | 2187 | **HIGH** |
-| `adversarial/captcha/extended_types.go` | 1229 | Medium |
+| `brws/stealth/challenge/stealth_detector.go` | 2187 | **HIGH** |
+| `brws/stealth/captcha/extended_types.go` | 1229 | Medium |
 | `adversarial/vectors.go` | 1183 | Medium |
-| `lab/enhanced_server.go` | 1076 | Medium |
-| `benchmark/tool_comparison.go` | 1071 | Low |
-| `adversarial/advanced_detection.go` | 1057 | Medium |
-| `engine/chromium/stealth.go` | 1040 | Medium |
-| `tlsfprint/signatures.go` | 1013 | Low |
+| `brws/stealth/challenge/lab_cloudflare.go` + `lab_recaptcha.go` | ~1076 | Medium |
+| `brws/fingerprint/bench/tool_comparison.go` | 1071 | Low |
+| `brws/stealth/challenge/advanced_detection.go` | 1057 | Medium |
+| `brws/browser/engine/chromium/stealth_engine.go` | 1040 | Medium |
+| `brws/fingerprint/tls/signatures.go` | 1013 | Low |
 
 ### Priority 4: Address lint issues
 
