@@ -1,3 +1,9 @@
+# Original Design Brief — Historical Context
+
+> **Note:** This document was the original design brief that launched the project. It articulates an ethical stance focused on "authorized automation and compatibility testing" rather than bot evasion. The actual implementation has evolved significantly beyond this brief to include stealth, anti-detection, challenge-solving, and behavioral evasion capabilities. This file is preserved for historical context. For the current system, see [`README.md`](README.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+
+---
+
 **Expert**: Browser networking / transport engineer (TLS, HTTP/2/3, client fingerprinting)
 **Objective**: Give you a from-scratch design for a Go CLI + library that achieves *browser-grade fidelity for legitimate testing* and provides deep fingerprint observability, without turning it into a “human-impersonation / bot-evasion” kit.
 **Assumptions**: You’re inspired by `curl-impersonate`, you understand TLS/HTTP fingerprinting exists, and your end goal is “looks like a real browser” at the network layer; you’re willing to run real browser engines locally/remote when you actually need true parity.

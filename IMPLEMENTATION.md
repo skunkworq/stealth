@@ -1,198 +1,225 @@
 # Implementation Summary
 
-This document provides an overview of the `brwslab` implementation.
+> **Module:** `github.com/skunkworq/stealth`  
+> **Go Version:** 1.26+  
+> **Total Go Lines:** ~170,000 (library + commands)  
+> **Packages:** 80+  
+
+This document provides a high-level overview of the `stealth` implementation. For deeper dives into individual modules, see the [`MODEL_*.md`](MODELS_INDEX.md) documentation suite.
+
+---
 
 ## Project Structure
 
 ```
-brwslab/
-├── brws/                      # Core library
-│   ├── engine/               # Engine interfaces and implementations
-│   │   ├── engine.go         # Core interface definitions
-│   │   ├── native/           # Go net/http implementation
-│   │   ├── chromium/         # Chrome CDP implementation
-│   │   ├── firefox/          # Firefox via Playwright
-│   │   └── webkit/           # WebKit via Playwright
-│   ├── session/              # Session management
-│   │   └── session.go        # Cookie jars, profile management
-│   ├── trace/                # HAR-like tracing (integrated in engine)
-│   ├── lab/                  # Fingerprint lab protocols
-│   │   └── server.go         # labd server implementation
-│   └── diff/                 # Comparison utilities
-│       └── diff.go           # Response/fingerprint diffing
-├── cmd/                      # CLI applications
-│   ├── brwslab/              # Main CLI tool
-│   │   └── main.go           # All CLI commands
-│   └── labd/                 # Lab server
-│       └── main.go           # Server entry point
-├── examples/                 # Example usage
-│   └── basic_fetch.go        # Library usage example
-├── go.mod                    # Go module definition
-├── Makefile                  # Build automation
-├── README.md                 # User documentation
-└── IMPLEMENTATION.md         # This file
+stealth/
+├── brws/                        # Library packages (~160K lines)
+│   ├── browser/                 # Browser automation engines
+│   │   ├── engine/              # Engine interface + 4 implementations
+│   │   │   ├── native/          # Go net/http + uTLS TLS spoofing
+│   │   │   ├── chromium/        # Chrome CDP (chromedp)
+│   │   │   ├── firefox/         # Firefox via Playwright
+│   │   │   ├── webkit/          # WebKit via Playwright
+│   │   │   ├── http3/           # QUIC/HTTP3 (quic-go)
+│   │   │   └── waterfall/       # Multi-engine racing
+│   │   └── pool/                # Browser instance pooling
+│   ├── content/                 # Content extraction & agents
+│   │   ├── agent/               # CDP-based autonomous browser agent
+│   │   ├── agentic/             # ScrapeGraphAI-style graph scraping (~1,870 lines)
+│   │   ├── semantic/            # Semantic tree + LLM compression
+│   │   └── text/                # Text processing utilities
+│   ├── core/                    # Shared infrastructure
+│   │   ├── config/              # Central configuration
+│   │   ├── constants/           # Defaults and known headers
+│   │   ├── instrumentation/     # OpenTelemetry tracing
+│   │   ├── observability/       # Prometheus metrics
+│   │   ├── resilience/          # Circuit breakers, retry
+│   │   ├── signals/             # OS signal handling
+│   │   ├── telemetry/           # Distributed tracing
+│   │   └── types/               # Canonical shared types
+│   ├── crawl/                   # Large-scale crawling
+│   │   ├── spider/              # Web spider framework
+│   │   ├── pipeline/            # Batch processing
+│   │   └── integration/         # Spider + stealth orchestrator
+│   ├── fingerprint/             # Fingerprint capture & spoofing
+│   │   ├── tls/                 # uTLS spoofing, JA3/JA4, parser
+│   │   ├── http/                # HTTP/1.1 & HTTP/2 fingerprinting
+│   │   ├── lab/                 # Fingerprint capture lab server
+│   │   └── train/datagen/       # ML training data collection
+│   ├── ml/                      # ML integration
+│   │   └── adaptive/            # Adaptive behavior tracking
+│   ├── network/                 # Network infrastructure
+│   │   ├── proxy/               # MITM proxy for capture
+│   │   │   └── pool/            # Proxy rotation & tier escalation
+│   │   ├── client/              # HTTP client factory
+│   │   └── sniff/               # CGO packet capture (Rust/libpcap)
+│   └── stealth/                 # Anti-detection & challenge solving
+│       ├── behavior/            # Behavioral simulation
+│       ├── captcha/             # CAPTCHA solving
+│       └── challenge/           # Cloudflare challenge detection
+├── cmd/                         # CLI applications (~9K lines)
+│   ├── brwslab/                 # Network fingerprinting CLI
+│   ├── stealth/                 # Spider framework CLI
+│   ├── labd/                    # Fingerprint lab server
+│   ├── semantic/                # Semantic extraction CLI
+│   ├── agent/                   # Browser automation CLI
+│   ├── stealth-mcp/             # MCP server (browser automation)
+│   ├── semantic-mcp/            # MCP server (semantic analysis)
+│   ├── crawl/                   # Standalone crawler
+│   ├── pipeline/                # Batch processing pipeline
+│   ├── benchmark/               # Performance benchmarks
+│   ├── train/                   # ML training orchestration
+│   ├── eval_e2e/                # End-to-end evaluation
+│   ├── evalbench/               # Evaluation suite
+│   ├── extract/                 # Structured extraction
+│   ├── gencert/                 # TLS cert generation
+│   └── ml_datagen/              # ML training data generation
+├── examples/                    # Usage examples
+├── lab-ui/                      # React UI for fingerprint lab
+├── models/                      # Trained PyTorch models (.pt)
+├── python/                      # Python bindings (pybrwslab)
+├── pkg/                         # Public utility packages
+│   ├── mathutils/               # Statistical functions
+│   └── types/                   # Common detection types
+├── deploy/                      # Kubernetes & Prometheus configs
+└── training-data/               # ML training traces
 ```
 
-## Components
+---
 
-### 1. Engine Interface (`brws/engine/engine.go`)
+## Key Capabilities
 
-The core abstraction that all HTTP clients implement:
+### 1. Multi-Engine HTTP Abstraction (`brws/browser/engine/`)
 
+Unified `Engine` interface with four implementations:
+
+| Engine | TLS | HTTP/2 | HTTP/3 | JS | Use Case |
+|--------|-----|--------|--------|----|----------|
+| `native` | uTLS spoofing | Yes | No | No | Fast API scraping |
+| `chromium` | Real Chrome | Yes | Yes | Yes | Full browser automation |
+| `firefox` | Real Firefox | Yes | Yes | Yes | Alternative fingerprint |
+| `webkit` | Real Safari | Yes | Yes | Yes | Mobile/Apple testing |
+
+Engines self-register via `init()`:
 ```go
-type Engine interface {
-    Name() string
-    Capabilities() Capabilities
-    Do(ctx context.Context, req *Request) (*Response, error)
-    Close() error
+func init() {
+    engine.Register("native", newNativeEngine)
 }
 ```
 
-**Capabilities:**
-- JavaScript execution
-- HTTP/2 and HTTP/3 support
-- Persistent profiles
-- NetLog export (Chromium only)
+### 2. TLS/HTTP Fingerprint Spoofing (`brws/fingerprint/`)
 
-### 2. Native Engine (`brws/engine/native/`)
+- **Capture:** MITM proxy intercepts real browser traffic → parses ClientHello → builds `CompleteFingerprint`
+- **Analysis:** JA3, JA4, GREASE detection, HTTP/2 SETTINGS frame analysis
+- **Spoofing:** uTLS-based `ClientHelloID` selection to match target browser signatures
+- **Adaptive:** ML-driven fingerprint selection based on success/failure outcomes
 
-Uses Go's standard `net/http` with:
-- Configurable TLS settings
-- HTTP/2 support via `ForceAttemptHTTP2`
-- HTTP trace timing (DNS, Connect, SSL, Send, Wait, Receive)
-- Proxy support
+### 3. Anti-Detection & Challenge Solving (`brws/stealth/`)
 
-### 3. Chromium Engine (`brws/engine/chromium/`)
+- **21+ stealth detection vectors** fixed (screen mismatch, canvas format, WebGL extensions, etc.)
+- **Behavioral simulation:** Bézier mouse curves, human-like typing, scroll patterns
+- **Cloudflare solver:** Auto-detects JS/Managed/Turnstile challenges → solves → obtains `cf_clearance`
+- **Session-pinned fingerprints:** Same browser instance uses consistent hardware fingerprints across requests
+- **Escalation:** 6-tier retry (basic → proxy → browser → behavioral → CAPTCHA → human fallback)
 
-Uses Chrome DevTools Protocol via `chromedp`:
-- Authentic Chrome TLS/HTTP2/HTTP3 behavior
-- Network event capture
-- JavaScript execution
-- Headless and headed modes
-- Persistent profiles
+### 4. Semantic Extraction (`brws/content/semantic/`)
 
-### 4. Firefox/WebKit Engines (`brws/engine/firefox/`, `brws/engine/webkit/`)
+- DOM chunking + LLM compression (~99% token reduction)
+- SQLite-backed content-addressed cache
+- Form schema extraction
+- Visual grounding (bounding boxes)
+- Incremental diffing
 
-Uses Playwright for:
-- Cross-browser testing
-- Consistent API across browsers
-- Automatic browser downloads
+### 5. Agentic Graph Scraping (`brws/content/agentic/`)
 
-### 5. Session Management (`brws/session/`)
+- ScrapeGraphAI-style directed-graph execution engine
+- Nodes: Fetch, Parse, GenerateAnswer, Reasoning, MergeAnswers, SearchInternet, Conditional
+- Graphs: `SmartScraperGraph` (8 strategy variations), `SearchGraph`
+- Map-reduce parallel chunk processing with goroutines + semaphores
+- Zero imports into existing `brws/content/agent/` or browser engine packages
 
-- Persistent cookie jars
-- Profile directories
-- Session import/export
-- JSON serialization
+### 6. Autonomous Browser Agent (`brws/content/agent/`)
 
-### 6. Lab Server (`brws/lab/`)
+- CDP-based observe → decide → execute loop
+- `PageSnapshot` with interactive elements, forms, links, tabs
+- Action space: click, type, scroll, navigate, tab management
+- LLM-formatted compact prompts for decision-making
 
-Fingerprint capture server:
-- TLS ClientHello analysis (JA3-style)
-- HTTP/2 fingerprinting
-- HTTP header analysis
-- Baseline storage and comparison
+### 7. Lab & Training (`brws/fingerprint/lab/`, `brws/ml/`)
 
-### 7. CLI (`cmd/brwslab/`)
+- Fingerprint capture lab with TLS/HTTP2/HTTP analysis
+- PyTorch RL models (`fsm_rl_policy.pt`, `shield_sword_policy.pt`)
+- SQLite-backed training data collection
+- Python training scripts for RL and adversarial shield/sword
 
-Commands:
-- `fetch` - Fetch URLs with any engine
-- `session` - Manage persistent sessions
-- `fingerprint` - Capture network fingerprint
-- `diff` - Compare engines
-- `trace` - Detailed request tracing
-- `engines` - List available engines
+---
 
 ## Design Decisions
 
 ### 1. Engine Registry Pattern
+Engines self-register in `init()` functions, allowing import-side discovery without central registration files.
 
-Engines self-register in `init()` functions:
-```go
-func init() {
-    engine.Register("native", New)
-}
-```
+### 2. Independence Principle
+The `agentic` package has **zero imports** into `brws/content/agent/`, `brws/browser/engine/chromium/`, or `brws/stealth/`. It reuses only `brws/content/semantic` for the default LLM client.
 
-This allows importing engines to automatically make them available.
+### 3. Fingerprint-Bound Identity
+Browser instances are coupled to a `CompleteFingerprint` for consistent headers, UA, TLS, and pacing across an entire session.
 
-### 2. Trace as First-Class Citizen
+### 4. Server-Side Measurement
+The fingerprint lab measures from the server side because that's what real defenses see. Client-side self-reporting can be misleading.
 
-Every response includes detailed timing and network trace information, enabling:
-- Performance analysis
-- Debugging
-- HAR export
-
-### 3. Lab Server Architecture
-
-The fingerprint lab measures from the server side because:
-- That's what real defenses see
-- Client-side self-reporting can be misleading
-- Enables baseline comparison and regression detection
-
-### 4. Explicit Non-Goals
-
-The implementation explicitly avoids:
-- TLS/HTTP2 spoofing to "bypass" detection
-- Human impersonation features
-- Automated bot evasion
+---
 
 ## Testing
 
 ```bash
-# Run all tests
-make test
+# All tests
+go test ./...
 
-# Run specific package tests
-go test ./brws/engine/native/... -v
-go test ./brws/session/... -v
+# With race detector
+go test -race -count=1 -timeout 120s ./...
 
-# Coverage
-make test-coverage
+# Specific packages
+go test ./brws/content/agentic/... -v
+go test ./brws/stealth/... -v
+go test ./brws/fingerprint/tls/... -v
+
+# Lint
+make lint
+
+# Benchmarks
+make bench
 ```
 
-## Future Enhancements
-
-### CI/Baseline Infrastructure
-- Nightly baseline capture
-- Fingerprint regression detection
-- Cross-platform browser testing
-
-### Enhanced Fingerprinting
-- Full JA4 fingerprint support
-- HTTP/2 frame-level inspection
-- QUIC/HTTP3 parameter capture
-- Custom TLS ClientHello parsing (via uTLS)
-
-### Additional Features
-- WebSocket support across engines
-- Request/response interception
-- HAR export/import
-- Cookie consent automation
+---
 
 ## Dependencies
 
 **Core:**
-- `github.com/chromedp/chromedp` - Chrome DevTools Protocol
-- `github.com/playwright-community/playwright-go` - Cross-browser automation
-- `github.com/spf13/cobra` - CLI framework
-- `github.com/google/uuid` - UUID generation
+- `github.com/chromedp/chromedp` — Chrome DevTools Protocol
+- `github.com/playwright-community/playwright-go` — Cross-browser automation
+- `github.com/refraction-networking/utls` — TLS fingerprint spoofing
+- `github.com/quic-go/quic-go` — QUIC/HTTP3
+- `github.com/spf13/cobra` — CLI framework
+- `github.com/prometheus/client_golang` — Metrics
+- `go.opentelemetry.io/otel` — Distributed tracing
+- `go.uber.org/zap` — Structured logging
+- `github.com/mattn/go-sqlite3` — SQLite (CGO)
 
-**Standard Library:**
-- `net/http` - HTTP client/server
-- `crypto/tls` - TLS configuration
-- `net/http/httptrace` - Request tracing
-- `net/http/cookiejar` - Cookie management
+---
 
-## Metrics
+## Documentation
 
-- **Lines of Go code:** ~3,650
-- **Packages:** 13
-- **Test coverage:** Core packages tested
-- **Binary sizes:**
-  - `brwslab`: ~21MB
-  - `labd`: ~12MB
+| Document | Purpose |
+|---|---|
+| [`QUICKSTART.md`](QUICKSTART.md) | Get started in 15 minutes |
+| [`MODELS_INDEX.md`](MODELS_INDEX.md) | Master index for module docs |
+| [`GO_CONCEPTS.md`](GO_CONCEPTS.md) | Go patterns used in the codebase |
+| [`AGENTIC_INTEGRATION.md`](AGENTIC_INTEGRATION.md) | Agentic graph engine summary |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Complete system architecture |
+
+---
 
 ## License
 
-MIT License - See LICENSE file for details.
+MIT License — See LICENSE file for details.

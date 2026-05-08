@@ -4,34 +4,35 @@ A Go toolkit for **browser-grade network fidelity**, **semantic web extraction**
 
 ## What It Does
 
-brwslab provides three layers of capability:
+brwslab provides four layers of capability:
 
 1. **Engine Layer** — Unified HTTP client abstraction across native Go, Chromium (CDP), Firefox, and WebKit with real browser TLS/HTTP2/HTTP3 fingerprints
 2. **Semantic Layer** — Extract hierarchical semantic trees from web pages with LLM-powered compression, diffing, form schemas, and token budget management
 3. **Stealth Layer** — Anti-detection browser automation with Cloudflare challenge auto-solving, behavioral simulation, and RL-driven policy selection
+4. **Agentic Layer** — ScrapeGraphAI-style directed-graph execution engine for LLM-centric scraping pipelines (`brws/content/agentic`)
 
 ## Installation
 
 ### Library
 
 ```bash
-go get github.com/stealth/brwslab
+go get github.com/skunkworq/stealth
 ```
 
 ### CLI Tools
 
 ```bash
 # Core tools
-go install github.com/stealth/brwslab/cmd/brwslab@latest
-go install github.com/stealth/brwslab/cmd/stealth@latest
-go install github.com/stealth/brwslab/cmd/labd@latest
+go install github.com/skunkworq/stealth/cmd/brwslab@latest
+go install github.com/skunkworq/stealth/cmd/stealth@latest
+go install github.com/skunkworq/stealth/cmd/labd@latest
 
 # Semantic extraction
-go install github.com/stealth/brwslab/cmd/semantic@latest
+go install github.com/skunkworq/stealth/cmd/semantic@latest
 
 # MCP servers (for Claude Desktop)
-go install github.com/stealth/brwslab/cmd/stealth-mcp@latest
-go install github.com/stealth/brwslab/cmd/semantic-mcp@latest
+go install github.com/skunkworq/stealth/cmd/stealth-mcp@latest
+go install github.com/skunkworq/stealth/cmd/semantic-mcp@latest
 ```
 
 ### Prerequisites
@@ -57,7 +58,7 @@ import (
     "fmt"
     "log"
 
-    "github.com/stealth/brwslab/brws/stealth"
+    "github.com/skunkworq/stealth/brws/stealth"
 )
 
 func main() {
@@ -97,7 +98,7 @@ import (
     "fmt"
     "log"
 
-    "github.com/stealth/brwslab/brws/semantic"
+    "github.com/skunkworq/stealth/brws/semantic"
 )
 
 func main() {
@@ -126,9 +127,9 @@ import (
     "fmt"
     "log"
 
-    "github.com/stealth/brwslab/brws/engine"
-    _ "github.com/stealth/brwslab/brws/engine/chromium"
-    _ "github.com/stealth/brwslab/brws/engine/native"
+    "github.com/skunkworq/stealth/brws/browser/engine"
+    _ "github.com/skunkworq/stealth/brws/browser/engine/chromium"
+    _ "github.com/skunkworq/stealth/brws/browser/engine/native"
 )
 
 func main() {
@@ -252,6 +253,30 @@ text := semantic.SerializeTree(tree, state, nil)
 
 // Extract form schemas
 forms := semantic.ExtractFormSchemas(html)
+```
+
+### `brws/content/agentic` — Agentic Graph Scraping
+
+LLM-driven directed-graph execution engine for structured data extraction. Compose reusable nodes into graphs that fetch, parse, reason, and extract answers.
+
+```go
+// Single-page extraction with reasoning and retry
+graph, _ := agentic.NewSmartScraperGraph(
+    "Extract all product names and prices",
+    "https://example.com/products",
+    map[string]interface{}{"reasoning": true, "reattempt": true},
+    nil, llm,
+)
+state, info, _ := graph.Run(ctx)
+fmt.Println(state["answer"])
+
+// Multi-URL search then scrape
+searchGraph, _ := agentic.NewSearchGraph(
+    "What are the latest features in Go 1.26?",
+    map[string]interface{}{"max_results": 3},
+    nil, llm,
+)
+state, _, _ = searchGraph.Run(ctx)
 ```
 
 ### `brws/adversarial` — Cloudflare Challenge Lab
@@ -505,47 +530,93 @@ result, err := solver.SolveChallenge(ts.URL, adversarial.ChallengeJS)
 ## Project Structure
 
 ```
-brwslab/
-├── brws/                   # Library packages
-│   ├── engine/             # HTTP engine abstraction
-│   │   ├── native/         # Go net/http + uTLS
-│   │   ├── chromium/       # Chrome CDP
-│   │   ├── firefox/        # Firefox via Playwright
-│   │   ├── webkit/         # WebKit via Playwright
-│   │   ├── spoof/          # HTTP/2 fingerprint spoofing
-│   │   ├── http3/          # QUIC/HTTP3
-│   │   ├── pool/           # Connection pooling
-│   │   └── cdpstealth/     # CDP stealth enhancements
-│   ├── stealth/            # Stealth automation client
-│   ├── semantic/           # Semantic tree extraction + LLM compression
-│   │   └── index/          # HNSW vector indexing
-│   ├── adversarial/        # Cloudflare challenge emulation lab
-│   ├── behavior/           # Behavioral simulation (mouse, typing, scroll)
-│   ├── session/            # Cookie jars and browser profiles
-│   ├── lab/                # Fingerprint lab server + UI
-│   ├── pipeline/           # Batch processing pipeline
-│   ├── spider/             # Web spider framework
-│   ├── instrumentation/    # OpenTelemetry tracing + metrics
-│   ├── observability/      # Prometheus metrics
-│   ├── ml/                 # RL policy loading
-│   ├── resilience/         # Circuit breakers, retry logic
-│   ├── proxy/              # MITM proxy for capture
-│   ├── tlsparser/          # TLS ClientHello parser
-│   ├── types/              # Shared fingerprint types
-│   └── diff/               # Comparison utilities
-├── cmd/
-│   ├── brwslab/            # Network fingerprinting CLI
-│   ├── stealth/            # Spider framework CLI
-│   ├── labd/               # Fingerprint lab server
-│   ├── semantic/           # Semantic extraction CLI
-│   ├── stealth-mcp/        # MCP server (browser automation)
-│   ├── semantic-mcp/       # MCP server (semantic analysis)
-│   ├── benchmark/          # Benchmark suite
-│   └── train/              # ML training orchestration
-├── lab-ui/                 # React UI for fingerprint lab
-├── Makefile                # Build, test, run targets
-├── Dockerfile              # Container image
-└── .golangci.yml           # Linter configuration
+stealth/
+├── brws/                        # Library packages
+│   ├── browser/                 # Browser automation
+│   │   ├── engine/              # HTTP engine abstraction
+│   │   │   ├── native/          # Go net/http + uTLS
+│   │   │   ├── chromium/        # Chrome CDP
+│   │   │   ├── firefox/         # Firefox via Playwright
+│   │   │   ├── webkit/          # WebKit via Playwright
+│   │   │   ├── http3/           # QUIC/HTTP3
+│   │   │   ├── testserver/      # Mock detection server
+│   │   │   └── waterfall/       # Multi-engine racing
+│   │   └── pool/                # Browser instance pooling
+│   ├── content/                 # Content extraction
+│   │   ├── agent/               # CDP-based autonomous browser agent
+│   │   ├── agentic/             # ScrapeGraphAI-style graph scraping
+│   │   ├── semantic/            # Semantic tree extraction + LLM compression
+│   │   │   └── index/           # HNSW vector indexing
+│   │   └── text/                # Text processing utilities
+│   ├── core/                    # Shared infrastructure
+│   │   ├── config/              # Central configuration
+│   │   ├── constants/           # Default values and headers
+│   │   ├── instrumentation/     # OpenTelemetry tracing + metrics
+│   │   ├── log/                 # Structured logging
+│   │   ├── observability/       # Prometheus metrics + health checks
+│   │   ├── resilience/          # Circuit breakers, retry logic
+│   │   ├── signals/             # OS signal handling
+│   │   ├── telemetry/           # Distributed tracing
+│   │   └── types/               # Shared canonical types
+│   ├── crawl/                   # Large-scale crawling
+│   │   ├── integration/         # Spider + stealth orchestrator
+│   │   ├── pipeline/            # Batch processing pipeline
+│   │   └── spider/              # Web spider framework
+│   ├── fingerprint/             # Fingerprint capture & spoofing
+│   │   ├── bench/               # Performance benchmarks
+│   │   ├── http/                # HTTP/1.1 & HTTP/2 fingerprinting
+│   │   ├── lab/                 # Fingerprint capture lab server
+│   │   ├── tls/                 # TLS spoofing, JA3/JA4, parser
+│   │   │   └── parser/          # Binary TLS ClientHello parser
+│   │   └── train/datagen/       # ML training data collection
+│   ├── ml/                      # ML integration
+│   │   └── adaptive/            # Adaptive behavior tracking & storage
+│   ├── network/                 # Network infrastructure
+│   │   ├── client/              # HTTP client factory
+│   │   ├── proxy/               # MITM proxy for capture
+│   │   │   └── pool/            # Proxy rotation & tier escalation
+│   │   └── sniff/               # CGO packet capture (libpcap/Rust)
+│   └── stealth/                 # Anti-detection & challenge solving
+│       ├── behavior/            # Behavioral simulation (mouse, typing, scroll)
+│       ├── captcha/             # CAPTCHA solving (segmentation, ML, external)
+│       └── challenge/           # Cloudflare challenge detection & solving
+├── cmd/                         # CLI applications
+│   ├── agent/                   # Browser automation CLI
+│   ├── benchmark/               # Performance benchmarks
+│   ├── brwslab/                 # Network fingerprinting CLI
+│   ├── crawl/                   # Standalone crawler
+│   ├── eval_e2e/                # End-to-end evaluation
+│   ├── evalbench/               # Evaluation suite
+│   ├── extract/                 # Structured extraction CLI
+│   ├── gencert/                 # TLS cert generation for MITM
+│   ├── labd/                    # Fingerprint lab server
+│   ├── ml_datagen/              # ML training data generation
+│   ├── pipeline/                # Processing pipeline CLI
+│   ├── semantic/                # Semantic extraction CLI
+│   ├── semantic-mcp/            # MCP server (semantic analysis)
+│   ├── stealth/                 # Spider framework CLI
+│   ├── stealth-mcp/             # MCP server (browser automation)
+│   └── train/                   # ML training orchestration
+├── deploy/                      # Deployment configs
+│   ├── kubernetes/              # K8s manifests
+│   └── prometheus/              # Prometheus rules
+├── docs/                        # Architecture docs (gitignored)
+├── examples/                    # Usage examples
+│   └── navigation/              # Navigation examples
+├── fingerprints/                # Captured browser fingerprints (JSON)
+├── lab-ui/                      # React UI for fingerprint lab
+├── models/                      # Trained PyTorch models (.pt)
+├── pkg/                         # Public utility packages
+│   ├── mathutils/               # Statistical functions
+│   └── types/                   # Common detection types
+├── python/                      # Python bindings
+│   └── pybrwslab/               # Python wrapper package
+├── scripts/                     # Build & install scripts
+├── training-data/               # ML training traces
+├── go.mod                       # Go module definition
+├── Makefile                     # Build, test, run targets
+├── Dockerfile                   # Container image
+└── .golangci.yml                # Linter configuration
 ```
 
 ---
@@ -646,6 +717,27 @@ make bench           # Run all benchmarks
 make bench-cpu       # With CPU profiling
 make bench-mem       # With memory profiling
 ```
+
+---
+
+## Documentation
+
+| Document | Purpose |
+|---|---|
+| [`QUICKSTART.md`](QUICKSTART.md) | Get from zero to scraping in 15 minutes |
+| [`MODELS_INDEX.md`](MODELS_INDEX.md) | Master index for all module documentation |
+| [`MODEL_STEALTH.md`](MODEL_STEALTH.md) | Anti-detection, CAPTCHA solving, behavioral evasion |
+| [`MODEL_FINGERPRINT.md`](MODEL_FINGERPRINT.md) | TLS/HTTP fingerprint capture, JA3/JA4, uTLS spoofing |
+| [`MODEL_BROWSER.md`](MODEL_BROWSER.md) | Browser engine (Chromium, Firefox, WebKit) |
+| [`MODEL_NETWORK.md`](MODEL_NETWORK.md) | MITM proxy, proxy rotation, tier escalation |
+| [`MODEL_CONTENT.md`](MODEL_CONTENT.md) | CDP agent, semantic pipeline, agentic scraping, crawl |
+| [`MODEL_ML.md`](MODEL_ML.md) | RL models, training, types, config, telemetry |
+| [`AGENTIC_INTEGRATION.md`](AGENTIC_INTEGRATION.md) | ScrapeGraphAI-style graph engine integration summary |
+| [`GO_CONCEPTS.md`](GO_CONCEPTS.md) | Go language patterns used throughout the codebase |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Complete system architecture overview |
+| [`TODO.md`](TODO.md) | Feature parity checklist and completed phases |
+| [`ROADMAP.md`](ROADMAP.md) | Battle testing & advanced use cases roadmap |
+| [`REFACTORING_PLAN.md`](REFACTORING_PLAN.md) | Code modularization plan and progress |
 
 ---
 

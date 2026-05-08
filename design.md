@@ -1,3 +1,7 @@
+# Stealth Browser Evasion System — Historical Design Document
+
+> **Note:** This document was written early in the project lifecycle and reflects the original design vision. The actual implementation has evolved significantly. For the current system, see [`README.md`](README.md), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md), and the [`MODEL_*.md`](MODELS_INDEX.md) module docs.
+
 # Stealth Browser Evasion System - Design Document
 
 ## Overview
@@ -804,7 +808,7 @@ func (s *Session) IncreaseTrust() {
 package main
 
 import (
-    "github.com/stealth/stealth/internal/cli"
+    "github.com/skunkworq/stealth/cmd/stealth"
 )
 
 func main() {

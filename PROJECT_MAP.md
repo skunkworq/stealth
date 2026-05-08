@@ -1,5 +1,7 @@
 # Project Directory Map
 
+> **Note:** This map describes the conceptual package organization. The actual directory structure has evolved — engines live under `brws/browser/engine/`, fingerprint code under `brws/fingerprint/`, stealth code under `brws/stealth/`, core infrastructure under `brws/core/`, network code under `brws/network/`, and crawl code under `brws/crawl/`. See [`README.md`](README.md) for the current directory tree.
+
 **Stealth** is a large project because web scraping at scale is a hard problem that touches many domains: networking, cryptography, browser automation, machine learning, distributed systems, and UI. Here's what every folder does and why it exists.
 
 ---
@@ -23,107 +25,107 @@
 
 These are the heart of the project. They're organized by concern, not by layer. Most real-world Go projects of this size split into ~20–40 packages.
 
-### The four layers you already know
+### The five layers you already know
 
 | Package | What it does | Size |
 |---------|-------------|------|
-| `brws/engine` | Engine interface + registry (`native`, `chromium`, `firefox`, `webkit`) | Core |
+| `brws/browser/engine` | Engine interface + registry (`native`, `chromium`, `firefox`, `webkit`) | Core |
 | `brws/stealth` | Main client — orchestrates engine, session, challenges, escalation | Core |
-| `brws/semantic` | DOM extraction, LLM compression, semantic trees, form schemas | Core |
-| `brws/agent` | Observation-action loop for autonomous agents | Core |
+| `brws/content/semantic` | DOM extraction, LLM compression, semantic trees, form schemas | Core |
+| `brws/content/agent` | Observation-action loop for autonomous agents | Core |
+| `brws/content/agentic` | ScrapeGraphAI-style graph execution for LLM-driven scraping | Core |
 
 ### Engine sub-packages
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/engine/native` | Go `net/http` + uTLS fingerprint spoofing | Fast, no-JS requests that look like Chrome/Firefox |
-| `brws/engine/chromium` | Full Chrome via chromedp/CDP | JS execution, NetLog, request interception |
-| `brws/engine/firefox` | Firefox via Playwright | Alternative browser fingerprint |
-| `brws/engine/webkit` | Safari via Playwright | Mobile/Apple testing |
-| `brws/engine/profiles` | Pre-defined browser fingerprint profiles | Chrome 120 macOS/Win, Firefox 120, Safari 16, etc. |
-| `brws/engine/proxy` | Tiered proxy management + waterfall fallback | Rotate proxies on ban, escalate tiers |
-| `brws/engine/waterfall` | Engine fallback logic (native → chromium → etc.) | Automatic retry with harder configs |
-| `brws/tlsfprint` | TLS fingerprint generation and spoofing | Impersonate Chrome/Firefox TLS handshakes |
-| `brws/tlsparser` | Raw TLS ClientHello parsing | Inspect TLS from packet captures |
+| `brws/browser/engine/native` | Go `net/http` + uTLS fingerprint spoofing | Fast, no-JS requests that look like Chrome/Firefox |
+| `brws/browser/engine/chromium` | Full Chrome via chromedp/CDP | JS execution, NetLog, request interception |
+| `brws/browser/engine/firefox` | Firefox via Playwright | Alternative browser fingerprint |
+| `brws/browser/engine/webkit` | Safari via Playwright | Mobile/Apple testing |
+| `brws/browser/pool` | Browser instance pooling | Recycle expensive browser instances |
+| `brws/browser/engine/waterfall` | Engine fallback logic (native → chromium → etc.) | Automatic retry with harder configs |
+| `brws/fingerprint/tls` | TLS fingerprint generation and spoofing | Impersonate Chrome/Firefox TLS handshakes |
+| `brws/fingerprint/tls/parser` | Raw TLS ClientHello parsing | Inspect TLS from packet captures |
+| `brws/fingerprint/lab` | Fingerprint capture lab server | Capture real browser signatures for training |
 
 ### Anti-detection & evasion
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/adversarial` | Cloudflare challenge harness, trace library, behavioral analyzer | Test solvers against realistic challenge pages; replay human traces |
-| `brws/behavior` | Human-like event generation (mouse, typing, scroll) + evasion strategies | Bot detectors check mouse paths and keystroke timing |
-| `brws/challenge` | Challenge type detection (Cloudflare, reCAPTCHA, hCaptcha, DataDome) | Know what you're facing before trying to solve it |
-| `brws/solver` | CAPTCHA solving integrations (CapSolver, 2Captcha, etc.) | Auto-solve when browser automation isn't enough |
-| `brws/adaptive` | Adaptive strategy tracking and storage | Remember which evasion strategies worked on which sites |
+| `brws/stealth/behavior` | Human-like event generation (mouse, typing, scroll) + evasion strategies | Bot detectors check mouse paths and keystroke timing |
+| `brws/stealth/challenge` | Challenge type detection (Cloudflare, reCAPTCHA, hCaptcha, DataDome) | Know what you're facing before trying to solve it |
+| `brws/stealth/captcha` | CAPTCHA solving (segmentation, ML model, external services) | Auto-solve when browser automation isn't enough |
+| `brws/ml/adaptive` | Adaptive strategy tracking and storage | Remember which evasion strategies worked on which sites |
 
 ### Content extraction & processing
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/semantic` | DOM → semantic tree compression (covered above) | LLM-friendly page representation |
-| `brws/langextract` | Language-specific text extraction and chunking | Handle CJK, Arabic, etc. correctly |
-| `brws/diff` | Diff between two semantic trees or HTTP responses | Detect page changes, validate stealth |
-| `brws/export` | Export formats (HAR, NetLog, CSV) | Integrate with external tools |
-| `brws/pipeline` | Integrated crawler pipeline with tracing + metrics | Production-grade crawling with observability |
+| `brws/content/semantic` | DOM → semantic tree compression | LLM-friendly page representation |
+| `brws/content/agentic` | ScrapeGraphAI-style graph scraping engine | LLM-driven structured data extraction |
+| `brws/content/text` | Text processing utilities | Language-aware chunking and cleaning |
+| `brws/crawl/pipeline` | Integrated crawler pipeline with tracing + metrics | Production-grade crawling with observability |
+| `brws/fingerprint/http/diff` | Diff between HTTP responses/fingerprints | Detect page changes, validate stealth |
 
 ### Crawling & spidering
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/spider` | Scrapy-inspired web crawler | Concurrent crawling with middleware, scheduling, dedup |
-| `brws/httpclient` | HTTP client utilities | Shared HTTP logic across engines |
-| `brws/browser` | Browser detection and classification | Detect if a response came from a real browser vs bot |
+| `brws/crawl/spider` | Scrapy-inspired web crawler | Concurrent crawling with middleware, scheduling, dedup |
+| `brws/network/client` | HTTP client utilities | Shared HTTP logic across engines |
+| `brws/crawl/integration` | Spider + stealth orchestrator | Coordinate crawling with anti-detection |
 
 ### Session & state management
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/session` | Cookie jars, localStorage, session persistence | Stay logged in across requests |
-| `brws/signals` | Event bus for crawler lifecycle events | Decouple components (e.g., notify metrics when crawl starts) |
-| `brws/types` | Shared domain types | Common structs used across packages |
+| `brws/browser/pool` | Browser instance pooling and session reuse | Stay logged in across requests |
+| `brws/core/signals` | Event bus for crawler lifecycle events | Decouple components |
+| `brws/core/types` | Shared domain types | Common structs used across packages |
 
 ### Resilience & reliability
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/resilience` | Retry, circuit breaker, rate limiting | Don't hammer dead sites, back off gracefully |
-| `brws/resilience` | (already listed) | |
+| `brws/core/resilience` | Retry, circuit breaker, rate limiting | Don't hammer dead sites, back off gracefully |
 
 ### ML & intelligence
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
 | `brws/ml` | RL policy loader (PyTorch DQN models) | Adapt stealth config based on detection feedback |
-| `brws/benchmark` | Performance benchmarks | Measure engine speed, memory, success rates |
+| `brws/fingerprint/bench` | Performance benchmarks | Measure engine speed, memory, success rates |
 
 ### Observability & ops
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/instrumentation` | Logging, tracing, hooks, FSM state tracking | Debug why a request failed |
-| `brws/observability` | Metrics and health checks | Production monitoring |
-| `brws/telemetry` | Usage telemetry and analytics | Understand system behavior at scale |
-| `brws/log` | Structured logging utilities | Consistent log format across the project |
+| `brws/core/instrumentation` | Logging, tracing, hooks, FSM state tracking | Debug why a request failed |
+| `brws/core/observability` | Metrics and health checks | Production monitoring |
+| `brws/core/telemetry` | Usage telemetry and analytics | Understand system behavior at scale |
+| `brws/core/log` | Structured logging utilities | Consistent log format across the project |
 
 ### Network & proxy
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/proxy` | MITM TLS/HTTP proxy for fingerprint capture | Inspect TLS handshakes and HTTP/2 frames |
-| `brws/sniffer` | Packet capture via libpcap + Rust bridge | Capture raw network traffic for analysis |
+| `brws/network/proxy` | MITM TLS/HTTP proxy for fingerprint capture | Inspect TLS handshakes and HTTP/2 frames |
+| `brws/network/sniffer` | Packet capture via libpcap + Rust bridge | Capture raw network traffic for analysis |
 
 ### Configuration & constants
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/config` | Configuration loading and validation | YAML/JSON config files |
-| `brws/constants` | Shared constants | Magic numbers, header names, etc. |
+| `brws/core/config` | Configuration loading and validation | YAML/JSON config files |
+| `brws/core/constants` | Shared constants | Magic numbers, header names, etc. |
 
 ### Lab & training
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/lab` | Fingerprint capture lab (covered in ARCHITECTURE.md) | Capture real browser signatures for training |
+| `brws/fingerprint/lab` | Fingerprint capture lab (covered in ARCHITECTURE.md) | Capture real browser signatures for training |
+| `brws/fingerprint/train/datagen` | ML training data collection | SQLite-backed episode storage for RL training |
 
 ### Integration
 

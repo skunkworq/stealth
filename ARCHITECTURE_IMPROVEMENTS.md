@@ -25,7 +25,7 @@ This document summarizes the architectural improvements made to the stealth brow
 
 ```go
 // Usage example
-import "github.com/stealth/brwslab/brws/log"
+import "github.com/skunkworq/stealth/brws/log"
 
 // Global logging
 log.Info("request completed", "url", url, "duration", duration)
@@ -63,7 +63,7 @@ log.Ctx(ctx).Info("processing")
 
 **Retry Pattern**:
 ```go
-import "github.com/stealth/brwslab/brws/resilience"
+import "github.com/skunkworq/stealth/brws/resilience"
 
 config := &resilience.Config{
     MaxAttempts:       3,
@@ -109,7 +109,7 @@ err := cb.ExecuteContext(ctx, func(ctx context.Context) error {
 
 **Metrics Example**:
 ```go
-import "github.com/stealth/brwslab/brws/observability"
+import "github.com/skunkworq/stealth/brws/observability"
 
 // Record metrics
 observability.IncCounter("requests", map[string]string{"engine": "native"})
@@ -210,9 +210,9 @@ All new packages have comprehensive test coverage:
 go test ./brws/log/... ./brws/resilience/... ./brws/observability/...
 
 # All tests pass
-ok      github.com/stealth/brwslab/brws/log           0.520s
-ok      github.com/stealth/brwslab/brws/resilience    0.857s
-ok      github.com/stealth/brwslab/brws/observability 0.924s
+ok      github.com/skunkworq/stealth/brws/log           0.520s
+ok      github.com/skunkworq/stealth/brws/resilience    0.857s
+ok      github.com/skunkworq/stealth/brws/observability 0.924s
 ```
 
 ## Linting
@@ -244,7 +244,7 @@ log.Printf("message: %s", value)
 
 With:
 ```go
-import "github.com/stealth/brwslab/brws/log"
+import "github.com/skunkworq/stealth/brws/log"
 log.Info("message", "key", value)
 ```
 
