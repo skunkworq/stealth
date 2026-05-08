@@ -153,6 +153,12 @@ func New(opts ...Option) (*Client, error) {
 	return NewWithConfig(cfg)
 }
 
+// NewClient creates a new stealth client with the given configuration.
+// It is a convenience wrapper around NewWithConfig for value-based configuration.
+func NewClient(cfg Config) (*Client, error) {
+	return NewWithConfig(&cfg)
+}
+
 // NewWithConfig creates a new stealth client with custom configuration.
 func NewWithConfig(cfg *Config) (*Client, error) {
 	logLevel := "info"
@@ -331,6 +337,7 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 
 	var resp *engine.Response
 	var err error
+	var challengeSolved bool
 	maxRetries := 3
 
 	// Use waterfall engine when available, otherwise raw engine
@@ -452,6 +459,7 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 			if solveErr == nil && solvedResp != nil {
 				c.evasionFSM.RecordCaptchaSolveResult(true)
 				resp = solvedResp
+				challengeSolved = true
 				span.AddEvent("captcha_solved_via_fsm", nil)
 				c.logger.Info("captcha solved via FSM", "url", url)
 			} else {
@@ -476,6 +484,7 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		solvedResp, _ := c.orchestrator.HandleResponse(ctx, url, resp, c.engine, c.options.Timeout)
 		if solvedResp != nil {
 			resp = solvedResp
+			challengeSolved = true
 			span.AddEvent("challenge_solved", nil)
 		}
 	} else if c.config.Challenge.AutoDetect && !c.isCleanResponse(resp) {
@@ -495,12 +504,20 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 	c.logger.Info("navigation complete", "url", url, "status", resp.Status, "size", len(resp.Body))
 
 	return &Response{
-		Status:   resp.Status,
-		Headers:  resp.Headers,
-		Body:     resp.Body,
-		FinalURL: resp.FinalURL,
-		Trace:    resp.Trace,
+		Status:          resp.Status,
+		Headers:         resp.Headers,
+		Body:            resp.Body,
+		FinalURL:        resp.FinalURL,
+		Trace:           resp.Trace,
+		ChallengeSolved: challengeSolved,
 	}, nil
+}
+
+// Scrape fetches a URL and returns the response.
+// It is a convenience alias for Navigate with a name that reflects the
+// high-level scraping intent.
+func (c *Client) Scrape(ctx context.Context, url string) (*Response, error) {
+	return c.Navigate(ctx, url)
 }
 
 // NavigateWithReferrer performs a navigation with an explicit referrer.
@@ -648,6 +665,10 @@ type Response struct {
 	FinalURL string
 	Trace    engine.Trace
 	Tree     *semantic.SemanticTree
+
+	// ChallengeSolved is true if an anti-bot challenge was detected and
+	// successfully solved during this request.
+	ChallengeSolved bool
 
 	// Lazy-parsing fields for extraction methods.
 	parseOnce sync.Once

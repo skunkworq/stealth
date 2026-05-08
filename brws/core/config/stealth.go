@@ -214,6 +214,13 @@ type MonitoringConfig struct {
 	LogLevel string `json:"log_level"`
 }
 
+// DefaultStealthConfig returns a default stealth configuration.
+// It is an alias for DefaultConfig provided for API consistency with
+// the getting-started documentation.
+func DefaultStealthConfig() *Config {
+	return DefaultConfig()
+}
+
 // DefaultConfig returns a default configuration.
 func DefaultConfig() *Config {
 	return &Config{

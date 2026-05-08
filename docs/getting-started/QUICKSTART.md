@@ -334,13 +334,21 @@ func main() {
     ctx := context.Background()
 
     // Create stealth client with challenge solving
-    client := stealth.NewClient(stealth.Config{
-        Engine:           "chromium-stealth",
-        Headless:         true,
-        ChallengeSolver:  true,
-        MaxRetries:       3,
-        EscalationDelay:  5 * time.Second,
+    client, err := stealth.NewClient(stealth.Config{
+        EngineName: "chromium-stealth",
+        Headless:   true,
+        Challenge: &stealth.ChallengeConfig{
+            AutoSolve: true,
+            AutoDetect: true,
+        },
+        Escalation: &stealth.EscalationConfig{
+            Enabled:              true,
+            MaxEscalationRetries: 3,
+        },
     })
+    if err != nil {
+        log.Fatal(err)
+    }
 
     // The client automatically handles challenges
     resp, err := client.Scrape(ctx, "https://cloudflare-challenge-site.com")
@@ -361,6 +369,11 @@ func main() {
     titles := doc.QuerySelectorAll("h1")
     for _, t := range titles {
         fmt.Printf("Title: %s\n", t.Text())
+    }
+
+    // Query by class or ID
+    if el := doc.QuerySelector(".content"); el != nil {
+        fmt.Printf("Content: %s\n", el.Text())
     }
 }
 ```
@@ -624,12 +637,12 @@ type StealthConfig struct {
 
 ```go
 cfg := config.DefaultStealthConfig()
-cfg.Headless = true
-cfg.StealthLevel = 3
-cfg.SpoofTLS = true
-cfg.BrowserType = "chrome"
-cfg.ProxyStrategy = "random"
-cfg.SolveCloudflare = true
+cfg.Engine.Headless = true
+cfg.Engine.StealthTLS = true
+cfg.Engine.Stealth = true
+cfg.Engine.Profile = "chrome-120-macos"
+cfg.Cloudflare.Detect = true
+cfg.Cloudflare.Solve = true
 ```
 
 ---
