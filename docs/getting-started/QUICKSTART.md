@@ -702,11 +702,11 @@ go build -tags norust ./...
 
 | Goal | Read |
 |---|---|
-| Understand architecture | [`MODELS_INDEX.md`](MODELS_INDEX.md) |
-| Deep dive into fingerprinting | [`MODEL_FINGERPRINT.md`](MODEL_FINGERPRINT.md) |
-| Deep dive into browser engine | [`MODEL_BROWSER.md`](MODEL_BROWSER.md) |
-| Deep dive into stealth/evasion | [`MODEL_STEALTH.md`](MODEL_STEALTH.md) |
-| Deep dive into content extraction | [`MODEL_CONTENT.md`](MODEL_CONTENT.md) |
+| Understand architecture | [`MODELS_INDEX.md`](../modules/MODELS_INDEX.md) |
+| Deep dive into fingerprinting | [`MODEL_FINGERPRINT.md`](../modules/MODEL_FINGERPRINT.md) |
+| Deep dive into browser engine | [`MODEL_BROWSER.md`](../modules/MODEL_BROWSER.md) |
+| Deep dive into stealth/evasion | [`MODEL_STEALTH.md`](../modules/MODEL_STEALTH.md) |
+| Deep dive into content extraction | [`MODEL_CONTENT.md`](../modules/MODEL_CONTENT.md) |
 | Train ML models | `brws/ml/train_rl_agent.py`, `brws/ml/train_shield_sword.py` |
 | Run benchmarks | `go test ./brws/fingerprint/bench/... -bench=. -benchmem` |
 

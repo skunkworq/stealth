@@ -1,6 +1,6 @@
 # Project Directory Map
 
-> **Note:** This map describes the conceptual package organization. The actual directory structure has evolved — engines live under `brws/browser/engine/`, fingerprint code under `brws/fingerprint/`, stealth code under `brws/stealth/`, core infrastructure under `brws/core/`, network code under `brws/network/`, and crawl code under `brws/crawl/`. See [`README.md`](README.md) for the current directory tree.
+> **Note:** This map describes the conceptual package organization. The actual directory structure has evolved — engines live under `brws/browser/engine/`, fingerprint code under `brws/fingerprint/`, stealth code under `brws/stealth/`, core infrastructure under `brws/core/`, network code under `brws/network/`, and crawl code under `brws/crawl/`. See [`README.md`](../README.md) for the current directory tree.
 
 **Stealth** is a large project because web scraping at scale is a hard problem that touches many domains: networking, cryptography, browser automation, machine learning, distributed systems, and UI. Here's what every folder does and why it exists.
 

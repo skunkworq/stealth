@@ -9,7 +9,6 @@ labd
 brws/fingerprint/lab/static/
 # Test binary
 *.test
-docs/
 # Output of the go coverage tool
 *.out
 coverage.html

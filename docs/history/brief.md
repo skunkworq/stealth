@@ -1,6 +1,6 @@
 # Original Design Brief — Historical Context
 
-> **Note:** This document was the original design brief that launched the project. It articulates an ethical stance focused on "authorized automation and compatibility testing" rather than bot evasion. The actual implementation has evolved significantly beyond this brief to include stealth, anti-detection, challenge-solving, and behavioral evasion capabilities. This file is preserved for historical context. For the current system, see [`README.md`](README.md) and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+> **Note:** This document was the original design brief that launched the project. It articulates an ethical stance focused on "authorized automation and compatibility testing" rather than bot evasion. The actual implementation has evolved significantly beyond this brief to include stealth, anti-detection, challenge-solving, and behavioral evasion capabilities. This file is preserved for historical context. For the current system, see [`README.md`](../README.md) and [`docs/ARCHITECTURE.md`](../architecture/ARCHITECTURE.md).
 
 ---
 

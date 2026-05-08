@@ -5,7 +5,7 @@
 > **Total Go Lines:** ~170,000 (library + commands)  
 > **Packages:** 80+  
 
-This document provides a high-level overview of the `stealth` implementation. For deeper dives into individual modules, see the [`MODEL_*.md`](MODELS_INDEX.md) documentation suite.
+This document provides a high-level overview of the `stealth` implementation. For deeper dives into individual modules, see the [`MODEL_*.md`](../modules/MODELS_INDEX.md) documentation suite.
 
 ---
 
@@ -212,11 +212,11 @@ make bench
 
 | Document | Purpose |
 |---|---|
-| [`QUICKSTART.md`](QUICKSTART.md) | Get started in 15 minutes |
-| [`MODELS_INDEX.md`](MODELS_INDEX.md) | Master index for module docs |
-| [`GO_CONCEPTS.md`](GO_CONCEPTS.md) | Go patterns used in the codebase |
-| [`AGENTIC_INTEGRATION.md`](AGENTIC_INTEGRATION.md) | Agentic graph engine summary |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Complete system architecture |
+| [`QUICKSTART.md`](../getting-started/QUICKSTART.md) | Get started in 15 minutes |
+| [`MODELS_INDEX.md`](../modules/MODELS_INDEX.md) | Master index for module docs |
+| [`GO_CONCEPTS.md`](../guides/GO_CONCEPTS.md) | Go patterns used in the codebase |
+| [`AGENTIC_INTEGRATION.md`](../guides/AGENTIC_INTEGRATION.md) | Agentic graph engine summary |
+| [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) | Complete system architecture |
 
 ---
 

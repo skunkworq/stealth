@@ -724,20 +724,20 @@ make bench-mem       # With memory profiling
 
 | Document | Purpose |
 |---|---|
-| [`QUICKSTART.md`](QUICKSTART.md) | Get from zero to scraping in 15 minutes |
-| [`MODELS_INDEX.md`](MODELS_INDEX.md) | Master index for all module documentation |
-| [`MODEL_STEALTH.md`](MODEL_STEALTH.md) | Anti-detection, CAPTCHA solving, behavioral evasion |
-| [`MODEL_FINGERPRINT.md`](MODEL_FINGERPRINT.md) | TLS/HTTP fingerprint capture, JA3/JA4, uTLS spoofing |
-| [`MODEL_BROWSER.md`](MODEL_BROWSER.md) | Browser engine (Chromium, Firefox, WebKit) |
-| [`MODEL_NETWORK.md`](MODEL_NETWORK.md) | MITM proxy, proxy rotation, tier escalation |
-| [`MODEL_CONTENT.md`](MODEL_CONTENT.md) | CDP agent, semantic pipeline, agentic scraping, crawl |
-| [`MODEL_ML.md`](MODEL_ML.md) | RL models, training, types, config, telemetry |
-| [`AGENTIC_INTEGRATION.md`](AGENTIC_INTEGRATION.md) | ScrapeGraphAI-style graph engine integration summary |
-| [`GO_CONCEPTS.md`](GO_CONCEPTS.md) | Go language patterns used throughout the codebase |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Complete system architecture overview |
-| [`TODO.md`](TODO.md) | Feature parity checklist and completed phases |
-| [`ROADMAP.md`](ROADMAP.md) | Battle testing & advanced use cases roadmap |
-| [`REFACTORING_PLAN.md`](REFACTORING_PLAN.md) | Code modularization plan and progress |
+| [`QUICKSTART.md`](docs/getting-started/QUICKSTART.md) | Get from zero to scraping in 15 minutes |
+| [`MODELS_INDEX.md`](docs/modules/MODELS_INDEX.md) | Master index for all module documentation |
+| [`MODEL_STEALTH.md`](docs/modules/MODEL_STEALTH.md) | Anti-detection, CAPTCHA solving, behavioral evasion |
+| [`MODEL_FINGERPRINT.md`](docs/modules/MODEL_FINGERPRINT.md) | TLS/HTTP fingerprint capture, JA3/JA4, uTLS spoofing |
+| [`MODEL_BROWSER.md`](docs/modules/MODEL_BROWSER.md) | Browser engine (Chromium, Firefox, WebKit) |
+| [`MODEL_NETWORK.md`](docs/modules/MODEL_NETWORK.md) | MITM proxy, proxy rotation, tier escalation |
+| [`MODEL_CONTENT.md`](docs/modules/MODEL_CONTENT.md) | CDP agent, semantic pipeline, agentic scraping, crawl |
+| [`MODEL_ML.md`](docs/modules/MODEL_ML.md) | RL models, training, types, config, telemetry |
+| [`AGENTIC_INTEGRATION.md`](docs/guides/AGENTIC_INTEGRATION.md) | ScrapeGraphAI-style graph engine integration summary |
+| [`GO_CONCEPTS.md`](docs/guides/GO_CONCEPTS.md) | Go language patterns used throughout the codebase |
+| [`docs/ARCHITECTURE.md`](docs/architecture/ARCHITECTURE.md) | Complete system architecture overview |
+| [`TODO.md`](docs/planning/TODO.md) | Feature parity checklist and completed phases |
+| [`ROADMAP.md`](docs/planning/ROADMAP.md) | Battle testing & advanced use cases roadmap |
+| [`REFACTORING_PLAN.md`](docs/planning/REFACTORING_PLAN.md) | Code modularization plan and progress |
 
 ---
 
