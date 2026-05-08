@@ -1,11 +1,27 @@
 # Go Concepts Used in This Project
 
 > A catalog of Go language features, idioms, and patterns you need to know to read and contribute to this codebase.
+>
+> **New to Go?** Start with Sections 0.1–0.10 for a syntax primer, then read 1+ for project-specific patterns.
 
 ---
 
 ## Table of Contents
 
+### Go Syntax Primer (for beginners)
+0.1. [Variables, Types & Constants](#01-variables-types--constants)
+0.2. [Functions](#02-functions)
+0.3. [Control Flow](#03-control-flow)
+0.4. [Structs & Methods](#04-structs--methods)
+0.5. [Pointers](#05-pointers)
+0.6. [Slices, Arrays & Maps](#06-slices-arrays--maps)
+0.7. [Packages & Imports](#07-packages--imports)
+0.8. [Interfaces (Basics)](#08-interfaces-basics)
+0.9. [Goroutines & Channels (Basics)](#09-goroutines--channels-basics)
+0.10. [defer (Basics)](#010-defer-basics)
+0.11. [Error Handling (Basics)](#011-error-handling-basics)
+
+### Project Patterns
 1. [Interfaces & Duck Typing](#1-interfaces--duck-typing)
 2. [Struct Embedding & Composition](#2-struct-embedding--composition)
 3. [Context Propagation](#3-context-propagation)
@@ -19,6 +35,614 @@
 11. [CGO](#11-cgo)
 12. [Idioms & Conventions](#12-idioms--conventions)
 13. [Build Tags & Directives](#13-build-tags--directives)
+
+---
+
+## 0.1. Variables, Types & Constants
+
+### Variable Declaration
+
+Go is **statically typed** — every variable has a type that cannot change.
+
+```go
+// Explicit type
+var count int = 42
+
+// Type inference (compiler figures it out)
+name := "stealth"          // string
+active := true             // bool
+ratio := 3.14              // float64
+
+// Multiple variables
+var a, b, c int = 1, 2, 3
+x, y := 10, "hello"
+
+// Zero values (variables are always initialized)
+var n int       // 0
+var s string    // ""
+var ok bool     // false
+var p *int      // nil
+```
+
+### Basic Types
+
+| Type | Example | Description |
+|------|---------|-------------|
+| `bool` | `true`, `false` | Boolean |
+| `string` | `"hello"` | UTF-8 text (immutable) |
+| `int` | `42` | Signed integer (32 or 64 bit) |
+| `int64` | `int64(42)` | 64-bit signed integer |
+| `uint` | `uint(42)` | Unsigned integer |
+| `float64` | `3.14` | 64-bit floating point |
+| `byte` | `byte('A')` | Alias for `uint8` |
+| `rune` | `rune('中')` | Alias for `int32` (Unicode code point) |
+
+### Constants
+
+```go
+const MaxRetries = 3
+const (
+    StatusOK       = 200
+    StatusNotFound = 404
+)
+
+// iota generates incrementing constants
+const (
+    Sunday = iota    // 0
+    Monday           // 1
+    Tuesday          // 2
+)
+```
+
+### Type Conversion
+
+Go **never** converts types implicitly. You must cast explicitly:
+
+```go
+var i int = 42
+var f float64 = float64(i)    // Required!
+var s string = strconv.Itoa(i) // int → string
+```
+
+---
+
+## 0.2. Functions
+
+### Declaration
+
+```go
+// Simple function
+func add(a int, b int) int {
+    return a + b
+}
+
+// Same type parameters can be grouped
+func multiply(a, b int) int {
+    return a * b
+}
+
+// Multiple return values (very common in Go!)
+func divide(a, b float64) (float64, error) {
+    if b == 0 {
+        return 0, fmt.Errorf("cannot divide by zero")
+    }
+    return a / b, nil
+}
+```
+
+### Named Return Values
+
+```go
+func split(sum int) (x, y int) {
+    x = sum * 4 / 9
+    y = sum - x
+    return // "naked return" — returns the named variables
+}
+```
+
+### Variadic Functions
+
+```go
+func sum(nums ...int) int {
+    total := 0
+    for _, n := range nums {
+        total += n
+    }
+    return total
+}
+
+// Call with any number of arguments
+result := sum(1, 2, 3, 4)
+```
+
+### First-Class Functions
+
+Functions can be passed as arguments and returned:
+
+```go
+func apply(a, b int, op func(int, int) int) int {
+    return op(a, b)
+}
+
+result := apply(3, 4, func(x, y int) int { return x + y })
+```
+
+---
+
+## 0.3. Control Flow
+
+### if / else
+
+```go
+if err != nil {
+    return err
+}
+
+// if with initialization (scope limited to the if block)
+if resp, err := client.Get(url); err != nil {
+    return err
+} else {
+    defer resp.Body.Close()
+}
+```
+
+### for Loops
+
+Go has only one loop keyword: `for`.
+
+```go
+// Classic for
+for i := 0; i < 10; i++ {
+    fmt.Println(i)
+}
+
+// While-style
+for condition {
+    // ...
+}
+
+// Infinite loop
+for {
+    // ...
+}
+
+// Iterate over a slice (range)
+items := []string{"a", "b", "c"}
+for index, value := range items {
+    fmt.Printf("%d: %s\n", index, value)
+}
+
+// If you only need the value, use _ for the index
+for _, value := range items {
+    fmt.Println(value)
+}
+
+// Iterate over a map
+scores := map[string]int{"alice": 90, "bob": 85}
+for name, score := range scores {
+    fmt.Printf("%s: %d\n", name, score)
+}
+```
+
+### switch
+
+```go
+// Switch on value
+switch engine {
+case "chromium":
+    return newChromiumEngine()
+case "firefox", "webkit":
+    return newPlaywrightEngine(engine)
+default:
+    return newNativeEngine()
+}
+
+// Switch without value (cleaner if/else chain)
+switch {
+case score > 90:
+    return "A"
+case score > 80:
+    return "B"
+default:
+    return "C"
+}
+
+// Type switch (see also Section 6)
+switch v := state["key"].(type) {
+case string:
+    // v is a string here
+    fmt.Println(v)
+case int:
+    // v is an int here
+    fmt.Println(v * 2)
+}
+```
+
+### select (Channels)
+
+See Section 0.9 for the basics, and Section 4 for advanced usage.
+
+---
+
+## 0.4. Structs & Methods
+
+### Structs
+
+A struct is a collection of fields:
+
+```go
+type ProxyConfig struct {
+    ListenAddr      string
+    EnableMITM      bool
+    EnableHTTPTrace bool
+}
+
+// Create a struct
+cfg := ProxyConfig{
+    ListenAddr:      ":8081",
+    EnableMITM:      true,
+    EnableHTTPTrace: false,
+}
+
+// Or use field names (order doesn't matter)
+cfg2 := ProxyConfig{ListenAddr: ":8081", EnableMITM: true}
+
+// Or positional (not recommended — breaks when fields change)
+cfg3 := ProxyConfig{":8081", true, false}
+```
+
+### Methods
+
+A method is a function with a **receiver** — the type it operates on:
+
+```go
+func (p *Proxy) Start() error {
+    // p is the receiver (like "this" in other languages)
+    listener, err := net.Listen("tcp", p.config.ListenAddr)
+    if err != nil {
+        return err
+    }
+    p.listener = listener
+    return nil
+}
+```
+
+**Pointer receiver (`*Proxy`)** vs **Value receiver (`Proxy`)**:
+- Use **pointer receivers** when you need to modify the struct or the struct is large
+- Use **value receivers** for small, immutable structs
+
+```go
+// Pointer receiver — modifies the original
+func (p *Proxy) SetAddr(addr string) {
+    p.config.ListenAddr = addr
+}
+
+// Value receiver — receives a copy (can't modify original)
+func (p Proxy) Addr() string {
+    return p.config.ListenAddr
+}
+```
+
+---
+
+## 0.5. Pointers
+
+A pointer holds the **memory address** of a value.
+
+```go
+var x int = 42
+var p *int = &x    // & gets the address
+
+fmt.Println(*p)    // * dereferences — prints 42
+*p = 100           // Modifies x through the pointer
+fmt.Println(x)     // Prints 100
+```
+
+### Common Patterns
+
+```go
+// new() allocates and returns a pointer
+node := new(baseNode)    // *baseNode, zero-initialized
+
+// & before a composite literal creates a pointer
+cfg := &ProxyConfig{
+    ListenAddr: ":8081",
+}
+
+// nil pointer check
+if p == nil {
+    return errors.New("proxy is nil")
+}
+```
+
+---
+
+## 0.6. Slices, Arrays & Maps
+
+### Arrays
+
+Fixed-size, rarely used directly:
+
+```go
+var arr [3]int = [3]int{1, 2, 3}
+```
+
+### Slices
+
+Slices are **dynamic views** into arrays. They are used everywhere.
+
+```go
+// Declare
+var nums []int                    // nil slice
+items := []string{"a", "b"}       // literal
+
+// append adds elements
+items = append(items, "c")
+
+// make creates a slice with length and capacity
+results := make([]string, 0, 10)  // len=0, cap=10
+
+// Slice of a slice (shares underlying array!)
+sub := items[1:3]   // elements 1 and 2
+
+// Length and capacity
+fmt.Println(len(items))  // 3
+fmt.Println(cap(items))  // 3 or more
+
+// Copy to avoid shared backing array
+dst := make([]string, len(items))
+copy(dst, items)
+```
+
+### Maps
+
+Key-value hash tables:
+
+```go
+// Declare
+var scores map[string]int
+
+// Initialize
+scores = make(map[string]int)
+
+// Literal
+cfg := map[string]interface{}{
+    "reasoning": true,
+    "reattempt": true,
+}
+
+// Get value
+val := cfg["reasoning"]        // returns interface{} (zero value if missing)
+
+// Check if key exists
+val, ok := cfg["missing"]      // ok is false if key doesn't exist
+if !ok {
+    // handle missing key
+}
+
+// Delete
+delete(cfg, "reasoning")
+
+// Iterate
+for k, v := range cfg {
+    fmt.Printf("%s = %v\n", k, v)
+}
+```
+
+---
+
+## 0.7. Packages & Imports
+
+### Package Declaration
+
+Every Go file starts with a package:
+
+```go
+package agentic    // Package name (usually same as directory)
+```
+
+### Importing
+
+```go
+import (
+    "context"                           // Standard library
+    "fmt"
+    "net/http"
+
+    "github.com/skunkworq/stealth/brws/content/semantic"  // Project package
+    "github.com/chromedp/chromedp"     // External dependency
+)
+```
+
+### Blank Import
+
+Import for side effects (e.g., registering engines):
+
+```go
+import _ "github.com/skunkworq/stealth/brws/browser/engine/native"
+```
+
+### Dot Import (rarely used)
+
+```go
+import . "fmt"
+// Now you can call Println() without fmt.
+```
+
+### Aliased Import
+
+```go
+import utls "github.com/refraction-networking/utls"
+```
+
+---
+
+## 0.8. Interfaces (Basics)
+
+An interface defines a set of methods. A type satisfies an interface by implementing all its methods — **no explicit declaration needed**.
+
+```go
+// Define an interface
+type Engine interface {
+    Name() string
+    Do(ctx context.Context, req *Request) (*Response, error)
+    Close() error
+}
+
+// Any type that has these methods is an Engine automatically
+type nativeEngine struct{}
+
+func (e *nativeEngine) Name() string { return "native" }
+func (e *nativeEngine) Do(ctx context.Context, req *Request) (*Response, error) {
+    // ...
+}
+func (e *nativeEngine) Close() error { return nil }
+
+// nativeEngine satisfies Engine without ever saying so
+```
+
+### The Empty Interface
+
+`interface{}` (or `any` in Go 1.18+) means "any type":
+
+```go
+func printAnything(v interface{}) {
+    fmt.Printf("value: %v, type: %T\n", v, v)
+}
+
+printAnything(42)
+printAnything("hello")
+printAnything([]int{1, 2, 3})
+```
+
+See Section 1 and 6 for advanced interface patterns.
+
+---
+
+## 0.9. Goroutines & Channels (Basics)
+
+### Goroutines
+
+A goroutine is a lightweight thread managed by the Go runtime:
+
+```go
+func main() {
+    go doWork()   // Launches doWork() in a new goroutine
+    go doWork()   // Launches another
+    time.Sleep(time.Second)  // Wait for them to finish (naive way)
+}
+```
+
+### Channels
+
+Channels are typed pipes for goroutine communication:
+
+```go
+// Create a channel
+ch := make(chan int)
+
+// Send (blocks until someone receives)
+ch <- 42
+
+// Receive (blocks until someone sends)
+value := <-ch
+
+// Buffered channel (non-blocking until full)
+ch := make(chan int, 10)
+```
+
+### Common Patterns
+
+```go
+// Worker pool pattern
+jobs := make(chan int, 100)
+results := make(chan int, 100)
+
+for w := 1; w <= 3; w++ {
+    go worker(w, jobs, results)
+}
+
+for j := 1; j <= 9; j++ {
+    jobs <- j
+}
+close(jobs)
+```
+
+See Section 4 for advanced concurrency patterns (`sync.WaitGroup`, `Mutex`, `select`).
+
+---
+
+## 0.10. defer (Basics)
+
+`defer` schedules a function call to run when the surrounding function returns:
+
+```go
+func readFile(path string) error {
+    f, err := os.Open(path)
+    if err != nil {
+        return err
+    }
+    defer f.Close()   // Will run when readFile returns
+
+    // Read file...
+    return nil        // f.Close() runs here
+}
+```
+
+**Key rules:**
+- Deferred calls run in **LIFO** order (last defer runs first)
+- Arguments are evaluated immediately, but the call is deferred
+
+```go
+func example() {
+    defer fmt.Println("first")
+    defer fmt.Println("second")
+    defer fmt.Println("third")
+}
+// Output: third, second, first
+```
+
+See Section 8 for more `defer` patterns.
+
+---
+
+## 0.11. Error Handling (Basics)
+
+Go uses **explicit error returns**, not exceptions.
+
+```go
+func fetch(url string) (*http.Response, error) {
+    resp, err := http.Get(url)
+    if err != nil {
+        return nil, err      // Return error to the caller
+    }
+    return resp, nil
+}
+
+// Caller handles the error
+resp, err := fetch("https://example.com")
+if err != nil {
+    log.Fatal(err)
+}
+defer resp.Body.Close()
+```
+
+### Creating Errors
+
+```go
+import "errors"
+
+var ErrNotFound = errors.New("not found")
+
+func find(id string) (*Item, error) {
+    if id == "" {
+        return nil, ErrNotFound
+    }
+    // ...
+}
+```
+
+See Section 5 for error wrapping and advanced patterns.
 
 ---
 
