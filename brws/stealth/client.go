@@ -302,6 +302,21 @@ func newClientWithEngine(eng engine.Engine, cfg *Config, logger *instrumentation
 
 // Navigate performs a GET request to the specified URL.
 func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
+	return c.navigate(ctx, url, nil)
+}
+
+// NavigateOnTab performs a GET request on an existing browser tab.
+// The stealth engine runs its setup (scripts, headers, permissions) directly
+// on the provided tabCtx, then navigates it. This eliminates the wasteful
+// double-navigation pattern when the stealth client and agent share a tab.
+func (c *Client) NavigateOnTab(ctx context.Context, tabCtx context.Context, url string) (*Response, error) {
+	return c.navigate(ctx, url, tabCtx)
+}
+
+// navigate is the shared implementation for Navigate and NavigateOnTab.
+// When tabCtx is nil, it uses engine.Do() (creates a temp tab).
+// When tabCtx is non-nil, it uses engine.DoOnTab() (operates on existing tab).
+func (c *Client) navigate(ctx context.Context, url string, tabCtx context.Context) (*Response, error) {
 	ctx, span := c.tracer.StartSpan(ctx, "navigate", instrumentation.SpanKindRequest)
 
 	span.SetAttribute("url", url)
@@ -327,8 +342,22 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 	// Use waterfall engine when available, otherwise raw engine
 	activeEngine := c.activeEngine()
 
+	// Determine request function: DoOnTab when tabCtx provided, otherwise Do
+	var doRequest func(context.Context, *engine.Request) (*engine.Response, error)
+	if tabCtx != nil {
+		if te, ok := activeEngine.(engine.TabEngine); ok {
+			doRequest = func(ctx context.Context, req *engine.Request) (*engine.Response, error) {
+				return te.DoOnTab(ctx, tabCtx, req)
+			}
+		} else {
+			return nil, fmt.Errorf("engine %q does not support DoOnTab", activeEngine.Name())
+		}
+	} else {
+		doRequest = activeEngine.Do
+	}
+
 	for attempt := 1; attempt <= maxRetries; attempt++ {
-		resp, err = activeEngine.Do(ctx, &engine.Request{
+		resp, err = doRequest(ctx, &engine.Request{
 			URL:     url,
 			Timeout: c.options.Timeout,
 		})
@@ -389,7 +418,7 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 				prevStrategy = nextStrategy
 				c.logger.Info("evasion FSM retry", "strategy", nextStrategy, "attempt", fsmRetry+1)
 
-				resp, err = activeEngine.Do(ctx, &engine.Request{
+				resp, err = doRequest(ctx, &engine.Request{
 					URL:     url,
 					Timeout: c.options.Timeout,
 				})
@@ -426,7 +455,7 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 			}
 			c.logger.Info("escalation retry", "attempt", escAttempt+1, "status", resp.Status)
 
-			resp, err = c.activeEngine().Do(ctx, &engine.Request{
+			resp, err = doRequest(ctx, &engine.Request{
 				URL:     url,
 				Timeout: c.options.Timeout,
 			})

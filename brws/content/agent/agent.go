@@ -17,8 +17,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/chromedp/chromedp"
-
 	"github.com/skunkworq/stealth/brws/content/semantic"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
@@ -399,21 +397,18 @@ func (a *Agent) LastActionSpace() []Action {
 }
 
 // NewStealthTab creates a new persistent tab from the stealth client's browser
-// instance, navigates to the given URL with challenge solving, and returns the
-// tab context. The caller should use this context for all subsequent agent
-// operations (Observe, Execute, etc.).
+// instance, navigates to the given URL with challenge solving directly on that
+// tab, and returns the tab context. The caller should use this context for all
+// subsequent agent operations (Observe, Execute, etc.).
+//
+// Unlike the old double-navigation pattern (stealth temp tab → agent tab
+// re-navigate), this uses NavigateOnTab to apply stealth setup and solve
+// challenges in-place on the agent's tab.
 //
 // Requires Agent.Config.StealthClient to be set.
 func (a *Agent) NewStealthTab(ctx context.Context, url string) (context.Context, context.CancelFunc, error) {
 	if a.cfg.StealthClient == nil {
 		return nil, nil, fmt.Errorf("no stealth client configured")
-	}
-
-	// First, use the stealth client to navigate and solve any challenges.
-	// This establishes session cookies in the shared browser instance.
-	resp, err := a.cfg.StealthClient.Navigate(ctx, url)
-	if err != nil {
-		return nil, nil, fmt.Errorf("stealth navigate: %w", err)
 	}
 
 	// Create a persistent tab from the stealth browser.
@@ -422,12 +417,11 @@ func (a *Agent) NewStealthTab(ctx context.Context, url string) (context.Context,
 		return nil, nil, fmt.Errorf("stealth client does not support persistent tabs (engine may not be chromium-stealth)")
 	}
 
-	// Navigate the persistent tab to the same URL.
-	// Cookies/session from the stealth navigate are shared, so challenges
-	// should already be solved.
-	if err := chromedp.Run(tabCtx, chromedp.Navigate(resp.FinalURL)); err != nil {
+	// Navigate directly on the new tab with stealth setup + challenge solving.
+	_, err := a.cfg.StealthClient.NavigateOnTab(ctx, tabCtx, url)
+	if err != nil {
 		tabCancel()
-		return nil, nil, fmt.Errorf("navigate persistent tab: %w", err)
+		return nil, nil, fmt.Errorf("stealth navigate on tab: %w", err)
 	}
 
 	// Wire the stealth client into the executor for future navigations.

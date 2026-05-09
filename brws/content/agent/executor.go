@@ -221,23 +221,20 @@ func (e *Executor) execNavigate(ctx context.Context, action Action) (*ExecuteRes
 		return nil, fmt.Errorf("navigate action missing url parameter")
 	}
 
-	// If a stealth client is configured, prime the browser session by navigating
-	// through the stealth client first. This handles anti-bot challenges and
-	// establishes cookies in the shared browser instance.
+	// If a stealth client is configured, navigate directly on the agent's tab
+	// with stealth setup applied in-place. This eliminates the wasteful
+	// double-navigation pattern (temp tab solve + agent tab re-navigate).
 	if e.StealthClient != nil {
-		resp, err := e.StealthClient.Navigate(ctx, urlStr)
+		resp, err := e.StealthClient.NavigateOnTab(ctx, ctx, urlStr)
 		if err != nil {
 			return nil, fmt.Errorf("stealth navigate failed: %w", err)
 		}
-		if resp != nil && resp.ChallengeSolved {
-			// Return partial result so the caller can record challenge solving
-			return &ExecuteResult{
-				ActionID:        "navigate-stealth",
-				Success:         true,
-				NewURL:            resp.FinalURL,
-				ChallengeSolved: true,
-			}, nil
-		}
+		return &ExecuteResult{
+			ActionID:        "navigate-stealth",
+			Success:         true,
+			NewURL:          resp.FinalURL,
+			ChallengeSolved: resp.ChallengeSolved,
+		}, nil
 	}
 
 	return nil, chromedp.Run(ctx, chromedp.Navigate(urlStr))
@@ -316,7 +313,8 @@ func (e *Executor) execCloseTab(ctx context.Context, action Action) error {
 }
 
 // execSolveChallenge uses the stealth client to re-navigate the current URL
-// with challenge solving enabled. Returns true if a challenge was solved.
+// with challenge solving enabled, directly on the agent's tab.
+// Returns true if a challenge was solved.
 func (e *Executor) execSolveChallenge(ctx context.Context, action Action) (bool, error) {
 	if e.StealthClient == nil {
 		return false, fmt.Errorf("no stealth client configured — cannot solve challenge")
@@ -328,15 +326,11 @@ func (e *Executor) execSolveChallenge(ctx context.Context, action Action) (bool,
 		return false, fmt.Errorf("get current url: %w", err)
 	}
 
-	// Use stealth client to navigate and solve any challenges
-	resp, err := e.StealthClient.Navigate(ctx, url)
+	// Use stealth client to navigate and solve any challenges directly on the
+	// agent's existing tab. This eliminates the double-navigation pattern.
+	resp, err := e.StealthClient.NavigateOnTab(ctx, ctx, url)
 	if err != nil {
 		return false, fmt.Errorf("stealth navigate for challenge solve: %w", err)
-	}
-
-	// Re-navigate the agent's tab to the solved page (cookies are shared)
-	if err := chromedp.Run(ctx, chromedp.Navigate(resp.FinalURL)); err != nil {
-		return false, fmt.Errorf("navigate tab to solved page: %w", err)
 	}
 
 	return resp.ChallengeSolved, nil

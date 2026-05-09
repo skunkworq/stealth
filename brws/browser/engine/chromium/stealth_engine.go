@@ -282,7 +282,6 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	// Start tracing
 	ctx, span := s.tracer.StartSpan(ctx, "stealth.fetch", instrumentation.SpanKindRequest)
 	span.SetAttribute("url", req.URL)
-
 	span.SetAttribute("method", req.Method)
 	defer span.End()
 
@@ -296,13 +295,6 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		s.logger.Error("FSM transition failed", "error", err)
 	}
 
-	requestID := string(span.SpanID)
-	trace := &engine.Trace{
-		Engine:    s.Name(),
-		RequestID: requestID,
-		Entries:   []engine.TraceEntry{},
-	}
-
 	// Create a new tab context
 	tabCtx, tabCancel := chromedp.NewContext(s.allocCtx)
 	defer tabCancel()
@@ -314,22 +306,44 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	tabCtx, cancel := context.WithTimeout(tabCtx, timeout)
 	defer cancel()
 
-	// Random delay before navigation
-	if s.stealthOpts.RandomDelays {
-		span.AddEvent("delay_before_navigation", map[string]interface{}{"min_ms": 500, "max_ms": 1500})
-		delay := RandomDelay(500*time.Millisecond, 1500*time.Millisecond)
-		time.Sleep(delay)
+	resp, err := s.DoOnTab(ctx, tabCtx, req)
+
+	// Transition FSM to complete or fail
+	if err != nil {
+		_ = s.fsm.Transition(ctx, instrumentation.RequestEvents.Fail)
+	} else {
+		_ = s.fsm.Transition(ctx, instrumentation.RequestEvents.Complete)
 	}
 
-	// Transition FSM to preparing
-	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Prepared); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
+	// Execute hooks
+	_ = s.hooks.Execute(ctx, instrumentation.HookNames.OnRequestEnd)
+
+	return resp, err
+}
+
+// DoOnTab executes a request on an existing tab context. This allows the stealth
+// engine to operate on a caller-managed tab (e.g. an agent's persistent tab)
+// instead of creating a fresh tab per request.
+func (s *StealthEngine) DoOnTab(ctx context.Context, tabCtx context.Context, req *engine.Request) (*engine.Response, error) {
+	requestID := ""
+	if span := instrumentation.SpanFromContext(ctx); span != nil {
+		requestID = string(span.SpanID)
+	}
+	trace := &engine.Trace{
+		Engine:    s.Name(),
+		RequestID: requestID,
+		Entries:   []engine.TraceEntry{},
+	}
+
+	// Random delay before navigation
+	if s.stealthOpts.RandomDelays {
+		delay := RandomDelay(500*time.Millisecond, 1500*time.Millisecond)
+		time.Sleep(delay)
 	}
 
 	// Build stealth script
 	var initScript string
 	if s.stealthOpts.EnableStealth {
-		span.AddEvent("injecting_stealth_scripts", nil)
 		initScript = GenerateStealthScript(s.config)
 		_ = s.hooks.Execute(ctx, instrumentation.HookNames.OnStealthInject)
 	}
@@ -379,11 +393,6 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 			_, err := page.AddScriptToEvaluateOnNewDocument(initScript).Do(ctx)
 			return err
 		}))
-	}
-
-	// Transition FSM to navigating
-	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Navigate); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
 	}
 
 	// Set up network event listener to capture all sub-resource requests.
@@ -485,28 +494,6 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 			Timing:      engine.TimingInfo{Total: total},
 		})
 	}
-
-	span.SetAttribute("status", 200)
-	span.SetAttribute("body_size", len(body))
-	span.SetAttribute("duration_ms", total.Milliseconds())
-	span.AddEvent("request_complete", map[string]interface{}{"status": 200, "body_size": len(body)})
-
-	// Transition FSM to detecting for shield validations
-	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
-	}
-
-	// NOTE: WAF/challenge detection was removed from the engine layer.
-	// The engine now returns raw responses. The stealth client checks
-	// for WAF markers and triggers adaptive retries at the orchestration layer.
-
-	// Transition FSM to complete
-	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Complete); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
-	}
-
-	// Execute hooks
-	_ = s.hooks.Execute(ctx, instrumentation.HookNames.OnRequestEnd)
 
 	s.logger.Info("request completed", "url", req.URL, "duration_ms", total.Milliseconds(), "body_size", len(body))
 

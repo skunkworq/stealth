@@ -50,13 +50,14 @@ func runObserve(args []string) error {
 	lastURL := readLastURL(cf.SessionDir)
 	if lastURL != *url {
 		if sc != nil {
-			// Use stealth client for challenge-aware navigation
-			if _, err := sc.Navigate(ctx, *url); err != nil {
+			// Use stealth client for challenge-aware navigation directly on agent's tab
+			if _, err := sc.NavigateOnTab(ctx, ctx, *url); err != nil {
 				return fmt.Errorf("stealth navigate to %s: %w", *url, err)
 			}
-		}
-		if err := chromedp.Run(ctx, chromedp.Navigate(*url)); err != nil {
-			return fmt.Errorf("navigating to %s: %w", *url, err)
+		} else {
+			if err := chromedp.Run(ctx, chromedp.Navigate(*url)); err != nil {
+				return fmt.Errorf("navigating to %s: %w", *url, err)
+			}
 		}
 	}
 
@@ -213,12 +214,13 @@ func runStep(args []string) error {
 	lastURL := readLastURL(cf.SessionDir)
 	if lastURL != *url {
 		if sc != nil {
-			if _, err := sc.Navigate(ctx, *url); err != nil {
+			if _, err := sc.NavigateOnTab(ctx, ctx, *url); err != nil {
 				return fmt.Errorf("stealth navigate to %s: %w", *url, err)
 			}
-		}
-		if err := chromedp.Run(ctx, chromedp.Navigate(*url)); err != nil {
-			return fmt.Errorf("navigating to %s: %w", *url, err)
+		} else {
+			if err := chromedp.Run(ctx, chromedp.Navigate(*url)); err != nil {
+				return fmt.Errorf("navigating to %s: %w", *url, err)
+			}
 		}
 	}
 

@@ -53,6 +53,16 @@ type InteractiveEngine interface {
 	ScrollTo(y float64) error
 }
 
+// TabEngine is an optional interface that engines may implement
+// to support executing requests on an existing browser tab context
+// instead of creating a fresh tab per request.
+type TabEngine interface {
+	Engine
+	// DoOnTab executes a request on an existing tab context.
+	// The tabCtx must be a valid chromedp context.
+	DoOnTab(ctx context.Context, tabCtx context.Context, req *Request) (*Response, error)
+}
+
 // Request is a unified HTTP request structure.
 type Request struct {
 	Method  string
