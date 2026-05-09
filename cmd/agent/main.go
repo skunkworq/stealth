@@ -79,10 +79,15 @@ Global flags (per command):
   --session-dir <path>   Session directory for persistent browser state
   --chrome-path <path>   Path to Chrome/Chromium executable (auto-detected if omitted)
 
+Stealth flags (per command):
+  --stealth              Use stealth client for challenge-aware navigation
+
 Examples:
   agent observe --session-dir /tmp/sess --url https://example.com --format compact
+  agent observe --session-dir /tmp/sess --url https://example.com --stealth
   agent execute --session-dir /tmp/sess --action '{"type":"click","id":"E1_click"}'
   agent step --session-dir /tmp/sess --url https://example.com --decision scroll_down
+  agent step --session-dir /tmp/sess --url https://example.com --decision solve_challenge --stealth
   agent session-stop --session-dir /tmp/sess
 `, version)
 }

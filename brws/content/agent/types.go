@@ -36,6 +36,10 @@ type PageSnapshot struct {
 	Tabs         []TabState            `json:"tabs,omitempty"` // all open tabs
 	Timestamp    time.Time             `json:"timestamp"`
 
+	// --- Challenge detection ---
+	ChallengeDetected bool   `json:"challenge_detected,omitempty"`
+	ChallengeType     string `json:"challenge_type,omitempty"`     // e.g. "cloudflare", "datadome", "recaptcha"
+
 	// --- Semantic enrichment (optional) ---
 	Meta         *semantic.PageMeta     `json:"meta,omitempty"`
 	Images       []semantic.ImageRef    `json:"images,omitempty"`
@@ -149,6 +153,7 @@ const (
 	ActionNewTab       ActionType = "new_tab"
 	ActionSwitchTab    ActionType = "switch_tab"
 	ActionCloseTab     ActionType = "close_tab"
+	ActionSolveChallenge ActionType = "solve_challenge"
 	ActionNone         ActionType = "done"
 )
 

@@ -61,6 +61,18 @@ func BuildActionSpace(snap *PageSnapshot) *ActionSpace {
 	// 5. Other actions
 	as.OtherActions = buildOtherActions()
 
+	// 6. Challenge action — only when a challenge is detected on the page
+	if snap.ChallengeDetected {
+		as.OtherActions = append(as.OtherActions, Action{
+			ID:          "solve_challenge",
+			Type:        ActionSolveChallenge,
+			Description: fmt.Sprintf("Attempt to solve the %s anti-bot challenge", snap.ChallengeType),
+			Parameters: map[string]interface{}{
+				"challenge_type": snap.ChallengeType,
+			},
+		})
+	}
+
 	return as
 }
 

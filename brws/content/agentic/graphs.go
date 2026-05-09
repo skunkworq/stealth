@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 // ---------------------------------------------------------------------------
@@ -20,6 +22,10 @@ type Pipeline struct {
 	Graph      *BaseGraph
 	InputKey   string // "url" or "local_dir"
 	ModelToken int
+
+	// StealthClient optionally provides challenge-aware fetching.
+	// When set, FetchNodes in the graph will use it instead of raw HTTP.
+	StealthClient *stealth.Client
 }
 
 // NewPipeline creates the common scaffolding.
@@ -72,6 +78,22 @@ type SmartScraperGraph struct {
 	Pipeline
 }
 
+// NewSmartScraperGraphWithStealth builds a SmartScraperGraph with a stealth client.
+func NewSmartScraperGraphWithStealth(prompt, source string, config map[string]interface{}, schema interface{}, llm LLM, client *stealth.Client) (*SmartScraperGraph, error) {
+	ss, err := NewSmartScraperGraph(prompt, source, config, schema, llm)
+	if err != nil {
+		return nil, err
+	}
+	ss.StealthClient = client
+	// Rebuild the graph with the stealth client injected
+	graph, err := ss.buildGraph()
+	if err != nil {
+		return nil, err
+	}
+	ss.Graph = graph
+	return ss, nil
+}
+
 // NewSmartScraperGraph builds a SmartScraperGraph pipeline.
 func NewSmartScraperGraph(prompt, source string, config map[string]interface{}, schema interface{}, llm LLM) (*SmartScraperGraph, error) {
 	pipe, err := NewPipeline(prompt, source, config, schema, llm)
@@ -94,6 +116,9 @@ func (ss *SmartScraperGraph) buildGraph() (*BaseGraph, error) {
 
 	// Core nodes
 	fetch := NewFetchNode("url | local_dir", "doc", cfg)
+	if ss.StealthClient != nil {
+		fetch.StealthClient = ss.StealthClient
+	}
 	parse := NewParseNode("doc", "parsed_doc", ss.ModelToken, cfg)
 	gen := NewGenerateAnswerNode(
 		"user_prompt & (relevant_chunks | parsed_doc | doc)",
@@ -242,6 +267,22 @@ func NewSearchGraph(prompt string, config map[string]interface{}, schema interfa
 	return sg, nil
 }
 
+// NewSearchGraphWithStealth builds a SearchGraph with a stealth client.
+func NewSearchGraphWithStealth(prompt string, config map[string]interface{}, schema interface{}, llm LLM, client *stealth.Client) (*SearchGraph, error) {
+	sg, err := NewSearchGraph(prompt, config, schema, llm)
+	if err != nil {
+		return nil, err
+	}
+	sg.StealthClient = client
+	// Rebuild the graph with the stealth client injected into the iterator
+	graph, err := sg.buildGraph()
+	if err != nil {
+		return nil, err
+	}
+	sg.Graph = graph
+	return sg, nil
+}
+
 func (sg *SearchGraph) buildGraph() (*BaseGraph, error) {
 	cfg := sg.Config
 	llm := sg.LLM
@@ -260,8 +301,9 @@ func (sg *SearchGraph) buildGraph() (*BaseGraph, error) {
 			minInputs:  2,
 			nodeConfig: cfg,
 		},
-		LLM:    llm,
-		Schema: schema,
+		LLM:           llm,
+		Schema:        schema,
+		StealthClient: sg.StealthClient,
 	}
 
 	merge := NewMergeAnswersNode("user_prompt & results", "answer", llm,
@@ -284,10 +326,11 @@ func (sg *SearchGraph) buildGraph() (*BaseGraph, error) {
 // GraphIteratorNode runs a scraper for each URL with semaphore-controlled
 // concurrency.
 type GraphIteratorNode struct {
-	Base     baseNode
-	LLM      LLM
-	Schema   interface{}
-	BatchSize int
+	Base          baseNode
+	LLM           LLM
+	Schema        interface{}
+	BatchSize     int
+	StealthClient *stealth.Client
 }
 
 func (n *GraphIteratorNode) Name() string      { return n.Base.nodeName }
@@ -320,7 +363,13 @@ func (n *GraphIteratorNode) Execute(ctx context.Context, state State) (State, st
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			graph, err := NewSmartScraperGraph(userPrompt, url, n.Base.nodeConfig, n.Schema, n.LLM)
+			var graph *SmartScraperGraph
+			var err error
+			if n.StealthClient != nil {
+				graph, err = NewSmartScraperGraphWithStealth(userPrompt, url, n.Base.nodeConfig, n.Schema, n.LLM, n.StealthClient)
+			} else {
+				graph, err = NewSmartScraperGraph(userPrompt, url, n.Base.nodeConfig, n.Schema, n.LLM)
+			}
 			if err != nil {
 				return
 			}

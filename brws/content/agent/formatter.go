@@ -203,16 +203,21 @@ func (f *Formatter) formatHeader(ctx *Context) string {
 		}
 	}
 
+	challengeWarning := ""
+	if s.ChallengeDetected {
+		challengeWarning = fmt.Sprintf("\n⚠️  CHALLENGE DETECTED: %s anti-bot page. Consider using solve_challenge action.", s.ChallengeType)
+	}
+
 	return fmt.Sprintf(`=== PAGE CONTEXT ===
 URL:     %s
 Title:   %s
 Viewport: %.0f x %.0f
 Scroll:   %.0f / %.0f px (%d%% — %s third)
-%s%s`,
+%s%s%s`,
 		s.URL, s.Title,
 		s.Viewport.Width, s.Viewport.Height,
 		s.Scroll.Y, s.Scroll.MaxY, pct, scrollRegion,
-		hist, tabs,
+		hist, tabs, challengeWarning,
 	)
 }
 

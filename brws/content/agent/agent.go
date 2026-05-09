@@ -251,6 +251,13 @@ func (a *Agent) Step(ctx context.Context, decideFn func(*Context, []Action, stri
 		return nil, err
 	}
 
+	// Log challenge detection so callers can react even before deciding
+	if pageCtx.Snapshot != nil && pageCtx.Snapshot.ChallengeDetected && a.cfg.StealthClient != nil {
+		a.cfg.StealthClient.Logger().Warn("agent detected anti-bot challenge",
+			"type", pageCtx.Snapshot.ChallengeType,
+			"url", pageCtx.Snapshot.URL)
+	}
+
 	// 2. Decide
 	a.mu.RLock()
 	hist := make([]Step, len(a.history))
@@ -265,7 +272,13 @@ func (a *Agent) Step(ctx context.Context, decideFn func(*Context, []Action, stri
 	// 3. Execute
 	res, execErr := a.Execute(ctx, action)
 
-	// 4. Build step record
+	// 4. Log challenge solving
+	if res != nil && res.ChallengeSolved && a.cfg.StealthClient != nil {
+		a.cfg.StealthClient.Logger().Info("agent solved anti-bot challenge",
+			"action", action.ID, "url", pageCtx.Snapshot.URL)
+	}
+
+	// 5. Build step record
 	step := Step{
 		Timestamp:   time.Now(),
 		Observation: pageCtx,

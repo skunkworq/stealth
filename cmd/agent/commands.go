@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/skunkworq/stealth/brws/content/agent"
+	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 // ---------------------------------------------------------------------------
@@ -25,6 +27,7 @@ func runObserve(args []string) error {
 	semanticLLM := fs.Bool("semantic-llm", false, "Use LLM for richer semantic tree (requires OPENROUTER_API_KEY)")
 	describeImages := fs.Bool("describe-images", false, "Describe images via vision API (requires OPENROUTER_API_KEY)")
 	representation := fs.String("representation", "dom", "Primary representation: dom or semantic")
+	stealthFlag := fs.Bool("stealth", false, "Use stealth client for challenge-aware navigation")
 	cf, err := parseCommonFlags(fs, args)
 	if err != nil {
 		return err
@@ -37,7 +40,7 @@ func runObserve(args []string) error {
 		rep = agent.RepresentationSemantic
 	}
 
-	ctx, cancel, err := ensureSession(cf.SessionDir, cf.ChromePath)
+	ctx, cancel, sc, err := ensureAgentSession(cf.SessionDir, cf.ChromePath, *stealthFlag)
 	if err != nil {
 		return err
 	}
@@ -46,6 +49,12 @@ func runObserve(args []string) error {
 	// Navigate if URL changed from last state
 	lastURL := readLastURL(cf.SessionDir)
 	if lastURL != *url {
+		if sc != nil {
+			// Use stealth client for challenge-aware navigation
+			if _, err := sc.Navigate(ctx, *url); err != nil {
+				return fmt.Errorf("stealth navigate to %s: %w", *url, err)
+			}
+		}
 		if err := chromedp.Run(ctx, chromedp.Navigate(*url)); err != nil {
 			return fmt.Errorf("navigating to %s: %w", *url, err)
 		}
@@ -133,6 +142,7 @@ func runObserve(args []string) error {
 func runExecute(args []string) error {
 	fs := flag.NewFlagSet("execute", flag.ExitOnError)
 	actionJSON := fs.String("action", "", "Action JSON to execute (required)")
+	stealthFlag := fs.Bool("stealth", false, "Use stealth client for challenge-aware execution")
 	cf, err := parseCommonFlags(fs, args)
 	if err != nil {
 		return err
@@ -146,13 +156,16 @@ func runExecute(args []string) error {
 		return fmt.Errorf("parsing action JSON: %w", err)
 	}
 
-	ctx, cancel, err := ensureSession(cf.SessionDir, cf.ChromePath)
+	ctx, cancel, sc, err := ensureAgentSession(cf.SessionDir, cf.ChromePath, *stealthFlag)
 	if err != nil {
 		return err
 	}
 	defer cancel()
 
 	exec := &agent.Executor{}
+	if sc != nil {
+		exec.StealthClient = sc
+	}
 	res, err := exec.Execute(ctx, act)
 	if err != nil {
 		// Still output the result even on error
@@ -177,6 +190,7 @@ func runStep(args []string) error {
 	semanticLLM := fs.Bool("semantic-llm", false, "Use LLM for richer semantic tree (requires OPENROUTER_API_KEY)")
 	describeImages := fs.Bool("describe-images", false, "Describe images via vision API (requires OPENROUTER_API_KEY)")
 	representation := fs.String("representation", "dom", "Primary representation: dom or semantic")
+	stealthFlag := fs.Bool("stealth", false, "Use stealth client for challenge-aware navigation")
 	cf, err := parseCommonFlags(fs, args)
 	if err != nil {
 		return err
@@ -189,7 +203,7 @@ func runStep(args []string) error {
 		rep = agent.RepresentationSemantic
 	}
 
-	ctx, cancel, err := ensureSession(cf.SessionDir, cf.ChromePath)
+	ctx, cancel, sc, err := ensureAgentSession(cf.SessionDir, cf.ChromePath, *stealthFlag)
 	if err != nil {
 		return err
 	}
@@ -198,6 +212,11 @@ func runStep(args []string) error {
 	// Navigate if URL changed
 	lastURL := readLastURL(cf.SessionDir)
 	if lastURL != *url {
+		if sc != nil {
+			if _, err := sc.Navigate(ctx, *url); err != nil {
+				return fmt.Errorf("stealth navigate to %s: %w", *url, err)
+			}
+		}
 		if err := chromedp.Run(ctx, chromedp.Navigate(*url)); err != nil {
 			return fmt.Errorf("navigating to %s: %w", *url, err)
 		}
@@ -272,6 +291,9 @@ func runStep(args []string) error {
 			return fmt.Errorf("action %q not found in action space", *decision)
 		}
 		exec := &agent.Executor{}
+		if sc != nil {
+			exec.StealthClient = sc
+		}
 		res, execErr := exec.Execute(ctx, *found)
 		result = res
 		if execErr != nil {
@@ -353,16 +375,18 @@ func saveState(dir, url string) error {
 
 func outputResult(res *agent.ExecuteResult) error {
 	out := map[string]interface{}{
-		"success":      res != nil && res.Success,
-		"action_id":    "",
-		"new_url":      "",
-		"scroll_delta": 0,
-		"error":        "",
+		"success":          res != nil && res.Success,
+		"action_id":        "",
+		"new_url":          "",
+		"scroll_delta":     0,
+		"challenge_solved": false,
+		"error":            "",
 	}
 	if res != nil {
 		out["action_id"] = res.ActionID
 		out["new_url"] = res.NewURL
 		out["scroll_delta"] = res.ScrollDelta
+		out["challenge_solved"] = res.ChallengeSolved
 		if !res.Success {
 			out["error"] = res.Error
 		}
@@ -385,4 +409,40 @@ func outputStep(snap *agent.PageSnapshot, as *agent.ActionSpace, formatted strin
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(out)
+}
+
+// ensureAgentSession returns a chromedp context and optionally a stealth client.
+// When stealth is enabled, it creates a stealth client and a persistent tab from
+// its browser instance. Otherwise, it falls back to the standard session manager.
+func ensureAgentSession(dir, chromePath string, useStealth bool) (context.Context, context.CancelFunc, *stealth.Client, error) {
+	if !useStealth {
+		ctx, cancel, err := ensureSession(dir, chromePath)
+		return ctx, cancel, nil, err
+	}
+
+	// Stealth mode: create a stealth client with default config
+	cfg := *stealth.DefaultConfig()
+	if chromePath != "" {
+		// The stealth client doesn't accept chrome path directly,
+		// but we can set it via environment or accept the default discovery
+	}
+	sc, err := stealth.NewClient(cfg)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("creating stealth client: %w", err)
+	}
+
+	// Create a persistent tab from the stealth browser
+	tabCtx, tabCancel, ok := sc.NewTab()
+	if !ok {
+		sc.Close()
+		return nil, nil, nil, fmt.Errorf("stealth client does not support persistent tabs")
+	}
+
+	// Combined cancel that cleans up both tab and stealth client
+	combinedCancel := func() {
+		tabCancel()
+		sc.Close()
+	}
+
+	return tabCtx, combinedCancel, sc, nil
 }

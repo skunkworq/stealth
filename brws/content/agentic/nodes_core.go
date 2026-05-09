@@ -88,6 +88,18 @@ func (n *FetchNode) Execute(ctx context.Context, state State) (State, string, er
 	out := state.Clone()
 	out[n.Base.output[0]] = docs
 	out["doc"] = docs
+
+	// Promote challenge metadata from first document to graph state so
+	// ConditionalNode can branch on it.
+	if len(docs) > 0 {
+		if v, ok := docs[0].Metadata["challenge_solved"]; ok {
+			out["challenge_solved"] = v == "true"
+		}
+		if v, ok := docs[0].Metadata["challenge_detected"]; ok {
+			out["challenge_detected"] = v == "true"
+		}
+	}
+
 	return out, "", nil
 }
 
@@ -102,9 +114,10 @@ func (n *FetchNode) fetchWeb(ctx context.Context, source string) ([]Document, er
 		}
 		content = string(resp.Body)
 		meta = map[string]string{
-			"source":           source,
+			"source":             source,
 			"final_url":          resp.FinalURL,
-			"challenge_solved": fmt.Sprintf("%v", resp.ChallengeSolved),
+			"challenge_solved":   fmt.Sprintf("%v", resp.ChallengeSolved),
+			"challenge_detected": fmt.Sprintf("%v", resp.ChallengeSolved), // if solved, challenge was present
 		}
 	} else {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)

@@ -113,7 +113,15 @@ func (o *Observer) Observe(ctx context.Context) (*PageSnapshot, error) {
 		snap.Forms = semantic.ExtractFormSchemas(html)
 	}
 
-	// 9. Semantic enrichment (optional)
+	// 9. Challenge detection
+	if html != "" {
+		if chType := detectPageChallenge(html); chType != "" {
+			snap.ChallengeDetected = true
+			snap.ChallengeType = chType
+		}
+	}
+
+	// 10. Semantic enrichment (optional)
 	if o.SemanticEnhancer != nil && html != "" {
 		_ = o.SemanticEnhancer.Enhance(ctx, snap, html, snap.URL)
 	}
@@ -408,4 +416,34 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max-3] + "..."
+}
+
+// detectPageChallenge scans HTML body for known anti-bot challenge markers.
+// Returns the challenge vendor name (lowercase) or empty string if none detected.
+func detectPageChallenge(body string) string {
+	lower := strings.ToLower(body)
+	checks := []struct {
+		marker string
+		vendor string
+	}{
+		{"cf-browser-verification", "cloudflare"},
+		{"challenge-platform", "cloudflare"},
+		{"turnstile", "cloudflare"},
+		{"datadome", "datadome"},
+		{"_Incapsula_Resource", "imperva"},
+		{"visid_incap", "imperva"},
+		{"recaptcha", "recaptcha"},
+		{"g-recaptcha", "recaptcha"},
+		{"hcaptcha", "hcaptcha"},
+		{"perimeterx", "perimeterx"},
+		{"px-captcha", "perimeterx"},
+		{"akamai", "akamai"},
+		{"bm_sz", "akamai"},
+	}
+	for _, c := range checks {
+		if strings.Contains(lower, c.marker) {
+			return c.vendor
+		}
+	}
+	return ""
 }

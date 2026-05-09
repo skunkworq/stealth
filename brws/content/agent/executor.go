@@ -84,6 +84,8 @@ func (e *Executor) Execute(ctx context.Context, action Action) (*ExecuteResult, 
 		err = e.execSwitchTab(ctx, action)
 	case ActionCloseTab:
 		err = e.execCloseTab(ctx, action)
+	case ActionSolveChallenge:
+		res.ChallengeSolved, err = e.execSolveChallenge(ctx, action)
 	case ActionNone:
 		// No-op
 	default:
@@ -311,6 +313,33 @@ func (e *Executor) execCloseTab(ctx context.Context, action Action) error {
 		return fmt.Errorf("close_tab missing target_id")
 	}
 	return chromedp.Run(ctx, target.CloseTarget(target.ID(tid)))
+}
+
+// execSolveChallenge uses the stealth client to re-navigate the current URL
+// with challenge solving enabled. Returns true if a challenge was solved.
+func (e *Executor) execSolveChallenge(ctx context.Context, action Action) (bool, error) {
+	if e.StealthClient == nil {
+		return false, fmt.Errorf("no stealth client configured — cannot solve challenge")
+	}
+
+	// Get current URL from the tab
+	url, err := e.currentURL(ctx)
+	if err != nil {
+		return false, fmt.Errorf("get current url: %w", err)
+	}
+
+	// Use stealth client to navigate and solve any challenges
+	resp, err := e.StealthClient.Navigate(ctx, url)
+	if err != nil {
+		return false, fmt.Errorf("stealth navigate for challenge solve: %w", err)
+	}
+
+	// Re-navigate the agent's tab to the solved page (cookies are shared)
+	if err := chromedp.Run(ctx, chromedp.Navigate(resp.FinalURL)); err != nil {
+		return false, fmt.Errorf("navigate tab to solved page: %w", err)
+	}
+
+	return resp.ChallengeSolved, nil
 }
 
 // ---------------------------------------------------------------------------
