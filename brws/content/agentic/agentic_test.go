@@ -124,6 +124,16 @@ func TestSplitText(t *testing.T) {
 	}
 }
 
+func TestFetchNodeStealthClientField(t *testing.T) {
+	// Verify FetchNode can hold a StealthClient reference (compile-time check).
+	node := NewFetchNode("url", "doc", nil)
+	if node.StealthClient != nil {
+		t.Fatal("expected nil StealthClient by default")
+	}
+	// Compile-time check that StealthClient field exists.
+	_ = node.StealthClient
+}
+
 // testNode is a simple Node implementation for unit tests.
 type testNode struct {
 	name   string

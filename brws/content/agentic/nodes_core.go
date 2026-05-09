@@ -12,6 +12,8 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/net/html"
+
+	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 // ---------------------------------------------------------------------------
@@ -26,6 +28,11 @@ type FetchNode struct {
 	BrowserBase  map[string]interface{}
 	ScrapeDo     map[string]interface{}
 	StorageState string
+
+	// StealthClient optionally provides challenge-aware, anti-detect fetching.
+	// When set, web URLs are fetched through the stealth client instead of
+	// the raw HTTP client.
+	StealthClient *stealth.Client
 }
 
 // NewFetchNode creates a FetchNode.
@@ -85,30 +92,47 @@ func (n *FetchNode) Execute(ctx context.Context, state State) (State, string, er
 }
 
 func (n *FetchNode) fetchWeb(ctx context.Context, source string) ([]Document, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	var content string
+	var meta map[string]string
 
-	resp, err := n.HTTPClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
+	if n.StealthClient != nil {
+		resp, err := n.StealthClient.Scrape(ctx, source)
+		if err != nil {
+			return nil, fmt.Errorf("stealth fetch: %w", err)
+		}
+		content = string(resp.Body)
+		meta = map[string]string{
+			"source":           source,
+			"final_url":          resp.FinalURL,
+			"challenge_solved": fmt.Sprintf("%v", resp.ChallengeSolved),
+		}
+	} else {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
+		resp, err := n.HTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		content = string(body)
+		meta = map[string]string{"source": source}
 	}
 
-	content := string(body)
 	// Simple HTML cleanup: if it looks like HTML, extract text.
 	if strings.Contains(content, "<html") || strings.Contains(content, "<!DOCTYPE") {
 		content = htmlToText(content)
 	}
 
-	return []Document{{PageContent: content, Metadata: map[string]string{"source": source}}}, nil
+	return []Document{{PageContent: content, Metadata: meta}}, nil
 }
 
 func (n *FetchNode) fetchLocal(source string) ([]Document, error) {

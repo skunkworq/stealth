@@ -189,6 +189,30 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		return nil, fmt.Errorf("create engine: %w", err)
 	}
 
+	return newClientWithEngine(eng, cfg, logger)
+}
+
+// NewWithEngine creates a stealth client that reuses an existing engine.
+// This is useful when the caller already manages the browser lifecycle
+// (e.g. an agent that needs persistent tabs).
+func NewWithEngine(eng engine.Engine, cfg *Config) (*Client, error) {
+	logLevel := "info"
+	if cfg.Instrumentation != nil {
+		logLevel = cfg.Instrumentation.LogLevel
+	}
+	logger, err := instrumentation.NewLogger(&instrumentation.Config{
+		LogLevel:          logLevel,
+		EnableJSONLogging: cfg.Instrumentation != nil && cfg.Instrumentation.EnableJSONLog,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("create logger: %w", err)
+	}
+
+	logger.Info("initializing stealth client with existing engine", "engine", eng.Name())
+	return newClientWithEngine(eng, cfg, logger)
+}
+
+func newClientWithEngine(eng engine.Engine, cfg *Config, logger *instrumentation.Logger) (*Client, error) {
 	var sessMgr *session.Manager
 	if cfg.Session.Enabled && cfg.Session.ProfileDir != "" {
 		sessMgr, _ = session.NewManager(cfg.Session.ProfileDir)
@@ -755,6 +779,33 @@ func (c *Client) BehavioralSnapshot() *behavior.EventData {
 // ResetBehavioralTracker clears the accumulated behavioral data.
 func (c *Client) ResetBehavioralTracker() {
 	c.behavTracker = NewBehavioralTracker()
+}
+
+// BrowserContext returns the chromedp allocator context if the underlying engine
+// is Chromium-based. This allows external callers (e.g. the agent) to create
+// persistent tabs inside the same browser instance so that cookies and session
+// state are shared with the stealth client.
+func (c *Client) BrowserContext() (context.Context, bool) {
+	if se, ok := c.engine.(*chromium.StealthEngine); ok {
+		return se.Allocator(), true
+	}
+	return nil, false
+}
+
+// NewTab creates a new persistent tab inside the stealth browser.
+// The caller is responsible for calling the returned cancel function.
+// Cookies and session state from previous stealth navigations are shared.
+func (c *Client) NewTab() (context.Context, context.CancelFunc, bool) {
+	if se, ok := c.engine.(*chromium.StealthEngine); ok {
+		ctx, cancel := se.NewTab()
+		return ctx, cancel, true
+	}
+	return nil, nil, false
+}
+
+// Engine returns the underlying engine for advanced use cases.
+func (c *Client) Engine() engine.Engine {
+	return c.activeEngine()
 }
 
 // activeEngine returns the waterfall engine if configured, otherwise the raw engine.

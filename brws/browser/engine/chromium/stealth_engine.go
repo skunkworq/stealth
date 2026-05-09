@@ -268,6 +268,17 @@ func (s *StealthEngine) Capabilities() engine.Capabilities {
 }
 
 // Do executes a request with stealth enhancements
+// Allocator returns the chromedp allocator context for creating persistent tabs.
+func (s *StealthEngine) Allocator() context.Context {
+	return s.allocCtx
+}
+
+// NewTab creates a new persistent tab in the stealth browser.
+// The caller is responsible for calling the returned cancel function.
+func (s *StealthEngine) NewTab() (context.Context, context.CancelFunc) {
+	return chromedp.NewContext(s.allocCtx)
+}
+
 func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
 	// Start tracing
 	ctx, span := s.tracer.StartSpan(ctx, "stealth.fetch", instrumentation.SpanKindRequest)

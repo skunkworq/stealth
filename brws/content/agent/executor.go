@@ -14,6 +14,8 @@ import (
 
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
+
+	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 // Executor performs actions on a live browser tab.
@@ -21,15 +23,22 @@ type Executor struct {
 	// EngineCtx is the chromedp allocator context used to spawn tab contexts.
 	// If nil, the executor expects a pre-built chromedp context in Execute().
 	EngineCtx context.Context
+
+	// StealthClient optionally provides challenge-aware navigation.
+	// When set, Navigate actions first use the stealth client to handle
+	// anti-bot challenges and establish session cookies, then navigate
+	// the agent's tab context (which must share the same browser instance).
+	StealthClient *stealth.Client
 }
 
 // ExecuteResult describes what happened during execution.
 type ExecuteResult struct {
-	ActionID    string
-	Success     bool
-	Error       string
-	NewURL      string
-	ScrollDelta float64
+	ActionID        string
+	Success         bool
+	Error           string
+	NewURL          string
+	ScrollDelta     float64
+	ChallengeSolved bool // true if a captcha/anti-bot challenge was solved during this action
 }
 
 // Execute runs a single action and returns the result.
@@ -50,7 +59,11 @@ func (e *Executor) Execute(ctx context.Context, action Action) (*ExecuteResult, 
 	case ActionScrollDown, ActionScrollUp, ActionScrollBottom, ActionScrollTop, ActionScrollTo:
 		res.ScrollDelta, err = e.execScroll(ctx, action)
 	case ActionNavigate:
-		err = e.execNavigate(ctx, action)
+		stealthRes, navErr := e.execNavigate(ctx, action)
+		if stealthRes != nil {
+			res.ChallengeSolved = stealthRes.ChallengeSolved
+		}
+		err = navErr
 		res.NewURL, _ = e.currentURL(ctx)
 	case ActionBack:
 		err = e.execBack(ctx)
@@ -200,12 +213,32 @@ func (e *Executor) execScroll(ctx context.Context, action Action) (float64, erro
 	return delta, chromedp.Run(ctx, chromedp.Evaluate(script, nil))
 }
 
-func (e *Executor) execNavigate(ctx context.Context, action Action) error {
-	url := action.Parameters["url"]
-	if u, ok := url.(string); ok && u != "" {
-		return chromedp.Run(ctx, chromedp.Navigate(u))
+func (e *Executor) execNavigate(ctx context.Context, action Action) (*ExecuteResult, error) {
+	urlStr, ok := action.Parameters["url"].(string)
+	if !ok || urlStr == "" {
+		return nil, fmt.Errorf("navigate action missing url parameter")
 	}
-	return fmt.Errorf("navigate action missing url parameter")
+
+	// If a stealth client is configured, prime the browser session by navigating
+	// through the stealth client first. This handles anti-bot challenges and
+	// establishes cookies in the shared browser instance.
+	if e.StealthClient != nil {
+		resp, err := e.StealthClient.Navigate(ctx, urlStr)
+		if err != nil {
+			return nil, fmt.Errorf("stealth navigate failed: %w", err)
+		}
+		if resp != nil && resp.ChallengeSolved {
+			// Return partial result so the caller can record challenge solving
+			return &ExecuteResult{
+				ActionID:        "navigate-stealth",
+				Success:         true,
+				NewURL:            resp.FinalURL,
+				ChallengeSolved: true,
+			}, nil
+		}
+	}
+
+	return nil, chromedp.Run(ctx, chromedp.Navigate(urlStr))
 }
 
 func (e *Executor) execBack(ctx context.Context) error {

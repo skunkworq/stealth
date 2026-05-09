@@ -3,6 +3,9 @@ package stealth
 import (
 	"context"
 	"testing"
+
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	"github.com/skunkworq/stealth/brws/content/semantic"
 )
 
 func TestNewClientValueConfig(t *testing.T) {
@@ -115,3 +118,77 @@ func TestResponseAsHTMLEmptyBody(t *testing.T) {
 
 // Compile-time check that Scrape matches the expected signature.
 var _ func(context.Context, string) (*Response, error) = (*Client)(nil).Scrape
+
+// ---------------------------------------------------------------------------
+// Stealth client persistent tab & semantic integration tests
+// ---------------------------------------------------------------------------
+
+func TestClientNewTabNativeEngine(t *testing.T) {
+	// With a native engine, NewTab should return false.
+	cfg := *DefaultConfig()
+	cfg.EngineName = "native"
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer client.Close()
+
+	_, _, ok := client.NewTab()
+	if ok {
+		t.Fatal("expected NewTab to return false for native engine")
+	}
+}
+
+func TestClientBrowserContextNativeEngine(t *testing.T) {
+	cfg := *DefaultConfig()
+	cfg.EngineName = "native"
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer client.Close()
+
+	_, ok := client.BrowserContext()
+	if ok {
+		t.Fatal("expected BrowserContext to return false for native engine")
+	}
+}
+
+func TestClientEngineReturnsActiveEngine(t *testing.T) {
+	cfg := *DefaultConfig()
+	cfg.EngineName = "native"
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer client.Close()
+
+	eng := client.Engine()
+	if eng == nil {
+		t.Fatal("expected non-nil engine")
+	}
+	if eng.Name() != "native" {
+		t.Fatalf("expected engine name 'native', got %s", eng.Name())
+	}
+}
+
+func TestClientNewSemanticExtractor(t *testing.T) {
+	cfg := *DefaultConfig()
+	cfg.EngineName = "native"
+	client, err := NewClient(cfg)
+	if err != nil {
+		t.Fatalf("NewClient failed: %v", err)
+	}
+	defer client.Close()
+
+	extractor := client.NewSemanticExtractor(&semantic.PipelineConfig{})
+	if extractor == nil {
+		t.Fatal("expected non-nil semantic extractor")
+	}
+}
+
+// Compile-time checks for new method signatures.
+var _ func() (context.Context, context.CancelFunc, bool) = (*Client)(nil).NewTab
+var _ func() (context.Context, bool) = (*Client)(nil).BrowserContext
+var _ func() engine.Engine = (*Client)(nil).Engine
+var _ func(*semantic.PipelineConfig) *semantic.SemanticExtractor = (*Client)(nil).NewSemanticExtractor

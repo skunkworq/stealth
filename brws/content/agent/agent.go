@@ -17,7 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chromedp/chromedp"
+
 	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 // Default configuration values.
@@ -39,6 +42,11 @@ type Config struct {
 	CompactLinks  bool          // One-line link format vs full struct
 	ScrollFirst   bool          // Prioritize scroll actions when building action space
 	StealthMode   bool          // Use stealth-appropriate defaults (human delays, etc.)
+
+	// StealthClient optionally provides challenge-aware navigation and
+	// anti-detection. When set, the agent creates its browser tabs from
+	// the stealth client's browser instance so that session state is shared.
+	StealthClient *stealth.Client
 
 	// SemanticMode enables semantic enrichment of observations.
 	// When true, the observer will build a semantic tree and extract
@@ -106,6 +114,10 @@ type Step struct {
 // NewAgent creates an agent with the given components.
 // Any nil component gets a default instance.
 func NewAgent(cfg Config, obs *Observer, fmttr *Formatter, exec *Executor) *Agent {
+	return newAgent(cfg, obs, fmttr, exec)
+}
+
+func newAgent(cfg Config, obs *Observer, fmttr *Formatter, exec *Executor) *Agent {
 	if obs == nil {
 		obs = DefaultObserver()
 	}
@@ -371,6 +383,46 @@ func (a *Agent) LastActionSpace() []Action {
 	acts := make([]Action, len(a.lastSpace))
 	copy(acts, a.lastSpace)
 	return acts
+}
+
+// NewStealthTab creates a new persistent tab from the stealth client's browser
+// instance, navigates to the given URL with challenge solving, and returns the
+// tab context. The caller should use this context for all subsequent agent
+// operations (Observe, Execute, etc.).
+//
+// Requires Agent.Config.StealthClient to be set.
+func (a *Agent) NewStealthTab(ctx context.Context, url string) (context.Context, context.CancelFunc, error) {
+	if a.cfg.StealthClient == nil {
+		return nil, nil, fmt.Errorf("no stealth client configured")
+	}
+
+	// First, use the stealth client to navigate and solve any challenges.
+	// This establishes session cookies in the shared browser instance.
+	resp, err := a.cfg.StealthClient.Navigate(ctx, url)
+	if err != nil {
+		return nil, nil, fmt.Errorf("stealth navigate: %w", err)
+	}
+
+	// Create a persistent tab from the stealth browser.
+	tabCtx, tabCancel, ok := a.cfg.StealthClient.NewTab()
+	if !ok {
+		return nil, nil, fmt.Errorf("stealth client does not support persistent tabs (engine may not be chromium-stealth)")
+	}
+
+	// Navigate the persistent tab to the same URL.
+	// Cookies/session from the stealth navigate are shared, so challenges
+	// should already be solved.
+	if err := chromedp.Run(tabCtx, chromedp.Navigate(resp.FinalURL)); err != nil {
+		tabCancel()
+		return nil, nil, fmt.Errorf("navigate persistent tab: %w", err)
+	}
+
+	// Wire the stealth client into the executor for future navigations.
+	if a.executor != nil {
+		a.executor.StealthClient = a.cfg.StealthClient
+	}
+
+	return tabCtx, tabCancel, nil
 }
 
 // Summary returns a one-line status of the agent.
