@@ -3,6 +3,8 @@ package stealth
 import (
 	"fmt"
 	"testing"
+
+	"github.com/skunkworq/stealth/brws/browser/engine/chromium"
 )
 
 func TestBuildStateVector_EmptyAnomalies(t *testing.T) {
@@ -93,25 +95,25 @@ func TestApplyAction_StealthConfigToggle(t *testing.T) {
 	tests := []struct {
 		actionIdx int
 		fieldName string
-		checkFunc func(cfg *StealthConfig) bool
+		checkFunc func(cfg *chromium.StealthConfig) bool
 	}{
-		{0, "RemoveWebDriver", func(c *StealthConfig) bool { return c.RemoveWebDriver }},
-		{1, "CanvasNoise", func(c *StealthConfig) bool { return c.CanvasNoise }},
-		{2, "ClientHints", func(c *StealthConfig) bool { return c.ClientHints }},
-		{3, "RandomUserAgent", func(c *StealthConfig) bool { return c.RandomUserAgent }},
-		{4, "WebGLSpoof", func(c *StealthConfig) bool { return c.WebGLSpoof }},
-		{5, "HardwareSync", func(c *StealthConfig) bool { return c.HardwareSync }},
-		{6, "NetworkSync", func(c *StealthConfig) bool { return c.NetworkSync }},
-		{7, "PluginsSync", func(c *StealthConfig) bool { return c.PluginsSync }},
-		{8, "GeometrySync", func(c *StealthConfig) bool { return c.GeometrySync }},
-		{9, "VideoSync", func(c *StealthConfig) bool { return c.VideoSync }},
-		{10, "PermissionsSync", func(c *StealthConfig) bool { return c.PermissionsSync }},
-		{11, "TimezoneSync", func(c *StealthConfig) bool { return c.TimezoneSync }},
+		{0, "RemoveWebDriver", func(c *chromium.StealthConfig) bool { return c.RemoveWebDriver }},
+		{1, "CanvasNoise", func(c *chromium.StealthConfig) bool { return c.CanvasNoise }},
+		{2, "ClientHints", func(c *chromium.StealthConfig) bool { return c.ClientHints }},
+		{3, "RandomUserAgent", func(c *chromium.StealthConfig) bool { return c.RandomUserAgent }},
+		{4, "WebGLSpoof", func(c *chromium.StealthConfig) bool { return c.WebGLSpoof }},
+		{5, "HardwareSync", func(c *chromium.StealthConfig) bool { return c.HardwareSync }},
+		{6, "NetworkSync", func(c *chromium.StealthConfig) bool { return c.NetworkSync }},
+		{7, "PluginsSync", func(c *chromium.StealthConfig) bool { return c.PluginsSync }},
+		{8, "GeometrySync", func(c *chromium.StealthConfig) bool { return c.GeometrySync }},
+		{9, "VideoSync", func(c *chromium.StealthConfig) bool { return c.VideoSync }},
+		{10, "PermissionsSync", func(c *chromium.StealthConfig) bool { return c.PermissionsSync }},
+		{11, "TimezoneSync", func(c *chromium.StealthConfig) bool { return c.TimezoneSync }},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.fieldName, func(t *testing.T) {
-			cfg := &StealthConfig{}
+			cfg := &chromium.StealthConfig{}
 
 			applied, name := ApplyAction(cfg, tt.actionIdx)
 			if !applied {
@@ -134,7 +136,7 @@ func TestApplyAction_StealthConfigToggle(t *testing.T) {
 }
 
 func TestApplyAction_SignalingActions(t *testing.T) {
-	cfg := &StealthConfig{}
+	cfg := &chromium.StealthConfig{}
 
 	// Actions 12-17 are signaling actions
 	for i := 12; i <= 17; i++ {
@@ -146,7 +148,7 @@ func TestApplyAction_SignalingActions(t *testing.T) {
 }
 
 func TestApplyAction_InvalidAction(t *testing.T) {
-	cfg := &StealthConfig{}
+	cfg := &chromium.StealthConfig{}
 
 	applied, name := ApplyAction(cfg, 99)
 	if applied {

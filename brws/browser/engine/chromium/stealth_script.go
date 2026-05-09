@@ -11,8 +11,12 @@ import (
 	"time"
 )
 
-// StealthConfig contains configuration for stealth mode
+// StealthConfig contains configuration for stealth mode.
+// This is the canonical type used by both the engine and the stealth client.
 type StealthConfig struct {
+	// Master switch: when false, all stealth features are disabled.
+	Enabled bool
+
 	// Spoof device memory (RAM)
 	DeviceMemoryGB int
 
@@ -58,6 +62,31 @@ type StealthConfig struct {
 	// Device pixel ratio (default 1.0, 2.0 for HiDPI/Retina)
 	DevicePixelRatio float64
 
+	// Remove WebDriver property from navigator
+	RemoveWebDriver bool
+
+	// Enable WebGL spoofing (complements WebGLVendor/WebGLRenderer)
+	WebGLSpoof bool
+
+	// Enable client hints spoofing
+	ClientHints bool
+
+	// Fake screen dimensions (complements ScreenWidth/ScreenHeight)
+	FakeScreen bool
+
+	// Fake timezone (complements Timezone)
+	FakeTimezone bool
+
+	// Use a random user agent
+	RandomUserAgent bool
+
+	// Explicit user agent override (empty = auto-generate)
+	UserAgent string
+
+	// Viewport dimensions
+	ViewportWidth  int
+	ViewportHeight int
+
 	// Dynamic AI Spoofer Sync Flags (passed from stealth.Client / Python RL)
 	HardwareSync    bool
 	NetworkSync     bool
@@ -79,6 +108,7 @@ type StealthConfig struct {
 // DefaultStealthConfig returns a default stealth configuration
 func DefaultStealthConfig() *StealthConfig {
 	return &StealthConfig{
+		Enabled:             true,
 		DeviceMemoryGB:      RandomRAM(),
 		HardwareConcurrency: 8,
 		Platform:            "Win32",
@@ -95,6 +125,14 @@ func DefaultStealthConfig() *StealthConfig {
 		Timezone:            "America/New_York",
 		ScreenWidth:         1920,
 		ScreenHeight:        1080,
+		RemoveWebDriver:     true,
+		WebGLSpoof:          true,
+		ClientHints:         true,
+		FakeScreen:          true,
+		FakeTimezone:        true,
+		RandomUserAgent:     true,
+		ViewportWidth:       1920,
+		ViewportHeight:      1080,
 		SpoofLocalIPs:       false,
 	}
 }

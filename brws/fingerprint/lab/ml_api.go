@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/chromium"
+	cstealth "github.com/skunkworq/stealth/brws/browser/engine/chromium"
 	"github.com/skunkworq/stealth/brws/fingerprint/train/datagen"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
@@ -94,7 +94,7 @@ func (s *EnhancedServer) handleMLEvaluate(w http.ResponseWriter, r *http.Request
 	// Build stealth config for the browser client
 	cfg := stealth.DefaultConfig()
 	if snapshot != nil {
-		cfg.Stealth = &stealth.StealthConfig{
+		cfg.Stealth = &cstealth.StealthConfig{
 			Enabled:         true,
 			RemoveWebDriver: snapshot.RemoveWebDriver,
 			CanvasNoise:     snapshot.CanvasNoise,
@@ -113,7 +113,7 @@ func (s *EnhancedServer) handleMLEvaluate(w http.ResponseWriter, r *http.Request
 		}
 	} else if len(req.FSMConfig) > 0 {
 		// Legacy: try to decode directly into StealthConfig
-		var sc stealth.StealthConfig
+		var sc cstealth.StealthConfig
 		if err := json.Unmarshal(req.FSMConfig, &sc); err == nil {
 			cfg.Stealth = &sc
 		}

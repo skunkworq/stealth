@@ -60,8 +60,7 @@ type Config struct {
 	Proxy           string
 	PolicyModelPath string
 
-	Stealth         *StealthConfig
-	Behavior        *BehaviorConfig
+	Stealth         *chromium.StealthConfig
 	Challenge       *ChallengeConfig
 	Session         *SessionConfig
 	Instrumentation *InstrumentationConfig
@@ -74,45 +73,6 @@ type Config struct {
 
 	// Trace-based captcha solving
 	TraceDataDir string // path to trace data directory for replay-based solving
-}
-
-// StealthConfig configures stealth capabilities.
-type StealthConfig struct {
-	Enabled         bool
-	RemoveWebDriver bool
-	CanvasNoise     bool
-	WebGLSpoof      bool
-	ClientHints     bool
-	FakeScreen      bool
-	FakeTimezone    bool
-	RandomUserAgent bool
-	UserAgent       string
-	ViewportWidth   int
-	ViewportHeight  int
-
-	// Phase 14 & 16: Dynamic RL Mutable Heuristics
-	HardwareSync    bool
-	NetworkSync     bool
-	PluginsSync     bool
-	GeometrySync    bool
-	VideoSync       bool
-	PermissionsSync bool
-	TimezoneSync    bool
-
-	// StealthPlus enables advanced anti-detection features inspired by nodriver:
-	// shadow-DOM expert mode, user-gesture evaluation, permission grants,
-	// and raw CDP escape hatch.  Does NOT include tab management or
-	// visual/template-based CAPTCHA solving.
-	StealthPlus bool
-}
-
-// BehaviorConfig configures human behavior simulation.
-type BehaviorConfig struct {
-	HumanizeMouse  bool
-	RandomDelays   bool
-	TypingSpeedMin time.Duration
-	TypingSpeedMax time.Duration
-	ScrollBehavior string
 }
 
 // ChallengeConfig configures challenge handling.
@@ -373,35 +333,38 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 			Timeout: c.options.Timeout,
 		})
 		if err != nil {
-			if strings.Contains(err.Error(), "WAF Challenge Detected") && attempt < maxRetries {
-				c.logger.Warn("WAF Blocked. Adapting Stealth Config and Retrying", "attempt", attempt, "error", err)
-
-				// FSM State Transition
-				_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.Retry)
-
-				// RL-driven stealth adaptation or hardcoded fallback
-				if c.policyLoader != nil {
-					stateVec := BuildStateVector(extractAnomalies(err), nil, nil)
-					actionIdx, qValue := c.policyLoader.SelectAction(stateVec)
-					applied, field := ApplyAction(c.config.Stealth, actionIdx)
-					c.logger.Info("RL policy action", "action", field, "q_value", qValue, "applied", applied)
-				} else {
-					c.config.Stealth.CanvasNoise = true
-					c.config.Stealth.WebGLSpoof = true
-					c.config.Stealth.ClientHints = true
-				}
-				// We wait randomly to let the previous context clear gracefully
-				time.Sleep(time.Duration(500+attempt*1500) * time.Millisecond)
-
-				continue
-			}
-
 			span.SetAttribute("error", err.Error())
 			c.logger.Error("navigation failed", "url", url, "error", err)
 			return nil, err
 		}
 
-		// Unblocked response received
+		// Check for WAF/challenge markers in the response body/headers.
+		// The engine now returns raw responses; challenge detection lives here.
+		if isWAFResponse(resp) && attempt < maxRetries {
+			c.logger.Warn("WAF challenge detected in response. Adapting stealth config and retrying",
+				"attempt", attempt, "status", resp.Status)
+
+			// FSM State Transition
+			_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.Retry)
+
+			// RL-driven stealth adaptation or hardcoded fallback
+			if c.policyLoader != nil {
+				stateVec := BuildStateVector(extractAnomaliesFromResponse(resp), nil, nil)
+				actionIdx, qValue := c.policyLoader.SelectAction(stateVec)
+				applied, field := ApplyAction(c.config.Stealth, actionIdx)
+				c.logger.Info("RL policy action", "action", field, "q_value", qValue, "applied", applied)
+			} else {
+				c.config.Stealth.CanvasNoise = true
+				c.config.Stealth.WebGLSpoof = true
+				c.config.Stealth.ClientHints = true
+			}
+			// We wait randomly to let the previous context clear gracefully
+			time.Sleep(time.Duration(500+attempt*1500) * time.Millisecond)
+
+			continue
+		}
+
+		// Clean response received
 		break
 	}
 
@@ -637,6 +600,23 @@ func (c *Client) isCleanResponse(resp *engine.Response) bool {
 	return resp.Status >= 200 && resp.Status < 400 && !c.isCaptchaResponse(resp)
 }
 
+// isWAFResponse returns true if the response contains WAF/challenge markers.
+// This replaces the engine-level WAF detection that was removed from
+// stealth_engine.go; challenge detection now lives entirely in the client.
+func isWAFResponse(resp *engine.Response) bool {
+	if resp == nil {
+		return false
+	}
+	flatHeaders := make(map[string]string, len(resp.Headers))
+	for k, v := range resp.Headers {
+		if len(v) > 0 {
+			flatHeaders[strings.ToLower(k)] = v[0]
+		}
+	}
+	waf := instrumentation.DetectChallenge(resp.Status, flatHeaders, resp.Body)
+	return waf != instrumentation.WAFUnknown
+}
+
 // attemptCaptchaSolve tries to solve a detected captcha, using trace-replayed
 // events when available, falling back to synthetic event generation.
 func (c *Client) attemptCaptchaSolve(ctx context.Context, targetURL string, resp *engine.Response) (*engine.Response, error) {
@@ -707,19 +687,25 @@ func (r *Response) AttachSemanticTree(tree *semantic.SemanticTree) {
 }
 
 // Mouse moves the mouse to the specified coordinates.
+// When the underlying engine supports interaction, it delegates to the engine.
 func (c *Client) Mouse(x, y float64) error {
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnMouseMove)
 	c.behavTracker.RecordMouseMove(x, y)
-	c.logger.Debug("mouse move", "x", x, "y", y)
+	if ie, ok := c.engine.(engine.InteractiveEngine); ok {
+		return ie.Mouse(x, y)
+	}
+	c.logger.Debug("mouse move (no interactive engine)", "x", x, "y", y)
 	return nil
 }
 
 // Click performs a mouse click at coordinates.
+// When the underlying engine supports interaction, it delegates to the engine.
 func (c *Client) Click(x, y float64) error {
-	sim := behavior.NewMouseSimulator(0)
-	_ = sim.ClickAt(x, y)
 	c.behavTracker.RecordMouseMove(x, y)
-	c.logger.Debug("click", "x", x, "y", y)
+	if ie, ok := c.engine.(engine.InteractiveEngine); ok {
+		return ie.Click(x, y)
+	}
+	c.logger.Debug("click (no interactive engine)", "x", x, "y", y)
 	return nil
 }
 
@@ -756,17 +742,25 @@ func (c *Client) ClickSelector(ctx context.Context, selector string) error {
 }
 
 // Type simulates typing text.
+// When the underlying engine supports interaction, it delegates to the engine.
 func (c *Client) Type(text string) error {
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnType)
 	c.behavTracker.RecordKeystroke()
-	c.logger.Debug("type", "length", len(text))
+	if ie, ok := c.engine.(engine.InteractiveEngine); ok {
+		return ie.Type(text)
+	}
+	c.logger.Debug("type (no interactive engine)", "length", len(text))
 	return nil
 }
 
 // Scroll scrolls the page.
+// When the underlying engine supports interaction, it delegates to the engine.
 func (c *Client) Scroll(pixels float64) error {
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnScroll)
-	c.logger.Debug("scroll", "pixels", pixels)
+	if ie, ok := c.engine.(engine.InteractiveEngine); ok {
+		return ie.Scroll(pixels)
+	}
+	c.logger.Debug("scroll (no interactive engine)", "pixels", pixels)
 	return nil
 }
 
@@ -1143,26 +1137,12 @@ func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *e
 
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
+	cfg := chromium.DefaultStealthConfig()
+	cfg.CanvasNoise = true // override: enable by default for the client
 	return &Config{
 		EngineName: "chromium-stealth",
 		Headless:   true,
-		Stealth: &StealthConfig{
-			Enabled:         true,
-			RemoveWebDriver: true,
-			CanvasNoise:     true,
-			WebGLSpoof:      true,
-			ClientHints:     true,
-			FakeScreen:      true,
-			RandomUserAgent: true,
-			ViewportWidth:   1920,
-			ViewportHeight:  1080,
-		},
-		Behavior: &BehaviorConfig{
-			HumanizeMouse:  true,
-			RandomDelays:   true,
-			TypingSpeedMin: 50 * time.Millisecond,
-			TypingSpeedMax: 150 * time.Millisecond,
-		},
+		Stealth:    cfg,
 		Challenge: &ChallengeConfig{
 			AutoDetect: true,
 			AutoSolve:  false,

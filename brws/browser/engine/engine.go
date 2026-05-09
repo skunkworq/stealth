@@ -36,6 +36,23 @@ type Capabilities struct {
 	Intercept         bool // Can intercept/modify requests
 }
 
+// InteractiveEngine is an optional interface that engines may implement
+// to support human-like browser interactions (mouse, keyboard, scroll).
+// Callers should check capabilities or type-assert before using these methods.
+type InteractiveEngine interface {
+	Engine
+	// Mouse moves the cursor to the specified coordinates.
+	Mouse(x, y float64) error
+	// Click performs a mouse click at the specified coordinates.
+	Click(x, y float64) error
+	// Type simulates human-like typing.
+	Type(text string) error
+	// Scroll scrolls the page by the specified amount.
+	Scroll(pixels float64) error
+	// ScrollTo scrolls to a specific Y position.
+	ScrollTo(y float64) error
+}
+
 // Request is a unified HTTP request structure.
 type Request struct {
 	Method  string

@@ -5,7 +5,6 @@ package chromium
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -146,10 +145,10 @@ func NewStealthWithFingerprint(opts engine.Options, fp *types.CompleteFingerprin
 		allocOpts = append(allocOpts, chromedp.UserAgent(RandomUserAgent()))
 	}
 
-	// Dynamically map advanced AI Spoofer properties if injected from Proxy Client (train_shield_sword)
+	// Directly apply stealth config if provided (eliminates brittle JSON round-trip)
 	if opts.StealthConfigRaw != nil {
-		if rawBytes, err := json.Marshal(opts.StealthConfigRaw); err == nil {
-			_ = json.Unmarshal(rawBytes, &stealthCfg)
+		if cfg, ok := opts.StealthConfigRaw.(*StealthConfig); ok {
+			stealthCfg = cfg
 		}
 	}
 
@@ -497,17 +496,9 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		s.logger.Error("FSM transition failed", "error", err)
 	}
 
-	// Scan the page for WAF Fingerprints
-	waf := instrumentation.DetectChallenge(200, map[string]string{}, []byte(body))
-	if waf != instrumentation.WAFUnknown {
-		s.logger.Warn("WAF challenge detected during stealth navigation", "waf", waf, "url", req.URL)
-
-		// Transition FSM to fail (which signals Adapting Retry)
-		_ = s.fsm.Transition(ctx, instrumentation.RequestEvents.Fail)
-
-		// Return specific error triggering the Adaptive loop upstream
-		return nil, fmt.Errorf("WAF Challenge Detected: %s", waf)
-	}
+	// NOTE: WAF/challenge detection was removed from the engine layer.
+	// The engine now returns raw responses. The stealth client checks
+	// for WAF markers and triggers adaptive retries at the orchestration layer.
 
 	// Transition FSM to complete
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Complete); err != nil {

@@ -3,6 +3,8 @@ package stealth
 import (
 	"strings"
 
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	"github.com/skunkworq/stealth/brws/browser/engine/chromium"
 	"github.com/skunkworq/stealth/brws/ml"
 )
 
@@ -96,7 +98,7 @@ type BehavioralState struct {
 // Actions 0-11 toggle boolean fields on StealthConfig.
 // Actions 12-17 are behavioral/challenge flags consumed by other subsystems.
 // Returns whether the action was applied and the field name.
-func ApplyAction(cfg *StealthConfig, actionIndex int) (applied bool, fieldName string) {
+func ApplyAction(cfg *chromium.StealthConfig, actionIndex int) (applied bool, fieldName string) {
 	name, ok := ml.ActionMap[actionIndex]
 	if !ok {
 		return false, "unknown"
@@ -200,6 +202,54 @@ func extractAnomalies(err error) []string {
 
 	for keyword, anomaly := range checks {
 		if strings.Contains(strings.ToLower(msg), strings.ToLower(keyword)) {
+			anomalies = append(anomalies, anomaly)
+		}
+	}
+
+	return anomalies
+}
+
+// extractAnomaliesFromResponse parses a response for WAF/challenge markers
+// and returns anomaly indicators for RL state vectors.
+func extractAnomaliesFromResponse(resp *engine.Response) []string {
+	if resp == nil {
+		return nil
+	}
+	anomalies := make([]string, 0)
+
+	// Check status codes
+	if resp.Status == 403 || resp.Status == 503 {
+		anomalies = append(anomalies, "waf_challenge")
+	}
+
+	// Check headers for WAF markers
+	for k, vals := range resp.Headers {
+		kl := strings.ToLower(k)
+		for _, v := range vals {
+			vl := strings.ToLower(v)
+			switch {
+			case strings.Contains(kl, "cf-ray"):
+				anomalies = append(anomalies, "waf_challenge")
+			case strings.Contains(kl, "x-datadome"):
+				anomalies = append(anomalies, "waf_challenge")
+			case strings.Contains(vl, "cloudflare"):
+				anomalies = append(anomalies, "waf_challenge")
+			}
+		}
+	}
+
+	// Check body for challenge markers
+	body := strings.ToLower(string(resp.Body))
+	checks := map[string]string{
+		"cf-browser-verification": "waf_challenge",
+		"datadome.js":             "waf_challenge",
+		"_Incapsula_Resource":     "waf_challenge",
+		"visid_incap":             "waf_challenge",
+		"captcha":                 "captcha_challenge",
+		"access denied":           "blocked",
+	}
+	for marker, anomaly := range checks {
+		if strings.Contains(body, marker) {
 			anomalies = append(anomalies, anomaly)
 		}
 	}
