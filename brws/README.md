@@ -67,8 +67,8 @@ resp, _ := eng.Do(ctx, &engine.Request{URL: "https://example.com"})
 
 | Package | Backend | When to use |
 |---|---|---|
-| `http/native` | `net/http` + uTLS | Fast, lightweight; no JS, TLS fingerprint spoofing |
-| `http/http3` | Go `quic-go` | HTTP/3-only targets; no JS rendering |
+| `http/native` | `net/http` + uTLS | Fast, lightweight; no JS, TLS fingerprint spoofing. Registered as `"native"` engine. |
+| `http/http3` | `quic-go` | **Stub** — HTTP/3 client utilities. Does not implement `engine.Engine`; use a browser engine for HTTP/3. |
 
 #### Meta engines (`browser/engine/meta/`)
 
