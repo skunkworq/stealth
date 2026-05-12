@@ -7,7 +7,7 @@ export type WSControlMessage = {
 
 export function createWebSocketUrl(): string {
   const protocol = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss:" : "ws:";
-  const host = process.env.NEXT_PUBLIC_WS_HOST ?? (typeof window !== "undefined" ? window.location.host : "localhost:8080");
+  const host = typeof window !== "undefined" ? window.location.host : "localhost:8080";
   return `${protocol}//${host}/ws`;
 }
 

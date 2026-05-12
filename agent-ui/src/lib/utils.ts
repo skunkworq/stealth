@@ -1,5 +1,6 @@
 export function escapeHtml(text: unknown): string {
   if (text == null) return "";
+  if (typeof document === "undefined") return String(text);
   const div = document.createElement("div");
   div.textContent = String(text);
   return div.innerHTML;

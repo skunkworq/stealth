@@ -1,6 +1,6 @@
 import type { Session, AgentInfo, CreateSessionRequest, SendMessageRequest } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "";
+const API_BASE = ""; // relative URLs — served from same origin
 
 async function fetchJSON<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${url}`, init);
