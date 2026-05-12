@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { escapeHtml } from '$lib/utils';
+	import { renderMarkdown } from '$lib/utils';
 	import type { Message } from '$lib/types';
 
 	interface Props {
@@ -14,6 +14,14 @@
 	let meta = $derived(
 		isSystem ? 'System' : msg.agent_id ? `Assistant (${msg.agent_id.slice(0, 8)})` : 'Assistant'
 	);
+
+	let renderedContent = $state('');
+
+	$effect(() => {
+		renderMarkdown(msg.content).then((html) => {
+			renderedContent = html;
+		});
+	});
 </script>
 
 <div
@@ -22,5 +30,5 @@
 		: 'self-start rounded-bl-sm bg-[#1e2736]'}"
 >
 	<div class="mb-1 text-[11px] text-[#7a8194]">{meta}</div>
-	<div class="whitespace-pre-wrap break-words">{@html escapeHtml(msg.content)}</div>
+	<div class="markdown-content whitespace-normal break-words">{@html renderedContent}</div>
 </div>
