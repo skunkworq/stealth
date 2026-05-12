@@ -459,7 +459,7 @@ import (
 Import for side effects (e.g., registering engines):
 
 ```go
-import _ "github.com/skunkworq/stealth/brws/browser/engine/native"
+import _ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 ```
 
 ### Dot Import (rarely used)
@@ -1139,7 +1139,7 @@ func New(name string, opts Options) (Engine, error) {
 Engines self-register via `init()`:
 
 ```go
-// brws/browser/engine/native/native.go
+// brws/browser/engine/http/native/native.go
 func init() {
     engine.Register("native", newNativeEngine)
 }
@@ -1279,7 +1279,7 @@ _ = resp.Body.Close()
 Import for side effects only:
 
 ```go
-import _ "github.com/skunkworq/stealth/brws/browser/engine/native"
+import _ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 ```
 
 ### String Builders

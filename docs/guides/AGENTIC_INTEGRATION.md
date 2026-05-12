@@ -105,7 +105,7 @@ Custom providers can be plugged in by implementing the two-method interface.
 ## Independence Guarantee
 
 - **Zero imports** into `brws/content/agent/` (existing CDP-based browser agent)
-- **Zero imports** into `brws/browser/engine/chromium` (browser engine)
+- **Zero imports** into `brws/browser/engine/browser/chromium` (browser engine)
 - **Zero imports** into `brws/stealth/` (evasion/detection infrastructure)
 - Relies only on `brws/content/semantic` for the default LLM client and standard library packages for HTTP/HTML parsing
 

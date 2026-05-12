@@ -8,7 +8,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/engine/testserver"
+	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
 )
 
 func TestDetailedDetectionTrace(t *testing.T) {

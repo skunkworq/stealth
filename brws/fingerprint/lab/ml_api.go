@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
-	cstealth "github.com/skunkworq/stealth/brws/browser/engine/chromium"
+	cstealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
 	"github.com/skunkworq/stealth/brws/fingerprint/train/datagen"
 	"github.com/skunkworq/stealth/brws/stealth"
 )

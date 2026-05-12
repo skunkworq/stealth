@@ -400,7 +400,7 @@ User: "Research: What is NVIDIA's current stock price?"
 import (
     "context"
     "github.com/skunkworq/stealth/brws/engine"
-    _ "github.com/skunkworq/stealth/brws/browser/engine/native"
+    _ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 )
 
 eng, _ := engine.New("native", engine.Options{Stealth: true})

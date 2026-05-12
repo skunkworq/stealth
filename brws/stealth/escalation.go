@@ -5,7 +5,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	pool "github.com/skunkworq/stealth/brws/network/proxy/pool"
-	wf "github.com/skunkworq/stealth/brws/browser/engine/waterfall"
+	wf "github.com/skunkworq/stealth/brws/browser/engine/meta/waterfall"
 	"github.com/skunkworq/stealth/brws/stealth/profile/session"
 )
 

@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 	"github.com/skunkworq/stealth/brws/fingerprint/lab"
 	"github.com/skunkworq/stealth/brws/content/semantic"
 	"github.com/skunkworq/stealth/brws/crawl/spider"

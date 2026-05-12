@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/engine/testserver"
+	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
 )
 
 func TestNativeWithTestserver(t *testing.T) {

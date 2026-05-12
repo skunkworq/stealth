@@ -10,8 +10,8 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	// Import engines to register them
-	_ "github.com/skunkworq/stealth/brws/browser/engine/chromium"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 )
 
 func main() {

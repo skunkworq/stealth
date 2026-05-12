@@ -11,7 +11,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/native" // register native engine
+	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native" // register native engine
 )
 
 // TestCloudflareBypass_RealWorld demonstrates the full bypass flow:

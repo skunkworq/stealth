@@ -9,7 +9,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/engine/testserver"
+	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
 )
 
 func TestAdvancedSpoofingDetection(t *testing.T) {

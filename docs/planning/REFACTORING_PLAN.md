@@ -144,7 +144,7 @@ brws/stealth/challenge/
 | `brws/stealth/challenge/lab_cloudflare.go` + `lab_recaptcha.go` | ~1076 | Medium |
 | `brws/fingerprint/bench/tool_comparison.go` | 1071 | Low |
 | `brws/stealth/challenge/advanced_detection.go` | 1057 | Medium |
-| `brws/browser/engine/chromium/stealth_engine.go` | 1040 | Medium |
+| `brws/browser/engine/browser/chromium/stealth_engine.go` | 1040 | Medium |
 | `brws/fingerprint/tls/signatures.go` | 1013 | Low |
 
 ### Priority 4: Address lint issues

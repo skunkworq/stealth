@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 )
 
 func TestDetailedDetectionTrace(t *testing.T) {

@@ -14,9 +14,9 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/engine/chromium"
+	"github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
 	pool "github.com/skunkworq/stealth/brws/network/proxy/pool"
-	wf "github.com/skunkworq/stealth/brws/browser/engine/waterfall"
+	wf "github.com/skunkworq/stealth/brws/browser/engine/meta/waterfall"
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
 	"github.com/skunkworq/stealth/brws/ml"
 	"github.com/skunkworq/stealth/brws/content/semantic"

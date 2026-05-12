@@ -6,7 +6,7 @@ import (
 	"log"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/engine/native"
+	"github.com/skunkworq/stealth/brws/browser/engine/http/native"
 )
 
 func main() {

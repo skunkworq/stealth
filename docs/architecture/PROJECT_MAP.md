@@ -39,12 +39,12 @@ These are the heart of the project. They're organized by concern, not by layer. 
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/browser/engine/native` | Go `net/http` + uTLS fingerprint spoofing | Fast, no-JS requests that look like Chrome/Firefox |
-| `brws/browser/engine/chromium` | Full Chrome via chromedp/CDP | JS execution, NetLog, request interception |
-| `brws/browser/engine/firefox` | Firefox via Playwright | Alternative browser fingerprint |
-| `brws/browser/engine/webkit` | Safari via Playwright | Mobile/Apple testing |
+| `brws/browser/engine/http/native` | Go `net/http` + uTLS fingerprint spoofing | Fast, no-JS requests that look like Chrome/Firefox |
+| `brws/browser/engine/browser/chromium` | Full Chrome via chromedp/CDP | JS execution, NetLog, request interception |
+| `brws/browser/engine/browser/firefox` | Firefox via Playwright | Alternative browser fingerprint |
+| `brws/browser/engine/browser/webkit` | Safari via Playwright | Mobile/Apple testing |
 | `brws/browser/pool` | Browser instance pooling | Recycle expensive browser instances |
-| `brws/browser/engine/waterfall` | Engine fallback logic (native → chromium → etc.) | Automatic retry with harder configs |
+| `brws/browser/engine/meta/waterfall` | Engine fallback logic (native → chromium → etc.) | Automatic retry with harder configs |
 | `brws/fingerprint/tls` | TLS fingerprint generation and spoofing | Impersonate Chrome/Firefox TLS handshakes |
 | `brws/fingerprint/tls/parser` | Raw TLS ClientHello parsing | Inspect TLS from packet captures |
 | `brws/fingerprint/lab` | Fingerprint capture lab server | Capture real browser signatures for training |

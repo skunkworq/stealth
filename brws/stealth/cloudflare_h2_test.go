@@ -16,7 +16,7 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 )
 
 // TestExampleCom_IsolateDetectionVector tests different combinations to find

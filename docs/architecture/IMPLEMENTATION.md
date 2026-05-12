@@ -160,7 +160,7 @@ func init() {
 Engines self-register in `init()` functions, allowing import-side discovery without central registration files.
 
 ### 2. Independence Principle
-The `agentic` package has **zero imports** into `brws/content/agent/`, `brws/browser/engine/chromium/`, or `brws/stealth/`. It reuses only `brws/content/semantic` for the default LLM client.
+The `agentic` package has **zero imports** into `brws/content/agent/`, `brws/browser/engine/browser/chromium/`, or `brws/stealth/`. It reuses only `brws/content/semantic` for the default LLM client.
 
 ### 3. Fingerprint-Bound Identity
 Browser instances are coupled to a `CompleteFingerprint` for consistent headers, UA, TLS, and pacing across an entire session.

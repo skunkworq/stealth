@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/engine/chromium"
+	"github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
 	"github.com/skunkworq/stealth/brws/ml"
 )
 

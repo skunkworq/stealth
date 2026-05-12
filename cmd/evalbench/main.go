@@ -15,11 +15,11 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/chromium"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/firefox"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/native"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/firefox"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 	_ "github.com/skunkworq/stealth/brws/stealth/script/spoof"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/webkit"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/webkit"
 )
 
 // TestTarget represents a URL to test against

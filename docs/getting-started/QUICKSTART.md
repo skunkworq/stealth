@@ -77,8 +77,8 @@ Stealth is a multi-layer anti-detection scraping framework. You can use it at di
 | Level | Use Case | Entry Point |
 |---|---|---|
 | **Level 0** | Simple HTTP with TLS spoofing | `brws/browser/engine` native engine |
-| **Level 1** | Browser automation | `brws/browser/engine/chromium` |
-| **Level 2** | Stealth browser (anti-detection) | `brws/browser/engine/chromium-stealth` |
+| **Level 1** | Browser automation | `brws/browser/engine/browser/chromium` |
+| **Level 2** | Stealth browser (anti-detection) | `brws/browser/engine/browser/chromium-stealth` |
 | **Level 3** | Full evasion stack (CAPTCHA, behavior, proxy) | `brws/stealth/client.go` |
 | **Level 4** | LLM-driven scraping | `brws/content/agentic` |
 | **Level 5** | Autonomous browser agent | `brws/content/agent` |

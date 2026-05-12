@@ -199,7 +199,7 @@ Concrete bugs that were trivially detectable. Each fix closes a detection vector
 ## Phase 9 — HTTP/2 Deep Fingerprint Evasion (Tier 2) ✅ COMPLETE
 
 ### P9.1 Profile-Aware HTTP/2 Transport
-- [x] `brws/browser/engine/native/native.go` — Added `h2Profile` struct with Chrome/Firefox HTTP/2 settings
+- [x] `brws/browser/engine/http/native/native.go` — Added `h2Profile` struct with Chrome/Firefox HTTP/2 settings
 - [x] `uTLSRoundTripper` now selects h2Profile based on TLS fingerprint (Chrome vs Firefox)
 - [x] `getH2Transport()` sets MaxHeaderListSize, MaxDecoderHeaderTableSize, MaxReadFrameSize per profile
 - [x] Chrome: 262144/65536/16384, Firefox: 0/131072/16384
