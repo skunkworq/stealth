@@ -1,5 +1,5 @@
 # Browser Fingerprint Lab Makefile
-.PHONY: all build clean test ci test-go test-frontend typecheck run run-lab run-lab-https certs help install kill-ports lab-ui ml-datagen ml-generate ml-export ml-stats train train-run train-benchmark train-discover
+.PHONY: all build clean test ci test-go test-frontend typecheck run run-lab run-lab-https certs help install kill-ports lab-ui agent-ui lint-agent ml-datagen ml-generate ml-export ml-stats train train-run train-benchmark train-discover
 
 # Variables
 BINARY_DIR := build
@@ -43,6 +43,15 @@ lab-ui: ## Build the React UI and embed into Go static dir
 	@cp -r lab-ui/out/. brws/fingerprint/lab/static/
 	@rm -rf brws/fingerprint/lab/static/_not-found brws/fingerprint/lab/static/_not-found.html brws/fingerprint/lab/static/__next.*
 	@echo "✓ UI built and copied to brws/fingerprint/lab/static/"
+
+agent-ui: ## Build the agent chat UI and embed into server/web/
+	@echo "Building agent-ui..."
+	@cd agent-ui && npm run build --silent
+	@mkdir -p server/web
+	@rm -rf server/web/*
+	@cp -r agent-ui/out/. server/web/
+	@rm -rf server/web/_not-found server/web/_not-found.html server/web/__next.*
+	@echo "✓ Agent UI built and copied to server/web/"
 
 run: kill-ports lab-ui $(LABD_BINARY) certs ## Build everything and run (UI + HTTPS + proxy)
 	@echo "╔═══════════════════════════════════════════════════════════════╗"
@@ -532,6 +541,10 @@ vet: ## Run go vet
 
 typecheck: ## Run TypeScript type checking
 	@cd lab-ui && npx tsc --noEmit
+	@cd agent-ui && npx tsc --noEmit
+
+lint-agent: ## Lint the agent UI
+	@cd agent-ui && npx eslint src/ --max-warnings 50
 
 install-hooks: ## Install git pre-commit hooks
 	@echo "Installing git hooks..."
@@ -588,14 +601,6 @@ clean: kill-ports ## Remove build artifacts, certificates, and kill processes
 	rm -f labd.log
 	rm -f $(PID_FILE)
 	@echo "✓ Cleaned"
-
-fmt: ## Format Go source code
-	@echo "Formatting Go code..."
-	go fmt ./...
-
-vet: ## Run go vet
-	@echo "Running go vet..."
-	go vet ./...
 
 deps: ## Download and verify dependencies
 	@echo "Downloading dependencies..."
