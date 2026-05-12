@@ -10,7 +10,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
-	chromiumstealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
+	chromiumstealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
 	"github.com/skunkworq/stealth/brws/fingerprint/train/datagen"
 )
 

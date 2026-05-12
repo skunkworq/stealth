@@ -16,9 +16,10 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
+	cstealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/firefox"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
-	_ "github.com/skunkworq/stealth/brws/stealth/script/spoof"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/spoof"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/webkit"
 )
 
@@ -105,12 +106,15 @@ var (
 	}
 
 	// Tools to test
-	toolsToTest []string
-	timeout     time.Duration
-	outputJSON  bool
+	toolsToTest    []string
+	timeout        time.Duration
+	outputJSON     bool
 
 	// Stealth options
-	stealth bool
+	stealth        bool
+	compareStealth bool
+	headless       bool
+	dwell          time.Duration
 )
 
 func main() {
@@ -125,7 +129,10 @@ effectiveness.`,
 
 	rootCmd.Flags().StringArrayVar(&toolsToTest, "tools", []string{"all"}, "Tools to test (curl, curl-impersonate-chrome, curl-impersonate-ff, brwslab-native, brwslab-chromium, brwslab-chromium-stealth, brwslab-spoof-chrome, brwslab-spoof-firefox, all)")
 	rootCmd.Flags().BoolVar(&stealth, "stealth", false, "Enable stealth mode (adds brwslab-chromium-stealth)")
+	rootCmd.Flags().BoolVar(&compareStealth, "compare-stealth", false, "Run brwslab-chromium and brwslab-chromium-stealth back-to-back and print comparison")
+	rootCmd.Flags().BoolVar(&headless, "headless", !detectDisplay(), "Run Chrome in headless mode (default: false on local desktop, true in cloud/SSH/container)")
 	rootCmd.Flags().DurationVar(&timeout, "timeout", 60*time.Second, "Request timeout")
+	rootCmd.Flags().DurationVar(&dwell, "dwell", 0, "Keep browser window open for N seconds after page load so you can visually inspect (e.g. 10s)")
 	rootCmd.Flags().BoolVar(&outputJSON, "json", false, "Output results as JSON")
 
 	if err := rootCmd.Execute(); err != nil {
@@ -161,6 +168,11 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 	// Generate summary
 	report.Summary = generateSummary(report.Results)
 
+	// Side-by-side stealth comparison
+	if compareStealth {
+		printStealthComparison(report.Results)
+	}
+
 	// Output
 	if outputJSON {
 		data, err := json.MarshalIndent(report, "", "  ")
@@ -176,6 +188,9 @@ func runBenchmark(cmd *cobra.Command, args []string) error {
 }
 
 func resolveTools(tools []string) []string {
+	if compareStealth {
+		return []string{"brwslab-chromium", "brwslab-chromium-stealth"}
+	}
 	if len(tools) == 1 && tools[0] == "all" {
 		allTools := []string{
 			"curl",
@@ -359,7 +374,7 @@ func runBrwslabNative(target TestTarget, start time.Time) TestResult {
 		result.Error = err.Error()
 		return result
 	}
-	_ = eng.Close()
+	defer eng.Close()
 
 	resp, err := eng.Do(context.Background(), &engine.Request{
 		Method:          "GET",
@@ -402,13 +417,13 @@ func runBrwslabChromium(target TestTarget, start time.Time) TestResult {
 
 	eng, err := engine.New("chromium", engine.Options{
 		Timeout:  timeout,
-		Headless: true,
+		Headless: headless,
 	})
 	if err != nil {
 		result.Error = err.Error()
 		return result
 	}
-	_ = eng.Close()
+	defer eng.Close()
 
 	resp, err := eng.Do(context.Background(), &engine.Request{
 		Method:          "GET",
@@ -416,6 +431,12 @@ func runBrwslabChromium(target TestTarget, start time.Time) TestResult {
 		FollowRedirects: true,
 		Timeout:         timeout,
 	})
+
+	// Dwell: keep browser open so user can visually inspect the page
+	if dwell > 0 {
+		fmt.Printf("  ⏳ Dwelling for %v...\n", dwell)
+		time.Sleep(dwell)
+	}
 
 	result.Duration = time.Since(start)
 
@@ -457,7 +478,7 @@ func runBrwslabSpoofChrome(target TestTarget, start time.Time) TestResult {
 		result.Error = err.Error()
 		return result
 	}
-	_ = eng.Close()
+	defer eng.Close()
 
 	resp, err := eng.Do(context.Background(), &engine.Request{
 		Method:          "GET",
@@ -465,6 +486,12 @@ func runBrwslabSpoofChrome(target TestTarget, start time.Time) TestResult {
 		FollowRedirects: true,
 		Timeout:         timeout,
 	})
+
+	// Dwell: keep browser open so user can visually inspect the page
+	if dwell > 0 {
+		fmt.Printf("  ⏳ Dwelling for %v...\n", dwell)
+		time.Sleep(dwell)
+	}
 
 	result.Duration = time.Since(start)
 
@@ -506,7 +533,7 @@ func runBrwslabSpoofFirefox(target TestTarget, start time.Time) TestResult {
 		result.Error = err.Error()
 		return result
 	}
-	_ = eng.Close()
+	defer eng.Close()
 
 	resp, err := eng.Do(context.Background(), &engine.Request{
 		Method:          "GET",
@@ -514,6 +541,12 @@ func runBrwslabSpoofFirefox(target TestTarget, start time.Time) TestResult {
 		FollowRedirects: true,
 		Timeout:         timeout,
 	})
+
+	// Dwell: keep browser open so user can visually inspect the page
+	if dwell > 0 {
+		fmt.Printf("  ⏳ Dwelling for %v...\n", dwell)
+		time.Sleep(dwell)
+	}
 
 	result.Duration = time.Since(start)
 
@@ -549,13 +582,20 @@ func runBrwslabChromiumStealth(target TestTarget, start time.Time) TestResult {
 
 	eng, err := engine.New("chromium-stealth", engine.Options{
 		Timeout:  timeout,
-		Headless: true,
+		Headless: headless,
 	})
 	if err != nil {
 		result.Error = err.Error()
 		return result
 	}
-	_ = eng.Close()
+	defer eng.Close()
+
+	// Disable human-like delays for benchmarking speed
+	if stealthEng, ok := eng.(*cstealth.StealthEngine); ok {
+		opts := cstealth.DefaultStealthOptions()
+		opts.RandomDelays = false
+		stealthEng.SetStealthOptions(opts)
+	}
 
 	resp, err := eng.Do(context.Background(), &engine.Request{
 		Method:          "GET",
@@ -563,6 +603,12 @@ func runBrwslabChromiumStealth(target TestTarget, start time.Time) TestResult {
 		FollowRedirects: true,
 		Timeout:         timeout,
 	})
+
+	// Dwell: keep browser open so user can visually inspect the page
+	if dwell > 0 {
+		fmt.Printf("  ⏳ Dwelling for %v...\n", dwell)
+		time.Sleep(dwell)
+	}
 
 	result.Duration = time.Since(start)
 
@@ -696,4 +742,120 @@ func printSummary(summary BenchmarkSummary) {
 	for tool, stats := range summary.ByTool {
 		fmt.Printf("%-30s %8d %8d %8d %8d\n", tool, stats.Total, stats.Success, stats.Blocked, stats.Errors)
 	}
+}
+
+// printStealthComparison shows a side-by-side comparison of brwslab-chromium vs
+// brwslab-chromium-stealth for each target.
+func printStealthComparison(results []TestResult) {
+	// Group results by target
+	byTarget := make(map[string][]TestResult)
+	for _, r := range results {
+		byTarget[r.Target] = append(byTarget[r.Target], r)
+	}
+
+	fmt.Println()
+	fmt.Println("=== Stealth Comparison: brwslab-chromium vs brwslab-chromium-stealth ===")
+	fmt.Println()
+	fmt.Printf("%-28s │ %-12s │ %-12s │ %-10s │ %s\n", "Target", "No Stealth", "Stealth", "Delta", "Winner")
+	fmt.Println(strings.Repeat("─", 95))
+
+	for target, targetResults := range byTarget {
+		var plain, stealth *TestResult
+		for i := range targetResults {
+			if targetResults[i].Tool == "brwslab-chromium" {
+				plain = &targetResults[i]
+			} else if targetResults[i].Tool == "brwslab-chromium-stealth" {
+				stealth = &targetResults[i]
+			}
+		}
+		if plain == nil || stealth == nil {
+			continue
+		}
+
+		plainStatus := statusEmoji(plain)
+		stealthStatus := statusEmoji(stealth)
+
+		var delta, winner string
+		if plain.Success && !stealth.Success {
+			delta = "stealth worse"
+			winner = "plain"
+		} else if !plain.Success && stealth.Success {
+			delta = "stealth better"
+			winner = "stealth"
+		} else if plain.Success && stealth.Success {
+			delta = "same"
+			winner = "tie"
+			if stealth.BodySize > plain.BodySize {
+				delta = fmt.Sprintf("+%dB", stealth.BodySize-plain.BodySize)
+			} else if stealth.BodySize < plain.BodySize {
+				delta = fmt.Sprintf("-%dB", plain.BodySize-stealth.BodySize)
+			}
+		} else {
+			delta = "same"
+			winner = "tie"
+		}
+
+		fmt.Printf("%-28s │ %-12s │ %-12s │ %-10s │ %s\n",
+			target, plainStatus, stealthStatus, delta, winner)
+	}
+	fmt.Println()
+}
+
+func statusEmoji(r *TestResult) string {
+	if r.Success {
+		return "✅ pass"
+	}
+	if r.Blocked {
+		return "❌ blocked"
+	}
+	if r.Error != "" {
+		return "💥 error"
+	}
+	return "?"
+}
+
+// detectDisplay returns true when running on a local desktop with a real
+// display server (X11 or Wayland) — suitable for showing browser windows.
+// Returns false for SSH sessions, containers, Kubernetes, and headless servers.
+func detectDisplay() bool {
+	// No DISPLAY or WAYLAND_DISPLAY means no GUI at all
+	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
+		return false
+	}
+	// SSH session — display is remote, not local
+	if os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_CLIENT") != "" {
+		return false
+	}
+	// Kubernetes / container environments
+	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		return false
+	}
+	if _, err := os.Stat("/.dockerenv"); err == nil {
+		return false
+	}
+	if _, err := os.Stat("/run/.containerenv"); err == nil {
+		return false
+	}
+	// Wayland session present — likely local desktop
+	if os.Getenv("WAYLAND_DISPLAY") != "" {
+		return true
+	}
+	// Verify X11 is actually reachable
+	if os.Getenv("DISPLAY") != "" {
+		if _, err := exec.LookPath("xset"); err == nil {
+			cmd := exec.Command("xset", "q")
+			cmd.Env = os.Environ()
+			if err := cmd.Run(); err == nil {
+				return true
+			}
+		}
+		if _, err := exec.LookPath("xdpyinfo"); err == nil {
+			cmd := exec.Command("xdpyinfo")
+			cmd.Env = os.Environ()
+			if err := cmd.Run(); err == nil {
+				return true
+			}
+		}
+	}
+	return false
 }

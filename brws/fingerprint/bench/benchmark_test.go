@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/pool"
+	instancepool "github.com/skunkworq/stealth/brws/browser/instancepool"
 	"github.com/skunkworq/stealth/brws/stealth/profile"
-	proxypool "github.com/skunkworq/stealth/brws/network/proxy/pool"
-	"github.com/skunkworq/stealth/brws/stealth/script/spoof"
+	proxypool "github.com/skunkworq/stealth/brws/network/proxy/connpool"
+	"github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/spoof"
 	"github.com/skunkworq/stealth/brws/stealth/profile/session"
 )
 
@@ -118,7 +118,7 @@ func (m *mockEngine) Do(_ context.Context, _ *engine.Request) (*engine.Response,
 func (m *mockEngine) Close() error { return nil }
 
 func BenchmarkPoolCreation(b *testing.B) {
-	cfg := &pool.Config{
+	cfg := &instancepool.Config{
 		MaxSize:     10,
 		MinSize:     2,
 		MaxUses:     100,
@@ -128,7 +128,7 @@ func BenchmarkPoolCreation(b *testing.B) {
 
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		p, err := pool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
+		p, err := instancepool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
 		if err != nil {
 			b.Fatalf("pool creation failed: %v", err)
 		}
@@ -137,8 +137,8 @@ func BenchmarkPoolCreation(b *testing.B) {
 }
 
 func BenchmarkPoolAcquireRelease(b *testing.B) {
-	cfg := pool.DefaultConfig()
-	p, err := pool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
+	cfg := instancepool.DefaultConfig()
+	p, err := instancepool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
 	if err != nil {
 		b.Fatalf("pool creation failed: %v", err)
 	}
@@ -157,7 +157,7 @@ func BenchmarkPoolAcquireRelease(b *testing.B) {
 }
 
 func BenchmarkPoolParallel(b *testing.B) {
-	cfg := &pool.Config{
+	cfg := &instancepool.Config{
 		MaxSize:     50,
 		MinSize:     10,
 		MaxUses:     1000,
@@ -165,7 +165,7 @@ func BenchmarkPoolParallel(b *testing.B) {
 		IdleTimeout: 5 * time.Minute,
 	}
 
-	p, err := pool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
+	p, err := instancepool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
 	if err != nil {
 		b.Fatalf("pool creation failed: %v", err)
 	}
@@ -317,7 +317,7 @@ func BenchmarkMemorySpoofEngine(b *testing.B) {
 }
 
 func BenchmarkMemoryPoolScaling(b *testing.B) {
-	cfg := &pool.Config{
+	cfg := &instancepool.Config{
 		MaxSize:     100,
 		MinSize:     10,
 		MaxUses:     1000,
@@ -328,10 +328,10 @@ func BenchmarkMemoryPoolScaling(b *testing.B) {
 	b.ReportAllocs()
 
 	for i := 0; i < b.N; i++ {
-		p, _ := pool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
+		p, _ := instancepool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
 
 		// Scale up
-		var instances []*pool.BrowserInstance
+		var instances []*instancepool.BrowserInstance
 		for j := 0; j < 50; j++ {
 			inst, _ := p.Acquire(context.Background())
 			instances = append(instances, inst)

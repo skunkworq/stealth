@@ -126,7 +126,7 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 				Protocol:   resp.Protocol,
 				RemoteAddr: resp.RemoteIPAddress,
 				Response: engine.TraceResponse{
-					Headers:  flattenHeaders(resp.Headers),
+					Headers:  FlattenHeaders(resp.Headers),
 					MimeType: resp.MimeType,
 				},
 			}
@@ -144,7 +144,7 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 				if networkEntries[i].RequestID == string(ev.RequestID) {
 					networkEntries[i].Method = ev.Request.Method
 					networkEntries[i].Request = engine.TraceRequest{
-						Headers:  flattenHeaders(ev.Request.Headers),
+						Headers:  FlattenHeaders(ev.Request.Headers),
 						BodySize: 0, // Could get from EventRequestWillBeSentExtraInfo
 					}
 					break
@@ -204,7 +204,7 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 		mainResponse = &engine.Response{
 			Status:     mainEntry.Status,
 			StatusText: fmt.Sprintf("%d", mainEntry.Status),
-			Headers:    unflattenHeaders(mainEntry.Response.Headers),
+			Headers:    UnflattenHeaders(mainEntry.Response.Headers),
 			Body:       []byte(body),
 			FinalURL:   mainEntry.URL,
 			Protocol:   mainEntry.Protocol,
@@ -243,7 +243,7 @@ func (c *Chromium) GetNetLog() ([]byte, error) {
 	return nil, fmt.Errorf("NetLog export not yet implemented")
 }
 
-func flattenHeaders(headers map[string]interface{}) map[string]string {
+func FlattenHeaders(headers map[string]interface{}) map[string]string {
 	result := make(map[string]string)
 	for key, value := range headers {
 		switch v := value.(type) {
@@ -258,7 +258,7 @@ func flattenHeaders(headers map[string]interface{}) map[string]string {
 	return result
 }
 
-func unflattenHeaders(headers map[string]string) map[string][]string {
+func UnflattenHeaders(headers map[string]string) map[string][]string {
 	result := make(map[string][]string)
 	for key, value := range headers {
 		result[key] = []string{value}

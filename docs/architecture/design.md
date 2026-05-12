@@ -236,7 +236,7 @@ func (b *Browser) IsHealthy() bool {
 JavaScript patches to remove automation indicators.
 
 ```go
-// brws/engine/stealth/scripts.go
+// brws/engine/browser/engine/browser/chromiums.go
 package stealth
 
 // Remove automation properties

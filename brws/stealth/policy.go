@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
+	chromestealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
 	"github.com/skunkworq/stealth/brws/ml"
 )
 
@@ -98,7 +98,7 @@ type BehavioralState struct {
 // Actions 0-11 toggle boolean fields on StealthConfig.
 // Actions 12-17 are behavioral/challenge flags consumed by other subsystems.
 // Returns whether the action was applied and the field name.
-func ApplyAction(cfg *chromium.StealthConfig, actionIndex int) (applied bool, fieldName string) {
+func ApplyAction(cfg *chromestealth.StealthConfig, actionIndex int) (applied bool, fieldName string) {
 	name, ok := ml.ActionMap[actionIndex]
 	if !ok {
 		return false, "unknown"

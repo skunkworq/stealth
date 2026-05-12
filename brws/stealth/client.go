@@ -14,12 +14,12 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
-	pool "github.com/skunkworq/stealth/brws/network/proxy/pool"
+	chromestealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
+	pool "github.com/skunkworq/stealth/brws/network/proxy/connpool"
 	wf "github.com/skunkworq/stealth/brws/browser/engine/meta/waterfall"
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
 	"github.com/skunkworq/stealth/brws/ml"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/stealth/profile/session"
 	"github.com/skunkworq/stealth/brws/stealth/captcha/solver"
 	challengefsm "github.com/skunkworq/stealth/brws/stealth/challenge/fsm"
@@ -60,7 +60,7 @@ type Config struct {
 	Proxy           string
 	PolicyModelPath string
 
-	Stealth         *chromium.StealthConfig
+	Stealth         *chromestealth.StealthConfig
 	Challenge       *ChallengeConfig
 	Session         *SessionConfig
 	Instrumentation *InstrumentationConfig
@@ -503,13 +503,17 @@ func (c *Client) navigate(ctx context.Context, url string, tabCtx context.Contex
 			challengeSolved = true
 			span.AddEvent("challenge_solved", nil)
 		}
-	} else if c.config.Challenge.AutoDetect && !c.isCleanResponse(resp) {
+	} else if c.config.Challenge.AutoDetect && resp != nil && !c.isCleanResponse(resp) {
 		// Fallback to generic challenge detection (no orchestrator)
 		detector := challenge.NewDetector()
 		if ch := detector.Detect(resp.Body, resp.Headers); ch != nil {
 			span.AddEvent("challenge_detected", map[string]interface{}{"type": string(ch.Type)})
 			c.logger.Info("challenge detected", "type", ch.Type)
 		}
+	}
+
+	if resp == nil {
+		return nil, fmt.Errorf("navigation failed: no response received")
 	}
 
 	span.SetAttribute("status", resp.Status)
@@ -577,23 +581,23 @@ func (c *Client) NavigateWithSearchProfile(ctx context.Context, url string, prof
 		domain = domain[:idx]
 	}
 
-	var navProfile chromium.NavigationProfile
+	var navProfile chromestealth.NavigationProfile
 	switch strings.ToLower(profile) {
 	case "google":
-		navProfile = chromium.GoogleSearchProfile(domain)
+		navProfile = chromestealth.GoogleSearchProfile(domain)
 	case "bing":
-		navProfile = chromium.BingSearchProfile(domain)
+		navProfile = chromestealth.BingSearchProfile(domain)
 	case "duckduckgo", "ddg":
-		navProfile = chromium.DuckDuckGoSearchProfile(domain)
+		navProfile = chromestealth.DuckDuckGoSearchProfile(domain)
 	case "random":
-		navProfile = chromium.RandomSearchProfile(domain)
+		navProfile = chromestealth.RandomSearchProfile(domain)
 	default:
 		return nil, fmt.Errorf("unknown search profile: %s (use google, bing, duckduckgo, random)", profile)
 	}
 
 	// If the engine supports full profile navigation (StealthPlus Chromium),
 	// apply the complete profile (referrer + sessionStorage seeding).
-	if stealthEng, ok := c.engine.(*chromium.StealthEngine); ok {
+	if stealthEng, ok := c.engine.(*chromestealth.StealthEngine); ok {
 		if err := stealthEng.NavigateWithProfile(ctx, url, navProfile); err != nil {
 			return nil, fmt.Errorf("profile navigation failed: %w", err)
 		}
@@ -697,7 +701,7 @@ type Response struct {
 	Body     []byte
 	FinalURL string
 	Trace    engine.Trace
-	Tree     *semantic.SemanticTree
+	Tree     *understand.SemanticTree
 
 	// ChallengeSolved is true if an anti-bot challenge was detected and
 	// successfully solved during this request.
@@ -711,7 +715,7 @@ type Response struct {
 
 // AttachSemanticTree associates a pre-built semantic tree with this response,
 // enabling extraction methods to delegate to the tree instead of regex.
-func (r *Response) AttachSemanticTree(tree *semantic.SemanticTree) {
+func (r *Response) AttachSemanticTree(tree *understand.SemanticTree) {
 	r.Tree = tree
 }
 
@@ -809,7 +813,7 @@ func (c *Client) ResetBehavioralTracker() {
 // persistent tabs inside the same browser instance so that cookies and session
 // state are shared with the stealth client.
 func (c *Client) BrowserContext() (context.Context, bool) {
-	if se, ok := c.engine.(*chromium.StealthEngine); ok {
+	if se, ok := c.engine.(*chromestealth.StealthEngine); ok {
 		return se.Allocator(), true
 	}
 	return nil, false
@@ -819,7 +823,7 @@ func (c *Client) BrowserContext() (context.Context, bool) {
 // The caller is responsible for calling the returned cancel function.
 // Cookies and session state from previous stealth navigations are shared.
 func (c *Client) NewTab() (context.Context, context.CancelFunc, bool) {
-	if se, ok := c.engine.(*chromium.StealthEngine); ok {
+	if se, ok := c.engine.(*chromestealth.StealthEngine); ok {
 		ctx, cancel := se.NewTab()
 		return ctx, cancel, true
 	}
@@ -1166,7 +1170,7 @@ func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *e
 
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
-	cfg := chromium.DefaultStealthConfig()
+	cfg := chromestealth.DefaultStealthConfig()
 	cfg.CanvasNoise = true // override: enable by default for the client
 	return &Config{
 		EngineName: "chromium-stealth",

@@ -15,7 +15,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
-	cstealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
+	cstealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
 )
 
 // TestCloudflare_TurnstileSolve uses a stealth chromium browser to solve a real

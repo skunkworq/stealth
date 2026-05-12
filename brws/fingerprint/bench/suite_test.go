@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/browser/pool"
-	"github.com/skunkworq/stealth/brws/stealth/script/spoof"
+	instancepool "github.com/skunkworq/stealth/brws/browser/instancepool"
+	"github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/spoof"
 	"github.com/skunkworq/stealth/brws/stealth/profile/session"
 )
 
@@ -161,7 +161,7 @@ func BenchmarkLockContention(b *testing.B) {
 	// Benchmark lock contention in hot paths
 
 	b.Run("PoolContention", func(b *testing.B) {
-		cfg := &pool.Config{
+		cfg := &instancepool.Config{
 			MaxSize:     10,
 			MinSize:     2,
 			MaxUses:     1000,
@@ -169,7 +169,7 @@ func BenchmarkLockContention(b *testing.B) {
 			IdleTimeout: 5 * time.Minute,
 		}
 
-		p, _ := pool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
+		p, _ := instancepool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
 		defer func() { _ = p.Close() }()
 
 		b.ReportAllocs()
@@ -317,7 +317,7 @@ func BenchmarkStressTest(b *testing.B) {
 
 	// High load sustained test
 	b.Run("SustainedLoad", func(b *testing.B) {
-		cfg := &pool.Config{
+		cfg := &instancepool.Config{
 			MaxSize:     100,
 			MinSize:     10,
 			MaxUses:     10000,
@@ -325,7 +325,7 @@ func BenchmarkStressTest(b *testing.B) {
 			IdleTimeout: 10 * time.Minute,
 		}
 
-		p, _ := pool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
+		p, _ := instancepool.New(func() (engine.Engine, error) { return &mockEngine{}, nil }, cfg)
 		defer func() { _ = p.Close() }()
 
 		b.ReportAllocs()
