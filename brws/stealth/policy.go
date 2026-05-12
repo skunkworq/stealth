@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	chromestealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
 	"github.com/skunkworq/stealth/brws/ml"
 )
 
@@ -95,84 +94,28 @@ type BehavioralState struct {
 }
 
 // ApplyAction maps a DQN action index (0-17) to a StealthConfig mutation.
-// Actions 0-11 toggle boolean fields on StealthConfig.
+// Actions 0-11 toggle boolean fields on StealthConfig via ToggleFeature.
 // Actions 12-17 are behavioral/challenge flags consumed by other subsystems.
 // Returns whether the action was applied and the field name.
-func ApplyAction(cfg *chromestealth.StealthConfig, actionIndex int) (applied bool, fieldName string) {
+func ApplyAction(cfg engine.StealthConfig, actionIndex int) (applied bool, fieldName string) {
 	name, ok := ml.ActionMap[actionIndex]
 	if !ok {
 		return false, "unknown"
 	}
 
-	switch actionIndex {
-	case 0: // RemoveWebDriver
-		if !cfg.RemoveWebDriver {
-			cfg.RemoveWebDriver = true
-			return true, name
-		}
-	case 1: // CanvasNoise
-		if !cfg.CanvasNoise {
-			cfg.CanvasNoise = true
-			return true, name
-		}
-	case 2: // ClientHints
-		if !cfg.ClientHints {
-			cfg.ClientHints = true
-			return true, name
-		}
-	case 3: // RandomUserAgent
-		if !cfg.RandomUserAgent {
-			cfg.RandomUserAgent = true
-			return true, name
-		}
-	case 4: // WebGLSpoof
-		if !cfg.WebGLSpoof {
-			cfg.WebGLSpoof = true
-			return true, name
-		}
-	case 5: // HardwareSync
-		if !cfg.HardwareSync {
-			cfg.HardwareSync = true
-			return true, name
-		}
-	case 6: // NetworkSync
-		if !cfg.NetworkSync {
-			cfg.NetworkSync = true
-			return true, name
-		}
-	case 7: // PluginsSync
-		if !cfg.PluginsSync {
-			cfg.PluginsSync = true
-			return true, name
-		}
-	case 8: // GeometrySync
-		if !cfg.GeometrySync {
-			cfg.GeometrySync = true
-			return true, name
-		}
-	case 9: // VideoSync
-		if !cfg.VideoSync {
-			cfg.VideoSync = true
-			return true, name
-		}
-	case 10: // PermissionsSync
-		if !cfg.PermissionsSync {
-			cfg.PermissionsSync = true
-			return true, name
-		}
-	case 11: // TimezoneSync
-		if !cfg.TimezoneSync {
-			cfg.TimezoneSync = true
-			return true, name
-		}
-	case 12, 13, 14, 15, 16, 17:
+	if actionIndex >= 12 {
 		// CaptchaSolver, HumanizeInteraction, DelayedNavigation,
 		// WebRTCDisable, CanvasNoiseStrength, HeadlessPatches
 		// These are signaling actions consumed by challenge/behavior subsystems.
 		return true, name
 	}
 
-	return false, name
+	if cfg == nil {
+		return false, name
+	}
+
+	applied, _ = cfg.ToggleFeature(name)
+	return applied, name
 }
 
 // WithPolicy is a functional option to load a trained DQN model for RL-driven

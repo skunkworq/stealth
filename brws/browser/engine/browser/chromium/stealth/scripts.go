@@ -105,6 +105,58 @@ type StealthConfig struct {
 	StealthPlus bool
 }
 
+// IsEnabled returns whether stealth is enabled.
+func (s *StealthConfig) IsEnabled() bool { return s.Enabled }
+
+// SetEnabled sets the stealth enabled flag.
+func (s *StealthConfig) SetEnabled(v bool) { s.Enabled = v }
+
+// ToggleFeature enables a stealth feature by name.
+// Returns (applied, alreadySet). applied is true when the feature was
+// toggled from off to on; alreadySet is true when it was already on.
+func (s *StealthConfig) ToggleFeature(name string) (bool, bool) {
+	switch name {
+	case "RemoveWebDriver":
+		if !s.RemoveWebDriver { s.RemoveWebDriver = true; return true, false }
+		return false, true
+	case "CanvasNoise":
+		if !s.CanvasNoise { s.CanvasNoise = true; return true, false }
+		return false, true
+	case "ClientHints":
+		if !s.ClientHints { s.ClientHints = true; return true, false }
+		return false, true
+	case "RandomUserAgent":
+		if !s.RandomUserAgent { s.RandomUserAgent = true; return true, false }
+		return false, true
+	case "WebGLSpoof":
+		if !s.WebGLSpoof { s.WebGLSpoof = true; return true, false }
+		return false, true
+	case "HardwareSync":
+		if !s.HardwareSync { s.HardwareSync = true; return true, false }
+		return false, true
+	case "NetworkSync":
+		if !s.NetworkSync { s.NetworkSync = true; return true, false }
+		return false, true
+	case "PluginsSync":
+		if !s.PluginsSync { s.PluginsSync = true; return true, false }
+		return false, true
+	case "GeometrySync":
+		if !s.GeometrySync { s.GeometrySync = true; return true, false }
+		return false, true
+	case "VideoSync":
+		if !s.VideoSync { s.VideoSync = true; return true, false }
+		return false, true
+	case "PermissionsSync":
+		if !s.PermissionsSync { s.PermissionsSync = true; return true, false }
+		return false, true
+	case "TimezoneSync":
+		if !s.TimezoneSync { s.TimezoneSync = true; return true, false }
+		return false, true
+	default:
+		return false, false
+	}
+}
+
 // DefaultStealthConfig returns a default stealth configuration
 func DefaultStealthConfig() *StealthConfig {
 	return &StealthConfig{

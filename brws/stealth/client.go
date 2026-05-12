@@ -14,7 +14,6 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	chromestealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
 	pool "github.com/skunkworq/stealth/brws/network/proxy/connpool"
 	wf "github.com/skunkworq/stealth/brws/browser/engine/meta/waterfall"
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
@@ -60,7 +59,7 @@ type Config struct {
 	Proxy           string
 	PolicyModelPath string
 
-	Stealth         *chromestealth.StealthConfig
+	Stealth         engine.StealthConfig
 	Challenge       *ChallengeConfig
 	Session         *SessionConfig
 	Instrumentation *InstrumentationConfig
@@ -135,7 +134,12 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 
 	logger.Info("initializing stealth client", "engine", cfg.EngineName)
 
-	stealthEnabled := cfg.Stealth != nil && cfg.Stealth.Enabled
+	// Lazily create default stealth config for known engines
+	if cfg.Stealth == nil {
+		cfg.Stealth = engine.DefaultStealthConfigFor(cfg.EngineName)
+	}
+
+	stealthEnabled := cfg.Stealth != nil && cfg.Stealth.IsEnabled()
 	eng, err := engine.New(cfg.EngineName, engine.Options{
 		Headless:         cfg.Headless,
 		Proxy:            cfg.Proxy,
@@ -377,15 +381,15 @@ func (c *Client) navigate(ctx context.Context, url string, tabCtx context.Contex
 			_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.Retry)
 
 			// RL-driven stealth adaptation or hardcoded fallback
-			if c.policyLoader != nil {
+			if c.policyLoader != nil && c.config.Stealth != nil {
 				stateVec := BuildStateVector(extractAnomaliesFromResponse(resp), nil, nil)
 				actionIdx, qValue := c.policyLoader.SelectAction(stateVec)
 				applied, field := ApplyAction(c.config.Stealth, actionIdx)
 				c.logger.Info("RL policy action", "action", field, "q_value", qValue, "applied", applied)
-			} else {
-				c.config.Stealth.CanvasNoise = true
-				c.config.Stealth.WebGLSpoof = true
-				c.config.Stealth.ClientHints = true
+			} else if c.config.Stealth != nil {
+				c.config.Stealth.ToggleFeature("CanvasNoise")
+				c.config.Stealth.ToggleFeature("WebGLSpoof")
+				c.config.Stealth.ToggleFeature("ClientHints")
 			}
 			// We wait randomly to let the previous context clear gracefully
 			time.Sleep(time.Duration(500+attempt*1500) * time.Millisecond)
@@ -441,8 +445,9 @@ func (c *Client) navigate(ctx context.Context, url string, tabCtx context.Contex
 		}
 		if c.evasionFSM.ShouldEscalate() && c.waterfall != nil {
 			reason := c.evasionFSM.EscalationReason()
-			c.waterfall.PromoteTier("chromium")
-			c.logger.Info("evasion FSM escalation", "reason", reason, "promoting", "chromium")
+			tierName := escalationTierFor(c.escalation, resp.Status)
+			c.waterfall.PromoteTier(tierName)
+			c.logger.Info("evasion FSM escalation", "reason", reason, "promoting", tierName)
 		}
 	}
 
@@ -485,8 +490,9 @@ func (c *Client) navigate(ctx context.Context, url string, tabCtx context.Contex
 				// Check if we should escalate to browser after captcha failure
 				if c.evasionFSM.ShouldEscalate() && c.waterfall != nil {
 					reason := c.evasionFSM.EscalationReason()
-					c.waterfall.PromoteTier("chromium")
-					c.logger.Info("captcha solve exhausted, escalating", "reason", reason)
+					tierName := escalationTierFor(c.escalation, resp.Status)
+					c.waterfall.PromoteTier(tierName)
+					c.logger.Info("captcha solve exhausted, escalating", "reason", reason, "promoting", tierName)
 				}
 			}
 		} else {
@@ -567,8 +573,8 @@ func (c *Client) NavigateWithReferrer(ctx context.Context, url string, referrer 
 
 // NavigateWithSearchProfile navigates to url using a pre-built search engine
 // referrer profile.  Supported profiles: "google", "bing", "duckduckgo", "random".
-// When the engine is a Chromium StealthEngine and StealthPlus is enabled, the
-// full profile (referrer + sessionStorage seeding) is applied via CDP.
+// When the engine implements ProfileNavigator, the full referrer profile is
+// applied via the engine; otherwise the referrer is passed as a header.
 func (c *Client) NavigateWithSearchProfile(ctx context.Context, url string, profile string) (*Response, error) {
 	c.logger.Info("navigating with search profile", "url", url, "profile", profile)
 
@@ -581,24 +587,23 @@ func (c *Client) NavigateWithSearchProfile(ctx context.Context, url string, prof
 		domain = domain[:idx]
 	}
 
-	var navProfile chromestealth.NavigationProfile
+	var referrer string
 	switch strings.ToLower(profile) {
 	case "google":
-		navProfile = chromestealth.GoogleSearchProfile(domain)
+		referrer = buildGoogleReferrer(domain)
 	case "bing":
-		navProfile = chromestealth.BingSearchProfile(domain)
+		referrer = buildBingReferrer(domain)
 	case "duckduckgo", "ddg":
-		navProfile = chromestealth.DuckDuckGoSearchProfile(domain)
+		referrer = buildDuckDuckGoReferrer(domain)
 	case "random":
-		navProfile = chromestealth.RandomSearchProfile(domain)
+		referrer = pickRandomSearchReferrer(domain)
 	default:
 		return nil, fmt.Errorf("unknown search profile: %s (use google, bing, duckduckgo, random)", profile)
 	}
 
-	// If the engine supports full profile navigation (StealthPlus Chromium),
-	// apply the complete profile (referrer + sessionStorage seeding).
-	if stealthEng, ok := c.engine.(*chromestealth.StealthEngine); ok {
-		if err := stealthEng.NavigateWithProfile(ctx, url, navProfile); err != nil {
+	// If the engine supports profile navigation, delegate to it
+	if pn, ok := c.engine.(engine.ProfileNavigator); ok {
+		if err := pn.NavigateWithReferrer(ctx, url, referrer); err != nil {
 			return nil, fmt.Errorf("profile navigation failed: %w", err)
 		}
 		// After profile navigation, fetch the page content to return a Response
@@ -606,7 +611,7 @@ func (c *Client) NavigateWithSearchProfile(ctx context.Context, url string, prof
 	}
 
 	// Fallback: just use the referrer via the generic engine interface
-	return c.NavigateWithReferrer(ctx, url, navProfile.Referrer)
+	return c.NavigateWithReferrer(ctx, url, referrer)
 }
 
 // isCaptchaResponse returns true if the response contains a captcha/challenge.
@@ -808,13 +813,13 @@ func (c *Client) ResetBehavioralTracker() {
 	c.behavTracker = NewBehavioralTracker()
 }
 
-// BrowserContext returns the chromedp allocator context if the underlying engine
-// is Chromium-based. This allows external callers (e.g. the agent) to create
+// BrowserContext returns the browser allocator context if the underlying engine
+// supports it. This allows external callers (e.g. the agent) to create
 // persistent tabs inside the same browser instance so that cookies and session
 // state are shared with the stealth client.
 func (c *Client) BrowserContext() (context.Context, bool) {
-	if se, ok := c.engine.(*chromestealth.StealthEngine); ok {
-		return se.Allocator(), true
+	if ae, ok := c.engine.(engine.AllocatorEngine); ok {
+		return ae.Allocator(), true
 	}
 	return nil, false
 }
@@ -823,8 +828,8 @@ func (c *Client) BrowserContext() (context.Context, bool) {
 // The caller is responsible for calling the returned cancel function.
 // Cookies and session state from previous stealth navigations are shared.
 func (c *Client) NewTab() (context.Context, context.CancelFunc, bool) {
-	if se, ok := c.engine.(*chromestealth.StealthEngine); ok {
-		ctx, cancel := se.NewTab()
+	if tc, ok := c.engine.(engine.TabCreator); ok {
+		ctx, cancel := tc.NewTab()
 		return ctx, cancel, true
 	}
 	return nil, nil, false
@@ -1047,7 +1052,12 @@ func WithProxy(proxy string) Option {
 // WithStealth enables stealth mode.
 func WithStealth(enabled bool) Option {
 	return func(c *Config) {
-		c.Stealth.Enabled = enabled
+		if c.Stealth == nil {
+			c.Stealth = engine.DefaultStealthConfigFor(c.EngineName)
+		}
+		if c.Stealth != nil {
+			c.Stealth.SetEnabled(enabled)
+		}
 	}
 }
 
@@ -1168,14 +1178,52 @@ func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *e
 	}
 }
 
+// ============================================================================
+// Search profile referrer builders (engine-agnostic)
+// ============================================================================
+
+func buildGoogleReferrer(domain string) string {
+	queries := []string{
+		fmt.Sprintf("https://www.google.com/search?q=%s&source=hp&ei=abc", domain),
+		fmt.Sprintf("https://www.google.com/search?q=%s+reviews&oq=%s+reviews", domain, domain),
+		fmt.Sprintf("https://www.google.com/search?q=site%%3A%s", domain),
+		fmt.Sprintf("https://www.google.com/search?q=%s+login&source=lmns", domain),
+	}
+	return queries[rand.Intn(len(queries))]
+}
+
+func buildBingReferrer(domain string) string {
+	queries := []string{
+		fmt.Sprintf("https://www.bing.com/search?q=%s&form=QBLH", domain),
+		fmt.Sprintf("https://www.bing.com/search?q=%s+official&qs=n", domain),
+		fmt.Sprintf("https://www.bing.com/search?q=site%%3A%s&form=QBRE", domain),
+	}
+	return queries[rand.Intn(len(queries))]
+}
+
+func buildDuckDuckGoReferrer(domain string) string {
+	queries := []string{
+		fmt.Sprintf("https://duckduckgo.com/?q=%s&ia=web", domain),
+		fmt.Sprintf("https://duckduckgo.com/?q=%s+reviews&ia=web", domain),
+		fmt.Sprintf("https://duckduckgo.com/?q=site%%3A%s&ia=web", domain),
+	}
+	return queries[rand.Intn(len(queries))]
+}
+
+func pickRandomSearchReferrer(domain string) string {
+	builders := []func(string) string{
+		buildGoogleReferrer,
+		buildBingReferrer,
+		buildDuckDuckGoReferrer,
+	}
+	return builders[rand.Intn(len(builders))](domain)
+}
+
 // DefaultConfig returns the default configuration.
 func DefaultConfig() *Config {
-	cfg := chromestealth.DefaultStealthConfig()
-	cfg.CanvasNoise = true // override: enable by default for the client
 	return &Config{
 		EngineName: "chromium-stealth",
 		Headless:   true,
-		Stealth:    cfg,
 		Challenge: &ChallengeConfig{
 			AutoDetect: true,
 			AutoSolve:  false,

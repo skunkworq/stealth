@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	pool "github.com/skunkworq/stealth/brws/network/proxy/pool"
+	pool "github.com/skunkworq/stealth/brws/network/proxy/connpool"
 	wf "github.com/skunkworq/stealth/brws/browser/engine/meta/waterfall"
 	"github.com/skunkworq/stealth/brws/stealth/profile/session"
 )
@@ -21,6 +21,9 @@ type EscalationConfig struct {
 	Enabled              bool
 	MaxEscalationRetries int   // max retries with escalated config (default 2)
 	PromoteOnStatus      []int // HTTP status codes that trigger escalation (default [401, 403, 429])
+	// DefaultTier is the waterfall tier to promote to for ban signals.
+	// Defaults to "browser" if empty.
+	DefaultTier          string
 }
 
 // DefaultEscalationConfig returns production-safe defaults.
@@ -43,12 +46,15 @@ func isBanSignal(cfg *EscalationConfig, status int) bool {
 }
 
 // escalationTierFor maps an HTTP status code to a waterfall tier name.
-func escalationTierFor(status int) string {
+func escalationTierFor(cfg *EscalationConfig, status int) string {
+	if cfg != nil && cfg.DefaultTier != "" {
+		return cfg.DefaultTier
+	}
 	switch status {
 	case 429:
 		return "stealth-tls"
 	default:
-		return "chromium"
+		return "browser"
 	}
 }
 
@@ -81,7 +87,7 @@ func (c *Client) escalate(ctx context.Context, resp *engine.Response, targetURL 
 
 	// Promote waterfall tier if waterfall engine is in use
 	if c.waterfall != nil {
-		tierName := escalationTierFor(resp.Status)
+		tierName := escalationTierFor(c.escalation, resp.Status)
 		c.waterfall.PromoteTier(tierName)
 		c.logger.Info("escalated waterfall tier", "promoted", tierName, "status", resp.Status)
 	}

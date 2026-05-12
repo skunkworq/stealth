@@ -63,6 +63,27 @@ type TabEngine interface {
 	DoOnTab(ctx context.Context, tabCtx context.Context, req *Request) (*Response, error)
 }
 
+// AllocatorEngine is an optional interface for engines that expose
+// a browser allocator context for persistent tab management.
+type AllocatorEngine interface {
+	Engine
+	Allocator() context.Context
+}
+
+// TabCreator is an optional interface for engines that support creating
+// new browser tabs.
+type TabCreator interface {
+	Engine
+	NewTab() (context.Context, context.CancelFunc)
+}
+
+// ProfileNavigator is an optional interface for engines that support
+// navigation with a referrer profile and context seeding.
+type ProfileNavigator interface {
+	Engine
+	NavigateWithReferrer(ctx context.Context, url string, referrer string) error
+}
+
 // Request is a unified HTTP request structure.
 type Request struct {
 	Method  string
@@ -196,6 +217,37 @@ type Options struct {
 	// CDP/WebDriver options
 	DebuggerURL string
 	WSURL       string
+}
+
+// StealthConfig is the interface for engine-specific stealth configurations
+// that support RL-driven adaptation and toggle-based feature control.
+type StealthConfig interface {
+	IsEnabled() bool
+	SetEnabled(bool)
+	// ToggleFeature enables a stealth feature by name.
+	// Returns (applied, alreadySet) where applied is true if the feature
+	// was toggled from false to true, and alreadySet is true if it was
+	// already enabled.
+	ToggleFeature(name string) (applied bool, alreadySet bool)
+}
+
+// defaultStealthConfigFactories maps engine names to functions that create
+// default stealth configs for that engine.
+var defaultStealthConfigFactories = map[string]func() StealthConfig{}
+
+// RegisterDefaultStealthConfig registers a factory for creating default
+// stealth configs for a given engine name.
+func RegisterDefaultStealthConfig(engineName string, factory func() StealthConfig) {
+	defaultStealthConfigFactories[engineName] = factory
+}
+
+// DefaultStealthConfigFor returns the default stealth config for an engine,
+// or nil if none is registered.
+func DefaultStealthConfigFor(engineName string) StealthConfig {
+	if f, ok := defaultStealthConfigFactories[engineName]; ok {
+		return f()
+	}
+	return nil
 }
 
 // BrowserProfile defines what browser to emulate for fingerprinting.

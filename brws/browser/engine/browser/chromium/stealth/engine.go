@@ -23,6 +23,11 @@ import (
 
 func init() {
 	engine.Register("chromium-stealth", NewStealth)
+	engine.RegisterDefaultStealthConfig("chromium-stealth", func() engine.StealthConfig {
+		cfg := DefaultStealthConfig()
+		cfg.CanvasNoise = true
+		return cfg
+	})
 }
 
 // StealthEngine extends Chromium with advanced anti-detection capabilities
