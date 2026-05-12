@@ -12,7 +12,6 @@
 |----------|-------|---------|
 | Core Go packages (`brws/*`) | 35 | The actual scraping/stealth/agent library |
 | CLI tools (`cmd/*`) | 23 | Binaries you run from the shell |
-| Python wrappers (`python/*`) | 1 package | Python interface to the Go binaries |
 | Lab UI (`lab-ui/*`) | 1 app | Next.js dashboard for the fingerprint lab |
 | Deployment (`deploy/*`) | 2 configs | Kubernetes + Prometheus for production |
 | Docs & examples | 3 dirs | Documentation and sample code |
@@ -187,30 +186,6 @@ Each `cmd/<name>/main.go` compiles to a standalone binary. This is standard Go p
 
 ---
 
-## `python/*` — Python Wrappers
-
-| Path | What it does |
-|------|-------------|
-| `python/pybrwslab/` | Python package wrapping all Go CLI binaries |
-| `python/pybrwslab/_base.py` | Base `CLIWrapper` class (subprocess runner) |
-| `python/pybrwslab/stealth.py` | Wraps `stealth` binary |
-| `python/pybrwslab/semantic.py` | Wraps `semantic` binary |
-| `python/pybrwslab/agent.py` | Wraps `agent` binary |
-| `python/pybrwslab/brwslab.py` | Wraps `brwslab` binary |
-| `python/pybrwslab/labd.py` | Wraps `labd` binary |
-| `python/pybrwslab/__init__.py` | Package exports |
-| `python/examples/` | Example scripts (Pydantic AI research agent) |
-| `python/pyproject.toml` | Python package config |
-| `python/README.md` | Python package docs |
-
-**Why subprocess?** The Go binaries are compiled and fast. Python wraps them because:
-1. No CGo complexity
-2. Easy to install (`pip install pybrwslab`, just need binaries in PATH)
-3. Process isolation — Go crashes don't kill Python
-4. Language-agnostic — any language can call the CLI binaries
-
----
-
 ## `lab-ui/*` — Fingerprint Lab Dashboard
 
 | Path | What it does |
@@ -254,7 +229,7 @@ Each `cmd/<name>/main.go` compiles to a standalone binary. This is standard Go p
 
 | Path | What it does |
 |------|-------------|
-| `fingerprints/chrome-116-custom.json` | A captured Chrome 116 fingerprint (TLS, HTTP/2, headers) |
+| `fingerprints/samples/chrome/chrome-116-custom.json` | A captured Chrome 116 fingerprint (TLS, HTTP/2, headers) |
 
 **Why a directory?** The lab generates hundreds of these. They're used to:
 - Validate stealth configs (does my spoofed Chrome match the real one?)
@@ -280,7 +255,7 @@ Each `cmd/<name>/main.go` compiles to a standalone binary. This is standard Go p
 |------|-------------|
 | `examples/basic_fetch.go` | Simple HTTP fetch example |
 
-**Why so few?** Most examples are in the READMEs and docs. The Python examples (`python/examples/`) are more comprehensive.
+**Why so few?** Most examples are in the READMEs and docs.
 
 ---
 

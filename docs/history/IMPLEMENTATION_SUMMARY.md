@@ -209,7 +209,7 @@ See `CURL_IMPERSONATE_ANALYSIS.md` for detailed signature breakdown.
 │   └── brwslab/
 │       └── main.go               # CLI command (updated)
 └── fingerprints/
-    └── chrome-116-custom.json    # Sample custom config
+    └── samples/chrome/chrome-116-custom.json    # Sample custom config
 ```
 
 ## Success Metrics

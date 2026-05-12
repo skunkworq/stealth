@@ -10,8 +10,8 @@
 ┌─────────────────────────────────────────────────────────────┐
 │                   Content Extraction Layer                   │
 ├─────────────┬─────────────┬─────────────┬───────────────────┤
-│    Agent    │   Semantic  │   Agentic   │     Crawl         │
-│  (Browser)  │  (Pipeline) │  (Graph)    │  (Spider)         │
+│   Interact  │  Understand │  Pipeline   │     Crawl         │
+│  (Browser)  │  (Semantic) │  (Graph)    │  (Spider)         │
 └──────┬──────┴──────┬──────┴──────┬──────┴────────┬──────────┘
        │             │             │               │
        ▼             ▼             ▼               ▼
@@ -25,7 +25,7 @@
 
 ---
 
-## Agent (`content/agent/`)
+## Agent (`content/interact/`)
 
 CDP-based browser agent implementing the classic **observe → decide → execute** loop.
 
@@ -84,7 +84,7 @@ Built-in decision functions for common cases:
 
 ---
 
-## Semantic Pipeline (`content/semantic/`)
+## Semantic Pipeline (`content/understand/`)
 
 LLM-powered semantic analysis of web pages.
 
@@ -140,7 +140,7 @@ func (c *LLMClient) CompleteJSON(ctx, systemPrompt, userPrompt string, v interfa
 
 ---
 
-## Agentic Scraping (`content/agentic/`)
+## Graph Pipeline (`content/pipeline/`)
 
 **New side-arm** — ScrapeGraphAI-style directed-graph execution engine.
 
@@ -210,19 +210,20 @@ Spider and pipeline infrastructure for large-scale crawling.
 
 | File | Description |
 |---|---|
-| `content/agent/agent.go` | Agent orchestrator |
-| `content/agent/observer.go` | CDP page observation |
-| `content/agent/executor.go` | Action execution on browser |
-| `content/agent/types.go` | Agent types (PageSnapshot, Action, Context) |
-| `content/semantic/pipeline.go` | Semantic analysis pipeline |
-| `content/semantic/tree.go` | Semantic tree builder |
-| `content/semantic/llm.go` | LLM client for semantic pipeline |
-| `content/semantic/vision_grounding.go` | Vision-based element grounding |
-| `content/agentic/engine.go` | Graph execution engine |
-| `content/agentic/nodes_core.go` | FetchNode, ParseNode |
-| `content/agentic/nodes_llm.go` | LLM-driven nodes |
-| `content/agentic/nodes_control.go` | ConditionalNode |
-| `content/agentic/graphs.go` | SmartScraperGraph, SearchGraph |
+| `content/interact/agent.go` | Agent orchestrator |
+| `content/interact/observer.go` | CDP page observation |
+| `content/interact/executor.go` | Action execution on browser |
+| `content/interact/types.go` | Agent types (PageSnapshot, Action, Context) |
+| `content/understand/pipeline.go` | Semantic analysis pipeline |
+| `content/understand/tree.go` | Semantic tree builder |
+| `content/understand/llm.go` | LLM client for semantic pipeline |
+| `content/understand/vision_grounding.go` | Vision-based element grounding |
+| `content/pipeline/engine.go` | Graph execution engine |
+| `content/pipeline/nodes_core.go` | FetchNode, ParseNode |
+| `content/pipeline/nodes_llm.go` | LLM-driven nodes |
+| `content/pipeline/nodes_control.go` | ConditionalNode |
+| `content/pipeline/graphs.go` | SmartScraperGraph, SearchGraph |
+| `content/repr/repr.go` | ContentRepr interface — SnapshotRepr, TextChunkRepr, TemplateRepr |
 | `crawl/spider/spider.go` | Core spider |
 | `crawl/spider/scheduler.go` | URL frontier |
 | `crawl/integration/orchestrator.go` | Crawl orchestrator |

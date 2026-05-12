@@ -77,7 +77,6 @@ stealth/
 ├── examples/                    # Usage examples
 ├── lab-ui/                      # React UI for fingerprint lab
 ├── models/                      # Trained PyTorch models (.pt)
-├── python/                      # Python bindings (pybrwslab)
 ├── pkg/                         # Public utility packages
 │   ├── mathutils/               # Statistical functions
 │   └── types/                   # Common detection types
