@@ -14,7 +14,7 @@
 //   - stealth/behavior      — human mouse/keystroke/scroll simulation
 //   - stealth/profile       — browser profile and UA management
 //   - stealth/profile/session — session health scoring and block detection
-//   - browser/engine/browser/chromium        — JS/CDP stealth script injection at page load
+//   - stealth/script        — JS/CDP stealth script injection at page load
 //
 // # Usage
 //

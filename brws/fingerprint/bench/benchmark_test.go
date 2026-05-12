@@ -16,7 +16,7 @@ import (
 	instancepool "github.com/skunkworq/stealth/brws/browser/instancepool"
 	"github.com/skunkworq/stealth/brws/stealth/profile"
 	proxypool "github.com/skunkworq/stealth/brws/network/proxy/connpool"
-	"github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/spoof"
+	"github.com/skunkworq/stealth/brws/stealth/script/spoof"
 	"github.com/skunkworq/stealth/brws/stealth/profile/session"
 )
 

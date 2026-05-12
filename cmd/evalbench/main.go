@@ -19,7 +19,7 @@ import (
 	cstealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/firefox"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/spoof"
+	_ "github.com/skunkworq/stealth/brws/stealth/script/spoof"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/webkit"
 )
 
