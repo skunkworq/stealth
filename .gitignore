@@ -49,7 +49,7 @@ docs/curl-original/
 docs/curl/
 docs/nodrive/
 
-# Go binaries
+# Go binaries (root level)
 /stealth
 /semantic
 /semantic-mcp
@@ -63,13 +63,20 @@ docs/nodrive/
 /test_semantic
 /vecbench
 /ml_datagen
-cmd/benchmark/benchmark
-cmd/extract/extract
-cmd/stealth/stealth
-cmd/train/train
-cmd/ml_datagen/ml_datagen
+/agent
 
-# Node
-node_modules/
-.lab-ui/
-agent
+# Go binaries (cmd/ subdirectories)
+cmd/*/*
+!cmd/*/*.go
+!cmd/*/*.md
+!cmd/*/*.py
+!cmd/*/*.sh
+!cmd/*/*.json
+!cmd/*/*.yaml
+!cmd/*/*.yml
+!cmd/*/*.toml
+!cmd/*/*.mod
+!cmd/*/*.sum
+
+# Backup files
+*.bak

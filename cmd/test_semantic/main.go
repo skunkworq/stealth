@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	semantic "github.com/skunkworq/stealth/brws/content/understand"
 )
 
 func main() {
@@ -98,7 +98,6 @@ func main() {
 		embedClient := semantic.NewEmbeddingClient(apiKey)
 		config.LLMClient = llmClient
 		config.EmbeddingClient = embedClient
-		config.VisionClient = semantic.NewVisionClient(llmClient)
 		fmt.Println("  Using LLM API key for compression")
 	} else {
 		fmt.Println("  No LLM API key - skipping compression (set OPENROUTER_API_KEY)")

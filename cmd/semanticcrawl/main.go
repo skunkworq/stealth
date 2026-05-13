@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	semantic "github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/crawl/spider"
 )
 

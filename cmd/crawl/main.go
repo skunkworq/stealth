@@ -16,7 +16,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 
 	"github.com/skunkworq/stealth/brws/crawl/pipeline"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	semantic "github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/core/telemetry"
 )
 

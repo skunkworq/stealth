@@ -10,7 +10,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	"github.com/skunkworq/stealth/brws/content/agent"
+	agent "github.com/skunkworq/stealth/brws/content/interact"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 

@@ -11,7 +11,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	semantic "github.com/skunkworq/stealth/brws/content/understand"
 )
 
 type MCPRequest struct {

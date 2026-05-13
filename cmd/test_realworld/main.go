@@ -14,7 +14,7 @@ import (
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	semantic "github.com/skunkworq/stealth/brws/content/understand"
 )
 
 func main() {

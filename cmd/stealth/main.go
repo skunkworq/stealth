@@ -26,7 +26,7 @@ import (
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 	"github.com/skunkworq/stealth/brws/fingerprint/lab"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	semantic "github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/crawl/spider"
 )
 

@@ -10,7 +10,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	semantic "github.com/skunkworq/stealth/brws/content/understand"
 )
 
 var (
@@ -98,7 +98,6 @@ Options:
 	config := &semantic.PipelineConfig{
 		LLMClient:       llmClient,
 		EmbeddingClient: embedClient,
-		VisionClient:    semantic.NewVisionClient(llmClient),
 		Cache:           cache,
 		MaxDepth:        8,
 		MinContentLen:   100,

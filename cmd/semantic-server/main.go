@@ -16,8 +16,8 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/skunkworq/stealth/brws/crawl/pipeline"
-	"github.com/skunkworq/stealth/brws/content/semantic"
-	"github.com/skunkworq/stealth/brws/content/semantic/index"
+	semantic "github.com/skunkworq/stealth/brws/content/understand"
+	"github.com/skunkworq/stealth/brws/content/understand/index"
 )
 
 type SemanticMCPServer struct {
