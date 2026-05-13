@@ -250,13 +250,13 @@ Each `PageResult` includes a `TraceContext`:
 
 ```bash
 # Single URL with metrics server
-go run ./cmd/pipeline -url "https://example.com" -metrics ":8080"
+go run ./cmd/scrape/pipeline -url "https://example.com" -metrics ":8080"
 
 # Batch from file
-go run ./cmd/pipeline -urls urls.txt -concurrency 8 -output summary
+go run ./cmd/scrape/pipeline -urls urls.txt -concurrency 8 -output summary
 
 # Verbose with traces
-go run ./cmd/pipeline -url "..." -v -output text
+go run ./cmd/scrape/pipeline -url "..." -v -output text
 ```
 
 ### Programmatic
@@ -287,7 +287,7 @@ counters := pipe.Metrics().GetAllCounters()
 
 ```bash
 # Start MCP server for Claude Desktop integration
-go run ./cmd/semantic-mcp
+go run ./cmd/semantic/semantic-mcp
 
 # Tools available:
 # - extract_semantic_tree
@@ -402,7 +402,7 @@ The system uses OpenTelemetry for distributed tracing:
 
 ```bash
 # With OTLP exporter (Jaeger, Tempo, etc.)
-go run ./cmd/crawl -url "https://example.com" \
+go run ./cmd/scrape/crawl -url "https://example.com" \
   -otel localhost:4317 \
   -prom :9090
 ```

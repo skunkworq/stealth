@@ -66,17 +66,17 @@ docs/nodrive/
 /agent
 
 # Go binaries (cmd/ subdirectories)
-cmd/*/*
-!cmd/*/*.go
-!cmd/*/*.md
-!cmd/*/*.py
-!cmd/*/*.sh
-!cmd/*/*.json
-!cmd/*/*.yaml
-!cmd/*/*.yml
-!cmd/*/*.toml
-!cmd/*/*.mod
-!cmd/*/*.sum
+cmd/**/*
+!cmd/**/*/*.go
+!cmd/**/*/*.md
+!cmd/**/*/*.py
+!cmd/**/*/*.sh
+!cmd/**/*/*.json
+!cmd/**/*/*.yaml
+!cmd/**/*/*.yml
+!cmd/**/*/*.toml
+!cmd/**/*/*.mod
+!cmd/**/*/*.sum
 
 # Backup files
 *.bak

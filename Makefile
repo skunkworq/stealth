@@ -9,10 +9,10 @@ EVALBENCH_BINARY := $(BINARY_DIR)/evalbench
 ML_DATAGEN_BINARY := $(BINARY_DIR)/ml_datagen
 
 # Source files
-LABD_SRC := ./cmd/labd
-BRWSLAB_SRC := ./cmd/brwslab
-EVALBENCH_SRC := ./cmd/evalbench
-ML_DATAGEN_SRC := ./cmd/ml_datagen
+LABD_SRC := ./cmd/lab/labd
+BRWSLAB_SRC := ./cmd/lab/brwslab
+EVALBENCH_SRC := ./cmd/ml/evalbench
+ML_DATAGEN_SRC := ./cmd/ml/ml_datagen
 
 # Certificate files
 CERT_FILE := server.crt
@@ -103,28 +103,28 @@ rust-sniffer:
 	@cd brws/sniffer/rust && cargo build --release
 	@echo "✓ Built rust sniffer"
 
-$(LABD_BINARY): rust-sniffer $(shell find brws/lab brws/adversarial cmd/labd -name '*.go' 2>/dev/null) brws/fingerprint/lab/static/index.html
+$(LABD_BINARY): rust-sniffer $(shell find brws/lab brws/adversarial cmd/lab/labd -name '*.go' 2>/dev/null) brws/fingerprint/lab/static/index.html
 	@echo "Building labd..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(LABD_SRC)
 	@echo "✓ Built $@"
 
-$(BRWSLAB_BINARY): $(shell find brws -name '*.go' cmd/brwslab -name '*.go' 2>/dev/null)
+$(BRWSLAB_BINARY): $(shell find brws -name '*.go' cmd/lab/brwslab -name '*.go' 2>/dev/null)
 	@echo "Building brwslab..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(BRWSLAB_SRC)
 	@echo "✓ Built $@"
 
-$(EVALBENCH_BINARY): $(shell find cmd/evalbench -name '*.go' 2>/dev/null)
+$(EVALBENCH_BINARY): $(shell find cmd/ml/evalbench -name '*.go' 2>/dev/null)
 	@echo "Building evalbench..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(EVALBENCH_SRC)
 	@echo "✓ Built $@"
 
 BENCHMARK_BINARY := $(BINARY_DIR)/benchmark
-BENCHMARK_SRC := ./cmd/benchmark
+BENCHMARK_SRC := ./cmd/ml/benchmark
 
-$(BENCHMARK_BINARY): $(shell find cmd/benchmark -name '*.go' brws/benchmark -name '*.go' 2>/dev/null)
+$(BENCHMARK_BINARY): $(shell find cmd/ml/benchmark -name '*.go' brws/benchmark -name '*.go' 2>/dev/null)
 	@echo "Building benchmark..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(BENCHMARK_SRC)
@@ -149,7 +149,7 @@ benchmark-run: $(BENCHMARK_BINARY) ## Run the extended benchmark suite
 	$(BENCHMARK_BINARY) --suite all --timeout 30s
 
 # ML Data Generation targets
-$(ML_DATAGEN_BINARY): $(shell find cmd/ml_datagen brws/ml -name '*.go' 2>/dev/null)
+$(ML_DATAGEN_BINARY): $(shell find cmd/ml/ml_datagen brws/ml -name '*.go' 2>/dev/null)
 	@echo "Building ml_datagen..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(ML_DATAGEN_SRC)
@@ -168,9 +168,9 @@ ml-stats: $(ML_DATAGEN_BINARY) ## Show ML training data statistics
 
 # Training targets
 TRAIN_BINARY := $(BINARY_DIR)/train
-TRAIN_SRC := ./cmd/train
+TRAIN_SRC := ./cmd/ml/train
 
-$(TRAIN_BINARY): $(shell find cmd/train brws/ml brws/lab -name '*.go' 2>/dev/null)
+$(TRAIN_BINARY): $(shell find cmd/ml/train brws/ml brws/lab -name '*.go' 2>/dev/null)
 	@echo "Building train..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(TRAIN_SRC)

@@ -306,7 +306,7 @@ func (a *ABTestDetector) Detect(url string,
 
 ```bash
 # Crawl 10,000 pages
-go run ./cmd/crawl --urls=urls_10k.txt --concurrency=100
+go run ./cmd/scrape/crawl --urls=urls_10k.txt --concurrency=100
 
 # Large pages (GitHub, Reddit)
 go test -run=XXX -bench="BenchmarkLargePages"

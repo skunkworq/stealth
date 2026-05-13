@@ -4,7 +4,7 @@
 
 ```bash
 # Build the server
-go build -o semantic-server ./cmd/semantic-server
+go build -o semantic-server ./cmd/semantic/semantic-server
 
 # Test it works
 export OPENROUTER_API_KEY="your-key"

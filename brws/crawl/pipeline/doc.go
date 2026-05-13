@@ -154,7 +154,7 @@
 // # Configuration
 //
 //	Config struct {
-//	    SemanticConfig  *semantic.PipelineConfig // Semantic extraction config
+//	    SemanticConfig  *understand.PipelineConfig // Semantic extraction config
 //	    MaxDepth        int                       // Crawling depth (default: 1)
 //	    Concurrency     int                       // Workers (default: 4)
 //	    UserAgent       string                    // HTTP User-Agent
@@ -165,8 +165,8 @@
 //
 // SemanticConfig passes through to the semantic package:
 //
-//	semanticConfig := &semantic.PipelineConfig{
-//	    LLMClient:        semantic.NewLLMClient(apiKey),
+//	semanticConfig := &understand.PipelineConfig{
+//	    LLMClient:        understand.NewLLMClient(apiKey),
 //	    MaxChunks:        200,
 //	    MaxConcurrentLLM: 10,
 //	}
@@ -196,8 +196,8 @@
 //	type PageResult struct {
 //	    URL              string
 //	    HTMLSize         int64
-//	    SemanticTree     *semantic.SemanticTree
-//	    CompressionStats *semantic.CompressionStats
+//	    SemanticTree     *understand.SemanticTree
+//	    CompressionStats *understand.CompressionStats
 //	    VectorAdded      bool
 //	    Trace            *TraceContext
 //	    FetchDuration    time.Duration
@@ -254,7 +254,7 @@
 //	    Concurrency:     16,              // More workers
 //	    RequestTimeout:  30 * time.Second, // Shorter timeout
 //	    EnableCache:     true,             // Enable caching
-//	    SemanticConfig: &semantic.PipelineConfig{
+//	    SemanticConfig: &understand.PipelineConfig{
 //	        MaxChunks:        100,  // Limit chunks per page
 //	        MaxConcurrentLLM: 20,   // More concurrent LLM calls
 //	    },
@@ -280,13 +280,13 @@
 // The cmd/pipeline tool provides CLI access:
 //
 //	# Single URL
-//	go run ./cmd/pipeline -url "https://example.com"
+//	go run ./cmd/scrape/pipeline -url "https://example.com"
 //
 //	# Batch from file
-//	go run ./cmd/pipeline -urls urls.txt -concurrency 8
+//	go run ./cmd/scrape/pipeline -urls urls.txt -concurrency 8
 //
 //	# With metrics server
-//	go run ./cmd/pipeline -url "..." -metrics ":8080"
+//	go run ./cmd/scrape/pipeline -url "..." -metrics ":8080"
 //	curl http://localhost:8080/stats
 //
 // # Example Output
