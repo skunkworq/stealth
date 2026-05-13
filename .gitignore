@@ -80,3 +80,6 @@ cmd/**/*
 
 # Backup files
 *.bak
+
+# Build artifacts
+server/web/

@@ -46,10 +46,10 @@ lab-ui: ## Build the React UI and embed into Go static dir
 
 agent-ui: ## Build the agent chat UI and embed into server/web/
 	@echo "Building agent-ui..."
-	@cd agent-ui && npm run build --silent
+	@cd server/ui && npm run build --silent
 	@mkdir -p server/web
 	@rm -rf server/web/*
-	@cp -r agent-ui/out/. server/web/
+	@cp -r server/ui/out/. server/web/
 	@rm -rf server/web/_not-found server/web/_not-found.html server/web/__next.*
 	@echo "✓ Agent UI built and copied to server/web/"
 
@@ -558,10 +558,10 @@ vet: ## Run go vet
 
 typecheck: ## Run TypeScript type checking
 	@cd lab-ui && npx tsc --noEmit
-	@cd agent-ui && npx tsc --noEmit
+	@cd server/ui && npx tsc --noEmit
 
 lint-agent: ## Lint the agent UI
-	@cd agent-ui && npx eslint src/ --max-warnings 50
+	@cd server/ui && npx eslint src/ --max-warnings 50
 
 install-hooks: ## Install git pre-commit hooks
 	@echo "Installing git hooks..."
