@@ -42,6 +42,19 @@ func NewServer(cfg Config, llmProv LLMProvider) *Server {
 	}
 }
 
+// spaFileServer wraps a file server to fallback to index.html for SPA routing.
+type spaFileServer struct {
+	root http.FileSystem
+}
+
+func (s *spaFileServer) Open(name string) (http.File, error) {
+	f, err := s.root.Open(name)
+	if err != nil {
+		return s.root.Open("index.html")
+	}
+	return f, nil
+}
+
 // Handler returns the root HTTP handler.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -52,13 +65,14 @@ func (s *Server) Handler() http.Handler {
 	// WebSocket route.
 	mux.Handle(s.cfg.WSPath, s.ws.Handler())
 
-	// Static web UI.
+	// Static web UI with SPA fallback.
 	static, err := fs.Sub(webFS, "web")
 	if err != nil {
 		slog.Error("failed to create static subfs", "err", err)
 		static = webFS
 	}
-	mux.Handle("/", http.FileServer(http.FS(static)))
+	spa := &spaFileServer{root: http.FS(static)}
+	mux.Handle("/", http.FileServer(spa))
 
 	return mux
 }

@@ -53,6 +53,23 @@ agent-ui: ## Build the agent chat UI and embed into server/web/
 	@rm -rf server/web/_not-found server/web/_not-found.html server/web/__next.*
 	@echo "✓ Agent UI built and copied to server/web/"
 
+AGENT_SERVER_BINARY := $(BINARY_DIR)/agent-server
+AGENT_SERVER_SRC := ./cmd/server
+
+$(AGENT_SERVER_BINARY): agent-ui $(shell find cmd/server server -name '*.go' 2>/dev/null)
+	@echo "Building agent-server..."
+	@mkdir -p $(BINARY_DIR)
+	go build $(LDFLAGS) -o $@ $(AGENT_SERVER_SRC)
+	@echo "✓ Built $@"
+
+agent-server: $(AGENT_SERVER_BINARY) ## Build the combined agent UI + server binary
+
+run-agent: $(AGENT_SERVER_BINARY) ## Run the combined agent server
+	@echo "Starting agent server on http://localhost:8080"
+	@echo "Press Ctrl+C to stop"
+	@echo ""
+	@$(AGENT_SERVER_BINARY)
+
 run: kill-ports lab-ui $(LABD_BINARY) certs ## Build everything and run (UI + HTTPS + proxy)
 	@echo "╔═══════════════════════════════════════════════════════════════╗"
 	@echo "║       Browser Fingerprint Lab                                ║"
