@@ -1,6 +1,8 @@
-package native
+package native_test
 
 import (
+	"github.com/skunkworq/stealth/brws/browser/engine/http/native"
+
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -12,6 +14,7 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
+
 )
 
 func TestRealTLSSpoofingDetection(t *testing.T) {
@@ -73,7 +76,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 
 	// Test 2: Native engine WITHOUT TLS spoofing
 	t.Run("Native No TLS Spoofing", func(t *testing.T) {
-		eng, err := New(engine.Options{
+		eng, err := native.New(engine.Options{
 			Timeout:    30 * time.Second,
 			HTTP2:      true,
 			Stealth:    false,
@@ -109,7 +112,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 
 	// Test 3: Native engine WITH TLS spoofing (Chrome)
 	t.Run("Native Chrome TLS Spoofing", func(t *testing.T) {
-		eng, err := New(engine.Options{
+		eng, err := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			HTTP2:       true,
 			Stealth:     false,
@@ -184,7 +187,7 @@ func TestCombinedSpoofingDetection(t *testing.T) {
 	fmt.Printf("\n=== Testing Combined HTTP + TLS Spoofing ===\n")
 
 	// Test with Chrome profile and TLS spoofing
-	eng, err := New(engine.Options{
+	eng, err := native.New(engine.Options{
 		Timeout:     30 * time.Second,
 		HTTP2:       true,
 		Stealth:     true,

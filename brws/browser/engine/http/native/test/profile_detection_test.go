@@ -1,6 +1,8 @@
-package native
+package native_test
 
 import (
+	"github.com/skunkworq/stealth/brws/browser/engine/http/native"
+
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -12,6 +14,7 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
+
 )
 
 func TestTLSSpoofingWithRealTLS(t *testing.T) {
@@ -76,7 +79,7 @@ func TestTLSSpoofingWithRealTLS(t *testing.T) {
 
 	// Test 2: Native with Chrome TLS spoofing
 	t.Run("Native Chrome TLS Spoofing", func(t *testing.T) {
-		eng, err := New(engine.Options{
+		eng, err := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			HTTP2:       true,
 			StealthTLS:  true,
@@ -143,7 +146,7 @@ func TestProfilesAgainstDetection(t *testing.T) {
 
 	for _, tc := range profiles {
 		t.Run(tc.name, func(t *testing.T) {
-			eng, err := New(engine.Options{
+			eng, err := native.New(engine.Options{
 				Timeout:     30 * time.Second,
 				HTTP2:       true,
 				Stealth:     true,

@@ -1,6 +1,8 @@
-package native
+package native_test
 
 import (
+	"github.com/skunkworq/stealth/brws/browser/engine/http/native"
+
 	"context"
 	"fmt"
 	"net/http"
@@ -9,6 +11,7 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
+
 )
 
 func TestDetailedDetectionTrace(t *testing.T) {
@@ -51,7 +54,7 @@ func TestDetailedDetectionTrace(t *testing.T) {
 
 	for _, tc := range scenarios {
 		t.Run(tc.name, func(t *testing.T) {
-			eng, err := New(tc.opts)
+			eng, err := native.New(tc.opts)
 			if err != nil {
 				t.Fatalf("Failed to create engine: %v", err)
 			}

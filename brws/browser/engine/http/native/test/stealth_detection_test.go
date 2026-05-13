@@ -1,6 +1,8 @@
-package native
+package native_test
 
 import (
+	"github.com/skunkworq/stealth/brws/browser/engine/http/native"
+
 	"context"
 	"fmt"
 	"net/http"
@@ -10,6 +12,7 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
+
 )
 
 func TestAdvancedSpoofingDetection(t *testing.T) {
@@ -52,7 +55,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 
 	// Test 2: Native with Chrome stealth (incomplete - missing TLS)
 	t.Run("Native Stealth Chrome Detection", func(_ *testing.T) {
-		eng, _ := New(engine.Options{
+		eng, _ := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "chrome-120-macos",
@@ -61,7 +64,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 	})
 
 	t.Run("Native Stealth Firefox Detection", func(_ *testing.T) {
-		eng, _ := New(engine.Options{
+		eng, _ := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "chrome-120-macos",
@@ -109,7 +112,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 
 	// Test 3: Native with Firefox (incomplete - missing Chrome headers)
 	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
-		eng, _ := New(engine.Options{
+		eng, _ := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "chrome-120-macos",
@@ -118,7 +121,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 	})
 
 	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
-		eng, _ := New(engine.Options{
+		eng, _ := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "firefox-120-macos",
@@ -171,7 +174,7 @@ func TestStealthDetection(t *testing.T) {
 	defer server.Close()
 
 	// Create stealth engine with Chrome profile
-	eng, err := New(engine.Options{
+	eng, err := native.New(engine.Options{
 		Timeout:     30 * time.Second,
 		HTTP2:       true,
 		Stealth:     true,
@@ -243,7 +246,7 @@ func TestStealthTLSDetection(t *testing.T) {
 	defer server.Close()
 
 	// Create stealth engine with TLS spoofing
-	eng, err := New(engine.Options{
+	eng, err := native.New(engine.Options{
 		Timeout:     30 * time.Second,
 		HTTP2:       true,
 		StealthTLS:  true,
@@ -291,7 +294,7 @@ func TestProfileFingerprintDetection(t *testing.T) {
 
 	for _, profileName := range profiles {
 		t.Run(profileName, func(t *testing.T) {
-			eng, err := New(engine.Options{
+			eng, err := native.New(engine.Options{
 				Timeout:     30 * time.Second,
 				HTTP2:       true,
 				Stealth:     true,
@@ -371,7 +374,7 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 
 	// Test 2: Native with stealth
 	t.Run("Native Stealth", func(t *testing.T) {
-		eng, _ := New(engine.Options{
+		eng, _ := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "chrome-120-macos",
@@ -380,7 +383,7 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 	})
 
 	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
-		eng, _ := New(engine.Options{
+		eng, _ := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "chrome-120-macos",
@@ -419,7 +422,7 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 
 	// Test 3: Native with Firefox profile
 	t.Run("Native Stealth Firefox", func(t *testing.T) {
-		eng, _ := New(engine.Options{
+		eng, _ := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "chrome-120-macos",
@@ -428,7 +431,7 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 	})
 
 	t.Run("Native Stealth Firefox Detection", func(t *testing.T) {
-		eng, _ := New(engine.Options{
+		eng, _ := native.New(engine.Options{
 			Timeout:     30 * time.Second,
 			Stealth:     true,
 			ProfileName: "firefox-120-macos",

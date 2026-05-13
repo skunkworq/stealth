@@ -1,6 +1,8 @@
-package lab
+package lab_test
 
 import (
+	"github.com/skunkworq/stealth/brws/fingerprint/lab"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,6 +13,7 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
 )
 
 // getFreePort asks the kernel for a free open port that is ready to use.
@@ -51,7 +54,7 @@ func TestHeadlessCapture(t *testing.T) {
 
 	// 2. Initialize the server
 	t.Logf("Starting server on HTTP=%d, HTTPS=%d, Proxy=%d", httpPort, httpsPort, proxyPort)
-	server := NewEnhancedServer(&ServerConfig{
+	server := lab.NewEnhancedServer(&lab.ServerConfig{
 		HTTPPort:    httpPort,
 		HTTPSPort:   httpsPort,
 		ProxyPort:   proxyPort,
@@ -110,7 +113,7 @@ func TestHeadlessCapture(t *testing.T) {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
-	var capturedData []CaptureSummary
+	var capturedData []lab.CaptureSummary
 
 	t.Log("Waiting for captures to arrive...")
 pollLoop:
@@ -135,7 +138,7 @@ pollLoop:
 			// Parse response
 			var apiResp struct {
 				Count    int              `json:"count"`
-				Captures []CaptureSummary `json:"captures"`
+				Captures []lab.CaptureSummary `json:"captures"`
 			}
 			if err := json.Unmarshal(cBody, &apiResp); err != nil {
 				continue
@@ -207,7 +210,7 @@ pollLoop:
 		t.Fatalf("Failed to read detail payload: %v", err)
 	}
 
-	var fullFingerprint CompleteFingerprint
+	var fullFingerprint lab.CompleteFingerprint
 	if err := json.Unmarshal(detailBody, &fullFingerprint); err != nil {
 		t.Fatalf("Failed to unmarshal CompleteFingerprint: %v", err)
 	}
