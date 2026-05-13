@@ -6,12 +6,12 @@ This guide covers the benchmarking and evaluation tools for measuring how well t
 
 | Tool | Path | Purpose | Engine-agnostic |
 |------|------|---------|-----------------|
-| `benchmark` | `cmd/ml/benchmark` | Comprehensive benchmark suite (endpoints, capabilities, fingerprint, performance) | Yes — discovers engines via registry |
-| `evalbench` | `cmd/ml/evalbench` | Real-world endpoint testing against live protected sites | No — hardcoded tools |
-| `eval_e2e` | `cmd/ml/eval_e2e` | End-to-end smoke test against local lab | No |
-| `labd` | `cmd/lab/labd` | Local fingerprint capture lab server | N/A |
-| `brwslab` | `cmd/lab/brwslab` | CLI for the fingerprint lab | N/A |
-| `vecbench` | `cmd/ml/vecbench` | Vector search backend benchmarks | N/A |
+| `benchmark` | `cmd/ml/bench/benchmark` | Comprehensive benchmark suite (endpoints, capabilities, fingerprint, performance) | Yes — discovers engines via registry |
+| `evalbench` | `cmd/ml/bench/evalbench` | Real-world endpoint testing against live protected sites | No — hardcoded tools |
+| `eval_e2e` | `cmd/ml/bench/eval_e2e` | End-to-end smoke test against local lab | No |
+| `labd` | `cmd/lab/server/labd` | Local fingerprint capture lab server | N/A |
+| `brwslab` | `cmd/lab/cli/brwslab` | CLI for the fingerprint lab | N/A |
+| `vecbench` | `cmd/ml/bench/vecbench` | Vector search backend benchmarks | N/A |
 
 ---
 
@@ -22,7 +22,7 @@ The primary benchmarking tool. It runs structured tests across multiple dimensio
 ### Building
 
 ```bash
-go build -o build/benchmark ./cmd/ml/benchmark
+go build -o build/benchmark ./cmd/ml/bench/benchmark
 ```
 
 ### Suites
@@ -107,7 +107,7 @@ Run real external tool processes against a local `labd` server:
 
 ```bash
 # Terminal 1: start lab
-go run ./cmd/lab/labd --http-port 8080
+go run ./cmd/lab/server/labd --http-port 8080
 
 # Terminal 2: blackbox test
 ./build/benchmark blackbox --base-url http://127.0.0.1:8080
@@ -134,7 +134,7 @@ Tests actual HTTP clients against live protected sites. Unlike `benchmark`, `eva
 ### Building
 
 ```bash
-go build -o build/evalbench ./cmd/ml/evalbench
+go build -o build/evalbench ./cmd/ml/bench/evalbench
 ```
 
 ### Usage
@@ -199,7 +199,7 @@ For controlled, repeatable testing without hitting live sites.
 ### Start the lab
 
 ```bash
-go run ./cmd/lab/labd --http-port 8080 --https-port 8443
+go run ./cmd/lab/server/labd --http-port 8080 --https-port 8443
 ```
 
 The lab captures complete browser signatures across:
@@ -211,10 +211,10 @@ The lab captures complete browser signatures across:
 
 ```bash
 # Use brwslab CLI
-go run ./cmd/lab/brwslab --help
+go run ./cmd/lab/cli/brwslab --help
 
 # Or run eval_e2e smoke test
-go run ./cmd/ml/eval_e2e
+go run ./cmd/ml/bench/eval_e2e
 ```
 
 ### Endpoints
@@ -249,7 +249,7 @@ go run ./cmd/ml/eval_e2e
    }
    ```
 
-3. Add blank import to `cmd/ml/benchmark/main.go`:
+3. Add blank import to `cmd/ml/bench/benchmark/main.go`:
    ```go
    _ "github.com/skunkworq/stealth/brws/browser/engine/myengine"
    ```
@@ -265,7 +265,7 @@ go run ./cmd/ml/eval_e2e
 `evalbench` requires manual wiring. Add a new `case` in `testTool()` and implement a `runMyEngine()` function:
 
 ```go
-// In cmd/ml/evalbench/main.go
+// In cmd/ml/bench/evalbench/main.go
 func testTool(tool string, target TestTarget) TestResult {
     switch tool {
     // ... existing cases ...
@@ -326,7 +326,7 @@ Example GitHub Actions step:
 ```yaml
 - name: Run stealth benchmarks
   run: |
-    go build -o build/benchmark ./cmd/ml/benchmark
+    go build -o build/benchmark ./cmd/ml/bench/benchmark
     ./build/benchmark --suite endpoints --format json --output benchmark.json
 - name: Upload results
   uses: actions/upload-artifact@v4
