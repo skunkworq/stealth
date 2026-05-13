@@ -1,11 +1,12 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { AgentEvent, Message, Session, AgentInfo } from '$lib/types';
-	import { listSessions, createSession, getSession, sendMessage, getAgentTree, listFiles } from '$lib/api';
+	import type { AgentEvent, Message, Session, AgentInfo, FileMeta } from '$lib/types';
+	import { listSessions, createSession, getSession, sendMessage, getAgentTree, listFiles, listFileMeta } from '$lib/api';
 	import { WSClient } from '$lib/websocket';
 	import SessionSidebar from '$lib/components/session/SessionSidebar.svelte';
 	import ChatPanel from '$lib/components/chat/ChatPanel.svelte';
 	import InspectorPanel from '$lib/components/inspector/InspectorPanel.svelte';
+	import SessionFilesPanel from '$lib/components/files/SessionFilesPanel.svelte';
 
 	/* ── state ── */
 	let sessions = $state<Session[]>([]);
@@ -15,6 +16,8 @@
 	let sending = $state(false);
 	let tree = $state<AgentInfo | null>(null);
 	let files = $state<Record<string, string[]>>({});
+	let fileMeta = $state<FileMeta[]>([]);
+	let filesPanelVisible = $state(false);
 
 	let sessionId = $derived(currentSession?.id);
 	let wsClient = $state<WSClient | null>(null);
@@ -98,6 +101,7 @@
 
 	async function refreshFiles(id: string) {
 		files = await listFiles(id);
+		fileMeta = await listFileMeta(id);
 	}
 
 	async function loadSession(id: string) {
@@ -171,4 +175,11 @@
 			<InspectorPanel {tree} {events} sessionId={sessionId ?? ''} {files} />
 		</div>
 	</main>
+
+	<SessionFilesPanel
+		sessionId={sessionId ?? ''}
+		files={fileMeta}
+		visible={filesPanelVisible}
+		onToggle={() => filesPanelVisible = !filesPanelVisible}
+	/>
 </div>

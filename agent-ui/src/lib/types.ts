@@ -72,3 +72,11 @@ export interface SendMessageRequest {
   model?: string;
   api_key?: string;
 }
+
+export interface FileMeta {
+  name: string;
+  agent_id: string;
+  size: number;
+  mod_time: string;
+  mime_type: string;
+}

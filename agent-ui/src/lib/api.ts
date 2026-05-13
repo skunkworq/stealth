@@ -1,4 +1,4 @@
-import type { Session, AgentInfo, CreateSessionRequest, SendMessageRequest } from "./types";
+import type { Session, AgentInfo, CreateSessionRequest, SendMessageRequest, FileMeta } from "./types";
 
 const API_BASE = ""; // relative URLs — served from same origin
 
@@ -48,6 +48,13 @@ export async function getAgentTree(sessionId: string): Promise<AgentInfo | null>
 export async function listFiles(sessionId: string): Promise<Record<string, string[]>> {
   const data = await fetchJSON<{ session_id: string; files: Record<string, string[]> }>(
     `/api/files/${sessionId}`
+  );
+  return data.files;
+}
+
+export async function listFileMeta(sessionId: string): Promise<FileMeta[]> {
+  const data = await fetchJSON<{ session_id: string; files: FileMeta[] }>(
+    `/api/files-meta/${sessionId}`
   );
   return data.files;
 }
