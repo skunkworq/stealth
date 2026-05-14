@@ -61,8 +61,8 @@ This document describes the comprehensive fingerprint capture lab system that ca
 
 | File | Description |
 |------|-------------|
-| `cmd/labd/main.go` | Lab server command |
-| `cmd/brwslab/main.go` | Main CLI with fetch, diff, trace commands |
+| `cmd/lab/server/labd/main.go` | Lab server command |
+| `cmd/lab/cli/brwslab/main.go` | Main CLI with fetch, diff, trace commands |
 
 ## Data Structures
 

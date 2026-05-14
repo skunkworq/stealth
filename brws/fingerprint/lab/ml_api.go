@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
-	cstealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
+	cstealth "github.com/skunkworq/stealth/brws/stealth/chromium"
 	"github.com/skunkworq/stealth/brws/fingerprint/train/datagen"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
@@ -119,7 +119,7 @@ func (s *EnhancedServer) handleMLEvaluate(w http.ResponseWriter, r *http.Request
 		}
 	}
 
-	client, err := stealth.NewWithConfig(cfg)
+	client, err := stealth.NewAdaptiveWithConfig(cfg)
 	if err != nil {
 		s.respondMLError(w, traceID, fmt.Sprintf("Failed to initialize Chrome Client: %v", err))
 		return

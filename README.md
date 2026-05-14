@@ -23,16 +23,16 @@ go get github.com/skunkworq/stealth
 
 ```bash
 # Core tools
-go install github.com/skunkworq/stealth/cmd/brwslab@latest
-go install github.com/skunkworq/stealth/cmd/stealth@latest
-go install github.com/skunkworq/stealth/cmd/labd@latest
+go install github.com/skunkworq/stealth/cmd/scrape/stealth/stealth@latest
+go install github.com/skunkworq/stealth/cmd/lab/cli/brwslab@latest
+go install github.com/skunkworq/stealth/cmd/lab/server/labd@latest
 
 # Semantic extraction
-go install github.com/skunkworq/stealth/cmd/semantic@latest
+go install github.com/skunkworq/stealth/cmd/semantic/cli/semantic@latest
 
 # MCP servers (for Claude Desktop)
-go install github.com/skunkworq/stealth/cmd/stealth-mcp@latest
-go install github.com/skunkworq/stealth/cmd/semantic-mcp@latest
+go install github.com/skunkworq/stealth/cmd/scrape/stealth/stealth-mcp@latest
+go install github.com/skunkworq/stealth/cmd/semantic/server/semantic-mcp@latest
 ```
 
 ### Prerequisites
@@ -62,12 +62,12 @@ import (
 )
 
 func main() {
-    client, err := stealth.NewWithConfig(&stealth.Config{
+    client, err := stealth.NewAdaptiveWithConfig(&stealth.Config{
         EngineName: "native",
         Stealth: &stealth.StealthConfig{
             Enabled:         true,
             RemoveWebDriver: true,
-            CanvasNoise:     true,
+            // CanvasNoise: false (default) — ANGLE GPU produces natural fingerprints; enabling noise increases entropy and is detectable
         },
         Challenge: &stealth.ChallengeConfig{
             AutoDetect: true,
@@ -194,7 +194,7 @@ fmt.Println(resp.Status, resp.Protocol, resp.Timing.Total)
 High-level client with anti-detection, challenge solving, and behavioral simulation.
 
 ```go
-client, _ := stealth.NewWithConfig(&stealth.Config{
+client, _ := stealth.NewAdaptiveWithConfig(&stealth.Config{
     EngineName: "native",
     Headless:   true,
 
@@ -543,11 +543,12 @@ stealth/
 │   │   │   └── waterfall/       # Multi-engine racing
 │   │   └── pool/                # Browser instance pooling
 │   ├── content/                 # Content extraction
-│   │   ├── agent/               # CDP-based autonomous browser agent
-│   │   ├── agentic/             # ScrapeGraphAI-style graph scraping
-│   │   ├── semantic/            # Semantic tree extraction + LLM compression
+│   │   ├── interact/            # CDP observe→decide→execute agent loop
+│   │   ├── pipeline/            # LLM graph execution, SearchCoordinator
+│   │   ├── understand/          # Semantic tree, LLM compression, embeddings
 │   │   │   └── index/           # HNSW vector indexing
-│   │   └── text/                # Text processing utilities
+│   │   ├── extract/             # LLM-driven entity/text extraction
+│   │   └── repr/                # ContentRepr interface (SnapshotRepr, TextChunkRepr, TemplateRepr)
 │   ├── core/                    # Shared infrastructure
 │   │   ├── config/              # Central configuration
 │   │   ├── constants/           # Default values and headers
@@ -609,8 +610,6 @@ stealth/
 ├── pkg/                         # Public utility packages
 │   ├── mathutils/               # Statistical functions
 │   └── types/                   # Common detection types
-├── python/                      # Python bindings
-│   └── pybrwslab/               # Python wrapper package
 ├── scripts/                     # Build & install scripts
 ├── training-data/               # ML training traces
 ├── go.mod                       # Go module definition
@@ -642,7 +641,7 @@ stealth/
     Stealth: &stealth.StealthConfig{
         Enabled:         true,
         RemoveWebDriver: true,   // Remove navigator.webdriver
-        CanvasNoise:     true,   // Add canvas fingerprint noise
+        CanvasNoise:     false,  // Keep false — ANGLE GPU renders natural fingerprints; noise increases detectable entropy
         WebGLSpoof:      true,   // Spoof WebGL renderer info
         ClientHints:     true,   // Spoof client hints
         FakeScreen:      true,   // Fake screen dimensions
@@ -651,8 +650,9 @@ stealth/
     },
 
     Behavior: &stealth.BehaviorConfig{
-        HumanizeMouse: true,     // Bezier curve mouse movements
-        RandomDelays:  true,     // Human-like timing jitter
+        HumanizeMouse:    true,  // Bezier curve mouse movements
+        RandomDelays:     true,  // Human-like timing jitter
+        SimulateBehavior: true,  // Bézier mouse paths, per-keystroke delays, scroll physics
     },
 
     Challenge: &stealth.ChallengeConfig{
@@ -673,7 +673,7 @@ stealth/
 make build
 
 # Build specific binary
-go build -o build/stealth ./cmd/stealth
+go build -o build/stealth ./cmd/scrape/stealth/stealth
 
 # Run the fingerprint lab with UI
 make run
@@ -730,7 +730,7 @@ make bench-mem       # With memory profiling
 | [`MODEL_FINGERPRINT.md`](docs/modules/MODEL_FINGERPRINT.md) | TLS/HTTP fingerprint capture, JA3/JA4, uTLS spoofing |
 | [`MODEL_BROWSER.md`](docs/modules/MODEL_BROWSER.md) | Browser engine (Chromium, Firefox, WebKit) |
 | [`MODEL_NETWORK.md`](docs/modules/MODEL_NETWORK.md) | MITM proxy, proxy rotation, tier escalation |
-| [`MODEL_CONTENT.md`](docs/modules/MODEL_CONTENT.md) | CDP agent, semantic pipeline, agentic scraping, crawl |
+| [`MODEL_CONTENT.md`](docs/modules/MODEL_CONTENT.md) | CDP agent (interact), semantic pipeline (understand), graph scraping (pipeline), crawl |
 | [`MODEL_ML.md`](docs/modules/MODEL_ML.md) | RL models, training, types, config, telemetry |
 | [`AGENTIC_INTEGRATION.md`](docs/guides/AGENTIC_INTEGRATION.md) | ScrapeGraphAI-style graph engine integration summary |
 | [`GO_CONCEPTS.md`](docs/guides/GO_CONCEPTS.md) | Go language patterns used throughout the codebase |

@@ -6,8 +6,8 @@
 ┌─────────────────────────────────────────────────────────────┐
 │  Layer 4 — Scale          crawl/   ml/   fingerprint/       │
 ├─────────────────────────────────────────────────────────────┤
-│  Layer 3 — Content        content/interact   content/pipeline   │
-│                           content/understand   content/extract   content/repr   │
+│  Layer 3 — Content        content/agent   content/scrapegraph          │
+│                           content/understand   content/extract          │
 ├─────────────────────────────────────────────────────────────┤
 │  Layer 2 — Stealth        stealth/                          │
 ├─────────────────────────────────────────────────────────────┤
@@ -57,8 +57,8 @@ resp, _ := eng.Do(ctx, &engine.Request{URL: "https://example.com"})
 
 | Package | Backend | When to use |
 |---|---|---|
-| `browser/chromium` | Chromedp / Chrome CDP | Base Chromium engine; authentic TLS/HTTP2/HTTP3 |
-| `browser/chromium/stealth` | Chromedp + anti-detection | **Default**; script injection, mouse humanization, random delays |
+| `browser/chromium` | Chromedp / Chrome CDP | Base Chromium engine; authentic TLS/HTTP2/HTTP3; supports TabEngine, InteractiveEngine |
+| `stealth/chromium` | Chromedp + anti-detection | **Default**; script injection, behavioral simulation (Bézier mouse, keystroke timing) |
 | `browser/chromium/cdp` | CDP actions | UA override, timezone, locale via CDP protocol |
 | `browser/firefox` | Playwright/Firefox | Firefox TLS fingerprint, alternate UA pool |
 | `browser/webkit` | WebKit | Safari-profile pages |
@@ -74,7 +74,7 @@ resp, _ := eng.Do(ctx, &engine.Request{URL: "https://example.com"})
 
 | Package | Purpose |
 |---|---|
-| `meta/waterfall` | Races multiple engines with timeout-based tier promotion. Starts the fastest engine, launches progressively heavier engines after configurable delays, cancels all losers when a winner responds. Used by `stealth.Client` to balance speed against detection resistance. |
+| `meta/waterfall` | Races multiple engines with timeout-based tier promotion. Starts the fastest engine, launches progressively heavier engines after configurable delays, cancels all losers when a winner responds. Used by `stealth.Adaptive` to balance speed against detection resistance. |
 
 #### Test utilities (`browser/engine/testutil/`)
 
@@ -92,7 +92,7 @@ Stealth-grade HTTP client: correct header order, realistic Accept/Accept-Languag
 
 ### `network/proxy/connpool`
 
-Per-domain tiered proxy pool. Records errors per domain and promotes to the next proxy tier (residential → datacenter → raw) on repeated failures. Used by `stealth.Client.escalate()`.
+Per-domain tiered proxy pool. Records errors per domain and promotes to the next proxy tier (residential → datacenter → raw) on repeated failures. Used by `stealth.Adaptive.escalate()`.
 
 ### `network/sniff`
 
@@ -102,12 +102,12 @@ Packet-level traffic capture and analysis (Rust FFI). Used by `fingerprint/` too
 
 ## Layer 2 — Stealth
 
-`stealth.Client` is the main entry point for the library. It wraps a `browser/engine` (or waterfall) and adds all anti-bot layers. **It is engine-agnostic** — it works with any `engine.Engine` implementation via optional interface checks.
+`stealth.Adaptive` is the main entry point for the library. It wraps a `browser/engine` (or waterfall) and adds all anti-bot layers. **It is engine-agnostic** — it works with any `engine.Engine` implementation via optional interface checks.
 
 Most callers only import this package.
 
 ```go
-client, _ := stealth.New(
+client, _ := stealth.NewAdaptive(
     stealth.WithHeadless(false),
     stealth.WithProxy("http://proxy:8080"),
     stealth.WithChallengeSolver("capsolver", "KEY"),
@@ -123,7 +123,7 @@ resp, _ := client.Navigate(ctx, "https://example.com")
 - **`escalation.go`** — `escalate()`: on a ban signal (401/403/429), records the ban, promotes the proxy tier, and promotes the waterfall tier. Configurable via `WithEscalation`.
 - **`policy.go`** — RL-driven stealth adaptation. `ApplyAction` mutates an `engine.StealthConfig` interface (actions toggle features like CanvasNoise, WebGLSpoof, etc.).
 - **`response_types.go`** / **`response_extract.go`** — typed `Response` and helpers to pull cookies, headers, and body.
-- **`semantic_integration.go`** — bridges `stealth.Client` to `content/semantic` for snapshot extraction directly from a live tab.
+- **`semantic_integration.go`** — bridges `stealth.Adaptive` to `content/semantic` for snapshot extraction directly from a live tab.
 
 ### `stealth/challenge`
 
@@ -136,7 +136,7 @@ Detects and defeats anti-bot challenges. A single flat package (40+ files) becau
 
 #### `stealth/challenge/fsm`
 
-Finite state machine governing escalation between evasion strategies (passive → active → solve → escalate). `stealth.Client` drives it via `evasionFSM.RecordBanSignal()`.
+Finite state machine governing escalation between evasion strategies (passive → active → solve → escalate). `stealth.Adaptive` drives it via `evasionFSM.RecordBanSignal()`.
 
 ### `stealth/captcha`
 
@@ -148,7 +148,7 @@ Solver backends (CapSolver API, etc.). Called by the challenge orchestrator when
 
 ### `stealth/behavior`
 
-Human behavior simulation: randomized mouse movement curves, keystroke timing, scroll jitter, click dwell time. Injected into engine interactions via the `InteractiveEngine` optional interface to defeat behavioral analytics. The `SimulateBehavior` flag on `interact.Config` wires these simulators directly into the agent executor — click, type, and scroll all get human-like timing when enabled.
+Human behavior simulation: randomized mouse movement curves, keystroke timing, scroll jitter, click dwell time. Injected into engine interactions via the `InteractiveEngine` optional interface to defeat behavioral analytics. The `SimulateBehavior` flag on `agent.Config` wires these simulators directly into the agent executor — click, type, and scroll all get human-like timing when enabled.
 
 - **`evasion_strategy.go`** — picks a strategy profile (desktop, mobile, careful).
 - **`simulator.go`** — executes mouse/scroll/timing sequences.
@@ -160,7 +160,7 @@ Browser profile management: UA strings, viewport sizes, locale, timezone, WebGL/
 
 #### `stealth/profile/session`
 
-Session health tracking. Records ban signals, computes a health score, and marks a session as blocked when the score crosses a threshold. `stealth.Client.escalate()` checks `sess.IsBlocked()` before retrying.
+Session health tracking. Records ban signals, computes a health score, and marks a session as blocked when the score crosses a threshold. `stealth.Adaptive.escalate()` checks `sess.IsBlocked()` before retrying.
 
 ### `stealth/script/spoof`
 
@@ -172,7 +172,7 @@ Browser-agnostic TLS/HTTP fingerprint spoofing using uTLS. Supports Chrome, Fire
 
 Content packages turn a raw HTML response or live browser tab into structured data or AI-driven actions. They depend on `stealth/` for tab management but are otherwise independent of each other.
 
-### `content/interact`
+### `content/agent`
 
 Goal-directed browser agent. Implements an observe→decide→execute loop over a live browser tab.
 
@@ -183,7 +183,7 @@ NewAgent → NewStealthTab → Step(decideFn) × N → History()
 ```
 
 Each `Step`:
-1. **Observe** — snapshots the DOM into an `interact.Context` (URL, title, elements, links, forms).
+1. **Observe** — snapshots the DOM into an `agent.Context` (URL, title, elements, links, forms).
 2. **Build action space** — `BuildActionSpace` (DOM) or `BuildSemanticActionSpace` (semantic tree); returns a `[]Action` the LLM can choose from.
 3. **Decide** — caller-supplied `decideFn(ctx, actions, formatted, history) (Action, error)`.
 4. **Execute** — dispatches the chosen action (click, type, navigate, scroll, wait, solve-challenge).
@@ -195,9 +195,9 @@ Each `Step`:
 | DOM (`RepresentationDOM`) | Raw element list | Higher | Need exact selectors, form structure |
 | Semantic (`RepresentationSemantic`) | Compressed tree | Lower (~40%) | LLM navigation, Q&A, search |
 
-See `content/interact/README.md` for the full API reference.
+See `content/agent/README.md` for the full API reference.
 
-### `content/pipeline`
+### `content/scrapegraph`
 
 LLM graph execution engine. Composes higher-level tasks from typed nodes connected into a DAG.
 
@@ -220,7 +220,7 @@ type LLM interface {
 
 `NewLLMFromEnv()` builds an OpenRouter client from `OPENROUTER_API_KEY`.
 
-**`SearchCoordinator`** (in `search.go`) is the bridge between `content/pipeline` and `content/interact`: it wires an `interact.Agent` step-loop to an LLM `decideFn`, handles search system prompts, and extracts structured `[]ResultItem` from the final page.
+**`SearchCoordinator`** (in `search.go`) is the bridge between `content/scrapegraph` and `content/agent`: it wires an `agent.Agent` step-loop to an LLM `decideFn`, handles search system prompts, and extracts structured `[]ResultItem` from the final page.
 
 ### `content/understand`
 
@@ -268,7 +268,7 @@ See `crawl/spider/doc.go` for the full API.
 
 ### `crawl/integration`
 
-Bridges `stealth.Client` with `content/semantic` at crawl scale. Provides components that operate on the semantic tree rather than raw HTML, enabling intent-driven crawling.
+Bridges `stealth.Adaptive` with `content/semantic` at crawl scale. Provides components that operate on the semantic tree rather than raw HTML, enabling intent-driven crawling.
 
 **Components:**
 
@@ -352,9 +352,9 @@ stealth/
   ←  stealth/profile/session
   ←  stealth/script/spoof      (fingerprint benchmarks only)
 
-content/interact  ←  stealth/
+content/agent  ←  stealth/
 content/understand ←  stealth/  (optional; for live-tab snapshots)
-content/pipeline  ←  content/interact
+content/scrapegraph  ←  content/agent
                   ←  content/understand
 content/extract   ←  (stdlib only)
 
@@ -373,7 +373,7 @@ fingerprint/*     ←  network/sniff  (for data collection)
 ### Navigate with stealth
 
 ```go
-client, _ := stealth.New(stealth.WithChallengeSolver("capsolver", key))
+client, _ := stealth.NewAdaptive(stealth.WithChallengeSolver("capsolver", key))
 defer client.Close()
 
 resp, _ := client.Navigate(ctx, "https://target.com")
@@ -397,16 +397,16 @@ for _, item := range result.Items {
 ### Goal-directed agent with custom decideFn
 
 ```go
-ag := interact.NewAgent(interact.DefaultConfig(), nil, nil, nil)
+ag := agent.NewAgent(agent.DefaultConfig(), nil, nil, nil)
 tabCtx, cancel, _ := ag.NewStealthTab(ctx, "https://example.com")
 defer cancel()
 
 for i := 0; i < 20; i++ {
-    step, _ := ag.Step(tabCtx, func(pageCtx *interact.Context, actions []interact.Action, formatted string, history []interact.Step) (interact.Action, error) {
+    step, _ := ag.Step(tabCtx, func(pageCtx *agent.Context, actions []agent.Action, formatted string, history []agent.Step) (agent.Action, error) {
         // call your LLM here
         return chosenAction, nil
     })
-    if step.Decision.Type == interact.ActionNone {
+    if step.Decision.Type == agent.ActionNone {
         break
     }
 }

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 
@@ -24,7 +24,7 @@ type AgentOrchestrator struct {
 
 type SemanticAgent struct {
 	ID         string
-	client     *stealth.Client
+	client     *stealth.Adaptive
 	navigator  *SemanticNavigator
 	smartNav   *SmartNavigator
 	sessionMgr *SessionManager
@@ -45,7 +45,7 @@ type AgentResult struct {
 	AgentID   string
 	URL       string
 	Success   bool
-	Tree      *semantic.SemanticTree
+	Tree      *understand.SemanticTree
 	Duration  time.Duration
 	Error     error
 	TokensIn  int
@@ -107,7 +107,7 @@ func newAgent(id string) *SemanticAgent {
 	}
 }
 
-func (a *SemanticAgent) SetClient(client *stealth.Client) {
+func (a *SemanticAgent) SetClient(client *stealth.Adaptive) {
 	a.client = client
 	a.navigator = NewSemanticNavigator(client, nil)
 	a.smartNav = NewSmartNavigator(client, a.navigator)

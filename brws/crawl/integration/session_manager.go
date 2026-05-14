@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 type SessionState struct {
@@ -148,7 +148,7 @@ func (sm *SessionManager) ListSessions() []string {
 	return ids
 }
 
-func (sm *SessionManager) ExtractSessionFromTree(ctx context.Context, tree *semantic.SemanticTree) map[string]string {
+func (sm *SessionManager) ExtractSessionFromTree(ctx context.Context, tree *understand.SemanticTree) map[string]string {
 	tokens := make(map[string]string)
 
 	for _, node := range tree.AllNodes() {
@@ -191,11 +191,11 @@ func (sm *SessionManager) ExtractSessionFromTree(ctx context.Context, tree *sema
 	return tokens
 }
 
-func extractValueFromNode(node *semantic.SemanticNode, attr string) string {
+func extractValueFromNode(node *understand.SemanticNode, attr string) string {
 	return ""
 }
 
-func (sm *SessionManager) DetectAuthState(tree *semantic.SemanticTree) AuthState {
+func (sm *SessionManager) DetectAuthState(tree *understand.SemanticTree) AuthState {
 	state := AuthState{}
 
 	for _, node := range tree.AllNodes() {
@@ -230,18 +230,18 @@ type AuthState struct {
 	PasswordField  string
 }
 
-func findClickSelector(node *semantic.SemanticNode) string {
+func findClickSelector(node *understand.SemanticNode) string {
 	for _, action := range node.Actions {
-		if action.Type == semantic.ActionClick {
+		if action.Type == understand.ActionClick {
 			return action.Selector
 		}
 	}
 	return ""
 }
 
-func findInputSelector(node *semantic.SemanticNode) string {
+func findInputSelector(node *understand.SemanticNode) string {
 	for _, action := range node.Actions {
-		if action.Type == semantic.ActionFill {
+		if action.Type == understand.ActionFill {
 			return action.Selector
 		}
 	}

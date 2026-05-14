@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	chromestealth "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium/stealth"
+	chromestealth "github.com/skunkworq/stealth/brws/stealth/chromium"
 )
 
 func TestBuildStateVector_EmptyAnomalies(t *testing.T) {

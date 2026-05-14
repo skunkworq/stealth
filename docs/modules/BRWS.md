@@ -9,8 +9,8 @@
 1. [Philosophy & Layer Architecture](#1-philosophy--layer-architecture)
 2. [Layer 1 — Engine](#2-layer-1--engine)
 3. [Layer 2 — Stealth](#3-layer-2--stealth)
-4. [Layer 3 — Content / Interact (Agent Loop)](#4-layer-3--content--interact-agent-loop)
-5. [Layer 3 — Content / Pipeline (Graph Execution)](#5-layer-3--content--pipeline-graph-execution)
+4. [Layer 3 — Content / Agent (Agent Loop)](#4-layer-3--content--agent-agent-loop)
+5. [Layer 3 — Content / Scrapegraph (Graph Execution)](#5-layer-3--content--scrapegraph-graph-execution)
 6. [Layer 4 — Crawl](#6-layer-4--crawl)
 7. [Data Flow Diagrams](#7-data-flow-diagrams)
 8. [Complete Agent Action Reference](#8-complete-agent-action-reference)
@@ -26,8 +26,8 @@
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  Layer 4 — Scale          crawl/         ml/           fingerprint/         │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│  Layer 3 — Content        content/interact   content/pipeline               │
-│                           content/understand   content/extract   content/repr│
+│  Layer 3 — Content        content/agent   content/scrapegraph               │
+│                           content/understand   content/extract              │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │  Layer 2 — Stealth        stealth/                                          │
 ├─────────────────────────────────────────────────────────────────────────────┤
@@ -83,7 +83,7 @@ eng, _ := engine.New("chromium-stealth", engine.Options{Headless: false})
 
 Registered engines: `"native"`, `"chromium"`, `"chromium-stealth"`, `"firefox"`, `"webkit"`.
 
-### 2.2 Chromium Stealth Engine (`brws/browser/engine/browser/chromium/stealth_engine.go`)
+### 2.2 Chromium Stealth Engine (`brws/stealth/chromium/engine.go`)
 
 This is the primary production engine. It implements `Engine`, `InteractiveEngine`, and `TabEngine`. It is registered under the name `"chromium-stealth"`.
 
@@ -151,12 +151,12 @@ Races multiple engines in tiers. Implements `engine.Engine`.
 
 The stealth layer wraps an engine (or waterfall) and adds all anti-bot, challenge-solving, and escalation logic. Most callers only need to import this package.
 
-### 3.1 `stealth.Client` (`brws/stealth/client.go`)
+### 3.1 `stealth.Adaptive` (`brws/stealth/client.go`)
 
 The primary API surface:
 
 ```go
-client, _ := stealth.New(
+client, _ := stealth.NewAdaptive(
     stealth.WithHeadless(false),
     stealth.WithProxy("http://proxy:8080"),
     stealth.WithChallengeSolver("capsolver", "KEY"),
@@ -173,7 +173,7 @@ resp, _ := client.Navigate(ctx, "https://example.com")
 - `Escalation *EscalationConfig` — anti-bot escalation rules
 - `WaterfallEngine`, `TieredProxies`, `EvasionFSMDisabled`
 
-**Construction flow (`NewWithConfig`):**
+**Construction flow (`NewAdaptiveWithConfig`):**
 1. Creates instrumentation (logger, tracer, hooks, FSM).
 2. Instantiates the engine via `engine.New()`.
 3. Initializes session manager, RL policy loader (if path given), captcha solver, Cloudflare solver.
@@ -253,7 +253,7 @@ This is the core request lifecycle, shared by `Navigate()` and `NavigateOnTab()`
 
 This is the **AI-driven agent framework**. It implements an observe → decide → execute loop over a live browser tab.
 
-### 4.1 Core Types (`brws/content/interact/types.go`)
+### 4.1 Core Types (`brws/content/agent/types.go`)
 
 **`PageSnapshot`** — Everything observable about a page:
 ```go
@@ -333,7 +333,7 @@ type Context struct {
 }
 ```
 
-### 4.2 Observer (`brws/content/interact/observer.go`)
+### 4.2 Observer (`brws/content/agent/observer.go`)
 
 **`Observer.Observe(ctx)`** captures a `PageSnapshot` via CDP in 10 steps:
 
@@ -353,7 +353,7 @@ type Context struct {
 9. `detectPageChallenge()` — scans HTML for WAF markers (Cloudflare, DataDome, Imperva, reCAPTCHA, hCaptcha, PerimeterX, Akamai)
 10. Optional semantic enrichment via `SemanticEnhancer`
 
-### 4.3 Action Space Builder (`brws/content/interact/actionspace.go`)
+### 4.3 Action Space Builder (`brws/content/agent/actionspace.go`)
 
 **`BuildActionSpace(snap)`** enumerates all possible actions from a snapshot:
 
@@ -377,7 +377,7 @@ type Context struct {
 
 **`BuildSemanticActionSpace(snap)`** derives actions from a `SemanticTree` instead of raw DOM. Produces a smaller action space (~40% fewer tokens) suitable for LLM navigation.
 
-### 4.4 Formatter (`brws/content/interact/formatter.go`)
+### 4.4 Formatter (`brws/content/agent/formatter.go`)
 
 Converts `Context` into an LLM-friendly prompt string.
 
@@ -398,14 +398,14 @@ OTHER: wait screenshot key_press wait_for_selector wait_for_navigation done
 
 **`FormatSemanticCompact(ctx)`** — Uses the semantic tree representation instead of raw DOM elements. Typically 30–40% fewer tokens.
 
-### 4.5 Executor (`brws/content/interact/executor.go`)
+### 4.5 Executor (`brws/content/agent/executor.go`)
 
 Runs agent-chosen actions against a live chromedp tab.
 
 ```go
 type Executor struct {
     EngineCtx        context.Context      // chromedp allocator context
-    StealthClient    *stealth.Client      // challenge-aware navigation
+    StealthClient    *stealth.Adaptive      // challenge-aware navigation
     SimulateBehavior bool                 // human-like mouse/typing/scroll
     BehaviorDelay    time.Duration        // base delay for simulators
 }
@@ -454,7 +454,7 @@ type ExecuteResult struct {
 
 **`ExecutePlan(ctx, actions)`** — Runs a sequence of actions with 200ms settle between each.
 
-### 4.6 Agent Orchestrator (`brws/content/interact/agent.go`)
+### 4.6 Agent Orchestrator (`brws/content/agent/agent.go`)
 
 Ties together Observer, Formatter, and Executor into the observe-decide-execute loop.
 
@@ -472,7 +472,7 @@ type Agent struct {
 
 **`Config`**:
 - `MaxRetries`, `SettleDelay` (500ms), `ActionTimeout` (30s), `HistorySize` (50)
-- `StealthClient *stealth.Client` — when set, agent creates tabs from stealth browser
+- `StealthClient *stealth.Adaptive` — when set, agent creates tabs from stealth browser
 - `Representation` — `RepresentationDOM` (default) or `RepresentationSemantic`
 - `SimulateBehavior`, `BehaviorDelay`
 
@@ -509,7 +509,7 @@ type Agent struct {
 - `ScrollToBottom` — scrolls to bottom
 - `SubmitFirstForm` — fills first input/select, then clicks submit
 
-### 4.7 LLM Bridge (`brws/content/interact/llm.go`)
+### 4.7 LLM Bridge (`brws/content/agent/llm.go`)
 
 **`LLMDecideFn(ctx, llm, systemPrompt)`** — Returns a `decideFn` for `Agent.Step()`:
 - Builds prompt with current page, available actions, and last 3 steps
@@ -522,7 +522,7 @@ type Agent struct {
 
 A **ScrapeGraphAI-inspired** directed-graph execution engine for LLM-centric scraping. Operates independently from the agent loop.
 
-### 5.1 Core Graph Engine (`brws/content/pipeline/engine.go`)
+### 5.1 Core Graph Engine (`brws/content/scrapegraph/engine.go`)
 
 ```go
 type Node interface {
@@ -580,7 +580,7 @@ SearchInternet → GraphIterator → MergeAnswers
 - `GraphIteratorNode` runs `SmartScraperGraph` for each URL
 - Semaphore-controlled concurrency (default batch 4)
 
-### 5.4 Search Coordinator (`brws/content/pipeline/search.go`)
+### 5.4 Search Coordinator (`brws/content/scrapegraph/search.go`)
 
 **`SearchCoordinator`** — Goal-directed observe-decide-execute loop for search tasks:
 
@@ -588,7 +588,7 @@ SearchInternet → GraphIterator → MergeAnswers
 type SearchCoordinator struct {
     cfg SearchConfig
     llm LLM
-    ag  *interact.Agent
+    ag  *agent.Agent
 }
 ```
 
@@ -685,8 +685,8 @@ Pipeline (SmartScraperGraph or SearchGraph)
     ├── FetchNode ──────────────────────┐
     │   │                               │
     │   ├── If StealthClient set:       │
-    │   │   stealth.Client.Scrape()     │
-    │   │   → stealth.Client.Navigate() │
+    │   │   stealth.Adaptive.Scrape()     │
+    │   │   → stealth.Adaptive.Navigate() │
     │   │       → engine.Do() or        │
     │   │         engine.DoOnTab()      │
     │   │           → chromium-stealth  │
@@ -716,7 +716,7 @@ Agent.NewStealthTab(url)
     │       → chromedp.NewContext(allocCtx)
     │
     └── Agent.cfg.StealthClient.NavigateOnTab(tabCtx, url)
-        → stealth.Client.navigate(tabCtx=tabCtx)
+        → stealth.Adaptive.navigate(tabCtx=tabCtx)
             → engine.TabEngine.DoOnTab(ctx, tabCtx, req)
                 → chromium.StealthEngine.DoOnTab()
                     → apply stealth script, headers, permissions
@@ -810,11 +810,11 @@ type Config struct {
 
 | Caller | Callee | Method / Entry Point |
 |--------|--------|---------------------|
-| `pipeline.FetchNode` | `stealth.Client` | `.Scrape()` |
-| `stealth.Client` | `engine.Engine` | `.Do()` / `.DoOnTab()` |
-| `stealth.Client` | `waterfall.Waterfall` | `.Do()` (if waterfall set) |
+| `pipeline.FetchNode` | `stealth.Adaptive` | `.Scrape()` |
+| `stealth.Adaptive` | `engine.Engine` | `.Do()` / `.DoOnTab()` |
+| `stealth.Adaptive` | `waterfall.Waterfall` | `.Do()` (if waterfall set) |
 | `waterfall.Waterfall` | `engine.Engine` (tiers) | `.Do()` |
-| `agent.Executor` | `stealth.Client` | `.NavigateOnTab()` |
+| `agent.Executor` | `stealth.Adaptive` | `.NavigateOnTab()` |
 | `agent.Agent` | `agent.Observer` | `.Observe()` |
 | `agent.Agent` | `agent.Executor` | `.Execute()` |
 | `SearchCoordinator` | `agent.Agent` | `.Step()` |
@@ -827,7 +827,7 @@ type Config struct {
 
 #### Navigate with stealth
 ```go
-client, _ := stealth.New(stealth.WithChallengeSolver("capsolver", key))
+client, _ := stealth.NewAdaptive(stealth.WithChallengeSolver("capsolver", key))
 defer client.Close()
 resp, _ := client.Navigate(ctx, "https://target.com")
 fmt.Println(string(resp.Body))
@@ -848,16 +848,16 @@ for _, item := range result.Items {
 
 #### Goal-directed agent with custom decideFn
 ```go
-ag := interact.NewAgent(interact.DefaultConfig(), nil, nil, nil)
+ag := agent.NewAgent(agent.DefaultConfig(), nil, nil, nil)
 tabCtx, cancel, _ := ag.NewStealthTab(ctx, "https://example.com")
 defer cancel()
 
 for i := 0; i < 20; i++ {
-    step, _ := ag.Step(tabCtx, func(pageCtx *interact.Context, actions []interact.Action, formatted string, history []interact.Step) (interact.Action, error) {
+    step, _ := ag.Step(tabCtx, func(pageCtx *agent.Context, actions []agent.Action, formatted string, history []agent.Step) (agent.Action, error) {
         // call your LLM here
         return chosenAction, nil
     })
-    if step.Decision.Type == interact.ActionNone {
+    if step.Decision.Type == agent.ActionNone {
         break
     }
 }

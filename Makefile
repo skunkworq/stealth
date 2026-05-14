@@ -1,5 +1,5 @@
 # Browser Fingerprint Lab Makefile
-.PHONY: all build clean test ci test-go test-frontend typecheck run run-lab run-lab-https certs help install kill-ports lab-ui agent-ui lint-agent ml-datagen ml-generate ml-export ml-stats train train-run train-benchmark train-discover
+.PHONY: all build clean test ci test-go test-frontend typecheck run run-lab run-lab-https certs help install kill-ports lab-ui agent-ui lint-agent ml-datagen ml-generate ml-export ml-stats train train-run train-benchmark train-discover evalbench
 
 # Variables
 BINARY_DIR := build
@@ -11,7 +11,7 @@ ML_DATAGEN_BINARY := $(BINARY_DIR)/ml_datagen
 # Source files
 LABD_SRC := ./cmd/lab/server/labd
 BRWSLAB_SRC := ./cmd/lab/cli/brwslab
-EVALBENCH_SRC := ./cmd/ml/bench/evalbench
+EVALBENCH_SRC := ./cmd/bench/evalbench
 ML_DATAGEN_SRC := ./cmd/ml/train/ml_datagen
 
 # Certificate files
@@ -54,9 +54,9 @@ agent-ui: ## Build the agent chat UI and embed into server/web/
 	@echo "✓ Agent UI built and copied to server/web/"
 
 AGENT_SERVER_BINARY := $(BINARY_DIR)/agent-server
-AGENT_SERVER_SRC := ./cmd/server
+AGENT_SERVER_SRC := ./cmd/scrape/agent/server
 
-$(AGENT_SERVER_BINARY): agent-ui $(shell find cmd/server server -name '*.go' 2>/dev/null)
+$(AGENT_SERVER_BINARY): agent-ui $(shell find cmd/scrape/agent/server server -name '*.go' 2>/dev/null)
 	@echo "Building agent-server..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(AGENT_SERVER_SRC)
@@ -115,38 +115,18 @@ $(BRWSLAB_BINARY): $(shell find brws -name '*.go' cmd/lab/cli/brwslab -name '*.g
 	go build $(LDFLAGS) -o $@ $(BRWSLAB_SRC)
 	@echo "✓ Built $@"
 
-$(EVALBENCH_BINARY): $(shell find cmd/ml/bench/evalbench -name '*.go' 2>/dev/null)
+$(EVALBENCH_BINARY): $(shell find cmd/bench/evalbench -name '*.go' 2>/dev/null)
 	@echo "Building evalbench..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(EVALBENCH_SRC)
 	@echo "✓ Built $@"
 
-BENCHMARK_BINARY := $(BINARY_DIR)/benchmark
-BENCHMARK_SRC := ./cmd/ml/bench/benchmark
-
-$(BENCHMARK_BINARY): $(shell find cmd/ml/bench/benchmark -name '*.go' brws/benchmark -name '*.go' 2>/dev/null)
-	@echo "Building benchmark..."
-	@mkdir -p $(BINARY_DIR)
-	go build $(LDFLAGS) -o $@ $(BENCHMARK_SRC)
-	@echo "✓ Built $@"
-
-benchmark: $(BENCHMARK_BINARY) ## Build the extended benchmark tool
-	@echo "Extended benchmark tool built at $(BENCHMARK_BINARY)"
-	@echo ""
-	@echo "Usage examples:"
-	@echo "  $(BENCHMARK_BINARY) --suite all"
-	@echo "  $(BENCHMARK_BINARY) --suite capabilities"
-	@echo "  $(BENCHMARK_BINARY) --suite endpoints --categories basic,protocol"
-	@echo "  $(BENCHMARK_BINARY) --engines native,chromium --suite performance"
-	@echo ""
-	@echo "List available endpoints:"
-	@echo "  $(BENCHMARK_BINARY) list"
-	@echo ""
-	@echo "List available engines:"
-	@echo "  $(BENCHMARK_BINARY) engines"
-
-benchmark-run: $(BENCHMARK_BINARY) ## Run the extended benchmark suite
-	$(BENCHMARK_BINARY) --suite all --timeout 30s
+evalbench: $(EVALBENCH_BINARY) ## Build the combined stealth + engine benchmark tool
+	@echo "Usage: $(EVALBENCH_BINARY) [--tools all] [--stealth] [--compare-stealth]"
+	@echo "       $(EVALBENCH_BINARY) suite --suite all"
+	@echo "       $(EVALBENCH_BINARY) shield"
+	@echo "       $(EVALBENCH_BINARY) compare"
+	@echo "       $(EVALBENCH_BINARY) blackbox --base-url http://127.0.0.1:8080"
 
 # ML Data Generation targets
 $(ML_DATAGEN_BINARY): $(shell find cmd/ml/train/ml_datagen brws/ml -name '*.go' 2>/dev/null)
@@ -168,9 +148,9 @@ ml-stats: $(ML_DATAGEN_BINARY) ## Show ML training data statistics
 
 # Training targets
 TRAIN_BINARY := $(BINARY_DIR)/train
-TRAIN_SRC := ./cmd/ml/train/train
+TRAIN_SRC := ./cmd/ml/train
 
-$(TRAIN_BINARY): $(shell find cmd/ml/train/train brws/ml brws/lab -name '*.go' 2>/dev/null)
+$(TRAIN_BINARY): $(shell find cmd/ml/train -maxdepth 1 brws/ml brws/lab -name '*.go' 2>/dev/null)
 	@echo "Building train..."
 	@mkdir -p $(BINARY_DIR)
 	go build $(LDFLAGS) -o $@ $(TRAIN_SRC)

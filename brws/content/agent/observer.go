@@ -16,7 +16,7 @@ import (
 	"github.com/chromedp/cdproto/target"
 	"github.com/chromedp/chromedp"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 // Observer extracts PageSnapshots from a live browser context.
@@ -110,7 +110,7 @@ func (o *Observer) Observe(ctx context.Context) (*PageSnapshot, error) {
 	// 8. Forms (extract from outerHTML)
 	var html string
 	if err := chromedp.Run(ctx, chromedp.OuterHTML("html", &html)); err == nil {
-		snap.Forms = semantic.ExtractFormSchemas(html)
+		snap.Forms = understand.ExtractFormSchemas(html)
 	}
 
 	// 9. Challenge detection
@@ -351,22 +351,22 @@ func inferActionTypes(elem VisibleElement) []ActionType {
 	var types []ActionType
 	switch elem.Tag {
 	case "a", "button":
-		types = append(types, ActionClick)
+		types = append(types, ActionClick, ActionHover, ActionFocus)
 	case "input":
 		inpType := elem.Attrs["type"]
 		switch inpType {
 		case "checkbox", "radio":
-			types = append(types, ActionToggle)
+			types = append(types, ActionToggle, ActionFocus)
 		default:
-			types = append(types, ActionTypeText)
+			types = append(types, ActionTypeText, ActionFocus, ActionClearInput)
 		}
 	case "textarea":
-		types = append(types, ActionTypeText)
+		types = append(types, ActionTypeText, ActionFocus, ActionClearInput)
 	case "select":
-		types = append(types, ActionSelect)
+		types = append(types, ActionSelect, ActionFocus)
 	}
 	if elem.Attrs["role"] == "button" || elem.Attrs["role"] == "link" {
-		types = append(types, ActionClick)
+		types = append(types, ActionClick, ActionHover, ActionFocus)
 	}
 	return types
 }

@@ -12,6 +12,7 @@ Every layer is separate and swappable. You can use the Observer by itself as a s
 ## Table of Contents
 
 - [Architecture](#architecture)
+- [Page Representation: DOM vs Semantic](#page-representation-dom-vs-semantic)
 - [Layer 1: Types (`types.go`)](#layer-1-types)
 - [Layer 2: Observer (`observer.go`)](#layer-2-observer)
 - [Layer 3: Action Space (`actionspace.go`)](#layer-3-action-space)
@@ -20,8 +21,7 @@ Every layer is separate and swappable. You can use the Observer by itself as a s
 - [Layer 6: Agent Orchestrator (`agent.go`)](#layer-6-agent-orchestrator)
 - [Using as a Scraper](#using-as-a-scraper)
 - [Using as an Agent Loop](#using-as-an-agent-loop)
-- [CLI Bridge (`cmd/agent`)](#cli-bridge)
-- [Python Integration (`pybrwslab.Agent`)](#python-integration)
+- [CLI Bridge (`cmd/scrape/agent/agent`)](#cli-bridge)
 - [Advanced: Custom Layers](#advanced-custom-layers)
 - [Action Reference](#action-reference)
 
@@ -60,6 +60,39 @@ Each layer is intentionally independent:
 | 4 | `formatter.go` | Render snapshot + actions as text/JSON | Yes (custom prompts) |
 | 5 | `executor.go` | Execute chosen `Action` on the browser | Yes (remote grid, HTTP) |
 | 6 | `agent.go` | Orchestrate the loop; history; convenience decisions | Yes (custom policies) |
+
+---
+
+## Page Representation: DOM vs Semantic
+
+The agent has two representation modes, selected once at construction via `Config.Representation`. The mode controls what the observer sends to the formatter and which action space is built. It does not change at runtime.
+
+| | `RepresentationDOM` (default) | `RepresentationSemantic` |
+|---|---|---|
+| **Source** | Raw CDP elements (bounding boxes, selectors) | Compressed semantic tree from `content/semantic` |
+| **Action space** | `BuildActionSpace` — one action per `(element, type)` pair | `BuildSemanticActionSpace` — one action per semantic tree node |
+| **Formatter** | `FormatCompact` — element list with coordinates | `FormatSemanticCompact` — hierarchical node summaries |
+| **Token cost** | Higher | ~40% lower |
+| **Best for** | Form filling, precise clicks, scraping with exact selectors | Navigation, Q&A, search, reading-heavy tasks |
+| **Requires** | Nothing extra | `SemanticMode: true` in Config (builds the tree during observe) |
+
+### Choosing a mode
+
+```go
+// DOM mode — default, always works
+cfg := agent.DefaultConfig()
+// cfg.Representation is RepresentationDOM
+
+// Semantic mode — lower token cost, needs semantic tree
+cfg := agent.Config{
+    Representation: agent.RepresentationSemantic,
+    SemanticMode:   true, // tells the observer to build the tree
+    StealthClient:  client,
+}
+ag := agent.NewAgent(cfg, nil, nil, nil)
+```
+
+Both modes expose the same `Step` / `Observe` / `Execute` API. The only difference is the content passed to `decideFn` and the action IDs the LLM can choose from.
 
 ---
 
@@ -350,12 +383,12 @@ Executes agent-chosen actions against a live browser tab via CDP.
 
 | Action | CDP Implementation |
 |--------|-------------------|
-| `click` | `chromedp.Click(selector)` or `chromedp.MouseClickXY(x, y)` |
-| `type` | `chromedp.SendKeys(selector, text)` |
+| `click` | `chromedp.Click(selector)` — or Bézier mouse path → CDP click when SimulateBehavior=true |
+| `type` | `chromedp.SendKeys(selector, text)` — or focus → char-by-char SendKeys + delays when SimulateBehavior=true |
 | `select` | JS `el.value = ...; el.dispatchEvent(new Event('change'))` |
 | `toggle` | `chromedp.Click(selector)` |
-| `scroll_down` | JS `window.scrollBy(0, amount)` |
-| `scroll_up` | JS `window.scrollBy(0, -amount)` |
+| `scroll_down` | JS `window.scrollBy(0, amount)` — or ScrollSimulator JS when SimulateBehavior=true |
+| `scroll_up` | JS `window.scrollBy(0, -amount)` — or ScrollSimulator JS when SimulateBehavior=true |
 | `scroll_bottom` | JS `window.scrollTo(0, document.body.scrollHeight)` |
 | `scroll_top` | JS `window.scrollTo(0, 0)` |
 | `scroll_to` | JS `el.scrollIntoView()` or `window.scrollTo(0, y)` |
@@ -368,6 +401,24 @@ Executes agent-chosen actions against a live browser tab via CDP.
 | `new_tab` | `target.CreateTarget(url)` |
 | `switch_tab` | `target.ActivateTarget(targetID)` |
 | `close_tab` | `target.CloseTarget(targetID)` |
+
+### ExecuteResult
+
+```go
+type ExecuteResult struct {
+    ActionID        string  // matches Action.ID
+    Success         bool
+    Error           string  // non-empty on failure
+    NewURL          string  // set after navigate/back/forward/reload
+    ScrollDelta     float64 // pixels moved for scroll_down/scroll_up
+    ChallengeSolved bool    // true if an anti-bot challenge was solved
+    // NoChange is true when the action succeeded but produced no measurable
+    // page change: scroll actions that moved zero pixels (already at boundary),
+    // or nav actions that resolved to the same URL. Useful in decideFn to
+    // detect when the agent is making no progress.
+    NoChange bool
+}
+```
 
 ### Usage
 
@@ -383,7 +434,7 @@ res, err := exec.Execute(ctx, agent.Action{
     },
 })
 
-fmt.Printf("Success: %v, New URL: %s\n", res.Success, res.NewURL)
+fmt.Printf("Success: %v, New URL: %s, NoChange: %v\n", res.Success, res.NewURL, res.NoChange)
 ```
 
 ### Execute a plan (sequence)
@@ -486,25 +537,41 @@ step, _ := a.Step(chromeCtx, agent.Decisions.SubmitFirstForm)
 
 ```go
 cfg := agent.Config{
-    MaxRetries:    3,               // Retry failed actions
-    SettleDelay:   500 * time.Millisecond, // Wait after page changes
-    ActionTimeout: 30 * time.Second,       // Per-action timeout
-    HistorySize:   50,              // Max steps to remember
-    IncludeMedia:  false,           // Include <img>/<video> (token-heavy)
-    IncludeForms:  true,            // Include form details
-    CompactLinks:  true,            // One-line link format
-    ScrollFirst:   true,            // Prioritize scroll actions
-    StealthMode:   true,            // Human-like delays
+    // --- Page representation (choose one) ---
+    Representation: agent.RepresentationDOM,      // or RepresentationSemantic
+    SemanticMode:   false,                        // set true when using RepresentationSemantic
+
+    // --- Timing ---
+    SettleDelay:   500 * time.Millisecond, // Wait after each action before re-observing
+    ActionTimeout: 30 * time.Second,       // Per-action deadline
+
+    // --- Memory ---
+    HistorySize: 50, // Max steps kept in memory; older steps are dropped
+
+    // --- Context shaping ---
+    IncludeMedia: false, // Include <img>/<video> in snapshot (token-heavy)
+    IncludeForms: true,  // Include form field details
+    CompactLinks: true,  // One-line link format vs full struct
+    ScrollFirst:  true,  // Prioritise scroll actions in the action space
+
+    // --- Stealth ---
+    StealthMode:   true,   // Human-like delays and behaviour
+    StealthClient: client, // Required for challenge solving and persistent tabs
+
+    // --- Behavior simulation ---
+    SimulateBehavior: false, // true = Bézier mouse paths, per-keystroke delays, incremental scroll
+    BehaviorDelay:    0,     // 0 = use simulator defaults (50–200 ms typing, 100–300 ms scroll)
 }
 ```
 
 ### History access
 
 ```go
-// Full step history
+// Full step history — each Step has Observation, Decision, Result, and Formatted
 for _, s := range a.History() {
-    fmt.Printf("%s: %s → %v\n", s.Timestamp.Format(time.RFC3339),
-        s.Decision.ID, s.Result.Success)
+    noChange := s.Result != nil && s.Result.NoChange
+    fmt.Printf("%s: %s → success=%v noChange=%v\n",
+        s.Timestamp.Format(time.RFC3339), s.Decision.ID, s.Result.Success, noChange)
 }
 
 // Last observed state
@@ -513,6 +580,23 @@ fmt.Println(ctx.Snapshot.URL)
 
 // Summary
 fmt.Println(a.Summary()) // "Agent[12 steps] @ https://... | 23 actions available"
+```
+
+### Using NoChange in a decideFn
+
+`ExecuteResult.NoChange` is set when a scroll action moved zero pixels (page boundary) or a nav action resolved to the same URL. It is available on the previous step's result via history:
+
+```go
+a.Step(tabCtx, func(pageCtx *agent.Context, actions []agent.Action, formatted string, hist []agent.Step) (agent.Action, error) {
+    // Detect if the last action had no effect
+    if len(hist) > 0 {
+        last := hist[len(hist)-1]
+        if last.Result != nil && last.Result.NoChange {
+            // Last action was a no-op — try something different
+        }
+    }
+    // ... decide
+})
 ```
 
 ---
@@ -717,7 +801,7 @@ agent.Execute(ctx, agent.Action{
 
 ## CLI Bridge
 
-The `cmd/agent` binary exposes the agent package as a subprocess-friendly CLI. This is how Python connects to it.
+The `cmd/scrape/agent/agent` binary exposes the agent package as a subprocess-friendly CLI. This is how Python connects to it.
 
 ### Commands
 
@@ -749,228 +833,6 @@ agent session-stop --session-dir /tmp/agent-session
 The first call to any command with `--session-dir` starts Chrome with `--remote-debugging-port`. Subsequent calls reconnect to the same Chrome instance. Session data (cookies, localStorage, history) persists in the session directory's Chrome profile.
 
 ---
-
-## Python Integration
-
-`pybrwslab.Agent` wraps the CLI binary:
-
-```python
-from pybrwslab import Agent
-
-with Agent(session_dir="/tmp/agent-session") as agent:
-    # Observe
-    ctx = agent.observe("https://example.com", format="compact")
-    print(ctx["formatted"])
-
-    # Pick an action and execute
-    action = ctx["action_space"]["element_actions"][0]
-    result = agent.execute(action)
-    print(result["success"])
-
-    # Or do it in one call
-    result = agent.step(
-        "https://example.com",
-        decision="click_E1",
-        format="compact"
-    )
-    print(result["observation"]["formatted"])
-```
-
-### Connecting to an LLM
-
-```python
-from pybrwslab import Agent
-import openai
-
-agent = Agent(session_dir="/tmp/agent-session")
-
-for _ in range(20):
-    ctx = agent.observe("https://example.com", format="compact")
-
-    # Send formatted context to LLM
-    response = openai.ChatCompletion.create(
-        model="gpt-4",
-        messages=[{
-            "role": "user",
-            "content": f"Choose ONE action by ID:\n\n{ctx['formatted']}"
-        }]
-    )
-    action_id = response.choices[0].message.content.strip()
-
-    # Execute
-    result = agent.step("https://example.com", decision=action_id)
-    if action_id == "done":
-        break
-
-agent.stop()
-```
-
-### Pydantic AI Research Agent
-
-For a structured, tool-based agent framework, use [Pydantic AI](https://github.com/pydantic/pydantic-ai). The browser state becomes a set of tools the agent can call:
-
-```python
-"""
-Pydantic AI Research Agent — Autonomous web research with structured output.
-"""
-
-from dataclasses import dataclass, field
-from pydantic import BaseModel, Field
-from pydantic_ai import Agent, RunContext
-from pybrwslab import Agent as BrowserAgent
-
-
-class ResearchReport(BaseModel):
-    query: str = Field(description="The original research question")
-    findings: list[str] = Field(default_factory=list, description="Facts discovered")
-    sources: list[str] = Field(default_factory=list, description="URLs visited")
-    answer: str = Field(description="Concise answer to the question")
-    confidence: str = Field(description="high | medium | low")
-
-
-@dataclass
-class ResearchDeps:
-    browser: BrowserAgent
-    visited_urls: list[str] = field(default_factory=list)
-    findings: list[str] = field(default_factory=list)
-    max_steps: int = 20
-    step_count: int = 0
-
-
-agent = Agent(
-    model="openai:gpt-4o",
-    system_prompt="""\
-You are an expert web researcher. Browse the web to find accurate answers.
-
-Rules:
-1. Start with search(query) or navigate(url).
-2. After each page load, the formatted context shows available actions.
-3. Use click(action_id), scroll(direction), type_text(action_id, text).
-4. Record facts with add_finding(fact).
-5. Track sources automatically.
-6. Finish with finish_research(answer, confidence).
-""",
-    result_type=ResearchReport,
-    deps_type=ResearchDeps,
-)
-
-
-@agent.tool
-async def navigate(ctx: RunContext[ResearchDeps], url: str) -> str:
-    """Navigate to a URL and observe the page."""
-    ctx.deps.step_count += 1
-    page = ctx.deps.browser.observe(url, format="compact")
-    ctx.deps.visited_urls.append(page["snapshot"]["url"])
-    return f"=== PAGE ===\n{page['formatted']}"
-
-
-@agent.tool
-async def search(ctx: RunContext[ResearchDeps], query: str) -> str:
-    """Search DuckDuckGo for the query."""
-    url = "https://html.duckduckgo.com/html/?q=" + query.replace(" ", "+")
-    return await navigate(ctx, url)
-
-
-@agent.tool
-async def click(ctx: RunContext[ResearchDeps], action_id: str) -> str:
-    """Click an element by its action ID."""
-    ctx.deps.step_count += 1
-    result = ctx.deps.browser.step("", decision=action_id, format="compact")
-    if result["result"].get("new_url"):
-        ctx.deps.visited_urls.append(result["result"]["new_url"])
-    return (
-        f"Clicked {action_id}: success={result['result']['success']}\n\n"
-        f"{result['observation']['formatted']}"
-    )
-
-
-@agent.tool
-async def scroll(ctx: RunContext[ResearchDeps], direction: str) -> str:
-    """Scroll the page: down, up, bottom, or top."""
-    mapping = {"down": "scroll_down", "up": "scroll_up",
-               "bottom": "scroll_bottom", "top": "scroll_top"}
-    result = ctx.deps.browser.step("", decision=mapping.get(direction, "scroll_down"))
-    return result["observation"]["formatted"]
-
-
-@agent.tool
-async def type_text(ctx: RunContext[ResearchDeps], action_id: str, text: str) -> str:
-    """Type text into an input field."""
-    page = ctx.deps.browser.observe("", format="json")
-    action = None
-    for a in page.get("action_space", {}).get("element_actions", []):
-        if a.get("id") == action_id:
-            action = a
-            break
-    if action is None:
-        return f"ERROR: {action_id} not found"
-    action.setdefault("parameters", {})
-    action["parameters"]["text"] = text
-    result = ctx.deps.browser.execute(action)
-    return f"Typed into {action_id}: success={result['success']}"
-
-
-@agent.tool
-async def go_back(ctx: RunContext[ResearchDeps]) -> str:
-    """Go back to the previous page."""
-    result = ctx.deps.browser.step("", decision="nav_back", format="compact")
-    return result["observation"]["formatted"]
-
-
-@agent.tool
-async def add_finding(ctx: RunContext[ResearchDeps], fact: str) -> str:
-    """Record a factual finding."""
-    ctx.deps.findings.append(fact)
-    return f"Recorded finding #{len(ctx.deps.findings)}: {fact}"
-
-
-@agent.tool
-async def finish_research(
-    ctx: RunContext[ResearchDeps], answer: str, confidence: str
-) -> ResearchReport:
-    """Submit the final research report."""
-    return ResearchReport(
-        query="",  # filled by framework
-        findings=ctx.deps.findings,
-        sources=list(dict.fromkeys(ctx.deps.visited_urls)),
-        answer=answer,
-        confidence=confidence,
-    )
-
-
-# Run research
-async def research(query: str) -> ResearchReport:
-    browser = BrowserAgent(session_dir="/tmp/pydantic-ai-research")
-    deps = ResearchDeps(browser=browser, max_steps=25)
-    try:
-        result = await agent.run(query, deps=deps)
-        return result.data
-    finally:
-        browser.stop()
-
-
-# Usage
-# report = asyncio.run(research("Current NVIDIA stock price"))
-# print(report.answer)
-# print(report.sources)
-```
-
-**How it works:**
-
-1. **Dependencies** (`ResearchDeps`) hold the `BrowserAgent` and accumulated state (visited URLs, findings, step counter).
-2. **Tools** are decorated with `@agent.tool`. Each tool calls the browser via `pybrwslab.Agent` and returns a string description back to the LLM.
-3. **Structured output** — `result_type=ResearchReport` means the agent returns a validated Pydantic model, not free text.
-4. **State tracking** — `visited_urls` and `findings` persist across tool calls via `RunContext.deps`.
-5. **Step limiting** — `max_steps` prevents infinite loops.
-
-**Running the example:**
-
-```bash
-export OPENAI_API_KEY="sk-..."
-python python/examples/pydantic_ai_researcher.py "What is the current price of NVIDIA stock?"
-```
-
-The full working example is at `python/examples/pydantic_ai_researcher.py`.
 
 ---
 
@@ -1052,6 +914,7 @@ step, _ := a.Step(chromeCtx, submitHunter)
 | `new_tab` | `new_tab` | `url` (optional) | Open new tab |
 | `switch_tab` | `switch_tab_<N>` | `target_id`, `index` | Switch tab |
 | `close_tab` | `close_tab_<N>` | `target_id`, `index` | Close tab |
+| `solve_challenge` | `solve_challenge` | `challenge_type` | Solve anti-bot challenge (requires StealthClient) |
 | `done` | `done` | — | No-op / terminate |
 
 ---
@@ -1059,9 +922,10 @@ step, _ := a.Step(chromeCtx, submitHunter)
 ## Design Principles
 
 1. **Compartmentalization** — Every layer is independent. Swap the Observer for Playwright, the Formatter for XML, the Executor for a remote grid.
-2. **JSON-serializable** — All types serialize cleanly so they can cross process boundaries (Go CLI → Python → LLM).
-3. **Scroll as first-class** — Scroll is not an afterthought. It carries intent, phase, and profile metadata.
-4. **Tab awareness** — The agent sees the full browser, not just one tab.
-5. **History awareness** — The agent knows exactly where back/forward will go, not just "can go back."
-6. **Token efficiency** — The Compact formatter is designed for LLM context windows.
-7. **Deterministic IDs** — Short action IDs let LLMs respond compactly (`[click_E1]` instead of full JSON).
+2. **Explicit mode selection** — `Config.Representation` is chosen once at construction. The agent never changes modes at runtime; the caller picks the right mode for the task.
+3. **JSON-serializable** — All types serialize cleanly so they can cross process boundaries (Go CLI → Python → LLM).
+4. **Scroll as first-class** — Scroll is not an afterthought. It carries intent, phase, and profile metadata.
+5. **Tab awareness** — The agent sees the full browser, not just one tab.
+6. **History awareness** — The agent knows exactly where back/forward will go, not just "can go back."
+7. **Token efficiency** — The Compact formatter is designed for LLM context windows; Semantic mode cuts that further by ~40%.
+8. **Deterministic IDs** — Short action IDs let LLMs respond compactly (`[click_E1]` instead of full JSON).

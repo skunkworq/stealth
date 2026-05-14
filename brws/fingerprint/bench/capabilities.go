@@ -193,9 +193,9 @@ func (ce *CapabilityEvaluator) testJavaScript(
 	resp, err := eng.Do(ctx, &engine.Request{
 		Method:            "GET",
 		URL:               "https://www.google.com",
-		WaitForNavigation: true,
-		Timeout:           ce.timeout,
-		ScriptToExecute:   "navigator.userAgent",
+		LoadStrategy:    engine.LoadLoad,
+		Timeout:         ce.timeout,
+		ScriptToExecute: "navigator.userAgent",
 	})
 	if err != nil {
 		return false, details, err
@@ -268,8 +268,8 @@ func (ce *CapabilityEvaluator) testWebSocket(
 	resp, err := eng.Do(ctx, &engine.Request{
 		Method:            "GET",
 		URL:               "https://www.websocket.org/echo.html",
-		WaitForNavigation: true,
-		Timeout:           ce.timeout,
+		LoadStrategy: engine.LoadLoad,
+		Timeout:      ce.timeout,
 	})
 	if err != nil {
 		return false, details, err

@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 // Formatter renders AgentContext into a string prompt.
@@ -512,7 +512,7 @@ func (f *Formatter) formatImagesCompact(ctx *Context) string {
 	return b.String()
 }
 
-func (f *Formatter) formatSemanticTreeMarkdown(tree *semantic.SemanticTree) string {
+func (f *Formatter) formatSemanticTreeMarkdown(tree *understand.SemanticTree) string {
 	var b strings.Builder
 	b.WriteString("\n=== SEMANTIC TREE ===\n")
 	for i := range tree.RootNodes {
@@ -521,7 +521,7 @@ func (f *Formatter) formatSemanticTreeMarkdown(tree *semantic.SemanticTree) stri
 	return b.String()
 }
 
-func (f *Formatter) formatSemanticNodeMarkdown(b *strings.Builder, node *semantic.SemanticNode, depth int) {
+func (f *Formatter) formatSemanticNodeMarkdown(b *strings.Builder, node *understand.SemanticNode, depth int) {
 	indent := strings.Repeat("  ", depth)
 	line := fmt.Sprintf("%s[%s] %s", indent, node.ID, node.Summary)
 	if len(node.Actions) > 0 {
@@ -540,7 +540,7 @@ func (f *Formatter) formatSemanticNodeMarkdown(b *strings.Builder, node *semanti
 	}
 }
 
-func (f *Formatter) formatSemanticTreeCompact(tree *semantic.SemanticTree) string {
+func (f *Formatter) formatSemanticTreeCompact(tree *understand.SemanticTree) string {
 	var b strings.Builder
 	for i := range tree.RootNodes {
 		f.formatSemanticNodeCompact(&b, &tree.RootNodes[i], 0)
@@ -548,7 +548,7 @@ func (f *Formatter) formatSemanticTreeCompact(tree *semantic.SemanticTree) strin
 	return b.String()
 }
 
-func (f *Formatter) formatSemanticNodeCompact(b *strings.Builder, node *semantic.SemanticNode, depth int) {
+func (f *Formatter) formatSemanticNodeCompact(b *strings.Builder, node *understand.SemanticNode, depth int) {
 	prefix := ""
 	if depth > 0 {
 		prefix = strings.Repeat("  ", depth)

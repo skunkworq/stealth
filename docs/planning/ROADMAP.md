@@ -40,7 +40,7 @@ Enables: login flows, checkout, signup automation
 
 ```go
 type SemanticFormFiller struct {
-    client   *stealth.Client
+    client   *stealth.Adaptive
     navigator *SemanticNavigator
 }
 

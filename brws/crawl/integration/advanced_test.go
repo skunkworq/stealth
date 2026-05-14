@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 func TestAdaptiveCrawlerSelectStrategy(t *testing.T) {
@@ -125,15 +125,15 @@ func TestAdaptivePolicyShouldRetry(t *testing.T) {
 func TestChangeDetectorDiffTrees(t *testing.T) {
 	detector := NewChangeDetector(0.5)
 
-	oldTree := &semantic.SemanticTree{
-		RootNodes: []semantic.SemanticNode{
+	oldTree := &understand.SemanticTree{
+		RootNodes: []understand.SemanticNode{
 			{DOMSelector: "div.price", Summary: "Price: $99.99"},
 			{DOMSelector: "div.title", Summary: "Product Name"},
 		},
 	}
 
-	newTree := &semantic.SemanticTree{
-		RootNodes: []semantic.SemanticNode{
+	newTree := &understand.SemanticTree{
+		RootNodes: []understand.SemanticNode{
 			{DOMSelector: "div.price", Summary: "Price: $79.99"},
 			{DOMSelector: "div.title", Summary: "Product Name"},
 			{DOMSelector: "div.new-badge", Summary: "New!"},
@@ -170,35 +170,35 @@ func TestChangeDetectorSignificance(t *testing.T) {
 
 	tests := []struct {
 		name            string
-		node            *semantic.SemanticNode
+		node            *understand.SemanticNode
 		minSignificance float32
 	}{
 		{
 			name: "static content",
-			node: &semantic.SemanticNode{
+			node: &understand.SemanticNode{
 				Summary:    "Static text",
 				TokenCount: 10,
-				Actions:    []semantic.Action{},
+				Actions:    []understand.Action{},
 				IsDynamic:  false,
 			},
 			minSignificance: 0.5,
 		},
 		{
 			name: "interactive content",
-			node: &semantic.SemanticNode{
+			node: &understand.SemanticNode{
 				Summary:    "Click here",
 				TokenCount: 20,
-				Actions:    []semantic.Action{{Type: semantic.ActionClick, Selector: "button"}},
+				Actions:    []understand.Action{{Type: understand.ActionClick, Selector: "button"}},
 				IsDynamic:  false,
 			},
 			minSignificance: 0.7,
 		},
 		{
 			name: "dynamic content",
-			node: &semantic.SemanticNode{
+			node: &understand.SemanticNode{
 				Summary:    "Ad content",
 				TokenCount: 5,
-				Actions:    []semantic.Action{},
+				Actions:    []understand.Action{},
 				IsDynamic:  true,
 			},
 			minSignificance: 0.1,
@@ -269,12 +269,12 @@ func TestPriceMonitorDetectCurrency(t *testing.T) {
 func TestABTestDetectorCluster(t *testing.T) {
 	detector := NewABTestDetector()
 
-	tree1 := &semantic.SemanticTree{StructuralHash: "hash-a"}
-	tree2 := &semantic.SemanticTree{StructuralHash: "hash-a"}
-	tree3 := &semantic.SemanticTree{StructuralHash: "hash-b"}
-	tree4 := &semantic.SemanticTree{StructuralHash: "hash-a"}
+	tree1 := &understand.SemanticTree{StructuralHash: "hash-a"}
+	tree2 := &understand.SemanticTree{StructuralHash: "hash-a"}
+	tree3 := &understand.SemanticTree{StructuralHash: "hash-b"}
+	tree4 := &understand.SemanticTree{StructuralHash: "hash-a"}
 
-	trees := []*semantic.SemanticTree{tree1, tree2, tree3, tree4}
+	trees := []*understand.SemanticTree{tree1, tree2, tree3, tree4}
 
 	groups := detector.clusterByStructure(trees)
 
@@ -295,7 +295,7 @@ func TestABTestDetectorDetect(t *testing.T) {
 	detector := NewABTestDetector()
 
 	for i := 0; i < 5; i++ {
-		tree := &semantic.SemanticTree{
+		tree := &understand.SemanticTree{
 			StructuralHash: "variant-a",
 		}
 		detector.RecordSample("test-url", tree)
@@ -308,7 +308,7 @@ func TestABTestDetectorDetect(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		tree := &semantic.SemanticTree{
+		tree := &understand.SemanticTree{
 			StructuralHash: "variant-b",
 		}
 		detector.RecordSample("test-url", tree)

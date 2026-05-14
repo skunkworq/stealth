@@ -14,8 +14,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/skunkworq/stealth/brws/content/agentic"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/scrapegraph"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 func main() {
@@ -26,13 +26,13 @@ func main() {
 	if key == "" {
 		log.Fatal("OPENROUTER_API_KEY required")
 	}
-	llm := agentic.NewSemanticLLM(semantic.NewLLMClient(key))
+	llm := understand.NewLLMClient(key)
 
 	// -------------------------------------------------------------------------
 	// Example 1: SmartScraperGraph — single-page extraction
 	// -------------------------------------------------------------------------
 	fmt.Println("=== SmartScraperGraph ===")
-	graph, err := agentic.NewSmartScraperGraph(
+	graph, err := pipeline.NewSmartScraperGraph(
 		"Extract the page title and all heading texts as a JSON object with keys 'title' and 'headings'.",
 		"https://example.com",
 		map[string]interface{}{
@@ -62,7 +62,7 @@ func main() {
 	// Example 2: SearchGraph — search then scrape top results
 	// -------------------------------------------------------------------------
 	fmt.Println("\n=== SearchGraph ===")
-	searchGraph, err := agentic.NewSearchGraph(
+	searchGraph, err := pipeline.NewSearchGraph(
 		"What are the latest features in Go 1.24?",
 		map[string]interface{}{
 			"max_results": 3,

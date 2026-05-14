@@ -13,7 +13,7 @@ func TestExecutorStealthClientField(t *testing.T) {
 	}
 
 	// Compile-time check that StealthClient field exists and has correct type.
-	var _ *stealth.Client = exec.StealthClient
+	var _ *stealth.Adaptive = exec.StealthClient
 }
 
 func TestExecuteResultChallengeSolvedField(t *testing.T) {

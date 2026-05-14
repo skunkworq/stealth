@@ -6,24 +6,24 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 type SemanticSpider struct {
 	name           string
 	startURLs      []string
-	config         *semantic.PipelineConfig
+	config         *understand.PipelineConfig
 	maxDepth       int
 	allowedDomains []string
 	denyPatterns   []string
 
 	mu           sync.Mutex
 	visited      map[string]bool
-	semanticTree map[string]*semantic.SemanticTree
-	pageGraph    *semantic.PageGraph
+	semanticTree map[string]*understand.SemanticTree
+	pageGraph    *understand.PageGraph
 
 	stats      *SemanticStats
-	onPage     func(url string, tree *semantic.SemanticTree)
+	onPage     func(url string, tree *understand.SemanticTree)
 	onComplete func(stats *SemanticStats)
 }
 
@@ -63,7 +63,7 @@ func WithAllowedDomains(domains []string) SemanticSpiderOption {
 	}
 }
 
-func WithOnPage(fn func(url string, tree *semantic.SemanticTree)) SemanticSpiderOption {
+func WithOnPage(fn func(url string, tree *understand.SemanticTree)) SemanticSpiderOption {
 	return func(s *SemanticSpider) {
 		s.onPage = fn
 	}
@@ -75,15 +75,15 @@ func WithOnComplete(fn func(stats *SemanticStats)) SemanticSpiderOption {
 	}
 }
 
-func NewSemanticSpider(name string, startURLs []string, config *semantic.PipelineConfig, opts ...SemanticSpiderOption) *SemanticSpider {
+func NewSemanticSpider(name string, startURLs []string, config *understand.PipelineConfig, opts ...SemanticSpiderOption) *SemanticSpider {
 	s := &SemanticSpider{
 		name:         name,
 		startURLs:    startURLs,
 		config:       config,
 		maxDepth:     3,
 		visited:      make(map[string]bool),
-		semanticTree: make(map[string]*semantic.SemanticTree),
-		pageGraph:    semantic.NewPageGraph(),
+		semanticTree: make(map[string]*understand.SemanticTree),
+		pageGraph:    understand.NewPageGraph(),
 		stats:        &SemanticStats{},
 	}
 
@@ -124,7 +124,7 @@ func (s *SemanticSpider) parsePage(resp Response) []*Request {
 
 	atomic.AddInt64(&s.stats.PagesVisited, 1)
 
-	tree, stats, err := semantic.HTMLToSemanticTreeCached(ctx, resp.Text, url, s.config)
+	tree, stats, err := understand.HTMLToSemanticTreeCached(ctx, resp.Text, url, s.config)
 	if err != nil {
 		atomic.AddInt64(&s.stats.Errors, 1)
 		return nil
@@ -192,23 +192,23 @@ func (s *SemanticSpider) isAllowed(urlStr string) bool {
 	return false
 }
 
-func (s *SemanticSpider) GetSemanticTree(url string) *semantic.SemanticTree {
+func (s *SemanticSpider) GetSemanticTree(url string) *understand.SemanticTree {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.semanticTree[url]
 }
 
-func (s *SemanticSpider) GetAllSemanticTrees() map[string]*semantic.SemanticTree {
+func (s *SemanticSpider) GetAllSemanticTrees() map[string]*understand.SemanticTree {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result := make(map[string]*semantic.SemanticTree)
+	result := make(map[string]*understand.SemanticTree)
 	for k, v := range s.semanticTree {
 		result[k] = v
 	}
 	return result
 }
 
-func (s *SemanticSpider) GetPageGraph() *semantic.PageGraph {
+func (s *SemanticSpider) GetPageGraph() *understand.PageGraph {
 	return s.pageGraph
 }
 
@@ -216,7 +216,7 @@ func (s *SemanticSpider) GetStats() *SemanticStats {
 	return s.stats
 }
 
-func countActions(node *semantic.SemanticNode) int {
+func countActions(node *understand.SemanticNode) int {
 	count := len(node.Actions)
 	for i := range node.Children {
 		count += countActions(&node.Children[i])

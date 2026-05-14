@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Config is the main configuration for the stealth crawler.
@@ -286,8 +288,11 @@ func LoadFromFile(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read config file: %w", err)
 	}
-	_ = data // TODO: unmarshal YAML
-	return DefaultConfig(), nil
+	cfg := DefaultConfig()
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		return nil, fmt.Errorf("parse config file: %w", err)
+	}
+	return cfg, nil
 }
 
 // Validate validates the configuration.

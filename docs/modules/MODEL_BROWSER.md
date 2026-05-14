@@ -70,7 +70,7 @@ type Engine interface {
 
 ---
 
-## Stealth Engine (`engine/chromium/stealth_engine.go`)
+## Stealth Engine (`stealth/chromium/engine.go`)
 
 The advanced anti-detection engine.
 
@@ -172,7 +172,7 @@ Mock HTTP/TLS server for testing:
 |---|---|
 | `engine/engine.go` | Core `Engine` interface, `Request`/`Response` types, registry |
 | `engine/chromium/chromium.go` | Basic CDP-based Chromium engine |
-| `engine/chromium/stealth_engine.go` | Advanced stealth engine with FSM, WAF detection, human-like interactions |
+| `stealth/chromium/engine.go` | Advanced stealth engine with FSM, WAF detection, human-like interactions |
 | `engine/chromium/stealth_script.go` | JS injection patches (~25 API patches) |
 | `engine/chromium/stealth_plus.go` | StealthPlus advanced CDP features |
 | `engine/response_types.go` | `TextResponse`/`HtmlResponse` with CSS/XPath parsing |

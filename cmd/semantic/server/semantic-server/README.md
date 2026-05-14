@@ -27,7 +27,7 @@ Model Context Protocol (MCP) server that exposes semantic web extraction capabil
 ## Installation
 
 ```bash
-go build -o semantic-server ./cmd/semantic/semantic-server
+go build -o semantic-server ./cmd/semantic/server/semantic-server
 ```
 
 ## Configuration
@@ -236,7 +236,7 @@ Typical results on production sites:
 
 ```bash
 # Build
-go build ./cmd/semantic/semantic-server
+go build ./cmd/semantic/server/semantic-server
 
 # Test
 go test ./brws/semantic/... ./brws/pipeline/...

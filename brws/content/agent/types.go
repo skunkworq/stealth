@@ -6,7 +6,7 @@ package agent
 import (
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 // ---------------------------------------------------------------------------
@@ -30,7 +30,7 @@ type PageSnapshot struct {
 	Scroll       ScrollState           `json:"scroll"`
 	DocumentSize DocumentSize          `json:"document_size"`
 	Elements     []VisibleElement      `json:"elements"`
-	Forms        []semantic.FormSchema `json:"forms,omitempty"`
+	Forms        []understand.FormSchema `json:"forms,omitempty"`
 	Links        []Link                `json:"links,omitempty"`
 	History      HistoryState          `json:"history"`
 	Tabs         []TabState            `json:"tabs,omitempty"` // all open tabs
@@ -41,12 +41,12 @@ type PageSnapshot struct {
 	ChallengeType     string `json:"challenge_type,omitempty"`     // e.g. "cloudflare", "datadome", "recaptcha"
 
 	// --- Semantic enrichment (optional) ---
-	Meta         *semantic.PageMeta     `json:"meta,omitempty"`
-	Images       []semantic.ImageRef    `json:"images,omitempty"`
-	Social       *semantic.SocialLinks  `json:"social,omitempty"`
-	Colors       []semantic.ColorInfo   `json:"colors,omitempty"`
-	Fonts        []semantic.FontInfo    `json:"fonts,omitempty"`
-	SemanticTree *semantic.SemanticTree `json:"semantic_tree,omitempty"`
+	Meta         *understand.PageMeta     `json:"meta,omitempty"`
+	Images       []understand.ImageRef    `json:"images,omitempty"`
+	Social       *understand.SocialLinks  `json:"social,omitempty"`
+	Colors       []understand.ColorInfo   `json:"colors,omitempty"`
+	Fonts        []understand.FontInfo    `json:"fonts,omitempty"`
+	SemanticTree *understand.SemanticTree `json:"semantic_tree,omitempty"`
 }
 
 // Viewport describes the browser viewport.
@@ -150,6 +150,12 @@ const (
 	ActionReload       ActionType = "reload"
 	ActionWait         ActionType = "wait"
 	ActionScreenshot   ActionType = "screenshot"
+	ActionHover        ActionType = "hover"
+	ActionFocus        ActionType = "focus"
+	ActionKeyPress     ActionType = "key_press"
+	ActionClearInput   ActionType = "clear_input"
+	ActionWaitForSelector   ActionType = "wait_for_selector"
+	ActionWaitForNavigation ActionType = "wait_for_navigation"
 	ActionNewTab       ActionType = "new_tab"
 	ActionSwitchTab    ActionType = "switch_tab"
 	ActionCloseTab     ActionType = "close_tab"

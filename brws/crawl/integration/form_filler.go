@@ -8,12 +8,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 type SemanticFormFiller struct {
-	client      *stealth.Client
+	client      *stealth.Adaptive
 	navigator   *SemanticNavigator
 	typingDelay time.Duration
 	mu          sync.Mutex
@@ -57,7 +57,7 @@ func WithTypingDelay(delay time.Duration) FormFillerOption {
 	}
 }
 
-func NewSemanticFormFiller(client *stealth.Client, nav *SemanticNavigator, opts ...FormFillerOption) *SemanticFormFiller {
+func NewSemanticFormFiller(client *stealth.Adaptive, nav *SemanticNavigator, opts ...FormFillerOption) *SemanticFormFiller {
 	f := &SemanticFormFiller{
 		client:      client,
 		navigator:   nav,
@@ -190,12 +190,12 @@ func (f *SemanticFormFiller) DetectForm(ctx context.Context, url string) (*FormS
 	return forms[0], nil
 }
 
-func (f *SemanticFormFiller) findFormsInTree(tree *semantic.SemanticTree) []*FormSchema {
+func (f *SemanticFormFiller) findFormsInTree(tree *understand.SemanticTree) []*FormSchema {
 	var forms []*FormSchema
 
 	for _, node := range tree.AllNodes() {
 		for _, action := range node.Actions {
-			if action.Type == semantic.ActionFill {
+			if action.Type == understand.ActionFill {
 				form := f.extractFormFromNode(node, action)
 				if form != nil {
 					forms = append(forms, form)
@@ -207,7 +207,7 @@ func (f *SemanticFormFiller) findFormsInTree(tree *semantic.SemanticTree) []*For
 	return forms
 }
 
-func (f *SemanticFormFiller) extractFormFromNode(node *semantic.SemanticNode, action semantic.Action) *FormSchema {
+func (f *SemanticFormFiller) extractFormFromNode(node *understand.SemanticNode, action understand.Action) *FormSchema {
 	form := &FormSchema{
 		Selector: node.DOMSelector,
 		Fields:   make([]FormField, 0),
@@ -223,7 +223,7 @@ func (f *SemanticFormFiller) extractFormFromNode(node *semantic.SemanticNode, ac
 
 	for _, child := range node.Children {
 		for _, childAction := range child.Actions {
-			if childAction.Type == semantic.ActionFill {
+			if childAction.Type == understand.ActionFill {
 				field := FormField{
 					Selector: childAction.Selector,
 					Type:     "text",
@@ -232,7 +232,7 @@ func (f *SemanticFormFiller) extractFormFromNode(node *semantic.SemanticNode, ac
 					field.Type = string(childAction.FillOptions.FieldType)
 				}
 				form.Fields = append(form.Fields, field)
-			} else if childAction.Type == semantic.ActionClick {
+			} else if childAction.Type == understand.ActionClick {
 				if strings.Contains(strings.ToLower(childAction.Description), "submit") ||
 					strings.Contains(strings.ToLower(childAction.Description), "login") ||
 					strings.Contains(strings.ToLower(childAction.Description), "search") {

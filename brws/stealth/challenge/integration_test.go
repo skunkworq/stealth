@@ -238,7 +238,10 @@ func TestStealthClient_AgainstAdversarialServer(t *testing.T) {
 }
 
 func TestStealthClient_DetailedAnalysis(t *testing.T) {
-	server := NewFingerprintTestServer()
+	server, err := NewFingerprintTestServer()
+	if err != nil {
+		t.Fatalf("failed to start fingerprint server: %v", err)
+	}
 	defer func() { _ = server.Close() }()
 
 	t.Run("Full fingerprint analysis", func(t *testing.T) {

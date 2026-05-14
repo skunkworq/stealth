@@ -169,14 +169,14 @@
 //
 // Use SemanticSpider for automatic extraction:
 //
-//	config := &semantic.PipelineConfig{
+//	config := &understand.PipelineConfig{
 //	    LLMClient: llmClient,
 //	}
 //
 //	spider := spider.NewSemanticSpider("crawler", startURLs, config,
 //	    spider.WithSemanticMaxDepth(3),
 //	    spider.WithAllowedDomains([]string{"example.com"}),
-//	    spider.WithOnPage(func(url string, tree *semantic.SemanticTree) {
+//	    spider.WithOnPage(func(url string, tree *understand.SemanticTree) {
 //	        log.Printf("Processed: %s → %d tokens", url, tree.CompressedTokenCount)
 //	    }),
 //	)

@@ -13,12 +13,12 @@ type Solver struct {
 	encoder    *ContrastiveEncoder
 	projector  *ProjectionHead
 	classifier *CharacterClassifier
-	config     *SolverConfig
+	config     *CaptchaEncoderConfig
 }
 
-// SolverConfig holds configuration for the CAPTCHA solver.
-// SolverConfig holds configuration for the CAPTCHA solver.
-type SolverConfig struct {
+// CaptchaEncoderConfig holds configuration for the CAPTCHA solver.
+// CaptchaEncoderConfig holds configuration for the CAPTCHA solver.
+type CaptchaEncoderConfig struct {
 	EmbeddingDim  int
 	HiddenDim     int
 	ProjectionDim int
@@ -41,9 +41,9 @@ type AugmentationConfig struct {
 	BlurRadius  float64
 }
 
-// DefaultSolverConfig provides default settings for the CAPTCHA solver.
-// DefaultSolverConfig provides default settings for the solver.
-var DefaultSolverConfig = SolverConfig{
+// DefaultCaptchaEncoderConfig provides default settings for the CAPTCHA solver.
+// DefaultCaptchaEncoderConfig provides default settings for the solver.
+var DefaultCaptchaEncoderConfig = CaptchaEncoderConfig{
 	EmbeddingDim:  128,
 	HiddenDim:     256,
 	ProjectionDim: 64,
@@ -67,14 +67,14 @@ var DefaultSolverConfig = SolverConfig{
 type ContrastiveEncoder struct {
 	weights [][]float64
 	bias    []float64
-	config  *SolverConfig
+	config  *CaptchaEncoderConfig
 }
 
 // NewContrastiveEncoder creates a new contrastive encoder.
 // NewContrastiveEncoder creates a new contrastive encoder with the given configuration.
-func NewContrastiveEncoder(config *SolverConfig) *ContrastiveEncoder {
+func NewContrastiveEncoder(config *CaptchaEncoderConfig) *ContrastiveEncoder {
 	if config == nil {
-		config = &DefaultSolverConfig
+		config = &DefaultCaptchaEncoderConfig
 	}
 	return &ContrastiveEncoder{
 		weights: initWeightMatrix(config.EmbeddingDim, config.HiddenDim),
@@ -105,14 +105,14 @@ func gaussianRandom(mean, std float64) float64 {
 type ProjectionHead struct {
 	weights [][]float64
 	bias    []float64
-	config  *SolverConfig
+	config  *CaptchaEncoderConfig
 }
 
 // NewProjectionHead creates a new projection head.
 // NewProjectionHead creates a new projection head with the given configuration.
-func NewProjectionHead(config *SolverConfig) *ProjectionHead {
+func NewProjectionHead(config *CaptchaEncoderConfig) *ProjectionHead {
 	if config == nil {
-		config = &DefaultSolverConfig
+		config = &DefaultCaptchaEncoderConfig
 	}
 	return &ProjectionHead{
 		weights: initWeightMatrix(config.HiddenDim, config.ProjectionDim),
@@ -126,14 +126,14 @@ func NewProjectionHead(config *SolverConfig) *ProjectionHead {
 type CharacterClassifier struct {
 	weights [][]float64
 	bias    []float64
-	config  *SolverConfig
+	config  *CaptchaEncoderConfig
 }
 
 // NewCharacterClassifier creates a new character classifier.
 // NewCharacterClassifier creates a new character classifier with the given configuration.
-func NewCharacterClassifier(config *SolverConfig) *CharacterClassifier {
+func NewCharacterClassifier(config *CaptchaEncoderConfig) *CharacterClassifier {
 	if config == nil {
-		config = &DefaultSolverConfig
+		config = &DefaultCaptchaEncoderConfig
 	}
 	return &CharacterClassifier{
 		weights: initWeightMatrix(config.HiddenDim, config.NumClasses),
@@ -144,9 +144,9 @@ func NewCharacterClassifier(config *SolverConfig) *CharacterClassifier {
 
 // NewSolver creates a new CAPTCHA solver instance.
 // NewSolver creates a new CAPTCHA solver with the given configuration.
-func NewSolver(config *SolverConfig) *Solver {
+func NewSolver(config *CaptchaEncoderConfig) *Solver {
 	if config == nil {
-		config = &DefaultSolverConfig
+		config = &DefaultCaptchaEncoderConfig
 	}
 	return &Solver{
 		encoder:    NewContrastiveEncoder(config),
@@ -567,14 +567,14 @@ func softmax(logits []float64) []float64 {
 type ContrastiveLearner struct {
 	solver  *Solver
 	dataset *ContrastiveDataset
-	config  *SolverConfig
+	config  *CaptchaEncoderConfig
 }
 
 // NewContrastiveLearner creates a new contrastive learner instance.
 // NewContrastiveLearner creates a new contrastive learner with the given configuration.
-func NewContrastiveLearner(config *SolverConfig) *ContrastiveLearner {
+func NewContrastiveLearner(config *CaptchaEncoderConfig) *ContrastiveLearner {
 	if config == nil {
-		config = &DefaultSolverConfig
+		config = &DefaultCaptchaEncoderConfig
 	}
 	return &ContrastiveLearner{
 		solver:  NewSolver(config),

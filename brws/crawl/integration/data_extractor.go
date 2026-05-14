@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 type DataExtractor struct {
@@ -51,7 +51,7 @@ type TableSpec struct {
 	RowSelector string
 }
 
-type CustomExtractor func(*semantic.SemanticTree) (map[string]interface{}, error)
+type CustomExtractor func(*understand.SemanticTree) (map[string]interface{}, error)
 
 type ExtractionResult struct {
 	URL         string
@@ -122,7 +122,7 @@ func (e *DataExtractor) Extract(ctx context.Context, url string) (*ExtractionRes
 	return result, nil
 }
 
-func (e *DataExtractor) extractTree(ctx context.Context, url string) (*semantic.SemanticTree, error) {
+func (e *DataExtractor) extractTree(ctx context.Context, url string) (*understand.SemanticTree, error) {
 	navResult, err := e.navigator.NavigateWithIntent(ctx, url, "")
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func (e *DataExtractor) matchSchema(url string) *ExtractionSchema {
 	return nil
 }
 
-func (e *DataExtractor) extractBySchema(tree *semantic.SemanticTree, schema *ExtractionSchema) map[string]interface{} {
+func (e *DataExtractor) extractBySchema(tree *understand.SemanticTree, schema *ExtractionSchema) map[string]interface{} {
 	data := make(map[string]interface{})
 
 	for _, field := range schema.Fields {
@@ -175,7 +175,7 @@ func (e *DataExtractor) extractBySchema(tree *semantic.SemanticTree, schema *Ext
 	return data
 }
 
-func (e *DataExtractor) extractField(tree *semantic.SemanticTree, spec FieldSpec) string {
+func (e *DataExtractor) extractField(tree *understand.SemanticTree, spec FieldSpec) string {
 	if spec.Selector != "" {
 		node := tree.FindNode(spec.Selector)
 		if node != nil {
@@ -221,7 +221,7 @@ func (e *DataExtractor) transformValue(value string, spec FieldSpec) string {
 	}
 }
 
-func (e *DataExtractor) extractList(tree *semantic.SemanticTree, spec ListSpec) []interface{} {
+func (e *DataExtractor) extractList(tree *understand.SemanticTree, spec ListSpec) []interface{} {
 	items := make([]interface{}, 0)
 
 	if spec.Selector != "" {
@@ -232,7 +232,7 @@ func (e *DataExtractor) extractList(tree *semantic.SemanticTree, spec ListSpec) 
 			if len(items) >= spec.MaxItems && spec.MaxItems > 0 {
 				break
 			}
-			value := e.extractField(&semantic.SemanticTree{RootNodes: []semantic.SemanticNode{*node}}, spec.ItemSpec)
+			value := e.extractField(&understand.SemanticTree{RootNodes: []understand.SemanticNode{*node}}, spec.ItemSpec)
 			if value != "" {
 				items = append(items, value)
 			}
@@ -242,7 +242,7 @@ func (e *DataExtractor) extractList(tree *semantic.SemanticTree, spec ListSpec) 
 	return items
 }
 
-func (e *DataExtractor) extractTable(tree *semantic.SemanticTree, spec TableSpec) [][]string {
+func (e *DataExtractor) extractTable(tree *understand.SemanticTree, spec TableSpec) [][]string {
 	if spec.Selector == "" {
 		return nil
 	}
@@ -259,7 +259,7 @@ func (e *DataExtractor) extractTable(tree *semantic.SemanticTree, spec TableSpec
 	return table
 }
 
-func (e *DataExtractor) extractByHeuristics(tree *semantic.SemanticTree) map[string]interface{} {
+func (e *DataExtractor) extractByHeuristics(tree *understand.SemanticTree) map[string]interface{} {
 	data := make(map[string]interface{})
 
 	data["title"] = tree.Title
@@ -268,7 +268,7 @@ func (e *DataExtractor) extractByHeuristics(tree *semantic.SemanticTree) map[str
 	links := make([]string, 0)
 	for _, node := range tree.AllNodes() {
 		for _, action := range node.Actions {
-			if action.Type == semantic.ActionClick {
+			if action.Type == understand.ActionClick {
 				if strings.HasPrefix(action.Selector, "a[href") ||
 					strings.HasPrefix(action.Selector, "a[") {
 					links = append(links, action.Description)
@@ -298,14 +298,14 @@ func (e *DataExtractor) extractByHeuristics(tree *semantic.SemanticTree) map[str
 	return data
 }
 
-func (e *DataExtractor) extractForms(tree *semantic.SemanticTree) []map[string]string {
+func (e *DataExtractor) extractForms(tree *understand.SemanticTree) []map[string]string {
 	forms := make([]map[string]string, 0)
 
 	formRE := regexp.MustCompile(`(?i)(login|signup|register|signin|contact|search|form)`)
 
 	for _, node := range tree.AllNodes() {
 		for _, action := range node.Actions {
-			if action.Type == semantic.ActionFill {
+			if action.Type == understand.ActionFill {
 				if formRE.MatchString(action.Description) {
 					forms = append(forms, map[string]string{
 						"field":    action.Description,
@@ -319,7 +319,7 @@ func (e *DataExtractor) extractForms(tree *semantic.SemanticTree) []map[string]s
 	return forms
 }
 
-func (e *DataExtractor) extractImages(tree *semantic.SemanticTree) []string {
+func (e *DataExtractor) extractImages(tree *understand.SemanticTree) []string {
 	images := make([]string, 0)
 
 	for _, node := range tree.AllNodes() {
@@ -333,7 +333,7 @@ func (e *DataExtractor) extractImages(tree *semantic.SemanticTree) []string {
 	return images
 }
 
-func (e *DataExtractor) extractHeadings(tree *semantic.SemanticTree) []string {
+func (e *DataExtractor) extractHeadings(tree *understand.SemanticTree) []string {
 	headings := make([]string, 0)
 
 	for _, node := range tree.AllNodes() {

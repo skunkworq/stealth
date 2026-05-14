@@ -113,7 +113,7 @@ The Stealth layer is the **anti-detection brain**. It sits between the user and 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      stealth.Client                         │
+│                      stealth.Adaptive                         │
 ├─────────────────────────────────────────────────────────────┤
 │  Session Manager  │  Reuses cookies, localStorage, profiles │
 │  Challenge Solver │  Auto-detects & solves CAPTCHAs         │
@@ -413,7 +413,7 @@ fmt.Println(string(resp.Body))
 ```go
 import "github.com/skunkworq/stealth/brws/stealth"
 
-client, _ := stealth.NewWithConfig(&stealth.Config{
+client, _ := stealth.NewAdaptiveWithConfig(&stealth.Config{
     EngineName: "chromium",
     Headless:   true,
     Stealth: &stealth.StealthConfig{
@@ -541,30 +541,29 @@ stealth train --urls https://google.com,https://github.com --output training-dat
 
 ## CLI Tools Reference
 
-| Tool | File | Purpose |
+| Tool | Path | Purpose |
 |------|------|---------|
-| `stealth` | `cmd/stealth` | Main CLI — fetch, crawl, spider, lab, train, shell |
-| `brwslab` | `cmd/brwslab` | Network fidelity — fingerprint, diff, trace, session |
-| `semantic` | `cmd/semantic` | Extract semantic trees from URLs |
-| `semantic-server` | `cmd/semantic-server` | HTTP API for semantic extraction |
-| `semantic-mcp` | `cmd/semantic-mcp` | MCP server for Claude Desktop |
-| `semanticcrawl` | `cmd/semanticcrawl` | Semantic crawler with LLM extraction |
-| `stealth-mcp` | `cmd/stealth-mcp` | MCP server for stealth operations |
-| `labd` | `cmd/labd` | Fingerprint lab daemon |
-| `agent` | `cmd/agent` | Browser automation — observe, execute, step |
-| `extract` | `cmd/extract` | Structured content extraction CLI |
-| `train` | `cmd/train` | ML training data generation |
-| `ml_datagen` | `cmd/ml_datagen` | ML dataset generation |
-| `benchmark` | `cmd/benchmark` | Performance benchmarks |
-| `evalbench` | `cmd/evalbench` | Evaluation suite |
-| `eval_e2e` | `cmd/eval_e2e` | End-to-end evaluation |
-| `vecbench` | `cmd/vecbench` | Vector/benchmark tooling |
-| `scanciphers` | `cmd/scanciphers` | TLS cipher scanner |
-| `crawl` | `cmd/crawl` | Standalone crawler |
-| `pipeline` | `cmd/pipeline` | Processing pipeline |
+| `stealth` | `cmd/scrape/stealth/stealth` | Main stealth fetch/crawl CLI |
+| `stealth-mcp` | `cmd/scrape/stealth/stealth-mcp` | MCP server for stealth operations |
+| `agent` | `cmd/scrape/agent/agent` | Browser automation — observe, execute, step |
+| `agent-server` | `cmd/scrape/agent/server` | WebSocket/REST hub for the agent UI |
+| `crawl` | `cmd/scrape/core/crawl` | Standalone crawler |
+| `extract` | `cmd/scrape/core/extract` | Structured content extraction CLI |
+| `pipeline` | `cmd/scrape/core/pipeline` | Processing pipeline |
+| `semanticcrawl` | `cmd/scrape/core/semanticcrawl` | Semantic crawler with LLM extraction |
+| `semantic` | `cmd/semantic/cli/semantic` | Extract semantic trees from URLs |
+| `semantic-server` | `cmd/semantic/server/semantic-server` | HTTP API for semantic extraction |
+| `semantic-mcp` | `cmd/semantic/server/semantic-mcp` | MCP server for Claude Desktop |
+| `brwslab` | `cmd/lab/cli/brwslab` | Network fidelity — fingerprint, diff, trace, session |
+| `scanciphers` | `cmd/lab/cli/scanciphers` | TLS cipher scanner |
+| `labd` | `cmd/lab/server/labd` | Fingerprint lab daemon |
+| `ml_datagen` | `cmd/ml/train/ml_datagen` | ML dataset generation |
+| `evalbench` | `cmd/bench/evalbench` | Evaluation suite |
+| `eval_e2e` | `cmd/bench/eval_e2e` | End-to-end evaluation |
+| `vecbench` | `cmd/bench/vecbench` | Vector/benchmark tooling |
 | `test_realworld` | `cmd/test_realworld` | Real-world integration tests |
 | `test_semantic` | `cmd/test_semantic` | Semantic pipeline tests |
-| `gencert` | `cmd/gencert` | TLS cert generation for MITM |
+| `gencert` | `cmd/lab/cli/gencert` | TLS cert generation for MITM |
 
 ---
 

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -306,7 +305,7 @@ type Analysis struct {
 }
 
 // NewFingerprintTestServer creates a new fingerprint test server
-func NewFingerprintTestServer() *FingerprintTestServer {
+func NewFingerprintTestServer() (*FingerprintTestServer, error) {
 	fts := &FingerprintTestServer{
 		Detections: make([]FingerprintDetection, 0),
 	}
@@ -323,14 +322,14 @@ func NewFingerprintTestServer() *FingerprintTestServer {
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		log.Fatalf("Failed to listen: %v", err)
+		return nil, fmt.Errorf("listen: %w", err)
 	}
 	fts.Listener = ln
 	fts.URL = "http://" + ln.Addr().String()
 
 	go func() { _ = fts.Server.Serve(ln) }()
 
-	return fts
+	return fts, nil
 }
 
 func (fts *FingerprintTestServer) handleRequest(w http.ResponseWriter, r *http.Request) {

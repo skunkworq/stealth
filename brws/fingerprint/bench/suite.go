@@ -277,7 +277,7 @@ func (sr *SuiteRunner) testEndpoint(
 		URL:               endpoint.URL,
 		FollowRedirects:   true,
 		Timeout:           timeout,
-		WaitForNavigation: eng.Capabilities().JavaScript,
+		LoadStrategy: engine.LoadLoad,
 	})
 	result.Duration = time.Since(start)
 

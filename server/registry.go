@@ -209,7 +209,7 @@ func toolBrowse(ctx context.Context, args map[string]interface{}) (interface{}, 
 	if url == "" {
 		return nil, fmt.Errorf("url is required")
 	}
-	// Stub: return placeholder. In production, wire to stealth.Client.Navigate().
+	// Stub: return placeholder. In production, wire to stealth.Adaptive.Navigate().
 	return map[string]interface{}{
 		"url":     url,
 		"title":   "Page Title",

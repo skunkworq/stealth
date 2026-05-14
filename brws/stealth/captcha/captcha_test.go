@@ -186,7 +186,7 @@ func TestSolver(t *testing.T) {
 }
 
 func TestSolverConfig(t *testing.T) {
-	config := &SolverConfig{
+	config := &CaptchaEncoderConfig{
 		EmbeddingDim:  128,
 		HiddenDim:     256,
 		ProjectionDim: 64,

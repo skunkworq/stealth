@@ -44,7 +44,7 @@ Before starting any enhancement loop, establish a working baseline:
 
 1. **Ensure `labd` is running** for local TLS/fingerprint capture:
    ```bash
-   cd cmd/labd && go build -o lab_server . && ./lab_server
+   cd cmd/lab/server/labd && go build -o lab_server . && ./lab_server
    ```
    This starts HTTPS on `:8443`, HTTP on `:8080`, Proxy on `:8081`.
 
@@ -141,9 +141,9 @@ Before starting any enhancement loop, establish a working baseline:
 **Goal:** Verify TLS-layer changes produce the correct JA3/JA4 fingerprint.
 
 ### Step 3a: Capture Chromium Baseline
-- Use `cmd/eval_e2e/main.go` configured to launch headless Chromium against `labd`:
+- Use `cmd/bench/eval_e2e/main.go` configured to launch headless Chromium against `labd`:
   ```bash
-  cd brws/cmd/eval_e2e && go run main.go
+  cd cmd/bench/eval_e2e && go run main.go
   ```
 - Record the Chromium JA3 hash from `curl -s http://localhost:8080/captures | jq`.
 
@@ -219,8 +219,8 @@ go test ./brws/adversarial/... -count=1 -run TestCloudflareChallenge -v
 ### Test Harnesses
 | File | Purpose |
 |---|---|
-| `brws/cmd/eval_e2e/main.go` | End-to-end TLS/fingerprint evaluator |
-| `cmd/labd/main.go` | Local TLS capture lab server |
+| `cmd/bench/eval_e2e/main.go` | End-to-end TLS/fingerprint evaluator |
+| `cmd/lab/server/labd/main.go` | Local TLS capture lab server |
 
 ## Common Pitfalls
 

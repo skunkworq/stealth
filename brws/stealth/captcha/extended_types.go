@@ -609,8 +609,8 @@ func (a *AudioCaptcha) IsExpired() bool {
 	return time.Now().After(a.ExpiresAt)
 }
 
-// BehavioralConfig holds configuration for behavioral analysis.
-type BehavioralConfig struct {
+// BehaviorSimConfig holds configuration for behavioral analysis.
+type BehaviorSimConfig struct {
 	MouseMovements   bool
 	Keystrokes       bool
 	ScrollPatterns   bool
@@ -621,8 +621,8 @@ type BehavioralConfig struct {
 	PatternThreshold float64
 }
 
-// DefaultBehavioralConfig provides default settings for behavioral analysis.
-var DefaultBehavioralConfig = BehavioralConfig{
+// DefaultBehaviorSimConfig provides default settings for behavioral analysis.
+var DefaultBehaviorSimConfig = BehaviorSimConfig{
 	MouseMovements:   true,
 	Keystrokes:       true,
 	ScrollPatterns:   true,
@@ -657,7 +657,7 @@ type BehavioralProfile struct {
 }
 
 // NewBehavioralProfile creates a new behavioral profile for analysis.
-func NewBehavioralProfile(_ *BehavioralConfig) *BehavioralProfile {
+func NewBehavioralProfile(_ *BehaviorSimConfig) *BehavioralProfile {
 	return &BehavioralProfile{
 		Events: make([]BehavioralEvent, 0),
 	}
@@ -958,7 +958,7 @@ func (s *CaptchaService) CreateAudio(cfg *AudioConfig) (*AudioCaptcha, error) {
 
 // CreateBehavioralProfile creates a new behavioral profile for session analysis.
 // CreateBehavioralProfile creates a new behavioral profile for the given session ID.
-func (s *CaptchaService) CreateBehavioralProfile(sessionID string, cfg *BehavioralConfig) *BehavioralProfile {
+func (s *CaptchaService) CreateBehavioralProfile(sessionID string, cfg *BehaviorSimConfig) *BehavioralProfile {
 	profile := NewBehavioralProfile(cfg)
 	s.Behavioral[sessionID] = profile
 	return profile

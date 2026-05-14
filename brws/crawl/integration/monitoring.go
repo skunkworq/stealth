@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 type PriceMonitor struct {
@@ -118,10 +118,10 @@ func (m *PriceMonitor) CheckPrice(ctx context.Context, url string) (*PriceInfo, 
 	return info, nil
 }
 
-func (m *PriceMonitor) findPriceNode(tree *semantic.SemanticTree) *semantic.SemanticNode {
+func (m *PriceMonitor) findPriceNode(tree *understand.SemanticTree) *understand.SemanticNode {
 	priceKeywords := []string{"price", "cost", "$", "€", "£", "USD", "EUR", "GBP"}
 
-	var bestMatch *semantic.SemanticNode
+	var bestMatch *understand.SemanticNode
 	bestScore := 0
 
 	for _, node := range tree.AllNodes() {
@@ -201,7 +201,7 @@ func (m *PriceMonitor) detectCurrency(text string) string {
 	return "USD"
 }
 
-func (m *PriceMonitor) checkAvailability(tree *semantic.SemanticTree) bool {
+func (m *PriceMonitor) checkAvailability(tree *understand.SemanticTree) bool {
 	inStockKeywords := []string{"in stock", "available", "add to cart", "buy now"}
 	outOfStockKeywords := []string{"out of stock", "unavailable", "sold out", "notify me"}
 
@@ -224,7 +224,7 @@ func (m *PriceMonitor) checkAvailability(tree *semantic.SemanticTree) bool {
 	return true
 }
 
-func (m *PriceMonitor) findPriceVariants(tree *semantic.SemanticTree) map[string]float64 {
+func (m *PriceMonitor) findPriceVariants(tree *understand.SemanticTree) map[string]float64 {
 	variants := make(map[string]float64)
 
 	for _, node := range tree.AllNodes() {
@@ -240,7 +240,7 @@ func (m *PriceMonitor) findPriceVariants(tree *semantic.SemanticTree) map[string
 	return variants
 }
 
-func (m *PriceMonitor) extractVariantName(node *semantic.SemanticNode) string {
+func (m *PriceMonitor) extractVariantName(node *understand.SemanticNode) string {
 	summary := node.Summary
 
 	if strings.Contains(summary, "Size") || strings.Contains(summary, "size") {
@@ -356,7 +356,7 @@ func (m *PriceMonitor) Close() {
 }
 
 type ABTestDetector struct {
-	trees   sync.Map // map[string][]*semantic.SemanticTree
+	trees   sync.Map // map[string][]*understand.SemanticTree
 	results sync.Map // map[string]*ABTestResult
 }
 
@@ -372,7 +372,7 @@ type ABTestResult struct {
 type VariantGroup struct {
 	StructuralHash string
 	Occurrences    int
-	SampleTree     *semantic.SemanticTree
+	SampleTree     *understand.SemanticTree
 	Differences    []string
 }
 
@@ -380,17 +380,17 @@ func NewABTestDetector() *ABTestDetector {
 	return &ABTestDetector{}
 }
 
-func (d *ABTestDetector) RecordSample(url string, tree *semantic.SemanticTree) *ABTestResult {
+func (d *ABTestDetector) RecordSample(url string, tree *understand.SemanticTree) *ABTestResult {
 	if val, ok := d.trees.Load(url); ok {
-		trees := val.([]*semantic.SemanticTree)
+		trees := val.([]*understand.SemanticTree)
 		trees = append(trees, tree)
 		d.trees.Store(url, trees)
 	} else {
-		d.trees.Store(url, []*semantic.SemanticTree{tree})
+		d.trees.Store(url, []*understand.SemanticTree{tree})
 	}
 
 	val, _ := d.trees.Load(url)
-	trees := val.([]*semantic.SemanticTree)
+	trees := val.([]*understand.SemanticTree)
 
 	if len(trees) >= 5 {
 		return d.Detect(url)
@@ -409,7 +409,7 @@ func (d *ABTestDetector) Detect(url string) *ABTestResult {
 		return &ABTestResult{URL: url, Detected: false}
 	}
 
-	trees := val.([]*semantic.SemanticTree)
+	trees := val.([]*understand.SemanticTree)
 	if len(trees) < 5 {
 		return &ABTestResult{
 			URL:        url,
@@ -445,13 +445,13 @@ func (d *ABTestDetector) Detect(url string) *ABTestResult {
 	return result
 }
 
-func (d *ABTestDetector) clusterByStructure(trees []*semantic.SemanticTree) map[string][]*semantic.SemanticTree {
-	groups := make(map[string][]*semantic.SemanticTree)
+func (d *ABTestDetector) clusterByStructure(trees []*understand.SemanticTree) map[string][]*understand.SemanticTree {
+	groups := make(map[string][]*understand.SemanticTree)
 
 	for _, tree := range trees {
 		hash := tree.StructuralHash
 		if _, exists := groups[hash]; !exists {
-			groups[hash] = make([]*semantic.SemanticTree, 0)
+			groups[hash] = make([]*understand.SemanticTree, 0)
 		}
 		groups[hash] = append(groups[hash], tree)
 	}
@@ -459,7 +459,7 @@ func (d *ABTestDetector) clusterByStructure(trees []*semantic.SemanticTree) map[
 	return groups
 }
 
-func (d *ABTestDetector) calculateConfidence(groups map[string][]*semantic.SemanticTree, total int) float32 {
+func (d *ABTestDetector) calculateConfidence(groups map[string][]*understand.SemanticTree, total int) float32 {
 	if len(groups) < 2 {
 		return 0
 	}

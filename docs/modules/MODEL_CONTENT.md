@@ -25,7 +25,7 @@
 
 ---
 
-## Agent (`content/interact/`)
+## Agent (`content/agent/`)
 
 CDP-based browser agent implementing the classic **observe → decide → execute** loop.
 
@@ -140,7 +140,7 @@ func (c *LLMClient) CompleteJSON(ctx, systemPrompt, userPrompt string, v interfa
 
 ---
 
-## Graph Pipeline (`content/pipeline/`)
+## Graph Pipeline (`content/scrapegraph/`)
 
 **New side-arm** — ScrapeGraphAI-style directed-graph execution engine.
 
@@ -210,20 +210,19 @@ Spider and pipeline infrastructure for large-scale crawling.
 
 | File | Description |
 |---|---|
-| `content/interact/agent.go` | Agent orchestrator |
-| `content/interact/observer.go` | CDP page observation |
-| `content/interact/executor.go` | Action execution on browser |
-| `content/interact/types.go` | Agent types (PageSnapshot, Action, Context) |
+| `content/agent/agent.go` | Agent orchestrator |
+| `content/agent/observer.go` | CDP page observation |
+| `content/agent/executor.go` | Action execution on browser |
+| `content/agent/types.go` | Agent types (PageSnapshot, Action, Context) |
 | `content/understand/pipeline.go` | Semantic analysis pipeline |
 | `content/understand/tree.go` | Semantic tree builder |
 | `content/understand/llm.go` | LLM client for semantic pipeline |
 | `content/understand/vision_grounding.go` | Vision-based element grounding |
-| `content/pipeline/engine.go` | Graph execution engine |
-| `content/pipeline/nodes_core.go` | FetchNode, ParseNode |
-| `content/pipeline/nodes_llm.go` | LLM-driven nodes |
-| `content/pipeline/nodes_control.go` | ConditionalNode |
-| `content/pipeline/graphs.go` | SmartScraperGraph, SearchGraph |
-| `content/repr/repr.go` | ContentRepr interface — SnapshotRepr, TextChunkRepr, TemplateRepr |
+| `content/scrapegraph/engine.go` | Graph execution engine |
+| `content/scrapegraph/nodes_core.go` | FetchNode, ParseNode |
+| `content/scrapegraph/nodes_llm.go` | LLM-driven nodes |
+| `content/scrapegraph/nodes_control.go` | ConditionalNode |
+| `content/scrapegraph/graphs.go` | SmartScraperGraph, SearchGraph |
 | `crawl/spider/spider.go` | Core spider |
 | `crawl/spider/scheduler.go` | URL frontier |
 | `crawl/integration/orchestrator.go` | Crawl orchestrator |

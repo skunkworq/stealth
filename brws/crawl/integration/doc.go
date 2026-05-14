@@ -1,43 +1,59 @@
-// Package integration provides the convergence layer between stealth browser
-// automation and semantic web extraction.
+// Package integration bridges stealth browser automation with semantic web
+// extraction for intent-driven crawling at scale.
 //
-// This package bridges:
-//   - brws/stealth (browser automation, CAPTCHA solving, fingerprinting)
-//   - brws/semantic (content extraction, compression, vector search)
-//   - brws/pipeline (crawling, instrumentation)
+// It sits above both stealth/ (browser automation, CAPTCHA solving,
+// fingerprinting) and content/semantic (semantic tree parsing, compression,
+// vector search), combining them into components that operate on semantic
+// page representations rather than raw HTML.
 //
-// # Architecture
+// # Components
 //
-// The integration layer provides three main components:
+//   - Navigator         — navigates to a URL with a semantic intent (e.g.
+//                         "find the login form"); uses the semantic tree to
+//                         locate and interact with the target element.
 //
-//  1. SemanticNavigator - Navigate pages using semantic understanding
-//  2. SemanticFormFiller - Auto-fill forms from semantic schema
-//  3. SmartCrawler - Crawl with semantic prioritization
+//   - SmartNavigator    — multi-step navigation with semantic-tree diffing
+//                         and backtracking when a step fails.
 //
-// # Quick Start
+//   - FormFiller        — detects and fills forms using semantic field
+//                         matching; accepts a map[string]string of field
+//                         labels to values.
 //
-// Basic semantic navigation:
+//   - ChangeDetector    — compares semantic trees across two visits to the
+//                         same URL and reports meaningful content changes,
+//                         ignoring structural noise.
 //
-//	client, _ := stealth.New()
-//	pipe, _ := pipeline.New(config)
+//   - DataExtractor     — pulls structured data from a semantic tree using
+//                         caller-supplied schema templates.
 //
-//	nav := integration.NewSemanticNavigator(client, pipe)
-//	result, _ := nav.NavigateWithIntent(ctx, url, "find login form")
+//   - AdaptiveCrawler   — steers the crawl frontier using semantic quality
+//                         signals (extraction yield, freshness, challenge
+//                         rate). Reads strategy hints from ml/adaptive.
 //
-// # Semantic Form Filling
+//   - SessionManager    — manages a pool of stealth sessions across
+//                         AdaptiveCrawler workers; retires blocked sessions.
 //
-// Auto-detect and fill forms:
+//   - Orchestrator      — top-level coordinator that wires the above
+//                         components into a full crawl run.
 //
-//	filler := integration.NewSemanticFormFiller(client)
-//	_ = filler.Fill(ctx, "https://example.com/signup", map[string]string{
-//	    "email": "user@example.com",
-//	    "name":  "John Doe",
-//	})
+//   - Monitoring        — emits crawl-specific metrics: pages/s, extraction
+//                         quality score, challenge rate per domain.
 //
-// # Smart Crawling
+// # Relationship to crawl/spider
 //
-// Crawl with semantic prioritization:
+// crawl/spider is a general-purpose high-throughput crawler that operates on
+// raw HTTP responses (no live browser required). Use it when JS rendering and
+// anti-bot handling are not needed.
 //
-//	crawler := integration.NewSmartCrawler(client, pipe)
-//	results := crawler.Crawl(ctx, seedURLs, "find product pages")
+// crawl/integration requires a live stealth browser and the semantic pipeline.
+// Use it when you need intent-driven navigation, form interaction, or
+// semantic-quality-driven frontier management.
+//
+// # Quick start
+//
+//	client, _ := stealth.NewAdaptive(stealth.WithChallengeSolver("capsolver", key))
+//	pipe := understand.NewPipeline(understand.DefaultConfig())
+//
+//	crawler := integration.NewAdaptiveCrawler(client, pipe)
+//	crawler.Crawl(ctx, []string{"https://shop.com"}, "find product listings")
 package integration

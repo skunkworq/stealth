@@ -122,6 +122,13 @@ func NewTypingSimulator(baseDelay time.Duration) *TypingSimulator {
 	}
 }
 
+// CharDelay returns a single randomised inter-keystroke delay drawn from the
+// simulator's configured range. Use this when typing via CDP (e.g. SendKeys)
+// rather than JS event dispatch, which cannot type into native input elements.
+func (t *TypingSimulator) CharDelay() time.Duration {
+	return randomDuration(t.minDelay, t.maxDelay)
+}
+
 // Type generates JavaScript to simulate typing the given text
 // Includes realistic delays between keystrokes and occasional backspace corrections
 func (t *TypingSimulator) Type(text string) string {

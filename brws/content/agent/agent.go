@@ -17,7 +17,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/browser/engine"
+	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 
@@ -31,7 +32,7 @@ const (
 
 // Config controls agent behavior.
 type Config struct {
-	MaxRetries    int           // How many times to retry a failed action
+	MaxRetries    int           // Reserved; not used by the agent loop itself.
 	SettleDelay   time.Duration // Wait after page changes before re-observing
 	ActionTimeout time.Duration // Timeout for any single action
 	HistorySize   int           // Max steps to keep in memory
@@ -44,7 +45,7 @@ type Config struct {
 	// StealthClient optionally provides challenge-aware navigation and
 	// anti-detection. When set, the agent creates its browser tabs from
 	// the stealth client's browser instance so that session state is shared.
-	StealthClient *stealth.Client
+	StealthClient *stealth.Adaptive
 
 	// SemanticMode enables semantic enrichment of observations.
 	// When true, the observer will build a semantic tree and extract
@@ -59,11 +60,33 @@ type Config struct {
 	// PipelineConfig provides the semantic pipeline configuration.
 	// If nil and LLM features are enabled, the agent attempts to
 	// build a config from environment variables.
-	PipelineConfig *semantic.PipelineConfig
-	// Representation controls which page representation drives the
-	// formatted prompt and action space.  "dom" (default) uses raw
-	// CDP-extracted elements; "semantic" uses the semantic tree.
+	PipelineConfig *understand.PipelineConfig
+	// Representation selects the page view the agent sends to the LLM and
+	// uses to build its action space. Choose once at construction; it does
+	// not change at runtime.
+	//
+	//   RepresentationDOM      — raw CDP elements, live bounding boxes, exact selectors.
+	//                            Higher token cost; best when precise element targeting matters.
+	//   RepresentationSemantic — compressed semantic tree built by content/semantic.
+	//                            ~40% fewer tokens; best for navigation, Q&A, and search tasks.
+	//
+	// RepresentationDOM is the default.
 	Representation Representation
+
+	// SimulateBehavior enables human-like interaction for all agent-driven
+	// actions: Bézier mouse paths before clicks, per-keystroke typing delays
+	// with occasional typo corrections, and incremental scroll physics.
+	// Adds latency (~100–500 ms per action) but reduces bot-detection risk.
+	SimulateBehavior bool
+
+	// BehaviorDelay overrides the base delay used by behavior simulators.
+	// Zero uses built-in defaults (50–200 ms typing, 100–300 ms scroll lead).
+	BehaviorDelay time.Duration
+
+	// DefaultLoadStrategy controls when navigate actions yield control back to
+	// the agent loop. Defaults to LoadLoad (window.onload) when zero.
+	// Use LoadNetworkIdle for SPAs that fetch data after the initial load event.
+	DefaultLoadStrategy engine.LoadStrategy
 }
 
 // DefaultConfig returns production-ready defaults.
@@ -125,6 +148,9 @@ func newAgent(cfg Config, obs *Observer, fmttr *Formatter, exec *Executor) *Agen
 	if exec == nil {
 		exec = &Executor{}
 	}
+	exec.SimulateBehavior = cfg.SimulateBehavior
+	exec.BehaviorDelay = cfg.BehaviorDelay
+	exec.DefaultLoadStrategy = cfg.DefaultLoadStrategy
 
 	// Wire semantic enhancer into the observer when semantic mode is on.
 	if cfg.SemanticMode && obs.SemanticEnhancer == nil {
@@ -176,7 +202,7 @@ func (a *Agent) Observe(ctx context.Context) (*Context, []Action, string, error)
 	}
 	agCtx.Representation = a.cfg.Representation
 
-	// 3. Choose active action space based on representation
+	// 3. Choose active action space based on configured representation
 	activeSpace := agCtx.ActionSpace
 	if a.cfg.Representation == RepresentationSemantic && agCtx.SemanticActionSpace != nil {
 		activeSpace = agCtx.SemanticActionSpace
@@ -188,7 +214,7 @@ func (a *Agent) Observe(ctx context.Context) (*Context, []Action, string, error)
 	a.lastSpace = activeSpace.All()
 	a.mu.Unlock()
 
-	// 5. Format using the chosen representation
+	// 5. Format using the configured representation
 	var formatted string
 	switch a.cfg.Representation {
 	case RepresentationSemantic:
@@ -202,7 +228,6 @@ func (a *Agent) Observe(ctx context.Context) (*Context, []Action, string, error)
 
 // Execute runs a single action and records the step in history.
 func (a *Agent) Execute(ctx context.Context, action Action) (*ExecuteResult, error) {
-	// Ensure timeout
 	execCtx, cancel := context.WithTimeout(ctx, a.cfg.ActionTimeout)
 	defer cancel()
 
@@ -215,9 +240,6 @@ func (a *Agent) Execute(ctx context.Context, action Action) (*ExecuteResult, err
 		ActionSpace: a.lastSpace,
 		Decision:    action,
 		Result:      res,
-	}
-	if res != nil {
-		step.Result = res
 	}
 
 	a.mu.Lock()

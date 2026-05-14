@@ -10,7 +10,7 @@ import (
 
 	"github.com/chromedp/chromedp"
 
-	agent "github.com/skunkworq/stealth/brws/content/interact"
+	agent "github.com/skunkworq/stealth/brws/content/agent"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 
@@ -416,7 +416,7 @@ func outputStep(snap *agent.PageSnapshot, as *agent.ActionSpace, formatted strin
 // ensureAgentSession returns a chromedp context and optionally a stealth client.
 // When stealth is enabled, it creates a stealth client and a persistent tab from
 // its browser instance. Otherwise, it falls back to the standard session manager.
-func ensureAgentSession(dir, chromePath string, useStealth bool) (context.Context, context.CancelFunc, *stealth.Client, error) {
+func ensureAgentSession(dir, chromePath string, useStealth bool) (context.Context, context.CancelFunc, *stealth.Adaptive, error) {
 	if !useStealth {
 		ctx, cancel, err := ensureSession(dir, chromePath)
 		return ctx, cancel, nil, err
@@ -428,7 +428,7 @@ func ensureAgentSession(dir, chromePath string, useStealth bool) (context.Contex
 		// The stealth client doesn't accept chrome path directly,
 		// but we can set it via environment or accept the default discovery
 	}
-	sc, err := stealth.NewClient(cfg)
+	sc, err := stealth.NewAdaptiveFromConfig(cfg)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("creating stealth client: %w", err)
 	}

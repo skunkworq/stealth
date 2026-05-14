@@ -26,7 +26,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/core/constants"
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/stealth/profile"
+	"github.com/skunkworq/stealth/brws/browser/engine/profile"
 )
 
 func init() {

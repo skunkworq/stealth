@@ -20,12 +20,12 @@ import (
 	"github.com/skunkworq/stealth/brws/ml"
 	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/stealth/profile/session"
-	"github.com/skunkworq/stealth/brws/stealth/captcha/solver"
+	"github.com/skunkworq/stealth/brws/stealth/captcha/external_service"
 	challengefsm "github.com/skunkworq/stealth/brws/stealth/challenge/fsm"
 )
 
-// Client is the main entry point for the stealth browser automation library.
-type Client struct {
+// Adaptive is the main entry point for the stealth browser automation library.
+type Adaptive struct {
 	engine        engine.Engine
 	config        *Config
 	options       *Options
@@ -104,22 +104,21 @@ type Options struct {
 }
 
 // New creates a new stealth client with default configuration.
-func New(opts ...Option) (*Client, error) {
+func NewAdaptive(opts ...Option) (*Adaptive, error) {
 	cfg := DefaultConfig()
 	for _, opt := range opts {
 		opt(cfg)
 	}
-	return NewWithConfig(cfg)
+	return NewAdaptiveWithConfig(cfg)
 }
 
-// NewClient creates a new stealth client with the given configuration.
-// It is a convenience wrapper around NewWithConfig for value-based configuration.
-func NewClient(cfg Config) (*Client, error) {
-	return NewWithConfig(&cfg)
+// NewAdaptiveFromConfig creates an Adaptive from a value-typed Config.
+func NewAdaptiveFromConfig(cfg Config) (*Adaptive, error) {
+	return NewAdaptiveWithConfig(&cfg)
 }
 
-// NewWithConfig creates a new stealth client with custom configuration.
-func NewWithConfig(cfg *Config) (*Client, error) {
+// NewAdaptiveWithConfig creates an Adaptive from a pointer-typed Config.
+func NewAdaptiveWithConfig(cfg *Config) (*Adaptive, error) {
 	logLevel := "info"
 	if cfg.Instrumentation != nil {
 		logLevel = cfg.Instrumentation.LogLevel
@@ -153,13 +152,13 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		return nil, fmt.Errorf("create engine: %w", err)
 	}
 
-	return newClientWithEngine(eng, cfg, logger)
+	return newAdaptiveWithEngine(eng, cfg, logger)
 }
 
-// NewWithEngine creates a stealth client that reuses an existing engine.
+// NewAdaptiveWithEngine creates an Adaptive that reuses an existing engine.
 // This is useful when the caller already manages the browser lifecycle
 // (e.g. an agent that needs persistent tabs).
-func NewWithEngine(eng engine.Engine, cfg *Config) (*Client, error) {
+func NewAdaptiveWithEngine(eng engine.Engine, cfg *Config) (*Adaptive, error) {
 	logLevel := "info"
 	if cfg.Instrumentation != nil {
 		logLevel = cfg.Instrumentation.LogLevel
@@ -173,10 +172,10 @@ func NewWithEngine(eng engine.Engine, cfg *Config) (*Client, error) {
 	}
 
 	logger.Info("initializing stealth client with existing engine", "engine", eng.Name())
-	return newClientWithEngine(eng, cfg, logger)
+	return newAdaptiveWithEngine(eng, cfg, logger)
 }
 
-func newClientWithEngine(eng engine.Engine, cfg *Config, logger *instrumentation.Logger) (*Client, error) {
+func newAdaptiveWithEngine(eng engine.Engine, cfg *Config, logger *instrumentation.Logger) (*Adaptive, error) {
 	var sessMgr *session.Manager
 	if cfg.Session.Enabled && cfg.Session.ProfileDir != "" {
 		sessMgr, _ = session.NewManager(cfg.Session.ProfileDir)
@@ -274,7 +273,7 @@ func newClientWithEngine(eng engine.Engine, cfg *Config, logger *instrumentation
 		}
 	}
 
-	c := &Client{
+	c := &Adaptive{
 		engine:            eng,
 		options:           &Options{Timeout: 30 * time.Second},
 		config:            cfg,
@@ -305,7 +304,7 @@ func newClientWithEngine(eng engine.Engine, cfg *Config, logger *instrumentation
 }
 
 // Navigate performs a GET request to the specified URL.
-func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
+func (c *Adaptive) Navigate(ctx context.Context, url string) (*Response, error) {
 	return c.navigate(ctx, url, nil)
 }
 
@@ -313,14 +312,14 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 // The stealth engine runs its setup (scripts, headers, permissions) directly
 // on the provided tabCtx, then navigates it. This eliminates the wasteful
 // double-navigation pattern when the stealth client and agent share a tab.
-func (c *Client) NavigateOnTab(ctx context.Context, tabCtx context.Context, url string) (*Response, error) {
+func (c *Adaptive) NavigateOnTab(ctx context.Context, tabCtx context.Context, url string) (*Response, error) {
 	return c.navigate(ctx, url, tabCtx)
 }
 
 // navigate is the shared implementation for Navigate and NavigateOnTab.
 // When tabCtx is nil, it uses engine.Do() (creates a temp tab).
 // When tabCtx is non-nil, it uses engine.DoOnTab() (operates on existing tab).
-func (c *Client) navigate(ctx context.Context, url string, tabCtx context.Context) (*Response, error) {
+func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Context) (*Response, error) {
 	ctx, span := c.tracer.StartSpan(ctx, "navigate", instrumentation.SpanKindRequest)
 
 	span.SetAttribute("url", url)
@@ -542,14 +541,14 @@ func (c *Client) navigate(ctx context.Context, url string, tabCtx context.Contex
 // Scrape fetches a URL and returns the response.
 // It is a convenience alias for Navigate with a name that reflects the
 // high-level scraping intent.
-func (c *Client) Scrape(ctx context.Context, url string) (*Response, error) {
+func (c *Adaptive) Scrape(ctx context.Context, url string) (*Response, error) {
 	return c.Navigate(ctx, url)
 }
 
 // NavigateWithReferrer performs a navigation with an explicit referrer.
 // When the underlying engine is a Chromium StealthEngine with StealthPlus
 // enabled, this sets both the HTTP Referer header and document.referrer.
-func (c *Client) NavigateWithReferrer(ctx context.Context, url string, referrer string) (*Response, error) {
+func (c *Adaptive) NavigateWithReferrer(ctx context.Context, url string, referrer string) (*Response, error) {
 	c.logger.Info("navigating with referrer", "url", url, "referrer", referrer)
 
 	activeEngine := c.activeEngine()
@@ -575,7 +574,7 @@ func (c *Client) NavigateWithReferrer(ctx context.Context, url string, referrer 
 // referrer profile.  Supported profiles: "google", "bing", "duckduckgo", "random".
 // When the engine implements ProfileNavigator, the full referrer profile is
 // applied via the engine; otherwise the referrer is passed as a header.
-func (c *Client) NavigateWithSearchProfile(ctx context.Context, url string, profile string) (*Response, error) {
+func (c *Adaptive) NavigateWithSearchProfile(ctx context.Context, url string, profile string) (*Response, error) {
 	c.logger.Info("navigating with search profile", "url", url, "profile", profile)
 
 	// Extract domain for profile construction
@@ -615,7 +614,7 @@ func (c *Client) NavigateWithSearchProfile(ctx context.Context, url string, prof
 }
 
 // isCaptchaResponse returns true if the response contains a captcha/challenge.
-func (c *Client) isCaptchaResponse(resp *engine.Response) bool {
+func (c *Adaptive) isCaptchaResponse(resp *engine.Response) bool {
 	if resp == nil {
 		return false
 	}
@@ -631,7 +630,7 @@ func (c *Client) isCaptchaResponse(resp *engine.Response) bool {
 }
 
 // isCleanResponse returns true if the response doesn't contain a challenge.
-func (c *Client) isCleanResponse(resp *engine.Response) bool {
+func (c *Adaptive) isCleanResponse(resp *engine.Response) bool {
 	if resp == nil {
 		return false
 	}
@@ -657,7 +656,7 @@ func isWAFResponse(resp *engine.Response) bool {
 
 // attemptCaptchaSolve tries to solve a detected captcha, using trace-replayed
 // events when available, falling back to synthetic event generation.
-func (c *Client) attemptCaptchaSolve(ctx context.Context, targetURL string, resp *engine.Response) (*engine.Response, error) {
+func (c *Adaptive) attemptCaptchaSolve(ctx context.Context, targetURL string, resp *engine.Response) (*engine.Response, error) {
 	if c.orchestrator == nil {
 		return nil, fmt.Errorf("no challenge orchestrator configured")
 	}
@@ -726,7 +725,7 @@ func (r *Response) AttachSemanticTree(tree *understand.SemanticTree) {
 
 // Mouse moves the mouse to the specified coordinates.
 // When the underlying engine supports interaction, it delegates to the engine.
-func (c *Client) Mouse(x, y float64) error {
+func (c *Adaptive) Mouse(x, y float64) error {
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnMouseMove)
 	c.behavTracker.RecordMouseMove(x, y)
 	if ie, ok := c.engine.(engine.InteractiveEngine); ok {
@@ -738,7 +737,7 @@ func (c *Client) Mouse(x, y float64) error {
 
 // Click performs a mouse click at coordinates.
 // When the underlying engine supports interaction, it delegates to the engine.
-func (c *Client) Click(x, y float64) error {
+func (c *Adaptive) Click(x, y float64) error {
 	c.behavTracker.RecordMouseMove(x, y)
 	if ie, ok := c.engine.(engine.InteractiveEngine); ok {
 		return ie.Click(x, y)
@@ -749,7 +748,7 @@ func (c *Client) Click(x, y float64) error {
 
 // ClickSelector clicks an element matching the CSS selector.
 // Uses JavaScript to find and click the element. Requires a JS-capable engine.
-func (c *Client) ClickSelector(ctx context.Context, selector string) error {
+func (c *Adaptive) ClickSelector(ctx context.Context, selector string) error {
 	if !c.engine.Capabilities().JavaScript {
 		return fmt.Errorf("click by selector requires JavaScript-capable engine")
 	}
@@ -781,7 +780,7 @@ func (c *Client) ClickSelector(ctx context.Context, selector string) error {
 
 // Type simulates typing text.
 // When the underlying engine supports interaction, it delegates to the engine.
-func (c *Client) Type(text string) error {
+func (c *Adaptive) Type(text string) error {
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnType)
 	c.behavTracker.RecordKeystroke()
 	if ie, ok := c.engine.(engine.InteractiveEngine); ok {
@@ -793,7 +792,7 @@ func (c *Client) Type(text string) error {
 
 // Scroll scrolls the page.
 // When the underlying engine supports interaction, it delegates to the engine.
-func (c *Client) Scroll(pixels float64) error {
+func (c *Adaptive) Scroll(pixels float64) error {
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnScroll)
 	if ie, ok := c.engine.(engine.InteractiveEngine); ok {
 		return ie.Scroll(pixels)
@@ -804,12 +803,12 @@ func (c *Client) Scroll(pixels float64) error {
 
 // BehavioralSnapshot returns the accumulated behavioral data from this session.
 // Useful for training data collection and self-evaluation.
-func (c *Client) BehavioralSnapshot() *behavior.EventData {
+func (c *Adaptive) BehavioralSnapshot() *behavior.EventData {
 	return c.behavTracker.Snapshot()
 }
 
 // ResetBehavioralTracker clears the accumulated behavioral data.
-func (c *Client) ResetBehavioralTracker() {
+func (c *Adaptive) ResetBehavioralTracker() {
 	c.behavTracker = NewBehavioralTracker()
 }
 
@@ -817,7 +816,7 @@ func (c *Client) ResetBehavioralTracker() {
 // supports it. This allows external callers (e.g. the agent) to create
 // persistent tabs inside the same browser instance so that cookies and session
 // state are shared with the stealth client.
-func (c *Client) BrowserContext() (context.Context, bool) {
+func (c *Adaptive) BrowserContext() (context.Context, bool) {
 	if ae, ok := c.engine.(engine.AllocatorEngine); ok {
 		return ae.Allocator(), true
 	}
@@ -827,7 +826,7 @@ func (c *Client) BrowserContext() (context.Context, bool) {
 // NewTab creates a new persistent tab inside the stealth browser.
 // The caller is responsible for calling the returned cancel function.
 // Cookies and session state from previous stealth navigations are shared.
-func (c *Client) NewTab() (context.Context, context.CancelFunc, bool) {
+func (c *Adaptive) NewTab() (context.Context, context.CancelFunc, bool) {
 	if tc, ok := c.engine.(engine.TabCreator); ok {
 		ctx, cancel := tc.NewTab()
 		return ctx, cancel, true
@@ -836,12 +835,12 @@ func (c *Client) NewTab() (context.Context, context.CancelFunc, bool) {
 }
 
 // Engine returns the underlying engine for advanced use cases.
-func (c *Client) Engine() engine.Engine {
+func (c *Adaptive) Engine() engine.Engine {
 	return c.activeEngine()
 }
 
 // activeEngine returns the waterfall engine if configured, otherwise the raw engine.
-func (c *Client) activeEngine() engine.Engine {
+func (c *Adaptive) activeEngine() engine.Engine {
 	if c.waterfall != nil {
 		return c.waterfall
 	}
@@ -849,14 +848,14 @@ func (c *Client) activeEngine() engine.Engine {
 }
 
 // Close closes the client and all associated resources.
-func (c *Client) Close() error {
+func (c *Adaptive) Close() error {
 	c.logger.Info("closing stealth client")
 	_ = c.hooks.Execute(context.Background(), instrumentation.HookNames.OnBrowserClose)
 	return c.engine.Close()
 }
 
 // EscalationMetrics returns a snapshot of escalation-related metrics.
-func (c *Client) EscalationMetrics() *EscalationMetricsSnapshot {
+func (c *Adaptive) EscalationMetrics() *EscalationMetricsSnapshot {
 	snap := &EscalationMetricsSnapshot{}
 
 	if c.waterfall != nil {
@@ -894,13 +893,13 @@ type EscalationMetricsSnapshot struct {
 }
 
 // Orchestrator returns the challenge orchestrator, if configured.
-func (c *Client) Orchestrator() *challengefsm.ChallengeOrchestrator {
+func (c *Adaptive) Orchestrator() *challengefsm.ChallengeOrchestrator {
 	return c.orchestrator
 }
 
 // registerSolvers registers all available solvers with the orchestrator registry.
 // Solvers are registered in priority order: CF → CAPTCHA → DataDome.
-func (c *Client) registerSolvers(registry *challengefsm.SolverRegistry) {
+func (c *Adaptive) registerSolvers(registry *challengefsm.SolverRegistry) {
 	// 1. Cloudflare solver (wraps existing cfSolver)
 	if c.cfSolver != nil {
 		cfSolver := challengefsm.NewCloudflareFSMSolver(
@@ -995,31 +994,31 @@ func (c *Client) registerSolvers(registry *challengefsm.SolverRegistry) {
 }
 
 // Hooks returns the hook registry for custom behavior.
-func (c *Client) Hooks() *instrumentation.HookRegistry {
+func (c *Adaptive) Hooks() *instrumentation.HookRegistry {
 	return c.hooks
 }
 
 // Tracer returns the tracer for request tracing.
-func (c *Client) Tracer() *instrumentation.Tracer {
+func (c *Adaptive) Tracer() *instrumentation.Tracer {
 	return c.tracer
 }
 
 // FSM returns the request state machine.
-func (c *Client) FSM() *instrumentation.FSM {
+func (c *Adaptive) FSM() *instrumentation.FSM {
 	return c.fsm
 }
 
 // Logger returns the logger.
-func (c *Client) Logger() *instrumentation.Logger {
+func (c *Adaptive) Logger() *instrumentation.Logger {
 	return c.logger
 }
 
 // Solver returns a challenge solver (requires API key configuration).
-func (c *Client) Solver() (solver.Solver, error) {
+func (c *Adaptive) Solver() (external_service.Solver, error) {
 	if c.config.Challenge.SolverAPIKey == "" {
 		return nil, fmt.Errorf("solver API key not configured")
 	}
-	return solver.NewSolver(solver.SolverConfig{
+	return external_service.NewSolver(external_service.SolverConfig{
 		Provider: c.config.Challenge.SolverType,
 		APIKey:   c.config.Challenge.SolverAPIKey,
 	})
@@ -1116,7 +1115,7 @@ func WithTracing(enabled bool) Option {
 }
 
 // detectCFChallenge checks if the response is a Cloudflare challenge page.
-func (c *Client) detectCFChallenge(resp *engine.Response) *challenge.CloudflareChallenge {
+func (c *Adaptive) detectCFChallenge(resp *engine.Response) *challenge.CloudflareChallenge {
 	httpHeaders := make(http.Header)
 	for k, vals := range resp.Headers {
 		for _, v := range vals {
@@ -1127,7 +1126,7 @@ func (c *Client) detectCFChallenge(resp *engine.Response) *challenge.CloudflareC
 }
 
 // solveCFChallenge attempts to solve a detected CF challenge and retry the request.
-func (c *Client) solveCFChallenge(ctx context.Context, targetURL string, resp *engine.Response, ch *challenge.CloudflareChallenge) (*engine.Response, error) {
+func (c *Adaptive) solveCFChallenge(ctx context.Context, targetURL string, resp *engine.Response, ch *challenge.CloudflareChallenge) (*engine.Response, error) {
 	switch ch.Type {
 	case challenge.ChallengeJS, challenge.ChallengeManaged:
 		// Extract PoW params from the challenge page body

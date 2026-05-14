@@ -801,14 +801,14 @@ func (s *Session) IncreaseTrust() {
 
 ### 7. CLI Design
 
-**Package**: `cmd/stealth`
+**Package: `cmd/scrape/stealth/stealth``
 
 ```go
-// cmd/stealth/main.go
+// cmd/scrape/stealth/stealth/main.go
 package main
 
 import (
-    "github.com/skunkworq/stealth/cmd/stealth"
+    "github.com/skunkworq/stealth/cmd/scrape/stealth/stealth"
 )
 
 func main() {

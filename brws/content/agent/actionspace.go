@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 // BuildActionSpace enumerates all possible actions from a snapshot.
@@ -44,6 +44,12 @@ func BuildActionSpace(snap *PageSnapshot) *ActionSpace {
 				act.Description = fmt.Sprintf("Select option in '%s' (%s)", elem.Text, elem.Tag)
 			case ActionToggle:
 				act.Description = fmt.Sprintf("Toggle '%s' (%s)", elem.Text, elem.Tag)
+			case ActionHover:
+				act.Description = fmt.Sprintf("Hover over '%s' (%s)", elem.Text, elem.Tag)
+			case ActionFocus:
+				act.Description = fmt.Sprintf("Focus '%s' (%s)", elem.Text, elem.Tag)
+			case ActionClearInput:
+				act.Description = fmt.Sprintf("Clear input '%s' (%s)", elem.Text, elem.Tag)
 			}
 			as.ElementActions = append(as.ElementActions, act)
 		}
@@ -80,6 +86,9 @@ func buildOtherActions() []Action {
 	return []Action{
 		{ID: "wait", Type: ActionWait, Description: "Wait for page to settle"},
 		{ID: "screenshot", Type: ActionScreenshot, Description: "Capture screenshot"},
+		{ID: "key_press", Type: ActionKeyPress, Description: "Press a key (Enter, Escape, Tab, etc.)", Parameters: map[string]interface{}{"key": "<key name>"}},
+		{ID: "wait_for_selector", Type: ActionWaitForSelector, Description: "Wait until an element appears on the page", Parameters: map[string]interface{}{"selector": "<CSS selector>", "timeout_ms": 5000}},
+		{ID: "wait_for_navigation", Type: ActionWaitForNavigation, Description: "Wait until the page navigates to a new URL", Parameters: map[string]interface{}{"timeout_ms": 5000}},
 		{ID: "done", Type: ActionNone, Description: "Task complete — no further actions"},
 	}
 }
@@ -278,8 +287,8 @@ func BuildSemanticActionSpace(snap *PageSnapshot) *ActionSpace {
 	as := &ActionSpace{}
 
 	// 1. Element-bound actions from semantic tree nodes
-	var walk func(nodes []semantic.SemanticNode)
-	walk = func(nodes []semantic.SemanticNode) {
+	var walk func(nodes []understand.SemanticNode)
+	walk = func(nodes []understand.SemanticNode) {
 		for i := range nodes {
 			node := &nodes[i]
 			for _, sa := range node.Actions {
@@ -312,15 +321,15 @@ func BuildSemanticActionSpace(snap *PageSnapshot) *ActionSpace {
 	return as
 }
 
-func mapSemanticActionType(t semantic.ActionType) ActionType {
+func mapSemanticActionType(t understand.ActionType) ActionType {
 	switch t {
-	case semantic.ActionClick:
+	case understand.ActionClick:
 		return ActionClick
-	case semantic.ActionFill:
+	case understand.ActionFill:
 		return ActionTypeText
-	case semantic.ActionSelect:
+	case understand.ActionSelect:
 		return ActionSelect
-	case semantic.ActionToggle:
+	case understand.ActionToggle:
 		return ActionToggle
 	}
 	return ActionClick

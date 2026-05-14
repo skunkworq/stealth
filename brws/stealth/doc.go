@@ -18,7 +18,7 @@
 //
 // # Usage
 //
-//	client, err := stealth.New(
+//	client, err := stealth.NewAdaptive(
 //	    stealth.WithHeadless(false),
 //	    stealth.WithProxy("http://proxy:8080"),
 //	    stealth.WithChallengeSolver("capsolver", "YOUR-API-KEY"),

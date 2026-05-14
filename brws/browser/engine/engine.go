@@ -84,6 +84,30 @@ type ProfileNavigator interface {
 	NavigateWithReferrer(ctx context.Context, url string, referrer string) error
 }
 
+// CookieJar is an optional interface for engines that support reading and
+// writing the browser's cookie store at any point during a session.
+// Use a type-assertion to check support before calling.
+type CookieJar interface {
+	Engine
+	// GetCookies returns all cookies visible to the given URL.
+	// Pass an empty string to return all cookies in the jar.
+	GetCookies(ctx context.Context, url string) ([]Cookie, error)
+	// SetCookies writes cookies into the browser's cookie store.
+	SetCookies(ctx context.Context, cookies []Cookie) error
+}
+
+// Cookie is a browser cookie, engine-agnostic.
+type Cookie struct {
+	Name     string
+	Value    string
+	Domain   string
+	Path     string
+	Expires  time.Time // zero means session cookie
+	Secure   bool
+	HTTPOnly bool
+	SameSite string // "Strict", "Lax", "None", or ""
+}
+
 // Request is a unified HTTP request structure.
 type Request struct {
 	Method  string
@@ -101,14 +125,38 @@ type Request struct {
 	FingerprintID string // Links to a cached CompleteFingerprint for consistent identity
 
 	// Browser-specific options
-	WaitForNavigation bool              // Wait for page load complete (browser engines)
-	WaitForSelector   string            // Wait for specific element (browser engines)
-	ScriptToExecute   string            // Execute JS after load (browser engines)
-	Viewport          *Viewport         // Browser viewport settings
-	UserAgent         string            // Override User-Agent
-	ExtraHeaders      map[string]string // Additional headers to inject
-	Referrer          string            // Navigation referrer for history/context simulation (StealthPlus)
+	LoadStrategy    LoadStrategy      // When to yield control back to the caller (default: Load)
+	WaitForSelector string            // Wait for specific element after navigation (browser engines)
+	ScriptToExecute string            // Execute JS after load (browser engines)
+	Viewport        *Viewport         // Browser viewport settings
+	UserAgent       string            // Override User-Agent
+	ExtraHeaders    map[string]string // Additional headers to inject
+	Referrer        string            // Navigation referrer for history/context simulation (StealthPlus)
 }
+
+// LoadStrategy controls when a browser engine yields control back to the caller
+// after a navigation, mirroring Playwright's waitUntil semantics.
+type LoadStrategy string
+
+const (
+	// LoadCommit yields as soon as the first response bytes are received and
+	// the document begins loading. Fastest; DOM is not yet available.
+	LoadCommit LoadStrategy = "commit"
+
+	// LoadDOMContentLoaded yields when the DOMContentLoaded event fires:
+	// the HTML is parsed and the DOM is ready, but subresources (images,
+	// stylesheets, iframes) may still be loading.
+	LoadDOMContentLoaded LoadStrategy = "domcontentloaded"
+
+	// LoadLoad yields when the window load event fires: all subresources
+	// have finished loading. This is the default and matches chromedp.Navigate.
+	LoadLoad LoadStrategy = "load"
+
+	// LoadNetworkIdle yields when there have been no in-flight network
+	// requests for at least 500 ms. Use this for SPAs that fetch data after
+	// the initial load event.
+	LoadNetworkIdle LoadStrategy = "networkidle"
+)
 
 // Viewport defines browser viewport dimensions.
 type Viewport struct {

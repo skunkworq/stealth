@@ -3,7 +3,7 @@ package stealth
 import (
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 const testHTML = `<!DOCTYPE html>
@@ -352,8 +352,8 @@ func TestResponse_LazyParsing(t *testing.T) {
 }
 
 func TestResponse_Meta_DelegatesToTree(t *testing.T) {
-	tree := &semantic.SemanticTree{
-		Meta: &semantic.PageMeta{
+	tree := &understand.SemanticTree{
+		Meta: &understand.PageMeta{
 			Title:       "Tree Title",
 			Description: "Tree Description",
 			Author:      "Tree Author",
@@ -362,17 +362,17 @@ func TestResponse_Meta_DelegatesToTree(t *testing.T) {
 			OG:          map[string]string{"title": "OG from tree"},
 			TwitterCard: map[string]string{"card": "summary"},
 		},
-		Social: &semantic.SocialLinks{
+		Social: &understand.SocialLinks{
 			LinkedIn: "https://linkedin.com/company/tree",
 			Twitter:  "https://twitter.com/tree",
 		},
-		Links: []semantic.Link{
+		Links: []understand.Link{
 			{URL: "https://tree.com/link", Text: "Tree Link", IsExternal: true},
 		},
-		Colors: []semantic.ColorInfo{
+		Colors: []understand.ColorInfo{
 			{Hex: "#aabbcc", Source: "meta"},
 		},
-		Fonts: []semantic.FontInfo{
+		Fonts: []understand.FontInfo{
 			{Family: "Tree Font", Source: "google-fonts"},
 		},
 	}

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 
@@ -49,7 +49,7 @@ type CrawlResult struct {
 	URL              string
 	Success          bool
 	Duration         time.Duration
-	SemanticTree     *semantic.SemanticTree
+	SemanticTree     *understand.SemanticTree
 	ActionsAvailable int
 	ActionsTaken     []string
 	Error            error
@@ -95,7 +95,7 @@ func WithAdaptivePolicy(policy *AdaptivePolicy) CrawlOption {
 	}
 }
 
-func NewAdaptiveCrawler(client *stealth.Client, opts ...CrawlOption) *AdaptiveCrawler {
+func NewAdaptiveCrawler(client *stealth.Adaptive, opts ...CrawlOption) *AdaptiveCrawler {
 	nav := NewSemanticNavigator(client, nil)
 	smartNav := NewSmartNavigator(client, nav)
 	filler := NewSemanticFormFiller(client, nav)
@@ -342,7 +342,7 @@ func (c *AdaptiveCrawler) updatePattern(url, intent string, success bool) {
 	c.history.pages.Store(url, history)
 }
 
-func (c *AdaptiveCrawler) countActions(tree *semantic.SemanticTree) int {
+func (c *AdaptiveCrawler) countActions(tree *understand.SemanticTree) int {
 	count := 0
 	for _, node := range tree.AllNodes() {
 		count += len(node.Actions)

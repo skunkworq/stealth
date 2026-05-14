@@ -60,7 +60,7 @@ func TestClient_FSMWaterfallEscalation(t *testing.T) {
 		PromoteOnStatus:      []int{403, 429},
 	}
 
-	client, err := NewWithConfig(cfg)
+	client, err := NewAdaptiveWithConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +126,7 @@ func TestClient_FSMExhaustion_PromotesChromium(t *testing.T) {
 		PromoteOnStatus:      []int{403},
 	}
 
-	client, err := NewWithConfig(cfg)
+	client, err := NewAdaptiveWithConfig(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestClient_ActiveEngine_SelectsWaterfall(t *testing.T) {
 	eng := &stubEngine{name: "base", response: &engine.Response{Status: 200}}
 	waterfallEng, _ := wf.New(wf.Tier{Engine: eng, Name: "base"})
 
-	client := &Client{
+	client := &Adaptive{
 		engine:    eng,
 		waterfall: waterfallEng,
 	}
@@ -173,7 +173,7 @@ func TestClient_ActiveEngine_SelectsWaterfall(t *testing.T) {
 func TestClient_ActiveEngine_FallsBackToRaw(t *testing.T) {
 	eng := &stubEngine{name: "native", response: &engine.Response{Status: 200}}
 
-	client := &Client{
+	client := &Adaptive{
 		engine: eng,
 	}
 

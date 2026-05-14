@@ -1,6 +1,6 @@
-// Package agent — Semantic Enhancement Layer
+// Package interact — Semantic Enhancement Layer
 //
-// Bridges the brws/semantic package into the agent observation loop,
+// Bridges the brws/content/understand package into the agent observation loop,
 // enriching PageSnapshots with structured metadata, semantic trees,
 // and optional vision-based image descriptions.
 package agent
@@ -12,7 +12,7 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 // SemanticEnhancer enriches PageSnapshots with semantic package features.
@@ -30,7 +30,7 @@ type SemanticEnhancer struct {
 	// Optional pipeline config for LLM features.
 	// If nil and EnableTreeLLM is true, the enhancer attempts to build
 	// a config from the OPENROUTER_API_KEY environment variable.
-	PipelineConfig *semantic.PipelineConfig
+	PipelineConfig *understand.PipelineConfig
 }
 
 // DefaultSemanticEnhancer returns an enhancer with all features off.
@@ -66,21 +66,21 @@ func (se *SemanticEnhancer) Enhance(ctx context.Context, snap *PageSnapshot, htm
 
 	if doc != nil {
 		if se.EnableMeta {
-			meta := semantic.ExtractPageMeta(doc, url)
+			meta := understand.ExtractPageMeta(doc, url)
 			snap.Meta = &meta
 		}
 		if se.EnableImages {
-			snap.Images = semantic.ExtractImagesFromDoc(doc, url)
+			snap.Images = understand.ExtractImagesFromDoc(doc, url)
 		}
 		if se.EnableSocial {
-			social := semantic.ExtractSocialLinks(doc)
+			social := understand.ExtractSocialLinks(doc)
 			snap.Social = &social
 		}
 		if se.EnableColors {
-			snap.Colors = semantic.ExtractColors(doc)
+			snap.Colors = understand.ExtractColors(doc)
 		}
 		if se.EnableFonts {
-			snap.Fonts = semantic.ExtractFonts(doc)
+			snap.Fonts = understand.ExtractFonts(doc)
 		}
 	}
 
@@ -99,18 +99,18 @@ func (se *SemanticEnhancer) needsParsedDoc() bool {
 func (se *SemanticEnhancer) enhanceTree(ctx context.Context, snap *PageSnapshot, htmlStr, url string) error {
 	config := se.PipelineConfig
 	if config == nil {
-		config = &semantic.PipelineConfig{
+		config = &understand.PipelineConfig{
 			MaxChunks: 50,
 		}
 		// Attempt to load LLM config from env if LLM-enhanced tree is requested.
 		if se.EnableTreeLLM {
-			if envConfig, err := semantic.NewConfigFromEnv(); err == nil {
+			if envConfig, err := understand.NewConfigFromEnv(); err == nil {
 				config = envConfig
 			}
 		}
 	}
 
-	tree, _, err := semantic.HTMLToSemanticTreeCached(ctx, htmlStr, url, config)
+	tree, _, err := understand.HTMLToSemanticTreeCached(ctx, htmlStr, url, config)
 	if err != nil {
 		return fmt.Errorf("semantic tree: %w", err)
 	}

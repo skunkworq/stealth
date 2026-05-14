@@ -334,7 +334,7 @@ func main() {
     ctx := context.Background()
 
     // Create stealth client with challenge solving
-    client, err := stealth.NewClient(stealth.Config{
+    client, err := stealth.NewAdaptiveFromConfig(stealth.Config{
         EngineName: "chromium-stealth",
         Headless:   true,
         Challenge: &stealth.ChallengeConfig{

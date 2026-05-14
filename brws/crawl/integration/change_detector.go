@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 type ChangeDetector struct {
-	previous           sync.Map // map[string]*semantic.SemanticTree
+	previous           sync.Map // map[string]*understand.SemanticTree
 	threshold          float32
 	significantChanges sync.Map // map[string][]Change
 }
@@ -52,7 +52,7 @@ func NewChangeDetector(threshold float32) *ChangeDetector {
 	}
 }
 
-func (d *ChangeDetector) DetectChanges(ctx context.Context, url string, newTree *semantic.SemanticTree) (*ChangeResult, error) {
+func (d *ChangeDetector) DetectChanges(ctx context.Context, url string, newTree *understand.SemanticTree) (*ChangeResult, error) {
 	start := time.Now()
 	result := &ChangeResult{
 		URL:                url,
@@ -62,7 +62,7 @@ func (d *ChangeDetector) DetectChanges(ctx context.Context, url string, newTree 
 	}
 
 	if val, ok := d.previous.Load(url); ok {
-		oldTree := val.(*semantic.SemanticTree)
+		oldTree := val.(*understand.SemanticTree)
 
 		if oldTree.StructuralHash == newTree.StructuralHash {
 			result.StructuralHash = newTree.StructuralHash
@@ -86,7 +86,7 @@ func (d *ChangeDetector) DetectChanges(ctx context.Context, url string, newTree 
 	return result, nil
 }
 
-func (d *ChangeDetector) diffTrees(old, new *semantic.SemanticTree) []Change {
+func (d *ChangeDetector) diffTrees(old, new *understand.SemanticTree) []Change {
 	changes := make([]Change, 0)
 
 	oldNodes := d.indexBySelector(old)
@@ -145,8 +145,8 @@ func (d *ChangeDetector) diffTrees(old, new *semantic.SemanticTree) []Change {
 	return changes
 }
 
-func (d *ChangeDetector) indexBySelector(tree *semantic.SemanticTree) map[string]*semantic.SemanticNode {
-	index := make(map[string]*semantic.SemanticNode)
+func (d *ChangeDetector) indexBySelector(tree *understand.SemanticTree) map[string]*understand.SemanticNode {
+	index := make(map[string]*understand.SemanticNode)
 
 	for _, node := range tree.AllNodes() {
 		if node.DOMSelector != "" {
@@ -157,7 +157,7 @@ func (d *ChangeDetector) indexBySelector(tree *semantic.SemanticTree) map[string
 	return index
 }
 
-func (d *ChangeDetector) calculateSignificance(node *semantic.SemanticNode) float32 {
+func (d *ChangeDetector) calculateSignificance(node *understand.SemanticNode) float32 {
 	significance := float32(0.5)
 
 	if node.IsDynamic {
@@ -182,7 +182,7 @@ func (d *ChangeDetector) calculateSignificance(node *semantic.SemanticNode) floa
 	return significance
 }
 
-func (d *ChangeDetector) calculateModificationSignificance(old, new *semantic.SemanticNode) float32 {
+func (d *ChangeDetector) calculateModificationSignificance(old, new *understand.SemanticNode) float32 {
 	base := d.calculateSignificance(old)
 
 	textDiff := d.textDifference(old.Summary, new.Summary)

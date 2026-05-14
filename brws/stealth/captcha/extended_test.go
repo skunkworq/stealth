@@ -282,7 +282,7 @@ func TestAudioCaptchaValidation(t *testing.T) {
 }
 
 func TestBehavioralProfile(t *testing.T) {
-	config := &BehavioralConfig{
+	config := &BehaviorSimConfig{
 		MouseMovements: true,
 		Keystrokes:     true,
 	}

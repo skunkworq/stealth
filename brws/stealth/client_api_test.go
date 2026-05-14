@@ -5,16 +5,16 @@ import (
 	"testing"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
-func TestNewClientValueConfig(t *testing.T) {
+func TestNewAdaptiveValueConfig(t *testing.T) {
 	cfg := *DefaultConfig()
 	cfg.EngineName = "native"
 	cfg.Headless = true
-	client, err := NewClient(cfg)
+	client, err := NewAdaptiveFromConfig(cfg)
 	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
 	}
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -28,9 +28,9 @@ func TestNewClientValueConfig(t *testing.T) {
 func TestScrapeAlias(t *testing.T) {
 	// Scrape is an alias for Navigate; verify it exists and calls through.
 	cfg := *DefaultConfig()
-	client, err := NewClient(cfg)
+	client, err := NewAdaptiveFromConfig(cfg)
 	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
 	}
 	defer client.Close()
 
@@ -117,7 +117,7 @@ func TestResponseAsHTMLEmptyBody(t *testing.T) {
 }
 
 // Compile-time check that Scrape matches the expected signature.
-var _ func(context.Context, string) (*Response, error) = (*Client)(nil).Scrape
+var _ func(context.Context, string) (*Response, error) = (*Adaptive)(nil).Scrape
 
 // ---------------------------------------------------------------------------
 // Stealth client persistent tab & semantic integration tests
@@ -127,9 +127,9 @@ func TestClientNewTabNativeEngine(t *testing.T) {
 	// With a native engine, NewTab should return false.
 	cfg := *DefaultConfig()
 	cfg.EngineName = "native"
-	client, err := NewClient(cfg)
+	client, err := NewAdaptiveFromConfig(cfg)
 	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
 	}
 	defer client.Close()
 
@@ -142,9 +142,9 @@ func TestClientNewTabNativeEngine(t *testing.T) {
 func TestClientBrowserContextNativeEngine(t *testing.T) {
 	cfg := *DefaultConfig()
 	cfg.EngineName = "native"
-	client, err := NewClient(cfg)
+	client, err := NewAdaptiveFromConfig(cfg)
 	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
 	}
 	defer client.Close()
 
@@ -157,9 +157,9 @@ func TestClientBrowserContextNativeEngine(t *testing.T) {
 func TestClientEngineReturnsActiveEngine(t *testing.T) {
 	cfg := *DefaultConfig()
 	cfg.EngineName = "native"
-	client, err := NewClient(cfg)
+	client, err := NewAdaptiveFromConfig(cfg)
 	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
 	}
 	defer client.Close()
 
@@ -175,20 +175,20 @@ func TestClientEngineReturnsActiveEngine(t *testing.T) {
 func TestClientNewSemanticExtractor(t *testing.T) {
 	cfg := *DefaultConfig()
 	cfg.EngineName = "native"
-	client, err := NewClient(cfg)
+	client, err := NewAdaptiveFromConfig(cfg)
 	if err != nil {
-		t.Fatalf("NewClient failed: %v", err)
+		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
 	}
 	defer client.Close()
 
-	extractor := client.NewSemanticExtractor(&semantic.PipelineConfig{})
+	extractor := client.NewSemanticExtractor(&understand.PipelineConfig{})
 	if extractor == nil {
 		t.Fatal("expected non-nil semantic extractor")
 	}
 }
 
 // Compile-time checks for new method signatures.
-var _ func() (context.Context, context.CancelFunc, bool) = (*Client)(nil).NewTab
-var _ func() (context.Context, bool) = (*Client)(nil).BrowserContext
-var _ func() engine.Engine = (*Client)(nil).Engine
-var _ func(*semantic.PipelineConfig) *semantic.SemanticExtractor = (*Client)(nil).NewSemanticExtractor
+var _ func() (context.Context, context.CancelFunc, bool) = (*Adaptive)(nil).NewTab
+var _ func() (context.Context, bool) = (*Adaptive)(nil).BrowserContext
+var _ func() engine.Engine = (*Adaptive)(nil).Engine
+var _ func(*understand.PipelineConfig) *understand.SemanticExtractor = (*Adaptive)(nil).NewSemanticExtractor

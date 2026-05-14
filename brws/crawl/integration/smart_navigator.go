@@ -6,12 +6,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 type SmartNavigator struct {
-	client    *stealth.Client
+	client    *stealth.Adaptive
 	navigator *SemanticNavigator
 }
 
@@ -24,12 +24,12 @@ type NavigationIntent struct {
 type IntentResult struct {
 	Found        bool
 	Selector     string
-	Action       *semantic.Action
+	Action       *understand.Action
 	Confidence   float32
-	Alternatives []*semantic.Action
+	Alternatives []*understand.Action
 }
 
-func NewSmartNavigator(client *stealth.Client, nav *SemanticNavigator) *SmartNavigator {
+func NewSmartNavigator(client *stealth.Adaptive, nav *SemanticNavigator) *SmartNavigator {
 	return &SmartNavigator{
 		client:    client,
 		navigator: nav,
@@ -52,11 +52,11 @@ func (s *SmartNavigator) NavigateByIntent(ctx context.Context, url string, inten
 	return intentResult, nil
 }
 
-func (s *SmartNavigator) findBestIntentMatch(tree *semantic.SemanticTree, intent NavigationIntent) *IntentResult {
+func (s *SmartNavigator) findBestIntentMatch(tree *understand.SemanticTree, intent NavigationIntent) *IntentResult {
 	allActions := s.collectActions(tree)
 
 	scored := make([]struct {
-		action *semantic.Action
+		action *understand.Action
 		score  float32
 	}, 0)
 
@@ -67,7 +67,7 @@ func (s *SmartNavigator) findBestIntentMatch(tree *semantic.SemanticTree, intent
 		score := s.scoreIntentMatch(action, intentWords, intent.ActionType)
 		if score > 0 {
 			scored = append(scored, struct {
-				action *semantic.Action
+				action *understand.Action
 				score  float32
 			}{action: action, score: score})
 		}
@@ -89,7 +89,7 @@ func (s *SmartNavigator) findBestIntentMatch(tree *semantic.SemanticTree, intent
 	}
 
 	if len(scored) > 1 {
-		result.Alternatives = make([]*semantic.Action, 0)
+		result.Alternatives = make([]*understand.Action, 0)
 		for i := 1; i < len(scored) && i < 5; i++ {
 			result.Alternatives = append(result.Alternatives, scored[i].action)
 		}
@@ -98,8 +98,8 @@ func (s *SmartNavigator) findBestIntentMatch(tree *semantic.SemanticTree, intent
 	return result
 }
 
-func (s *SmartNavigator) collectActions(tree *semantic.SemanticTree) []*semantic.Action {
-	actions := make([]*semantic.Action, 0)
+func (s *SmartNavigator) collectActions(tree *understand.SemanticTree) []*understand.Action {
+	actions := make([]*understand.Action, 0)
 
 	for _, node := range tree.AllNodes() {
 		for i := range node.Actions {
@@ -110,7 +110,7 @@ func (s *SmartNavigator) collectActions(tree *semantic.SemanticTree) []*semantic
 	return actions
 }
 
-func (s *SmartNavigator) scoreIntentMatch(action *semantic.Action, intentWords []string, actionType string) float32 {
+func (s *SmartNavigator) scoreIntentMatch(action *understand.Action, intentWords []string, actionType string) float32 {
 	score := float32(0.0)
 
 	descLower := strings.ToLower(action.Description)
@@ -136,7 +136,7 @@ func (s *SmartNavigator) scoreIntentMatch(action *semantic.Action, intentWords [
 		score += 8.0
 	}
 
-	if action.Type == semantic.ActionClick && (strings.Contains(descLower, "button") || strings.Contains(descLower, "link")) {
+	if action.Type == understand.ActionClick && (strings.Contains(descLower, "button") || strings.Contains(descLower, "link")) {
 		score += 2.0
 	}
 
@@ -160,7 +160,7 @@ func (s *SmartNavigator) ClickBestMatch(ctx context.Context, url string, intent 
 	return nil
 }
 
-func (s *SmartNavigator) ClickAlternative(ctx context.Context, alternatives []*semantic.Action, idx int) error {
+func (s *SmartNavigator) ClickAlternative(ctx context.Context, alternatives []*understand.Action, idx int) error {
 	if idx >= len(alternatives) {
 		return fmt.Errorf("alternative index out of range")
 	}
@@ -182,7 +182,7 @@ func (s *SmartNavigator) FindByText(ctx context.Context, url, text string) (*Int
 func (s *SmartNavigator) FindButton(ctx context.Context, url, description string) (*IntentResult, error) {
 	return s.NavigateByIntent(ctx, url, NavigationIntent{
 		Description: description,
-		ActionType:  string(semantic.ActionClick),
+		ActionType:  string(understand.ActionClick),
 		Priority:    8,
 	})
 }
@@ -190,7 +190,7 @@ func (s *SmartNavigator) FindButton(ctx context.Context, url, description string
 func (s *SmartNavigator) FindLink(ctx context.Context, url, linkText string) (*IntentResult, error) {
 	return s.NavigateByIntent(ctx, url, NavigationIntent{
 		Description: linkText + " link",
-		ActionType:  string(semantic.ActionClick),
+		ActionType:  string(understand.ActionClick),
 		Priority:    7,
 	})
 }
@@ -198,7 +198,7 @@ func (s *SmartNavigator) FindLink(ctx context.Context, url, linkText string) (*I
 func (s *SmartNavigator) FindForm(ctx context.Context, url, formType string) (*IntentResult, error) {
 	return s.NavigateByIntent(ctx, url, NavigationIntent{
 		Description: formType + " form",
-		ActionType:  string(semantic.ActionFill),
+		ActionType:  string(understand.ActionFill),
 		Priority:    6,
 	})
 }

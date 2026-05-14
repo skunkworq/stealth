@@ -3,24 +3,24 @@ package integration
 import (
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 func TestSmartNavigatorFindBestMatch(t *testing.T) {
-	tree := &semantic.SemanticTree{
-		RootNodes: []semantic.SemanticNode{
+	tree := &understand.SemanticTree{
+		RootNodes: []understand.SemanticNode{
 			{
 				DOMSelector: "body",
-				Actions: []semantic.Action{
-					{Type: semantic.ActionClick, Selector: "button.login", Description: "Login button"},
-					{Type: semantic.ActionClick, Selector: "a.home", Description: "Go to homepage"},
+				Actions: []understand.Action{
+					{Type: understand.ActionClick, Selector: "button.login", Description: "Login button"},
+					{Type: understand.ActionClick, Selector: "a.home", Description: "Go to homepage"},
 				},
-				Children: []semantic.SemanticNode{
+				Children: []understand.SemanticNode{
 					{
 						DOMSelector: "body/nav",
-						Actions: []semantic.Action{
-							{Type: semantic.ActionClick, Selector: "a.about", Description: "About us link"},
-							{Type: semantic.ActionClick, Selector: "a.contact", Description: "Contact page"},
+						Actions: []understand.Action{
+							{Type: understand.ActionClick, Selector: "a.about", Description: "About us link"},
+							{Type: understand.ActionClick, Selector: "a.contact", Description: "Contact page"},
 						},
 					},
 				},
@@ -54,13 +54,13 @@ func TestSmartNavigatorFindBestMatch(t *testing.T) {
 }
 
 func TestSmartNavigatorFindLinkByText(t *testing.T) {
-	tree := &semantic.SemanticTree{
-		RootNodes: []semantic.SemanticNode{
+	tree := &understand.SemanticTree{
+		RootNodes: []understand.SemanticNode{
 			{
 				DOMSelector: "body",
-				Actions: []semantic.Action{
-					{Type: semantic.ActionClick, Selector: "a.products", Description: "View all products"},
-					{Type: semantic.ActionClick, Selector: "a.services", Description: "Our services"},
+				Actions: []understand.Action{
+					{Type: understand.ActionClick, Selector: "a.products", Description: "View all products"},
+					{Type: understand.ActionClick, Selector: "a.services", Description: "Our services"},
 				},
 			},
 		},
@@ -83,8 +83,8 @@ func TestSmartNavigatorFindLinkByText(t *testing.T) {
 }
 
 func TestSmartNavigatorScoring(t *testing.T) {
-	action := &semantic.Action{
-		Type:        semantic.ActionClick,
+	action := &understand.Action{
+		Type:        understand.ActionClick,
 		Selector:    "button.submit-form",
 		Description: "Submit the form",
 	}
@@ -94,7 +94,7 @@ func TestSmartNavigatorScoring(t *testing.T) {
 	score1 := nav.scoreIntentMatch(action, []string{"submit"}, "")
 	t.Logf("Score with 'submit' text only: %.1f", score1)
 
-	score2 := nav.scoreIntentMatch(action, []string{"submit"}, string(semantic.ActionClick))
+	score2 := nav.scoreIntentMatch(action, []string{"submit"}, string(understand.ActionClick))
 	t.Logf("Score with 'submit' text + action type: %.1f", score2)
 
 	if score2 <= score1 {
@@ -115,14 +115,14 @@ func TestSmartNavigatorScoring(t *testing.T) {
 }
 
 func TestSmartNavigatorAlternatives(t *testing.T) {
-	tree := &semantic.SemanticTree{
-		RootNodes: []semantic.SemanticNode{
+	tree := &understand.SemanticTree{
+		RootNodes: []understand.SemanticNode{
 			{
 				DOMSelector: "body",
-				Actions: []semantic.Action{
-					{Type: semantic.ActionClick, Selector: "a.shop-1", Description: "Shop now"},
-					{Type: semantic.ActionClick, Selector: "a.shop-2", Description: "Visit our shop"},
-					{Type: semantic.ActionClick, Selector: "a.store", Description: "Store locations"},
+				Actions: []understand.Action{
+					{Type: understand.ActionClick, Selector: "a.shop-1", Description: "Shop now"},
+					{Type: understand.ActionClick, Selector: "a.shop-2", Description: "Visit our shop"},
+					{Type: understand.ActionClick, Selector: "a.store", Description: "Store locations"},
 				},
 			},
 		},
@@ -238,14 +238,14 @@ func TestSessionManagerCurrentSession(t *testing.T) {
 func TestFormFillerDetectForm(t *testing.T) {
 	filler := &SemanticFormFiller{}
 
-	tree := &semantic.SemanticTree{
-		RootNodes: []semantic.SemanticNode{
+	tree := &understand.SemanticTree{
+		RootNodes: []understand.SemanticNode{
 			{
 				DOMSelector: "body > form.login",
-				Actions: []semantic.Action{
-					{Type: semantic.ActionFill, Selector: "input.email", Description: "Email address"},
-					{Type: semantic.ActionFill, Selector: "input.password", Description: "Password"},
-					{Type: semantic.ActionClick, Selector: "button[type=submit]", Description: "Login"},
+				Actions: []understand.Action{
+					{Type: understand.ActionFill, Selector: "input.email", Description: "Email address"},
+					{Type: understand.ActionFill, Selector: "input.password", Description: "Password"},
+					{Type: understand.ActionClick, Selector: "button[type=submit]", Description: "Login"},
 				},
 			},
 		},
@@ -265,26 +265,26 @@ func TestFormFillerDetectForm(t *testing.T) {
 }
 
 func TestFormFillerExtractFormSchema(t *testing.T) {
-	node := &semantic.SemanticNode{
+	node := &understand.SemanticNode{
 		DOMSelector: "form#checkout",
-		Actions: []semantic.Action{
+		Actions: []understand.Action{
 			{
-				Type:        semantic.ActionFill,
+				Type:        understand.ActionFill,
 				Selector:    "input[name=card]",
-				FillOptions: &semantic.FillOptions{FieldType: semantic.FieldTypeText},
+				FillOptions: &understand.FillOptions{FieldType: understand.FieldTypeText},
 			},
 		},
-		Children: []semantic.SemanticNode{
+		Children: []understand.SemanticNode{
 			{
 				DOMSelector: "form#checkout > div",
-				Actions: []semantic.Action{
+				Actions: []understand.Action{
 					{
-						Type:        semantic.ActionFill,
+						Type:        understand.ActionFill,
 						Selector:    "input[name=cvv]",
-						FillOptions: &semantic.FillOptions{FieldType: semantic.FieldTypePassword},
+						FillOptions: &understand.FillOptions{FieldType: understand.FieldTypePassword},
 					},
 					{
-						Type:        semantic.ActionClick,
+						Type:        understand.ActionClick,
 						Selector:    "button.pay",
 						Description: "Submit payment",
 					},
@@ -294,7 +294,7 @@ func TestFormFillerExtractFormSchema(t *testing.T) {
 	}
 
 	filler := &SemanticFormFiller{}
-	action := semantic.Action{Type: semantic.ActionFill}
+	action := understand.Action{Type: understand.ActionFill}
 
 	form := filler.extractFormFromNode(node, action)
 

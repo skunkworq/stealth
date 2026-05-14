@@ -168,7 +168,7 @@ func TestCloudflare_LiveWithStealthClient(t *testing.T) {
 			// Find project root for trace data
 			traceDir := findProjectRoot(t) + "/training-data/traces"
 
-			client, err := New(
+			client, err := NewAdaptive(
 				WithEngine("native"),
 				WithStealth(true),
 				WithEvasionFSM(),

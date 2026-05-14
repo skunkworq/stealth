@@ -61,7 +61,7 @@ func escalationTierFor(cfg *EscalationConfig, status int) string {
 // escalate is called after a ban-signal response.
 // It records the ban, escalates proxy tier, promotes waterfall tier,
 // and returns whether a retry should be attempted.
-func (c *Client) escalate(ctx context.Context, resp *engine.Response, targetURL string, sess *session.Session) bool {
+func (c *Adaptive) escalate(ctx context.Context, resp *engine.Response, targetURL string, sess *session.Session) bool {
 	reason, ok := BanSignalStatus[resp.Status]
 	if !ok {
 		reason = "unknown_ban_signal"

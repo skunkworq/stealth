@@ -140,49 +140,44 @@ Each `cmd/<name>/main.go` compiles to a standalone binary. This is standard Go p
 
 ### Core tools you use daily
 
-| Binary | File | What it does |
+| Binary | Path | What it does |
 |--------|------|-------------|
-| `stealth` | `cmd/stealth` | Main CLI — fetch URLs, run spiders, start lab, training sessions |
-| `brwslab` | `cmd/brwslab` | Network fidelity testing — diff engines, trace requests, fingerprint analysis |
-| `semantic` | `cmd/semantic` | Extract semantic trees from URLs via CLI |
-| `agent` | `cmd/agent` | Browser automation — observe, execute, step |
+| `stealth` | `cmd/scrape/stealth/stealth` | Main stealth fetch/crawl CLI |
+| `brwslab` | `cmd/lab/cli/brwslab` | Network fidelity testing — diff engines, trace requests, fingerprint analysis |
+| `semantic` | `cmd/semantic/cli/semantic` | Extract semantic trees from URLs via CLI |
+| `agent` | `cmd/scrape/agent/agent` | Browser automation — observe, execute, step |
 
 ### Servers & APIs
 
-| Binary | File | What it does |
+| Binary | Path | What it does |
 |--------|------|-------------|
-| `semantic-server` | `cmd/semantic-server` | HTTP REST API for semantic extraction |
-| `semantic-mcp` | `cmd/semantic-mcp` | MCP (Model Context Protocol) server for Claude Desktop |
-| `stealth-mcp` | `cmd/stealth-mcp` | MCP server for stealth operations |
-| `labd` | `cmd/labd` | Fingerprint capture lab daemon |
+| `agent-server` | `cmd/scrape/agent/server` | WebSocket/REST hub for the agent UI |
+| `semantic-server` | `cmd/semantic/server/semantic-server` | HTTP REST API for semantic extraction |
+| `semantic-mcp` | `cmd/semantic/server/semantic-mcp` | MCP (Model Context Protocol) server for Claude Desktop |
+| `stealth-mcp` | `cmd/scrape/stealth/stealth-mcp` | MCP server for stealth operations |
+| `labd` | `cmd/lab/server/labd` | Fingerprint capture lab daemon |
 
 ### Specialized tools
 
-| Binary | File | What it does |
+| Binary | Path | What it does |
 |--------|------|-------------|
-| `crawl` | `cmd/crawl` | Standalone crawler (lighter than `stealth crawl`) |
-| `semanticcrawl` | `cmd/semanticcrawl` | Crawl + extract semantic trees in one pass |
-| `extract` | `cmd/extract` | Standalone content extractor |
-| `train` | `cmd/train` | ML training data generation |
-| `ml_datagen` | `cmd/ml_datagen` | Generate datasets for ML model training |
-| `gencert` | `cmd/gencert` | TLS certificate generation for MITM proxy |
-| `scanciphers` | `cmd/scanciphers` | TLS cipher suite scanner |
+| `crawl` | `cmd/scrape/core/crawl` | Standalone crawler |
+| `semanticcrawl` | `cmd/scrape/core/semanticcrawl` | Crawl + extract semantic trees in one pass |
+| `extract` | `cmd/scrape/core/extract` | Standalone content extractor |
+| `pipeline` | `cmd/scrape/core/pipeline` | Run processing pipelines |
+| `ml_datagen` | `cmd/ml/train/ml_datagen` | Generate datasets for ML model training |
+| `gencert` | `cmd/lab/cli/gencert` | TLS certificate generation for MITM proxy |
+| `scanciphers` | `cmd/lab/cli/scanciphers` | TLS cipher suite scanner |
 
 ### Testing & benchmarking
 
-| Binary | File | What it does |
+| Binary | Path | What it does |
 |--------|------|-------------|
-| `benchmark` | `cmd/benchmark` | Performance benchmarks |
-| `evalbench` | `cmd/evalbench` | Evaluation benchmark suite |
-| `vecbench` | `cmd/vecbench` | Vector embedding benchmarks |
-| `test_realworld` | `cmd/test_realworld` | Real-world integration tests |
-| `test_semantic` | `cmd/test_semantic` | Semantic extraction tests |
-
-### Pipeline
-
-| Binary | File | What it does |
-|--------|------|-------------|
-| `pipeline` | `cmd/pipeline` | Run processing pipelines |
+| `evalbench` | `cmd/bench/evalbench` | Evaluation benchmark suite |
+| `eval_e2e` | `cmd/bench/eval_e2e` | End-to-end evaluation |
+| `vecbench` | `cmd/bench/vecbench` | Vector embedding benchmarks |
+| `test_realworld` | `cmd/semantic/cli/test_realworld` | Real-world integration tests |
+| `test_semantic` | `cmd/semantic/cli/test_semantic` | Semantic extraction tests |
 
 ---
 

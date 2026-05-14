@@ -166,8 +166,8 @@ func (fb *FingerprintBenchmark) captureFingerprint(
 	resp, err := eng.Do(ctx, &engine.Request{
 		Method:            "GET",
 		URL:               fb.targetURL,
-		WaitForNavigation: eng.Capabilities().JavaScript,
-		Timeout:           fb.timeout,
+		LoadStrategy: engine.LoadLoad,
+		Timeout:      fb.timeout,
 	})
 	if err != nil {
 		return nil, err

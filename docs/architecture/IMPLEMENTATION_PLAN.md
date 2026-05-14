@@ -11,7 +11,7 @@ Port of Webfurl semantic extraction system from Rust to Go. Compresses web pages
 │                            APPLICATION LAYER                                  │
 │                                                                               │
 │   ┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐           │
-│   │ cmd/pipeline    │   │ cmd/semantic-mcp│   │ cmd/test_semantic│           │
+│   │ cmd/scrape/core/pipeline    │   │ cmd/semantic/server/semantic-mcp│   │ cmd/test_semantic│           │
 │   │ (crawler)       │   │ (MCP server)    │   │ (testing)        │           │
 │   └────────┬────────┘   └────────┬────────┘   └────────┬────────┘           │
 │            │                     │                     │                     │
@@ -154,10 +154,10 @@ Port of Webfurl semantic extraction system from Rust to Go. Compresses web pages
 
 | Tool | Purpose |
 |------|---------|
-| `cmd/pipeline/` | Integrated crawler with metrics |
-| `cmd/semantic-mcp/` | MCP server for LLM integration |
+| `cmd/scrape/core/pipeline/` | Integrated crawler with metrics |
+| `cmd/semantic/server/semantic-mcp/` | MCP server for LLM integration |
 | `cmd/test_semantic/` | URL testing with diagnostics |
-| `cmd/vecbench/` | Vector backend benchmark |
+| `cmd/bench/vecbench/` | Vector backend benchmark |
 
 ---
 
@@ -287,7 +287,7 @@ counters := pipe.Metrics().GetAllCounters()
 
 ```bash
 # Start MCP server for Claude Desktop integration
-go run ./cmd/semantic/semantic-mcp
+go run ./cmd/semantic/server/semantic-mcp
 
 # Tools available:
 # - extract_semantic_tree

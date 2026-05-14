@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/crawl/pipeline"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	pipeline "github.com/skunkworq/stealth/brws/crawl/ingest"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 func TestSemanticNavigator_NavigateWithIntent(t *testing.T) {
@@ -128,18 +128,18 @@ func TestSemanticNavigator_ExtractAndNavigate(t *testing.T) {
 }
 
 func TestFindActionBySelector(t *testing.T) {
-	tree := &semantic.SemanticTree{
-		RootNodes: []semantic.SemanticNode{
+	tree := &understand.SemanticTree{
+		RootNodes: []understand.SemanticNode{
 			{
 				DOMSelector: "body",
-				Actions: []semantic.Action{
-					{Type: semantic.ActionClick, Selector: "button.submit", Description: "Submit form"},
+				Actions: []understand.Action{
+					{Type: understand.ActionClick, Selector: "button.submit", Description: "Submit form"},
 				},
-				Children: []semantic.SemanticNode{
+				Children: []understand.SemanticNode{
 					{
 						DOMSelector: "body/div",
-						Actions: []semantic.Action{
-							{Type: semantic.ActionClick, Selector: "a.link", Description: "Navigate"},
+						Actions: []understand.Action{
+							{Type: understand.ActionClick, Selector: "a.link", Description: "Navigate"},
 						},
 					},
 				},
@@ -169,12 +169,12 @@ func TestFindActionBySelector(t *testing.T) {
 }
 
 func TestFindActionByDescription(t *testing.T) {
-	tree := &semantic.SemanticTree{
-		RootNodes: []semantic.SemanticNode{
+	tree := &understand.SemanticTree{
+		RootNodes: []understand.SemanticNode{
 			{
 				DOMSelector: "body",
-				Actions: []semantic.Action{
-					{Type: semantic.ActionClick, Selector: "button", Description: "Submit the form now"},
+				Actions: []understand.Action{
+					{Type: understand.ActionClick, Selector: "button", Description: "Submit the form now"},
 				},
 			},
 		},

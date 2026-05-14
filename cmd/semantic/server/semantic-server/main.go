@@ -15,7 +15,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/skunkworq/stealth/brws/crawl/pipeline"
+	pipeline "github.com/skunkworq/stealth/brws/crawl/ingest"
 	semantic "github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/content/understand/index"
 )

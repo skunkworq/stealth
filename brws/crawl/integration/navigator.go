@@ -7,24 +7,24 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/crawl/pipeline"
-	"github.com/skunkworq/stealth/brws/content/semantic"
+	pipeline "github.com/skunkworq/stealth/brws/crawl/ingest"
+	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 
 type SemanticNavigator struct {
-	client   *stealth.Client
+	client   *stealth.Adaptive
 	pipeline *pipeline.Pipeline
-	cache    *semantic.CacheStore
+	cache    *understand.CacheStore
 
-	trees sync.Map // map[string]*semantic.SemanticTree - read-heavy, sync.Map ideal
+	trees sync.Map // map[string]*understand.SemanticTree - read-heavy, sync.Map ideal
 }
 
 type NavigationResult struct {
 	URL              string
 	FinalURL         string
-	SemanticTree     *semantic.SemanticTree
-	CompressionStats *semantic.CompressionStats
+	SemanticTree     *understand.SemanticTree
+	CompressionStats *understand.CompressionStats
 	ActionsTaken     []ActionTaken
 	CAPTCHAsSolved   int
 	OriginalTokens   int
@@ -42,13 +42,13 @@ type ActionTaken struct {
 
 type NavigatorOption func(*SemanticNavigator)
 
-func WithCache(cache *semantic.CacheStore) NavigatorOption {
+func WithCache(cache *understand.CacheStore) NavigatorOption {
 	return func(n *SemanticNavigator) {
 		n.cache = cache
 	}
 }
 
-func NewSemanticNavigator(client *stealth.Client, pipe *pipeline.Pipeline, opts ...NavigatorOption) *SemanticNavigator {
+func NewSemanticNavigator(client *stealth.Adaptive, pipe *pipeline.Pipeline, opts ...NavigatorOption) *SemanticNavigator {
 	n := &SemanticNavigator{
 		client:   client,
 		pipeline: pipe,
@@ -78,8 +78,8 @@ func (n *SemanticNavigator) NavigateWithIntent(ctx context.Context, url, intent 
 		result.FinalURL = resp.FinalURL
 	}
 
-	var tree *semantic.SemanticTree
-	var stats *semantic.CompressionStats
+	var tree *understand.SemanticTree
+	var stats *understand.CompressionStats
 
 	pageResult := n.pipeline.ProcessURL(ctx, url)
 	if pageResult.Error != nil {
@@ -117,7 +117,7 @@ func (n *SemanticNavigator) NavigateWithIntent(ctx context.Context, url, intent 
 	return result, nil
 }
 
-func (n *SemanticNavigator) findRelevantActions(tree *semantic.SemanticTree, intent string) []ActionTaken {
+func (n *SemanticNavigator) findRelevantActions(tree *understand.SemanticTree, intent string) []ActionTaken {
 	actions := make([]ActionTaken, 0)
 	if tree == nil {
 		return actions
@@ -125,8 +125,8 @@ func (n *SemanticNavigator) findRelevantActions(tree *semantic.SemanticTree, int
 
 	intentLower := strings.ToLower(intent)
 
-	var walk func(node *semantic.SemanticNode)
-	walk = func(node *semantic.SemanticNode) {
+	var walk func(node *understand.SemanticNode)
+	walk = func(node *understand.SemanticNode) {
 		for _, action := range node.Actions {
 			desc := strings.ToLower(action.Description)
 			if strings.Contains(desc, intentLower) ||
@@ -152,9 +152,9 @@ func (n *SemanticNavigator) findRelevantActions(tree *semantic.SemanticTree, int
 	return actions
 }
 
-func (n *SemanticNavigator) GetTree(url string) *semantic.SemanticTree {
+func (n *SemanticNavigator) GetTree(url string) *understand.SemanticTree {
 	if val, ok := n.trees.Load(url); ok {
-		return val.(*semantic.SemanticTree)
+		return val.(*understand.SemanticTree)
 	}
 	return nil
 }
@@ -195,11 +195,11 @@ func (n *SemanticNavigator) ExtractAndNavigate(ctx context.Context, url, targetS
 	return navResult, nil
 }
 
-func (n *SemanticNavigator) findActionBySelector(tree *semantic.SemanticTree, selector string) *semantic.Action {
-	var result *semantic.Action
+func (n *SemanticNavigator) findActionBySelector(tree *understand.SemanticTree, selector string) *understand.Action {
+	var result *understand.Action
 
-	var walk func(node *semantic.SemanticNode)
-	walk = func(node *semantic.SemanticNode) {
+	var walk func(node *understand.SemanticNode)
+	walk = func(node *understand.SemanticNode) {
 		for i := range node.Actions {
 			if strings.Contains(node.Actions[i].Selector, selector) {
 				result = &node.Actions[i]
@@ -224,12 +224,12 @@ func (n *SemanticNavigator) findActionBySelector(tree *semantic.SemanticTree, se
 	return result
 }
 
-func (n *SemanticNavigator) findActionByDescription(tree *semantic.SemanticTree, desc string) *semantic.Action {
-	var result *semantic.Action
+func (n *SemanticNavigator) findActionByDescription(tree *understand.SemanticTree, desc string) *understand.Action {
+	var result *understand.Action
 	descLower := strings.ToLower(desc)
 
-	var walk func(node *semantic.SemanticNode)
-	walk = func(node *semantic.SemanticNode) {
+	var walk func(node *understand.SemanticNode)
+	walk = func(node *understand.SemanticNode) {
 		for i := range node.Actions {
 			nodeDesc := strings.ToLower(node.Actions[i].Description)
 			if strings.Contains(nodeDesc, descLower) || strings.Contains(descLower, nodeDesc) {
