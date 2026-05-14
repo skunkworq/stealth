@@ -1,4 +1,4 @@
-package stealth
+package stealth_test
 
 import (
 	"context"
@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 // TestCloudflare_AnalyzeChallengePages fetches sites that serve JS challenges
@@ -20,7 +20,7 @@ import (
 //
 // Usage:
 //
-//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/ -run TestCloudflare_AnalyzeChallengePages -v -count=1 -timeout 2m
+//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/test/ -run TestCloudflare_AnalyzeChallengePages -v -count=1 -timeout 2m
 func TestCloudflare_AnalyzeChallengePages(t *testing.T) {
 	if os.Getenv("STEALTH_LIVE_TEST") != "1" {
 		t.Skip("set STEALTH_LIVE_TEST=1 to run live tests")
@@ -177,7 +177,7 @@ func TestCloudflare_AnalyzeChallengePages(t *testing.T) {
 //
 // Usage:
 //
-//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/ -run TestCloudflare_WaitAndRetrySolve -v -count=1 -timeout 3m
+//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/test/ -run TestCloudflare_WaitAndRetrySolve -v -count=1 -timeout 3m
 func TestCloudflare_WaitAndRetrySolve(t *testing.T) {
 	if os.Getenv("STEALTH_LIVE_TEST") != "1" {
 		t.Skip("set STEALTH_LIVE_TEST=1 to run live tests")
@@ -286,7 +286,7 @@ func TestCloudflare_WaitAndRetrySolve(t *testing.T) {
 //
 // Usage:
 //
-//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/ -run TestCloudflare_ChromiumSolve -v -count=1 -timeout 5m
+//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/test/ -run TestCloudflare_ChromiumSolve -v -count=1 -timeout 5m
 func TestCloudflare_ChromiumSolve(t *testing.T) {
 	if os.Getenv("STEALTH_LIVE_TEST") != "1" {
 		t.Skip("set STEALTH_LIVE_TEST=1 to run live tests")
@@ -318,9 +318,9 @@ func TestCloudflare_ChromiumSolve(t *testing.T) {
 			t.Logf("Navigating with chromium engine (headless)...")
 
 			resp, err := eng.Do(ctx, &engine.Request{
-				URL:               site.url,
-				Timeout:           site.timeout,
-				WaitForNavigation: true,
+				URL:          site.url,
+				Timeout:      site.timeout,
+				LoadStrategy: engine.LoadLoad,
 			})
 			if err != nil {
 				t.Fatalf("chromium request failed: %v", err)

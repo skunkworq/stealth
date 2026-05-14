@@ -9,5 +9,5 @@ import (
 // extraction — anti-bot pages are automatically solved before the semantic
 // tree is built.
 func (c *Adaptive) NewSemanticExtractor(config *understand.PipelineConfig) *understand.SemanticExtractor {
-	return understand.NewSemanticExtractorWithEngine(config, c.activeEngine())
+	return understand.NewSemanticExtractorWithEngine(config, c.ActiveEngine())
 }

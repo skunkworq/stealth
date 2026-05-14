@@ -1,4 +1,4 @@
-package stealth
+package stealth_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	wf "github.com/skunkworq/stealth/brws/browser/engine/meta/waterfall"
+	stealth "github.com/skunkworq/stealth/brws/stealth"
 )
 
 // stubEngine is a test double that returns a fixed response.
@@ -50,17 +51,17 @@ func TestClient_FSMWaterfallEscalation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := DefaultConfig()
+	cfg := stealth.DefaultConfig()
 	cfg.EngineName = "native"
 	// EvasionFSM is enabled by default
 	cfg.WaterfallEngine = waterfallEng
-	cfg.Escalation = &EscalationConfig{
+	cfg.Escalation = &stealth.EscalationConfig{
 		Enabled:              true,
 		MaxEscalationRetries: 1,
 		PromoteOnStatus:      []int{403, 429},
 	}
 
-	client, err := NewAdaptiveWithConfig(cfg)
+	client, err := stealth.NewAdaptiveWithEngine(httpEngine, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,11 +78,11 @@ func TestClient_FSMWaterfallEscalation(t *testing.T) {
 	}
 
 	// FSM should have escalated — the retry loop accumulated 3+ ban signals
-	if !client.evasionFSM.ShouldEscalate() {
+	if !client.EvasionFSM().ShouldEscalate() {
 		t.Error("FSM should recommend escalation after retry loop accumulated ban signals")
 	}
 
-	reason := client.evasionFSM.EscalationReason()
+	reason := client.EvasionFSM().EscalationReason()
 	if reason != "ban_signals" {
 		t.Errorf("expected reason 'ban_signals', got %q", reason)
 	}
@@ -89,7 +90,7 @@ func TestClient_FSMWaterfallEscalation(t *testing.T) {
 	// Verify waterfall metrics show the chromium tier was promoted
 	metrics := waterfallEng.Metrics()
 	t.Logf("Waterfall metrics: wins=%v errors=%v", metrics.Wins, metrics.Errors)
-	t.Logf("FSM summary:\n%s", client.evasionFSM.Summary())
+	t.Logf("FSM summary:\n%s", client.EvasionFSM().Summary())
 
 	_ = resp
 }
@@ -116,17 +117,17 @@ func TestClient_FSMExhaustion_PromotesChromium(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cfg := DefaultConfig()
+	cfg := stealth.DefaultConfig()
 	cfg.EngineName = "native"
 	// EvasionFSM is enabled by default
 	cfg.WaterfallEngine = waterfallEng
-	cfg.Escalation = &EscalationConfig{
+	cfg.Escalation = &stealth.EscalationConfig{
 		Enabled:              true,
 		MaxEscalationRetries: 0, // no retries — just track signals
 		PromoteOnStatus:      []int{403},
 	}
 
-	client, err := NewAdaptiveWithConfig(cfg)
+	client, err := stealth.NewAdaptiveWithEngine(blockedEngine, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -143,41 +144,45 @@ func TestClient_FSMExhaustion_PromotesChromium(t *testing.T) {
 		}
 	}
 
-	if !client.evasionFSM.ShouldEscalate() {
+	if !client.EvasionFSM().ShouldEscalate() {
 		t.Fatal("expected FSM to recommend escalation")
 	}
 
-	t.Logf("Escalation reason: %s", client.evasionFSM.EscalationReason())
-	t.Logf("FSM summary:\n%s", client.evasionFSM.Summary())
+	t.Logf("Escalation reason: %s", client.EvasionFSM().EscalationReason())
+	t.Logf("FSM summary:\n%s", client.EvasionFSM().Summary())
 }
 
-// TestClient_ActiveEngine_SelectsWaterfall verifies that activeEngine() returns
+// TestClient_ActiveEngine_SelectsWaterfall verifies that ActiveEngine() returns
 // the waterfall when configured.
 func TestClient_ActiveEngine_SelectsWaterfall(t *testing.T) {
 	eng := &stubEngine{name: "base", response: &engine.Response{Status: 200}}
 	waterfallEng, _ := wf.New(wf.Tier{Engine: eng, Name: "base"})
 
-	client := &Adaptive{
-		engine:    eng,
-		waterfall: waterfallEng,
+	cfg := stealth.DefaultConfig()
+	cfg.WaterfallEngine = waterfallEng
+	client, err := stealth.NewAdaptiveWithEngine(eng, cfg)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	active := client.activeEngine()
+	active := client.ActiveEngine()
 	if active.Name() != "waterfall" {
 		t.Errorf("expected waterfall engine, got %s", active.Name())
 	}
 }
 
-// TestClient_ActiveEngine_FallsBackToRaw verifies that activeEngine() returns
+// TestClient_ActiveEngine_FallsBackToRaw verifies that ActiveEngine() returns
 // the raw engine when no waterfall is configured.
 func TestClient_ActiveEngine_FallsBackToRaw(t *testing.T) {
 	eng := &stubEngine{name: "native", response: &engine.Response{Status: 200}}
 
-	client := &Adaptive{
-		engine: eng,
+	cfg := stealth.DefaultConfig()
+	client, err := stealth.NewAdaptiveWithEngine(eng, cfg)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	active := client.activeEngine()
+	active := client.ActiveEngine()
 	if active.Name() != "native" {
 		t.Errorf("expected native engine, got %s", active.Name())
 	}

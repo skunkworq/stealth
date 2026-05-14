@@ -1,14 +1,15 @@
-package stealth
+package stealth_test
 
 import (
 	"fmt"
 	"testing"
 
+	"github.com/skunkworq/stealth/brws/stealth"
 	chromestealth "github.com/skunkworq/stealth/brws/stealth/chromium"
 )
 
 func TestBuildStateVector_EmptyAnomalies(t *testing.T) {
-	vec := BuildStateVector(nil, nil, nil)
+	vec := stealth.BuildStateVector(nil, nil, nil)
 	if len(vec) != 18 {
 		t.Fatalf("expected 18 dimensions, got %d", len(vec))
 	}
@@ -28,7 +29,7 @@ func TestBuildStateVector_AnomaliesMapping(t *testing.T) {
 		"timezone mismatch",
 	}
 
-	vec := BuildStateVector(anomalies, nil, nil)
+	vec := stealth.BuildStateVector(anomalies, nil, nil)
 
 	if vec[0] != 1.0 {
 		t.Error("webdriver anomaly not mapped to vec[0]")
@@ -48,13 +49,13 @@ func TestBuildStateVector_AnomaliesMapping(t *testing.T) {
 }
 
 func TestBuildStateVector_CaptchaState(t *testing.T) {
-	captcha := &CaptchaState{
+	captcha := &stealth.CaptchaState{
 		Presented:  true,
 		Solved:     true,
 		Difficulty: 0.75,
 	}
 
-	vec := BuildStateVector(nil, captcha, nil)
+	vec := stealth.BuildStateVector(nil, captcha, nil)
 
 	if vec[11] != 1.0 {
 		t.Error("captcha presented not mapped to vec[11]")
@@ -68,14 +69,14 @@ func TestBuildStateVector_CaptchaState(t *testing.T) {
 }
 
 func TestBuildStateVector_BehavioralState(t *testing.T) {
-	behavioral := &BehavioralState{
+	behavioral := &stealth.BehavioralState{
 		MouseVelocity: 1000.0, // 1000/2000 = 0.5
 		TypingSpeed:   250.0,  // 250/500 = 0.5
 		Straightness:  0.8,
 		SolveTimeMs:   15000, // 15000/30000 = 0.5
 	}
 
-	vec := BuildStateVector(nil, nil, behavioral)
+	vec := stealth.BuildStateVector(nil, nil, behavioral)
 
 	if vec[14] != 0.5 {
 		t.Errorf("mouse velocity: expected 0.5, got %.4f", vec[14])
@@ -115,7 +116,7 @@ func TestApplyAction_StealthConfigToggle(t *testing.T) {
 		t.Run(tt.fieldName, func(t *testing.T) {
 			cfg := &chromestealth.StealthConfig{}
 
-			applied, name := ApplyAction(cfg, tt.actionIdx)
+			applied, name := stealth.ApplyAction(cfg, tt.actionIdx)
 			if !applied {
 				t.Errorf("expected action %d (%s) to be applied", tt.actionIdx, tt.fieldName)
 			}
@@ -127,7 +128,7 @@ func TestApplyAction_StealthConfigToggle(t *testing.T) {
 			}
 
 			// Applying again should return false (already set)
-			applied, _ = ApplyAction(cfg, tt.actionIdx)
+			applied, _ = stealth.ApplyAction(cfg, tt.actionIdx)
 			if applied {
 				t.Errorf("re-applying action %d should return applied=false", tt.actionIdx)
 			}
@@ -140,7 +141,7 @@ func TestApplyAction_SignalingActions(t *testing.T) {
 
 	// Actions 12-17 are signaling actions
 	for i := 12; i <= 17; i++ {
-		applied, name := ApplyAction(cfg, i)
+		applied, name := stealth.ApplyAction(cfg, i)
 		if !applied {
 			t.Errorf("signaling action %d (%s) should always apply", i, name)
 		}
@@ -150,7 +151,7 @@ func TestApplyAction_SignalingActions(t *testing.T) {
 func TestApplyAction_InvalidAction(t *testing.T) {
 	cfg := &chromestealth.StealthConfig{}
 
-	applied, name := ApplyAction(cfg, 99)
+	applied, name := stealth.ApplyAction(cfg, 99)
 	if applied {
 		t.Error("invalid action should not be applied")
 	}
@@ -170,7 +171,7 @@ func TestExtractAnomalies(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		anomalies := extractAnomalies(fmt.Errorf("%s", tt.errMsg))
+		anomalies := stealth.ExtractAnomalies(fmt.Errorf("%s", tt.errMsg))
 		if len(anomalies) == 0 {
 			t.Errorf("expected anomalies from error '%s', got none", tt.errMsg)
 		}
@@ -191,20 +192,20 @@ func TestExtractAnomalies(t *testing.T) {
 }
 
 func TestExtractAnomalies_Nil(t *testing.T) {
-	anomalies := extractAnomalies(nil)
+	anomalies := stealth.ExtractAnomalies(nil)
 	if anomalies != nil {
 		t.Error("nil error should return nil anomalies")
 	}
 }
 
 func TestClamp(t *testing.T) {
-	if clamp(-1, 0, 1) != 0 {
-		t.Error("clamp(-1, 0, 1) should be 0")
+	if stealth.Clamp(-1, 0, 1) != 0 {
+		t.Error("Clamp(-1, 0, 1) should be 0")
 	}
-	if clamp(2, 0, 1) != 1 {
-		t.Error("clamp(2, 0, 1) should be 1")
+	if stealth.Clamp(2, 0, 1) != 1 {
+		t.Error("Clamp(2, 0, 1) should be 1")
 	}
-	if clamp(0.5, 0, 1) != 0.5 {
-		t.Error("clamp(0.5, 0, 1) should be 0.5")
+	if stealth.Clamp(0.5, 0, 1) != 0.5 {
+		t.Error("Clamp(0.5, 0, 1) should be 0.5")
 	}
 }

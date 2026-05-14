@@ -1,4 +1,4 @@
-package stealth
+package stealth_test
 
 import (
 	"context"
@@ -12,14 +12,15 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
+	stealth "github.com/skunkworq/stealth/brws/stealth"
 )
 
 // findProjectRoot returns the absolute path to the project root.
 func findProjectRoot(t *testing.T) string {
 	t.Helper()
 	_, f, _, _ := runtime.Caller(0)
-	// cloudflare_live_test.go is in brws/stealth/, go up 2 levels
-	return filepath.Join(filepath.Dir(f), "..", "..")
+	// cloudflare_live_test.go is in brws/stealth/test/, go up 3 levels
+	return filepath.Join(filepath.Dir(f), "..", "..", "..")
 }
 
 // TestCloudflare_LiveSites tests the stealth client against real Cloudflare-protected
@@ -27,7 +28,7 @@ func findProjectRoot(t *testing.T) string {
 //
 // Usage:
 //
-//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/ -run TestCloudflare_LiveSites -v -count=1 -timeout 2m
+//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/test/ -run TestCloudflare_LiveSites -v -count=1 -timeout 2m
 func TestCloudflare_LiveSites(t *testing.T) {
 	if os.Getenv("STEALTH_LIVE_TEST") != "1" {
 		t.Skip("set STEALTH_LIVE_TEST=1 to run live tests")
@@ -144,7 +145,7 @@ func TestCloudflare_LiveSites(t *testing.T) {
 //
 // Usage:
 //
-//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/ -run TestCloudflare_LiveWithStealthClient -v -count=1 -timeout 3m
+//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/test/ -run TestCloudflare_LiveWithStealthClient -v -count=1 -timeout 3m
 func TestCloudflare_LiveWithStealthClient(t *testing.T) {
 	if os.Getenv("STEALTH_LIVE_TEST") != "1" {
 		t.Skip("set STEALTH_LIVE_TEST=1 to run live tests")
@@ -168,19 +169,19 @@ func TestCloudflare_LiveWithStealthClient(t *testing.T) {
 			// Find project root for trace data
 			traceDir := findProjectRoot(t) + "/training-data/traces"
 
-			client, err := NewAdaptive(
-				WithEngine("native"),
-				WithStealth(true),
-				WithEvasionFSM(),
-				WithTraceLibrary(traceDir),
-				WithLogging("info", false),
+			client, err := stealth.NewAdaptive(
+				stealth.WithEngine("native"),
+				stealth.WithStealth(true),
+				stealth.WithEvasionFSM(),
+				stealth.WithTraceLibrary(traceDir),
+				stealth.WithLogging("info", false),
 			)
 			if err != nil {
 				t.Fatalf("create client: %v", err)
 			}
 			// Enable auto-solve on the config directly
-			client.config.Challenge.AutoDetect = true
-			client.config.Challenge.AutoSolve = true
+			client.Config().Challenge.AutoDetect = true
+			client.Config().Challenge.AutoSolve = true
 
 			resp, err := client.Navigate(ctx, site.url)
 			if err != nil {
@@ -207,9 +208,9 @@ func TestCloudflare_LiveWithStealthClient(t *testing.T) {
 			}
 
 			// Report evasion FSM state
-			if client.evasionFSM != nil {
-				t.Logf("Evasion FSM: %s", client.evasionFSM.Summary())
-				det, solves, failures := client.evasionFSM.CaptchaStats()
+			if fsm := client.EvasionFSM(); fsm != nil {
+				t.Logf("Evasion FSM: %s", fsm.Summary())
+				det, solves, failures := fsm.CaptchaStats()
 				if det > 0 {
 					t.Logf("Captcha stats: detected=%d solved=%d failed=%d", det, solves, failures)
 				}
@@ -223,7 +224,7 @@ func TestCloudflare_LiveWithStealthClient(t *testing.T) {
 //
 // Usage:
 //
-//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/ -run TestCloudflare_LiveComparison -v -count=1 -timeout 2m
+//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/test/ -run TestCloudflare_LiveComparison -v -count=1 -timeout 2m
 func TestCloudflare_LiveComparison(t *testing.T) {
 	if os.Getenv("STEALTH_LIVE_TEST") != "1" {
 		t.Skip("set STEALTH_LIVE_TEST=1 to run live tests")
@@ -259,15 +260,15 @@ func TestCloudflare_LiveComparison(t *testing.T) {
 		return fmt.Sprintf("%d (%d bytes)", r.status, r.bodySize)
 	}
 
-	runWith := func(stealth bool) []compResult {
+	runWith := func(stealthEnabled bool) []compResult {
 		eng, err := engine.New("native", engine.Options{
-			Stealth:     stealth,
-			StealthTLS:  stealth,
+			Stealth:     stealthEnabled,
+			StealthTLS:  stealthEnabled,
 			ProfileName: "chrome-120-macos",
 			Timeout:     20 * time.Second,
 		})
 		if err != nil {
-			t.Fatalf("create engine (stealth=%v): %v", stealth, err)
+			t.Fatalf("create engine (stealth=%v): %v", stealthEnabled, err)
 		}
 		defer eng.Close()
 

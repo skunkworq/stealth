@@ -1,4 +1,4 @@
-package stealth
+package stealth_test
 
 import (
 	"fmt"
@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	stealth "github.com/skunkworq/stealth/brws/stealth"
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
@@ -67,7 +68,7 @@ func TestCloudflareOnExampleCom(t *testing.T) {
 	ts, cc := mountCloudflareLabServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 
 	// 3a. JS Challenge
 	t.Log("\n--- 3a: JS Challenge ---")
@@ -90,7 +91,7 @@ func TestCloudflareOnExampleCom(t *testing.T) {
 
 	// 3b. Managed Challenge (behavioral analysis is stochastic; retry up to 3 times)
 	t.Log("\n--- 3b: Managed Challenge ---")
-	var managedResult *CloudflareSolveResult
+	var managedResult *stealth.CloudflareSolveResult
 	for attempt := 1; attempt <= 3; attempt++ {
 		managedResult, err = solver.SolveManagedChallenge(ts.URL)
 		if err == nil && managedResult.Passed {

@@ -1,4 +1,4 @@
-package stealth
+package stealth_test
 
 import (
 	"compress/gzip"

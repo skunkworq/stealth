@@ -1,4 +1,4 @@
-package stealth
+package stealth_test
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/skunkworq/stealth/brws/stealth"
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
@@ -223,7 +224,7 @@ func TestSwordSolvesJSChallenge(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 	result, err := solver.SolveJSChallenge(ts.URL)
 	if err != nil {
 		t.Fatalf("SolveJSChallenge failed: %v", err)
@@ -253,10 +254,10 @@ func TestSwordSolvesManagedChallenge(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 
 	// Behavioral analysis is stochastic; retry up to 5 times for CI stability
-	var result *CloudflareSolveResult
+	var result *stealth.CloudflareSolveResult
 	var err error
 	for attempt := 1; attempt <= 5; attempt++ {
 		result, err = solver.SolveManagedChallenge(ts.URL)
@@ -287,10 +288,10 @@ func TestSwordSolvesTurnstile(t *testing.T) {
 	ts, cc := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
-	result, err := solver.ExerciseTurnstileFlow(ts.URL, &TurnstileFlowOptions{
-		Verifier: &LabTurnstileVerifier{
-			HTTPClient: solver.httpClient,
+	solver := stealth.NewCloudflareSolverClient()
+	result, err := solver.ExerciseTurnstileFlow(ts.URL, &stealth.TurnstileFlowOptions{
+		Verifier: &stealth.LabTurnstileVerifier{
+			HTTPClient: solver.HTTPClient(),
 			BaseURL:    ts.URL,
 			Secret:     cc.TurnstileSecretKey(),
 			Hostname:   "localhost",
@@ -354,11 +355,11 @@ func TestSwordSolvesTurnstileVariants(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			solver := NewCloudflareSolverClient()
-			result, err := solver.ExerciseTurnstileFlow(ts.URL, &TurnstileFlowOptions{
+			solver := stealth.NewCloudflareSolverClient()
+			result, err := solver.ExerciseTurnstileFlow(ts.URL, &stealth.TurnstileFlowOptions{
 				DetectionScore: tc.score,
-				Verifier: &LabTurnstileVerifier{
-					HTTPClient: solver.httpClient,
+				Verifier: &stealth.LabTurnstileVerifier{
+					HTTPClient: solver.HTTPClient(),
 					BaseURL:    ts.URL,
 					Secret:     cc.TurnstileSecretKey(),
 					Hostname:   "localhost",
@@ -428,7 +429,7 @@ func TestSwordSolvesTurnstileVariants(t *testing.T) {
 }
 
 func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 
 	testCases := []struct {
 		name            string
@@ -513,20 +514,20 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			plan := solver.buildTurnstileInteractionPlan(tc.cfg)
-			if plan == nil || plan.interactionProof == nil {
+			plan := solver.BuildTurnstileInteractionPlan(tc.cfg)
+			if plan == nil || plan.InteractionProof == nil {
 				t.Fatalf("expected interaction plan for %s", tc.name)
 			}
-			if plan.interactionProof.Type != tc.wantVariant {
-				t.Fatalf("expected %s proof, got %+v", tc.wantVariant, plan.interactionProof)
+			if plan.InteractionProof.Type != tc.wantVariant {
+				t.Fatalf("expected %s proof, got %+v", tc.wantVariant, plan.InteractionProof)
 			}
-			if len(plan.events) == 0 {
+			if len(plan.Events) == 0 {
 				t.Fatalf("expected events for %s", tc.name)
 			}
 
-			summary := summarizeTurnstilePlan(plan.events)
+			summary := summarizeTurnstilePlan(plan.Events)
 			if !summary.timestampsSorted {
-				t.Fatalf("expected sorted timestamps: %+v", plan.events)
+				t.Fatalf("expected sorted timestamps: %+v", plan.Events)
 			}
 			if !summary.hasMouseDown || !summary.hasMouseUp || !summary.hasClick {
 				t.Fatalf("expected complete pointer lifecycle: %+v", summary)
@@ -552,60 +553,60 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 
 			switch tc.wantVariant {
 			case "hold":
-				if plan.interactionProof.HoldDurationMs != summary.holdDurationMs {
-					t.Fatalf("hold proof should match event trace: proof=%+v summary=%+v", plan.interactionProof, summary)
+				if plan.InteractionProof.HoldDurationMs != summary.holdDurationMs {
+					t.Fatalf("hold proof should match event trace: proof=%+v summary=%+v", plan.InteractionProof, summary)
 				}
-				if plan.interactionProof.HoldDurationMs < tc.cfg.Interaction.RequiredHoldMs {
-					t.Fatalf("hold proof below required threshold: %+v", plan.interactionProof)
+				if plan.InteractionProof.HoldDurationMs < tc.cfg.Interaction.RequiredHoldMs {
+					t.Fatalf("hold proof below required threshold: %+v", plan.InteractionProof)
 				}
 			case "drag":
-				if plan.interactionProof.DragEventCount != summary.dragMoveCount {
-					t.Fatalf("drag proof should match drag move count: proof=%+v summary=%+v", plan.interactionProof, summary)
+				if plan.InteractionProof.DragEventCount != summary.dragMoveCount {
+					t.Fatalf("drag proof should match drag move count: proof=%+v summary=%+v", plan.InteractionProof, summary)
 				}
-				if plan.interactionProof.DragDistancePx < tc.cfg.Interaction.RequiredDragDistancePx {
-					t.Fatalf("drag proof below required threshold: %+v", plan.interactionProof)
+				if plan.InteractionProof.DragDistancePx < tc.cfg.Interaction.RequiredDragDistancePx {
+					t.Fatalf("drag proof below required threshold: %+v", plan.InteractionProof)
 				}
-				if summary.dragDistancePx < plan.interactionProof.DragDistancePx {
-					t.Fatalf("event trace should cover proof distance: proof=%+v summary=%+v", plan.interactionProof, summary)
+				if summary.dragDistancePx < plan.InteractionProof.DragDistancePx {
+					t.Fatalf("event trace should cover proof distance: proof=%+v summary=%+v", plan.InteractionProof, summary)
 				}
 			case "drag_precision":
 				// The precision plan uses jittered float coordinates and rounds the proof
 				// back to whole pixels, so a 1px undershoot can happen without changing
 				// the actual interaction contract.
 				overshootTolerancePx := 1
-				if plan.interactionProof.DragEventCount != summary.dragMoveCount {
-					t.Fatalf("precision proof should match drag move count: proof=%+v summary=%+v", plan.interactionProof, summary)
+				if plan.InteractionProof.DragEventCount != summary.dragMoveCount {
+					t.Fatalf("precision proof should match drag move count: proof=%+v summary=%+v", plan.InteractionProof, summary)
 				}
-				if summary.approachMoveCount < plan.interactionProof.ApproachMoveCount {
-					t.Fatalf("precision trace should back approach move count: proof=%+v summary=%+v", plan.interactionProof, summary)
+				if summary.approachMoveCount < plan.InteractionProof.ApproachMoveCount {
+					t.Fatalf("precision trace should back approach move count: proof=%+v summary=%+v", plan.InteractionProof, summary)
 				}
-				if summary.approachHoverMs < plan.interactionProof.ApproachHoverMs {
-					t.Fatalf("precision trace should back approach hover: proof=%+v summary=%+v", plan.interactionProof, summary)
+				if summary.approachHoverMs < plan.InteractionProof.ApproachHoverMs {
+					t.Fatalf("precision trace should back approach hover: proof=%+v summary=%+v", plan.InteractionProof, summary)
 				}
-				if plan.interactionProof.ApproachSettleMs != summary.approachSettleMs {
-					t.Fatalf("precision proof should match approach settle: proof=%+v summary=%+v", plan.interactionProof, summary)
+				if plan.InteractionProof.ApproachSettleMs != summary.approachSettleMs {
+					t.Fatalf("precision proof should match approach settle: proof=%+v summary=%+v", plan.InteractionProof, summary)
 				}
-				if plan.interactionProof.SettleDurationMs != summary.settleAfterDragMs {
-					t.Fatalf("precision proof should match post-drag settle: proof=%+v summary=%+v", plan.interactionProof, summary)
+				if plan.InteractionProof.SettleDurationMs != summary.settleAfterDragMs {
+					t.Fatalf("precision proof should match post-drag settle: proof=%+v summary=%+v", plan.InteractionProof, summary)
 				}
-				if plan.interactionProof.DirectionChanges != summary.directionChanges {
-					t.Fatalf("precision proof should match direction changes: proof=%+v summary=%+v", plan.interactionProof, summary)
+				if plan.InteractionProof.DirectionChanges != summary.directionChanges {
+					t.Fatalf("precision proof should match direction changes: proof=%+v summary=%+v", plan.InteractionProof, summary)
 				}
-				if plan.interactionProof.OvershootPx+overshootTolerancePx < tc.cfg.Interaction.RequiredOvershootPx {
-					t.Fatalf("precision proof below overshoot threshold: %+v", plan.interactionProof)
+				if plan.InteractionProof.OvershootPx+overshootTolerancePx < tc.cfg.Interaction.RequiredOvershootPx {
+					t.Fatalf("precision proof below overshoot threshold: %+v", plan.InteractionProof)
 				}
-				if plan.interactionProof.SettleDurationMs < tc.cfg.Interaction.RequiredSettleMs {
-					t.Fatalf("precision settle below required threshold: %+v", plan.interactionProof)
+				if plan.InteractionProof.SettleDurationMs < tc.cfg.Interaction.RequiredSettleMs {
+					t.Fatalf("precision settle below required threshold: %+v", plan.InteractionProof)
 				}
-				if plan.interactionProof.ApproachHoverMs < tc.cfg.Interaction.RequiredApproachHoverMs {
-					t.Fatalf("precision hover below required threshold: %+v", plan.interactionProof)
+				if plan.InteractionProof.ApproachHoverMs < tc.cfg.Interaction.RequiredApproachHoverMs {
+					t.Fatalf("precision hover below required threshold: %+v", plan.InteractionProof)
 				}
-				if plan.interactionProof.ApproachSettleMs < tc.cfg.Interaction.RequiredApproachSettleMs {
-					t.Fatalf("precision approach settle below required threshold: %+v", plan.interactionProof)
+				if plan.InteractionProof.ApproachSettleMs < tc.cfg.Interaction.RequiredApproachSettleMs {
+					t.Fatalf("precision approach settle below required threshold: %+v", plan.InteractionProof)
 				}
 			default:
-				if plan.interactionProof.CheckboxClicks != 1 {
-					t.Fatalf("expected a single checkbox click: %+v", plan.interactionProof)
+				if plan.InteractionProof.CheckboxClicks != 1 {
+					t.Fatalf("expected a single checkbox click: %+v", plan.InteractionProof)
 				}
 			}
 		})
@@ -613,7 +614,7 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 }
 
 func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 	cfg := &challenge.TurnstileWidgetConfig{
 		Interaction: challenge.TurnstileInteractionConfig{
 			Type:                   "drag",
@@ -622,15 +623,15 @@ func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
 		},
 	}
 
-	first := solver.buildTurnstileInteractionPlan(cfg)
-	second := solver.buildTurnstileInteractionPlan(cfg)
+	first := solver.BuildTurnstileInteractionPlan(cfg)
+	second := solver.BuildTurnstileInteractionPlan(cfg)
 
 	firstJSON, err := json.Marshal(struct {
 		Proof  *challenge.TurnstileInteractionProof `json:"proof"`
 		Events []challenge.CaptchaEvent             `json:"events"`
 	}{
-		Proof:  first.interactionProof,
-		Events: first.events,
+		Proof:  first.InteractionProof,
+		Events: first.Events,
 	})
 	if err != nil {
 		t.Fatalf("marshal first plan: %v", err)
@@ -639,8 +640,8 @@ func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
 		Proof  *challenge.TurnstileInteractionProof `json:"proof"`
 		Events []challenge.CaptchaEvent             `json:"events"`
 	}{
-		Proof:  second.interactionProof,
-		Events: second.events,
+		Proof:  second.InteractionProof,
+		Events: second.Events,
 	})
 	if err != nil {
 		t.Fatalf("marshal second plan: %v", err)
@@ -652,7 +653,7 @@ func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
 }
 
 func TestHandleTurnstileLabRejectsUnallowlistedHost(t *testing.T) {
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 	if _, err := solver.HandleTurnstileLab("https://example.com"); err == nil {
 		t.Fatal("expected non-local host to be rejected")
 	}
@@ -662,10 +663,10 @@ func TestLabTurnstileVerifierRejectsDuplicateToken(t *testing.T) {
 	ts, cc := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
-	result, err := solver.ExerciseTurnstileFlow(ts.URL, &TurnstileFlowOptions{
-		Verifier: &LabTurnstileVerifier{
-			HTTPClient: solver.httpClient,
+	solver := stealth.NewCloudflareSolverClient()
+	result, err := solver.ExerciseTurnstileFlow(ts.URL, &stealth.TurnstileFlowOptions{
+		Verifier: &stealth.LabTurnstileVerifier{
+			HTTPClient: solver.HTTPClient(),
 			BaseURL:    ts.URL,
 			Secret:     cc.TurnstileSecretKey(),
 			Hostname:   "localhost",
@@ -675,8 +676,8 @@ func TestLabTurnstileVerifierRejectsDuplicateToken(t *testing.T) {
 		t.Fatalf("ExerciseTurnstileFlow failed: %v", err)
 	}
 
-	verifier := &LabTurnstileVerifier{
-		HTTPClient: solver.httpClient,
+	verifier := &stealth.LabTurnstileVerifier{
+		HTTPClient: solver.HTTPClient(),
 		BaseURL:    ts.URL,
 		Secret:     cc.TurnstileSecretKey(),
 		Hostname:   "localhost",
@@ -694,7 +695,7 @@ func TestSwordClearanceCookieReuse(t *testing.T) {
 	ts, cc := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 	result, err := solver.SolveJSChallenge(ts.URL)
 	if err != nil {
 		t.Fatalf("initial solve failed: %v", err)
@@ -733,22 +734,22 @@ func TestBotBehavioralRejection(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 
 	// Init a managed challenge
-	initResp, err := solver.initChallenge(ts.URL, "cloudflare_managed", 0.5, "")
+	initResp, err := solver.InitChallenge(ts.URL, "cloudflare_managed", 0.5, "")
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
 
 	// Solve PoW correctly
-	powSolution, err := solver.solvePoW(initResp.PoW.Prefix, initResp.PoW.Difficulty)
+	powSolution, err := solver.SolvePoW(initResp.PoW.Prefix, initResp.PoW.Difficulty)
 	if err != nil {
 		t.Fatalf("PoW solve failed: %v", err)
 	}
 
 	// Generate valid fingerprint but send ZERO events
-	fp := solver.generateFingerprint()
+	fp := solver.GenerateFingerprint()
 
 	body, _ := json.Marshal(map[string]interface{}{
 		"session_id":  initResp.SessionID,
@@ -757,8 +758,8 @@ func TestBotBehavioralRejection(t *testing.T) {
 		"events":      []challenge.CaptchaEvent{}, // empty!
 	})
 
-	// Use the solver's httpClient which has the __cf_bm cookie from init
-	resp, err := solver.httpClient.Post(ts.URL+"/api/cloudflare/solve/managed", "application/json",
+	// Use the solver's HTTPClient which has the __cf_bm cookie from init
+	resp, err := solver.HTTPClient().Post(ts.URL+"/api/cloudflare/solve/managed", "application/json",
 		bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("solve request failed: %v", err)
@@ -785,20 +786,20 @@ func TestEmptyFingerprintRejection(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 
-	initResp, err := solver.initChallenge(ts.URL, "cloudflare_managed", 0.5, "")
+	initResp, err := solver.InitChallenge(ts.URL, "cloudflare_managed", 0.5, "")
 	if err != nil {
 		t.Fatalf("init failed: %v", err)
 	}
 
-	powSolution, err := solver.solvePoW(initResp.PoW.Prefix, initResp.PoW.Difficulty)
+	powSolution, err := solver.SolvePoW(initResp.PoW.Prefix, initResp.PoW.Difficulty)
 	if err != nil {
 		t.Fatalf("PoW solve failed: %v", err)
 	}
 
 	// Generate some events but send nil fingerprint
-	events := solver.eventGen.GenerateHumanEvents(3000)
+	events := solver.EventGen().GenerateHumanEvents(3000)
 
 	body, _ := json.Marshal(map[string]interface{}{
 		"session_id":  initResp.SessionID,
@@ -807,8 +808,8 @@ func TestEmptyFingerprintRejection(t *testing.T) {
 		"events":      events,
 	})
 
-	// Use the solver's httpClient which has the __cf_bm cookie from init
-	resp, err := solver.httpClient.Post(ts.URL+"/api/cloudflare/solve/managed", "application/json",
+	// Use the solver's HTTPClient which has the __cf_bm cookie from init
+	resp, err := solver.HTTPClient().Post(ts.URL+"/api/cloudflare/solve/managed", "application/json",
 		bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("solve request failed: %v", err)
@@ -833,13 +834,13 @@ func TestDifficultyProgression(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 
 	scores := []float64{0.1, 0.3, 0.5}
 	prevDifficulty := 0
 
 	for _, score := range scores {
-		initResp, err := solver.initChallenge(ts.URL, "cloudflare_js", score, "")
+		initResp, err := solver.InitChallenge(ts.URL, "cloudflare_js", score, "")
 		if err != nil {
 			t.Fatalf("init failed for score %.1f: %v", score, err)
 		}
@@ -858,7 +859,7 @@ func TestStatusEndpoint(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := NewCloudflareSolverClient()
+	solver := stealth.NewCloudflareSolverClient()
 
 	// Solve a few challenges
 	_, _ = solver.SolveJSChallenge(ts.URL)

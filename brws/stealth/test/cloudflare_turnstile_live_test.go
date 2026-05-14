@@ -1,4 +1,4 @@
-package stealth
+package stealth_test
 
 import (
 	"context"
@@ -25,7 +25,7 @@ import (
 //
 // Usage:
 //
-//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/ -run TestCloudflare_TurnstileSolve -v -count=1 -timeout 3m
+//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/test/ -run TestCloudflare_TurnstileSolve -v -count=1 -timeout 3m
 func TestCloudflare_TurnstileSolve(t *testing.T) {
 	if os.Getenv("STEALTH_LIVE_TEST") != "1" {
 		t.Skip("set STEALTH_LIVE_TEST=1 to run live tests")
@@ -236,11 +236,11 @@ func TestCloudflare_TurnstileSolve(t *testing.T) {
 				startY := clickY - 30 - rand.Float64()*50
 
 				for i := 0; i <= steps; i++ {
-					t := float64(i) / float64(steps)
+					tt := float64(i) / float64(steps)
 					// Ease-in-out
-					t = t * t * (3 - 2*t)
-					x := startX + (clickX-startX)*t + rand.Float64()*2 - 1
-					y := startY + (clickY-startY)*t + rand.Float64()*2 - 1
+					tt = tt * tt * (3 - 2*tt)
+					x := startX + (clickX-startX)*tt + rand.Float64()*2 - 1
+					y := startY + (clickY-startY)*tt + rand.Float64()*2 - 1
 
 					if err := input.DispatchMouseEvent(input.MouseMoved, x, y).Do(ctx); err != nil {
 						return err
@@ -358,7 +358,7 @@ func TestCloudflare_TurnstileSolve(t *testing.T) {
 //
 // Usage:
 //
-//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/ -run TestCloudflare_TurnstileManagedChallenge -v -count=1 -timeout 3m
+//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/test/ -run TestCloudflare_TurnstileManagedChallenge -v -count=1 -timeout 3m
 func TestCloudflare_TurnstileManagedChallenge(t *testing.T) {
 	if os.Getenv("STEALTH_LIVE_TEST") != "1" {
 		t.Skip("set STEALTH_LIVE_TEST=1 to run live tests")

@@ -1,4 +1,4 @@
-package stealth
+package stealth_test
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 //
 // Usage:
 //
-//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/ -run TestCloudflare_WaterfallEscalation -v -count=1 -timeout 3m
+//	STEALTH_LIVE_TEST=1 go test ./brws/stealth/test/ -run TestCloudflare_WaterfallEscalation -v -count=1 -timeout 3m
 func TestCloudflare_WaterfallEscalation(t *testing.T) {
 	if os.Getenv("STEALTH_LIVE_TEST") != "1" {
 		t.Skip("set STEALTH_LIVE_TEST=1 to run live tests")
@@ -100,9 +100,9 @@ func TestCloudflare_WaterfallEscalation(t *testing.T) {
 			waterfall.PromoteTier("chromium")
 
 			resp, err = waterfall.Do(ctx, &engine.Request{
-				URL:               site.url,
-				Timeout:           30 * time.Second,
-				WaitForNavigation: true,
+				URL:          site.url,
+				Timeout:      30 * time.Second,
+				LoadStrategy: engine.LoadLoad,
 			})
 			if err != nil {
 				t.Fatalf("Chromium request failed: %v", err)

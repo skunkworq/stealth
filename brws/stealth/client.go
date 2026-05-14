@@ -343,7 +343,7 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 	maxRetries := 3
 
 	// Use waterfall engine when available, otherwise raw engine
-	activeEngine := c.activeEngine()
+	activeEngine := c.ActiveEngine()
 
 	// Determine request function: DoOnTab when tabCtx provided, otherwise Do
 	var doRequest func(context.Context, *engine.Request) (*engine.Response, error)
@@ -551,7 +551,7 @@ func (c *Adaptive) Scrape(ctx context.Context, url string) (*Response, error) {
 func (c *Adaptive) NavigateWithReferrer(ctx context.Context, url string, referrer string) (*Response, error) {
 	c.logger.Info("navigating with referrer", "url", url, "referrer", referrer)
 
-	activeEngine := c.activeEngine()
+	activeEngine := c.ActiveEngine()
 	resp, err := activeEngine.Do(ctx, &engine.Request{
 		URL:      url,
 		Referrer: referrer,
@@ -836,11 +836,11 @@ func (c *Adaptive) NewTab() (context.Context, context.CancelFunc, bool) {
 
 // Engine returns the underlying engine for advanced use cases.
 func (c *Adaptive) Engine() engine.Engine {
-	return c.activeEngine()
+	return c.ActiveEngine()
 }
 
-// activeEngine returns the waterfall engine if configured, otherwise the raw engine.
-func (c *Adaptive) activeEngine() engine.Engine {
+// ActiveEngine returns the waterfall engine if configured, otherwise the raw engine.
+func (c *Adaptive) ActiveEngine() engine.Engine {
 	if c.waterfall != nil {
 		return c.waterfall
 	}
@@ -1011,6 +1011,33 @@ func (c *Adaptive) FSM() *instrumentation.FSM {
 // Logger returns the logger.
 func (c *Adaptive) Logger() *instrumentation.Logger {
 	return c.logger
+}
+
+// Config returns the client's configuration.
+func (c *Adaptive) Config() *Config {
+	return c.config
+}
+
+// EvasionFSM returns the adaptive evasion FSM, or nil if not initialized.
+func (c *Adaptive) EvasionFSM() *behavior.AdaptiveEvasionFSM {
+	return c.evasionFSM
+}
+
+// NewAdaptiveFromEngines builds a minimal Adaptive wrapping the provided engine
+// and optional waterfall. Intended for unit tests that need direct engine/waterfall
+// injection without going through the full constructor.
+func NewAdaptiveFromEngines(eng engine.Engine, wfall *wf.Waterfall) *Adaptive {
+	logger, _ := instrumentation.NewLogger(&instrumentation.Config{LogLevel: "error"})
+	return &Adaptive{
+		engine:    eng,
+		waterfall: wfall,
+		config:    DefaultConfig(),
+		options:   &Options{Timeout: 30 * time.Second},
+		logger:    logger,
+		tracer:    instrumentation.NewTracer(),
+		hooks:     instrumentation.DefaultHookRegistry(),
+		fsm:       instrumentation.NewRequestFSM(),
+	}
 }
 
 // Solver returns a challenge solver (requires API key configuration).

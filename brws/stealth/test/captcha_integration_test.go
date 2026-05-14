@@ -1,4 +1,4 @@
-package stealth
+package stealth_test
 
 import (
 	"bytes"
@@ -14,9 +14,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
-	"github.com/skunkworq/stealth/brws/stealth/captcha"
+	stealth "github.com/skunkworq/stealth/brws/stealth"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
+	"github.com/skunkworq/stealth/brws/stealth/captcha"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/core/constants"
 )
 
@@ -80,7 +81,7 @@ func TestCaptchaAutoSolveEndToEnd(t *testing.T) {
 	}
 
 	// Step 4: Use CaptchaSolver to detect the captcha
-	solver := NewCaptchaSolver()
+	solver := stealth.NewCaptchaSolver()
 	cr := solver.DetectCaptchaResponse(body, flattenHeaders(resp.Header))
 	if cr == nil {
 		t.Fatal("CaptchaSolver failed to detect captcha in response")
@@ -90,11 +91,11 @@ func TestCaptchaAutoSolveEndToEnd(t *testing.T) {
 	}
 
 	// Step 5: Get actual answer from shield's internal state (ML solver is untrained)
-	challenge, found := as.CaptchaShield.GetChallenge(challengeID)
+	chal, found := as.CaptchaShield.GetChallenge(challengeID)
 	if !found {
 		t.Fatal("challenge not found in shield")
 	}
-	expectedText, _ := challenge.Challenge["text"].(string)
+	expectedText, _ := chal.Challenge["text"].(string)
 	if expectedText == "" {
 		t.Fatal("expected text answer in challenge")
 	}
@@ -115,19 +116,19 @@ func testVerifySeparately(t *testing.T, as *challenge.AdvancedStealthServer, bas
 	t.Helper()
 
 	// Create a text challenge directly
-	challenge, err := as.CaptchaShield.CreateChallenge("test-session", nil, "text")
+	chal, err := as.CaptchaShield.CreateChallenge("test-session", nil, "text")
 	if err != nil {
 		t.Fatalf("create challenge failed: %v", err)
 	}
 
-	expectedText, _ := challenge.Challenge["text"].(string)
+	expectedText, _ := chal.Challenge["text"].(string)
 	if expectedText == "" {
 		t.Fatal("expected text in challenge")
 	}
 
-	solver := NewCaptchaSolver()
+	solver := stealth.NewCaptchaSolver()
 	events := solver.GenerateHumanEvents(3000)
-	solved, err := solver.SubmitSolution(baseURL+"/api/captcha/verify", challenge.ID, expectedText, events)
+	solved, err := solver.SubmitSolution(baseURL+"/api/captcha/verify", chal.ID, expectedText, events)
 	if err != nil {
 		t.Fatalf("submit solution failed: %v", err)
 	}
@@ -141,18 +142,18 @@ func TestValidateChallengeRejectsWrongAnswer(t *testing.T) {
 	as := challenge.NewAdvancedStealthServer()
 
 	// Create a text challenge
-	challenge, err := as.CaptchaShield.CreateChallenge("test-session", nil, "text")
+	chal, err := as.CaptchaShield.CreateChallenge("test-session", nil, "text")
 	if err != nil {
 		t.Fatalf("create challenge: %v", err)
 	}
 
-	expectedText, _ := challenge.Challenge["text"].(string)
+	expectedText, _ := chal.Challenge["text"].(string)
 	if expectedText == "" {
 		t.Fatal("expected text in challenge")
 	}
 
 	// Submit wrong answer
-	solved, metrics := as.CaptchaShield.ValidateChallenge(challenge.ID, "WRONG_ANSWER_XYZ")
+	solved, metrics := as.CaptchaShield.ValidateChallenge(chal.ID, "WRONG_ANSWER_XYZ")
 	if solved {
 		t.Error("expected wrong answer to be rejected")
 	}
@@ -185,22 +186,22 @@ func TestHandleRequestIncludesImage(t *testing.T) {
 	as := challenge.NewAdvancedStealthServer()
 
 	// Create a text challenge directly and verify the data filtering works
-	challenge, err := as.CaptchaShield.CreateChallenge("test-image", nil, "text")
+	chal, err := as.CaptchaShield.CreateChallenge("test-image", nil, "text")
 	if err != nil {
 		t.Fatalf("create challenge: %v", err)
 	}
 
 	// The challenge should have both "text" (answer) and "image" internally
-	if _, hasText := challenge.Challenge["text"]; !hasText {
+	if _, hasText := chal.Challenge["text"]; !hasText {
 		t.Fatal("expected text in internal challenge")
 	}
-	if _, hasImage := challenge.Challenge["image"]; !hasImage {
+	if _, hasImage := chal.Challenge["image"]; !hasImage {
 		t.Fatal("expected image in internal challenge")
 	}
 
 	// Simulate what HandleRequest does: filter out "text" for the client
 	challengeData := make(map[string]interface{})
-	for k, v := range challenge.Challenge {
+	for k, v := range chal.Challenge {
 		if k != "text" {
 			challengeData[k] = v
 		}
@@ -355,7 +356,7 @@ func TestSwordEvadesFully(t *testing.T) {
 // TestGenerateHumanEventsPassesBotScorer verifies that the upgraded
 // GenerateHumanEvents produces events scoring < 0.5 on enhanced CalculateBotScore.
 func TestGenerateHumanEventsPassesBotScorer(t *testing.T) {
-	solver := NewCaptchaSolver()
+	solver := stealth.NewCaptchaSolver()
 
 	// Run multiple trials to verify consistency
 	for trial := 0; trial < 10; trial++ {
@@ -385,7 +386,7 @@ func TestGenerateHumanEventsPassesBotScorer(t *testing.T) {
 // may fire because captcha events use local timestamps starting from 0, not epoch.
 // We use a higher threshold (0.5) to allow for those expected flags.
 func TestGenerateHumanEventsPassesBehavioralAnalyzer(t *testing.T) {
-	solver := NewCaptchaSolver()
+	solver := stealth.NewCaptchaSolver()
 
 	for trial := 0; trial < 10; trial++ {
 		events := solver.GenerateHumanEvents(5000)
@@ -474,12 +475,12 @@ func TestCaptchaSolveEndToEndWithRealSolver(t *testing.T) {
 	defer ts.Close()
 
 	// Create a challenge directly (easier captcha for testing)
-	challenge, err := as.CaptchaShield.CreateChallenge("real-solver-test", nil, "text")
+	chal, err := as.CaptchaShield.CreateChallenge("real-solver-test", nil, "text")
 	if err != nil {
 		t.Fatalf("create challenge: %v", err)
 	}
 
-	imgB64, ok := challenge.Challenge["image"].(string)
+	imgB64, ok := chal.Challenge["image"].(string)
 	if !ok || imgB64 == "" {
 		t.Fatal("expected image in challenge")
 	}
@@ -493,15 +494,15 @@ func TestCaptchaSolveEndToEndWithRealSolver(t *testing.T) {
 	solution, confidence := templateSolver.SolveWithTemplates(img, 6)
 	t.Logf("Template solver predicted: %q (confidence: %.3f)", solution, confidence)
 
-	expectedText, _ := challenge.Challenge["text"].(string)
+	expectedText, _ := chal.Challenge["text"].(string)
 	t.Logf("Expected answer: %q", expectedText)
 
 	// Generate human-like events
-	solver := NewCaptchaSolver()
+	solver := stealth.NewCaptchaSolver()
 	events := solver.GenerateHumanEvents(4500)
 
 	// Submit with correct answer (use expected for deterministic test)
-	solved, err := solver.SubmitSolution(ts.URL+"/api/captcha/verify", challenge.ID, expectedText, events)
+	solved, err := solver.SubmitSolution(ts.URL+"/api/captcha/verify", chal.ID, expectedText, events)
 	if err != nil {
 		t.Fatalf("submit solution: %v", err)
 	}
@@ -528,14 +529,14 @@ func TestSessionTokenBypassesCaptcha(t *testing.T) {
 	defer ts.Close()
 
 	// Step 1: Create and solve a captcha to get a token
-	challenge, err := as.CaptchaShield.CreateChallenge("token-test", nil, "text")
+	chal, err := as.CaptchaShield.CreateChallenge("token-test", nil, "text")
 	if err != nil {
 		t.Fatalf("create challenge: %v", err)
 	}
-	expectedText, _ := challenge.Challenge["text"].(string)
-	solver := NewCaptchaSolver()
+	expectedText, _ := chal.Challenge["text"].(string)
+	solver := stealth.NewCaptchaSolver()
 	events := solver.GenerateHumanEvents(4000)
-	solved, err := solver.SubmitSolution(ts.URL+"/api/captcha/verify", challenge.ID, expectedText, events)
+	solved, err := solver.SubmitSolution(ts.URL+"/api/captcha/verify", chal.ID, expectedText, events)
 	if err != nil {
 		t.Fatalf("submit: %v", err)
 	}

@@ -67,11 +67,11 @@ func BuildStateVector(anomalies []string, captcha *CaptchaState, behavioral *Beh
 
 	// Behavioral dimensions [14-17]
 	if behavioral != nil {
-		vec[14] = clamp(behavioral.MouseVelocity/2000.0, 0, 1)
-		vec[15] = clamp(behavioral.TypingSpeed/500.0, 0, 1)
+		vec[14] = Clamp(behavioral.MouseVelocity/2000.0, 0, 1)
+		vec[15] = Clamp(behavioral.TypingSpeed/500.0, 0, 1)
 		vec[16] = behavioral.Straightness
 		if behavioral.SolveTimeMs > 0 {
-			vec[17] = clamp(float64(behavioral.SolveTimeMs)/30000.0, 0, 1)
+			vec[17] = Clamp(float64(behavioral.SolveTimeMs)/30000.0, 0, 1)
 		}
 	}
 
@@ -126,8 +126,8 @@ func WithPolicy(modelPath string) Option {
 	}
 }
 
-// extractAnomalies parses WAF/detection error strings into anomaly indicators.
-func extractAnomalies(err error) []string {
+// ExtractAnomalies parses WAF/detection error strings into anomaly indicators.
+func ExtractAnomalies(err error) []string {
 	if err == nil {
 		return nil
 	}
@@ -200,7 +200,7 @@ func extractAnomaliesFromResponse(resp *engine.Response) []string {
 	return anomalies
 }
 
-func clamp(v, min, max float64) float64 {
+func Clamp(v, min, max float64) float64 {
 	if v < min {
 		return min
 	}

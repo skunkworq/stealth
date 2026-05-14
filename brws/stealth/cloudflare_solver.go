@@ -68,8 +68,8 @@ func NewCloudflareSolverClient() *CloudflareSolverClient {
 	}
 }
 
-// cfInitResp mirrors the server's init response.
-type cfInitResp struct {
+// CFInitResp mirrors the server's init response.
+type CFInitResp struct {
 	SessionID           string                             `json:"session_id"`
 	Type                string                             `json:"type"`
 	RayID               string                             `json:"ray_id"`
@@ -79,6 +79,9 @@ type cfInitResp struct {
 	SiteKey             string                             `json:"site_key,omitempty"`
 	Turnstile           *challenge.TurnstileWidgetConfig `json:"turnstile,omitempty"`
 }
+
+// cfInitResp is an alias kept for internal use.
+type cfInitResp = CFInitResp
 
 // cfSolveResp mirrors the server's solve response.
 type cfSolveResp struct {
@@ -99,9 +102,10 @@ type TurnstileFlowOptions struct {
 	Verifier       TurnstileVerifier
 }
 
-type turnstileInteractionPlan struct {
-	interactionProof *challenge.TurnstileInteractionProof
-	events           []challenge.CaptchaEvent
+// TurnstileInteractionPlan holds a generated pointer event trace and its proof.
+type TurnstileInteractionPlan struct {
+	InteractionProof *challenge.TurnstileInteractionProof
+	Events           []challenge.CaptchaEvent
 }
 
 type turnstileApproachProfile struct {
@@ -193,7 +197,7 @@ func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*Cloudf
 	fp := cs.generateFingerprint()
 
 	// Step 4: Generate a human-like pointer trace for the lab harness.
-	events := cs.buildTurnstileInteractionPlan(nil).events
+	events := cs.buildTurnstileInteractionPlan(nil).Events
 
 	// Step 4.5: Human-like delay — managed challenges require ≥1.5s solve time
 	elapsed := time.Since(totalStart)
@@ -279,7 +283,7 @@ func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *Tu
 	}
 
 	// Step 4: Submit the same interaction trace that informed the widget proof.
-	events := plan.events
+	events := plan.Events
 
 	// Step 5: Submit
 	body, _ := json.Marshal(map[string]interface{}{
@@ -341,7 +345,7 @@ func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSol
 	return cs.HandleTurnstileLab(baseURL)
 }
 
-func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initResp *cfInitResp, plan *turnstileInteractionPlan) error {
+func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initResp *cfInitResp, plan *TurnstileInteractionPlan) error {
 	widgetURL := fmt.Sprintf(
 		"%s/api/cloudflare/turnstile/widget?session_id=%s&site_key=%s",
 		strings.TrimRight(baseURL, "/"),
@@ -398,8 +402,8 @@ func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initRe
 		}
 		cs.turnstileLiveDelay(callback.delayAfterMs[0], callback.delayAfterMs[1])
 	}
-	if plan != nil && plan.interactionProof != nil {
-		if err := cs.postTurnstileInteraction(baseURL, initResp.RayID, initResp.SessionID, plan.interactionProof); err != nil {
+	if plan != nil && plan.InteractionProof != nil {
+		if err := cs.postTurnstileInteraction(baseURL, initResp.RayID, initResp.SessionID, plan.InteractionProof); err != nil {
 			return err
 		}
 	}
@@ -498,6 +502,21 @@ func (cs *CloudflareSolverClient) postTurnstileInteraction(baseURL, rayID, sessi
 	return nil
 }
 
+// HTTPClient returns the internal HTTP client (used by tests to inject cookies).
+func (cs *CloudflareSolverClient) HTTPClient() *http.Client {
+	return cs.httpClient
+}
+
+// EventGen returns the internal captcha event generator.
+func (cs *CloudflareSolverClient) EventGen() *CaptchaSolver {
+	return cs.eventGen
+}
+
+// InitChallenge sends a POST to /api/cloudflare/init and returns the session.
+func (cs *CloudflareSolverClient) InitChallenge(baseURL, challengeType string, score float64, siteKey string) (*cfInitResp, error) {
+	return cs.initChallenge(baseURL, challengeType, score, siteKey)
+}
+
 // initChallenge sends a POST to /api/cloudflare/init and returns the session.
 func (cs *CloudflareSolverClient) initChallenge(baseURL, challengeType string, score float64, siteKey string) (*cfInitResp, error) {
 	body, _ := json.Marshal(map[string]interface{}{
@@ -518,6 +537,11 @@ func (cs *CloudflareSolverClient) initChallenge(baseURL, challengeType string, s
 	}
 
 	return &initResp, nil
+}
+
+// SolvePoW performs the SHA-256 hashcash loop (exported for testing).
+func (cs *CloudflareSolverClient) SolvePoW(prefix string, difficulty int) (*challenge.PoWSolution, error) {
+	return cs.solvePoW(prefix, difficulty)
 }
 
 // solvePoW performs the SHA-256 hashcash loop.
@@ -566,9 +590,9 @@ func hasLeadingZeroBits(hash []byte, n int) bool {
 	return true
 }
 
-// timezoneToOffset maps IANA timezone strings to their UTC offset in minutes
+// TimezoneToOffset maps IANA timezone strings to their UTC offset in minutes
 // (matching JavaScript's Date.getTimezoneOffset() convention: negative = ahead of UTC).
-func timezoneToOffset(tz string) int {
+func TimezoneToOffset(tz string) int {
 	switch tz {
 	case "America/New_York":
 		return -300
@@ -593,6 +617,11 @@ func timezoneToOffset(tz string) int {
 	default:
 		return -300
 	}
+}
+
+// GenerateFingerprint returns a session-pinned fingerprint (exported for testing).
+func (cs *CloudflareSolverClient) GenerateFingerprint() *challenge.FingerprintPayload {
+	return cs.generateFingerprint()
 }
 
 // generateFingerprint returns a session-pinned fingerprint. On the first call it
@@ -687,7 +716,7 @@ func (cs *CloudflareSolverClient) generateFingerprint() *challenge.FingerprintPa
 		DeviceMemory:        devMem,
 		ScreenWidth:         screenW,
 		ScreenHeight:        screenH,
-		TimezoneOffset:      timezoneToOffset(profile.Timezone),
+		TimezoneOffset:      TimezoneToOffset(profile.Timezone),
 		Timezone:            profile.Timezone,
 		ColorDepth:          colorDepth,
 		TouchPoints:         0,
@@ -701,6 +730,17 @@ func (cs *CloudflareSolverClient) generateFingerprint() *challenge.FingerprintPa
 func (cs *CloudflareSolverClient) ResetFingerprint() {
 	cs.pinnedFingerprint = nil
 	cs.pinnedProfile = nil
+}
+
+// SubmitSolution posts a challenge solution to the appropriate CF solve endpoint (exported for testing).
+func (cs *CloudflareSolverClient) SubmitSolution(
+	baseURL string,
+	ch *challenge.CloudflareChallenge,
+	solution *challenge.PoWSolution,
+	fp *challenge.FingerprintPayload,
+	events []challenge.CaptchaEvent,
+) (*http.Cookie, error) {
+	return cs.submitSolution(baseURL, ch, solution, fp, events)
 }
 
 // submitSolution posts a challenge solution to the appropriate CF solve endpoint.
@@ -801,7 +841,12 @@ func (cs *CloudflareSolverClient) buildTurnstileSnapshot() *challenge.TurnstileC
 	}
 }
 
-func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *challenge.TurnstileWidgetConfig) *turnstileInteractionPlan {
+// BuildTurnstileInteractionPlan builds a human-like pointer event trace for a Turnstile widget.
+func (cs *CloudflareSolverClient) BuildTurnstileInteractionPlan(cfg *challenge.TurnstileWidgetConfig) *TurnstileInteractionPlan {
+	return cs.buildTurnstileInteractionPlan(cfg)
+}
+
+func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *challenge.TurnstileWidgetConfig) *TurnstileInteractionPlan {
 	builder := newTurnstileTraceBuilder()
 	proof := &challenge.TurnstileInteractionProof{
 		Type:           "checkbox",
@@ -1107,9 +1152,9 @@ func (cs *CloudflareSolverClient) buildTurnstileInteractionPlan(cfg *challenge.T
 		builder.addPointer(cs.turnstileDelay(22, 42), "click", up.X+cs.turnstileJitter(0.6), up.Y+cs.turnstileJitter(0.6))
 	}
 
-	return &turnstileInteractionPlan{
-		interactionProof: proof,
-		events:           builder.events,
+	return &TurnstileInteractionPlan{
+		InteractionProof: proof,
+		Events:           builder.events,
 	}
 }
 
