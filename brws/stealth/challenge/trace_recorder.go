@@ -416,6 +416,23 @@ func sanitizeOperator(name string) string {
 	return string(out)
 }
 
+func calculateVariance(values []float64) float64 {
+	if len(values) < 2 {
+		return 0
+	}
+	mean := 0.0
+	for _, v := range values {
+		mean += v
+	}
+	mean /= float64(len(values))
+	variance := 0.0
+	for _, v := range values {
+		diff := v - mean
+		variance += diff * diff
+	}
+	return variance / float64(len(values)-1)
+}
+
 // TraceFingerprint produces a short hash of a recording's event pattern,
 // useful for deduplicating similar traces.
 func TraceFingerprint(rec *TraceRecording) string {

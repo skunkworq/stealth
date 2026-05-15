@@ -7,6 +7,8 @@ import (
 	"math"
 	"sync"
 	"time"
+
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 // CaptchaTracer tracks CAPTCHA interactions for bot detection analysis.
@@ -176,14 +178,14 @@ func (ct *CaptchaTracer) updateMetrics(trace *CaptchaTrace) {
 }
 
 // CreateDetectionTrace creates a detection trace from a detection result.
-func (ct *CaptchaTracer) CreateDetectionTrace(detection *DetectionResult) *DetectionTrace {
-	if detection == nil {
+func (ct *CaptchaTracer) CreateDetectionTrace(dr *detection.DetectionResult) *DetectionTrace {
+	if dr == nil {
 		return nil
 	}
 	return &DetectionTrace{
-		Timestamp:  detection.Timestamp,
-		FinalScore: detection.Score,
-		IsBot:      detection.IsBot,
+		Timestamp:  dr.Timestamp,
+		FinalScore: dr.Score,
+		IsBot:      dr.IsBot,
 	}
 }
 
@@ -209,9 +211,9 @@ func (ct *CaptchaTracer) CalculateBotScore(trace *CaptchaTrace) float64 {
 
 // CalculateBotScoreDetailed returns the bot score plus the full behavioral analysis result.
 // Uses quick heuristics for scoring but still returns the analyzer result for diagnostics.
-func (ct *CaptchaTracer) CalculateBotScoreDetailed(trace *CaptchaTrace) (float64, *VectorResult) {
+func (ct *CaptchaTracer) CalculateBotScoreDetailed(trace *CaptchaTrace) (float64, *detection.VectorResult) {
 	enhanced := ct.buildEnhancedEvents(trace)
-	analyzer := NewBehavioralAnalyzer(nil)
+	analyzer := detection.NewBehavioralAnalyzer(nil)
 	result := analyzer.Analyze(enhanced)
 
 	// Use quick score for actual bot scoring (see CalculateBotScore comment)
@@ -241,15 +243,15 @@ func (ct *CaptchaTracer) calculateQuickScore(trace *CaptchaTrace) float64 {
 
 // buildEnhancedEvents converts CaptchaTrace events into EnhancedBehavioralEvents
 // for the full BehavioralAnalyzer suite.
-func (ct *CaptchaTracer) buildEnhancedEvents(trace *CaptchaTrace) *EnhancedBehavioralEvents {
-	enhanced := &EnhancedBehavioralEvents{
+func (ct *CaptchaTracer) buildEnhancedEvents(trace *CaptchaTrace) *detection.EnhancedBehavioralEvents {
+	enhanced := &detection.EnhancedBehavioralEvents{
 		MouseTimestamps:  make([]int64, 0),
 		ScrollTimestamps: make([]int64, 0),
 		TypingTimestamps: make([]int64, 0),
-		MousePositions:   make([]Position, 0),
+		MousePositions:   make([]detection.Position, 0),
 		MouseVelocities:  make([]float64, 0),
 		ClickTimestamps:  make([]int64, 0),
-		ClickPositions:   make([]Position, 0),
+		ClickPositions:   make([]detection.Position, 0),
 		ScrollDeltas:     make([]float64, 0),
 	}
 
@@ -261,13 +263,13 @@ func (ct *CaptchaTracer) buildEnhancedEvents(trace *CaptchaTrace) *EnhancedBehav
 		switch ev.Type {
 		case "mousemove":
 			enhanced.MouseTimestamps = append(enhanced.MouseTimestamps, ev.Timestamp)
-			enhanced.MousePositions = append(enhanced.MousePositions, Position{X: ev.X, Y: ev.Y})
+			enhanced.MousePositions = append(enhanced.MousePositions, detection.Position{X: ev.X, Y: ev.Y})
 			enhanced.MouseEvents++
 
 			if !firstMouse && ev.Timestamp > prevTimestamp {
 				dx := ev.X - prevX
 				dy := ev.Y - prevY
-				dt := float64(ev.Timestamp-prevTimestamp) / 1000.0 // seconds
+				dt := float64(ev.Timestamp-prevTimestamp) / 1000.0
 				if dt > 0 {
 					dist := math.Sqrt(dx*dx + dy*dy)
 					velocity := dist / dt
@@ -289,7 +291,7 @@ func (ct *CaptchaTracer) buildEnhancedEvents(trace *CaptchaTrace) *EnhancedBehav
 
 		case "click", "mousedown", "mouseup":
 			enhanced.ClickTimestamps = append(enhanced.ClickTimestamps, ev.Timestamp)
-			enhanced.ClickPositions = append(enhanced.ClickPositions, Position{X: ev.X, Y: ev.Y})
+			enhanced.ClickPositions = append(enhanced.ClickPositions, detection.Position{X: ev.X, Y: ev.Y})
 		}
 	}
 

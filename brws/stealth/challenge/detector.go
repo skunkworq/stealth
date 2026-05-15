@@ -4,7 +4,85 @@ package challenge
 
 import (
 	"strings"
+
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
+
+// DetectionReport is the canonical report type from core/detection, re-exported for callers.
+type DetectionReport = detection.DetectionReport
+
+// DetectionResult is the per-request detection result from core/detection, re-exported for callers.
+type DetectionResult = detection.DetectionResult
+
+// ScreenData is the canonical screen data type from core/detection, re-exported for callers.
+type ScreenData = detection.ScreenData
+
+// StealthDetection re-exports the core detection result type.
+type StealthDetection = detection.StealthDetection
+
+// StealthDetector re-exports the core detector type.
+type StealthDetector = detection.StealthDetector
+
+// AdaptiveScorer re-exports the core adaptive scorer type.
+type AdaptiveScorer = detection.AdaptiveScorer
+
+// AdaptiveScorerConfig re-exports the core adaptive scorer config type.
+type AdaptiveScorerConfig = detection.AdaptiveScorerConfig
+
+// Analyzer re-exports the core fingerprint analyzer type.
+type Analyzer = detection.Analyzer
+
+// CloudflareDetector re-exports the core cloudflare detector type.
+type CloudflareDetector = detection.CloudflareDetector
+
+// HTTPFingerprintInfo re-exports the core HTTP fingerprint info type.
+type HTTPFingerprintInfo = detection.HTTPFingerprintInfo
+
+// IsomorphicAnalyzer re-exports the core isomorphic analyzer type.
+type IsomorphicAnalyzer = detection.IsomorphicAnalyzer
+
+// WebGLData re-exports the core WebGL data type.
+type WebGLData = detection.WebGLData
+
+// WebGLAnalyzer re-exports the core WebGL analyzer type.
+type WebGLAnalyzer = detection.WebGLAnalyzer
+
+// FontData re-exports the core font data type.
+type FontData = detection.FontData
+
+// FontAnalyzer re-exports the core font analyzer type.
+type FontAnalyzer = detection.FontAnalyzer
+
+// ScreenAnalyzer re-exports the core screen analyzer type.
+type ScreenAnalyzer = detection.ScreenAnalyzer
+
+// PluginData re-exports the core plugin data type.
+type PluginData = detection.PluginData
+
+// PluginAnalyzer re-exports the core plugin analyzer type.
+type PluginAnalyzer = detection.PluginAnalyzer
+
+// TimingAnalyzer re-exports the core timing analyzer type.
+type TimingAnalyzer = detection.TimingAnalyzer
+
+// RequestTimingSequence re-exports the core request timing sequence type.
+type RequestTimingSequence = detection.RequestTimingSequence
+
+// AdvancedDetection re-exports the core advanced detection type.
+type AdvancedDetection = detection.AdvancedDetection
+
+var NewStealthDetector = detection.NewStealthDetector
+var NewAdaptiveScorer = detection.NewAdaptiveScorer
+var NewAnalyzer = detection.NewAnalyzer
+var NewCloudflareDetector = detection.NewCloudflareDetector
+var NewIsomorphicAnalyzer = detection.NewIsomorphicAnalyzer
+var NewWebGLAnalyzer = detection.NewWebGLAnalyzer
+var NewFontAnalyzer = detection.NewFontAnalyzer
+var NewScreenAnalyzer = detection.NewScreenAnalyzer
+var NewPluginAnalyzer = detection.NewPluginAnalyzer
+var NewTimingAnalyzer = detection.NewTimingAnalyzer
+var NewRequestTimingSequenceFromMap = detection.NewRequestTimingSequenceFromMap
+var NewAdvancedDetection = detection.NewAdvancedDetection
 
 // ChallengeType represents the type of challenge detected.
 //

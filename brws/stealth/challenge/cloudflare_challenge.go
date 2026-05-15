@@ -15,7 +15,22 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
+
+// Type aliases so challenge-package code can use these without qualifying the package.
+type (
+	BehavioralAnalyzer      = detection.BehavioralAnalyzer
+	BehavioralEvents        = detection.BehavioralEvents
+	EnhancedBehavioralEvents = detection.EnhancedBehavioralEvents
+	Position                = detection.Position
+)
+
+// NewBehavioralAnalyzer delegates to detection.NewBehavioralAnalyzer.
+func NewBehavioralAnalyzer(config *detection.BehavioralAnalyzerConfig) *BehavioralAnalyzer {
+	return detection.NewBehavioralAnalyzer(config)
+}
 
 // ChallengeState tracks the lifecycle of a challenge session.
 type ChallengeState string
@@ -286,7 +301,7 @@ func (cc *CloudflareChallenger) RecordTurnstileCallback(sessionID, callback stri
 		session.TurnstilePresentedAt = time.Now().UTC()
 		session.TurnstileTelemetry.PresentedAt = session.TurnstilePresentedAt
 	}
-	session.TurnstileTelemetry.recordCallback(callback)
+	session.TurnstileTelemetry.RecordCallback(callback)
 	session.TurnstileConfig.CallbackState = session.TurnstileTelemetry.CallbackState
 	return true
 }
@@ -335,7 +350,7 @@ func (cc *CloudflareChallenger) RecordTurnstileInteractionProof(sessionID string
 		session.TurnstilePresentedAt = time.Now().UTC()
 		session.TurnstileTelemetry.PresentedAt = session.TurnstilePresentedAt
 	}
-	session.TurnstileTelemetry.recordInteraction(proof)
+	session.TurnstileTelemetry.RecordInteraction(proof)
 	return true
 }
 
@@ -785,10 +800,10 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		}
 		session.TurnstileTelemetry.HeuristicReport = heuristicReport
 		if session.TurnstileTelemetry.CallbackCount == 0 {
-			session.TurnstileTelemetry.recordCallback("before-interactive")
-			session.TurnstileTelemetry.recordCallback("after-interactive")
+			session.TurnstileTelemetry.RecordCallback("before-interactive")
+			session.TurnstileTelemetry.RecordCallback("after-interactive")
 		}
-		session.TurnstileTelemetry.recordCallback("success")
+		session.TurnstileTelemetry.RecordCallback("success")
 		session.TurnstileConfig.CallbackState = session.TurnstileTelemetry.CallbackState
 	}
 	cc.mu.Unlock()
@@ -1779,6 +1794,9 @@ func SolvePoW(prefix string, difficulty int, maxIterations int64) (*PoWSolution,
 
 		if hasLeadingZeroBits(hash[:], difficulty) {
 			elapsed := time.Since(start).Milliseconds()
+			if elapsed == 0 {
+				elapsed = 1
+			}
 			return &PoWSolution{
 				Nonce:      nonce,
 				Hash:       hex.EncodeToString(hash[:]),
@@ -1805,6 +1823,9 @@ func SolvePoWRandom(prefix string, difficulty int, maxIterations int64) (*PoWSol
 
 		if hasLeadingZeroBits(hash[:], difficulty) {
 			elapsed := time.Since(start).Milliseconds()
+			if elapsed == 0 {
+				elapsed = 1
+			}
 			return &PoWSolution{
 				Nonce:      nonce,
 				Hash:       hex.EncodeToString(hash[:]),
@@ -1911,4 +1932,18 @@ func (cc *CloudflareChallenger) ValidateCFBMCookie(r *http.Request, sessionID st
 // EstimatePoWIterations returns the expected number of iterations for a given difficulty.
 func EstimatePoWIterations(difficulty int) *big.Int {
 	return new(big.Int).Lsh(big.NewInt(1), uint(difficulty))
+}
+
+// selectCaptchaTypeFromScore maps a WAF detection score to a CAPTCHA challenge type.
+func selectCaptchaTypeFromScore(score float64) string {
+	switch {
+	case score >= 0.80:
+		return "cloudflare_managed"
+	case score >= 0.60:
+		return "cloudflare_js"
+	case score >= 0.35:
+		return "hcaptcha"
+	default:
+		return "text"
+	}
 }

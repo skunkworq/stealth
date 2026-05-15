@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
+	tracing "github.com/skunkworq/stealth/brws/research/detection/tracing"
 
 )
 
@@ -81,7 +81,7 @@ func TestDetailedDetectionTrace(t *testing.T) {
 			}
 
 			// Use detailed trace
-			trace := challenge.NewDetailedTrace(mockReq, nil)
+			trace := tracing.NewDetailedTrace(mockReq, nil)
 			report := trace.GenerateReport()
 
 			fmt.Printf("\n=== %s ===\n", tc.name)
