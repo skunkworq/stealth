@@ -1528,20 +1528,22 @@ func NewAdaptiveEvasionFSMForURL(targetURL string) *AdaptiveEvasionFSM {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DetectionResult / DetectionAnalyzer — interface for self-analysis pre-flight
+// RequestEvaluation / DetectionAnalyzer — interface for self-analysis pre-flight
 // ─────────────────────────────────────────────────────────────────────────────
 
-// DetectionResult captures the shield's verdict on a request.
-type DetectionResult struct {
+// RequestEvaluation captures the shield's verdict on a single outgoing request.
+// Distinct from challenge.DetectionResult, which is the richer inbound detection
+// result used by the server-side challenge/fingerprint pipeline.
+type RequestEvaluation struct {
 	IsBot      bool
 	Score      float64
 	Indicators []string
 }
 
-// DetectionAnalyzer runs a request through local detection and returns a result.
+// DetectionAnalyzer runs a request through local detection and returns an evaluation.
 // In tests this is the StealthDetector; in production it can be nil (rely on
 // HTTP ban signals instead).
-type DetectionAnalyzer func(req *http.Request) DetectionResult
+type DetectionAnalyzer func(req *http.Request) RequestEvaluation
 
 // ─────────────────────────────────────────────────────────────────────────────
 // AdaptiveEvasionFSM

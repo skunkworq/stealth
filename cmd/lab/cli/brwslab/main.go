@@ -17,12 +17,13 @@ import (
 
 	"github.com/skunkworq/stealth/brws/core/config"
 	"github.com/skunkworq/stealth/brws/browser/engine"
+	httpdiff "github.com/skunkworq/stealth/brws/fingerprint/http/diff"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"
 	_ "github.com/skunkworq/stealth/brws/stealth/chromium"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/firefox"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/browser/webkit"
-	"github.com/skunkworq/stealth/brws/fingerprint/lab"
+	lab "github.com/skunkworq/stealth/brws/research/fingerprint/capture"
 	"github.com/skunkworq/stealth/brws/stealth/profile/session"
 )
 
@@ -484,62 +485,76 @@ func runDiff(cmd *cobra.Command, args []string) error {
 		engines = []string{"native", "chromium"}
 	}
 
-	reports := make(map[string]*lab.CompleteFingerprint)
 	fpURL := labURL + "/capture/json"
+	ctx := context.Background()
 
-	for _, engName := range engines {
-		eng, err := engine.New(engName, engine.Options{
-			Timeout: timeout,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not create %s engine: %v\n", engName, err)
-			continue
-		}
-
-		req := &engine.Request{
-			Method:  "GET",
-			URL:     fpURL,
-			Timeout: timeout,
-		}
-
-		ctx := context.Background()
-		resp, err := eng.Do(ctx, req)
-		_ = eng.Close()
-
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: %s fetch failed: %v\n", engName, err)
-			continue
-		}
-
-		var report lab.CompleteFingerprint
-		if err := json.Unmarshal(resp.Body, &report); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: could not parse %s response: %v\n", engName, err)
-			continue
-		}
-
-		reports[engName] = &report
+	type fetchResult struct {
+		report *lab.CompleteFingerprint
+		diff   httpdiff.EngineResult
 	}
 
-	// Display comparison
+	fetched := make([]fetchResult, 0, len(engines))
+
+	for _, engName := range engines {
+		eng, err := engine.New(engName, engine.Options{Timeout: timeout})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: could not create %s engine: %v\n", engName, err)
+			fetched = append(fetched, fetchResult{diff: httpdiff.EngineResult{EngineName: engName, Error: err}})
+			continue
+		}
+
+		resp, fetchErr := eng.Do(ctx, &engine.Request{Method: "GET", URL: fpURL, Timeout: timeout})
+		_ = eng.Close()
+
+		dr := httpdiff.EngineResult{EngineName: engName, Error: fetchErr}
+		if fetchErr == nil {
+			dr.Response = resp
+			dr.Trace = &resp.Trace
+		}
+
+		var fp *lab.CompleteFingerprint
+		if fetchErr == nil {
+			var report lab.CompleteFingerprint
+			if parseErr := json.Unmarshal(resp.Body, &report); parseErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: could not parse %s response: %v\n", engName, parseErr)
+			} else {
+				fp = &report
+			}
+		} else {
+			fmt.Fprintf(os.Stderr, "Warning: %s fetch failed: %v\n", engName, fetchErr)
+		}
+
+		fetched = append(fetched, fetchResult{report: fp, diff: dr})
+	}
+
+	// Fingerprint summary
 	_, _ = fmt.Fprintln(os.Stdout, "Fingerprint Comparison")
 	_, _ = fmt.Fprintln(os.Stdout, "=====================")
 	_, _ = fmt.Fprintln(os.Stdout)
-
-	for name, report := range reports {
-		_, _ = fmt.Fprintf(os.Stdout, "Engine: %s\n", name)
-		if report.TLS != nil {
-			_, _ = fmt.Fprintf(os.Stdout, "  JA3: %s\n", report.TLS.JA3Hash)
-		}
-		if report.HTTP2 != nil {
-			_, _ = fmt.Fprintf(os.Stdout, "  HTTP/2 Settings:\n")
-			for _, s := range report.HTTP2.Settings {
-				_, _ = fmt.Fprintf(os.Stdout, "    %s=%d\n", s.Name, s.Value)
+	for _, r := range fetched {
+		_, _ = fmt.Fprintf(os.Stdout, "Engine: %s\n", r.diff.EngineName)
+		if r.report != nil {
+			if r.report.TLS != nil {
+				_, _ = fmt.Fprintf(os.Stdout, "  JA3: %s\n", r.report.TLS.JA3Hash)
+			}
+			if r.report.HTTP2 != nil {
+				_, _ = fmt.Fprintln(os.Stdout, "  HTTP/2 Settings:")
+				for _, s := range r.report.HTTP2.Settings {
+					_, _ = fmt.Fprintf(os.Stdout, "    %s=%d\n", s.Name, s.Value)
+				}
 			}
 		}
 		_, _ = fmt.Fprintln(os.Stdout)
 	}
 
-	// TODO: Show detailed diffs
+	// HTTP response diff
+	diffInputs := make([]httpdiff.EngineResult, 0, len(fetched))
+	for _, r := range fetched {
+		diffInputs = append(diffInputs, r.diff)
+	}
+	comp := httpdiff.Compare(fpURL, diffInputs)
+	_, _ = fmt.Fprintln(os.Stdout, comp.FormatPretty())
+
 	return nil
 }
 

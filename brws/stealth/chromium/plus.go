@@ -8,6 +8,7 @@ package chromestealth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -22,6 +23,8 @@ import (
 )
 
 // --- StealthPlus: Permission Grants ---
+
+var errStealthPlusDisabled = errors.New("StealthPlus is not enabled")
 
 // allPermissions is the full list of permissions nodriver proactively grants.
 var allPermissions = []browser.PermissionType{
@@ -52,7 +55,7 @@ var allPermissions = []browser.PermissionType{
 // browser.grant_all_permissions().
 func (s *StealthEngine) GrantAllPermissions(ctx context.Context) error {
 	if !s.config.StealthPlus {
-		return fmt.Errorf("StealthPlus is not enabled")
+		return errStealthPlusDisabled
 	}
 
 	tabCtx, cancel := chromedp.NewContext(s.allocCtx)
@@ -79,7 +82,7 @@ func (s *StealthEngine) GrantAllPermissions(ctx context.Context) error {
 // The caller must provide a valid chromedp context (e.g. from NewContext).
 func (s *StealthEngine) EvaluateWithGesture(ctx context.Context, expression string) (interface{}, error) {
 	if !s.config.StealthPlus {
-		return nil, fmt.Errorf("StealthPlus is not enabled")
+		return nil, errStealthPlusDisabled
 	}
 
 	var result interface{}
@@ -116,7 +119,7 @@ func (s *StealthEngine) EvaluateWithGesture(ctx context.Context, expression stri
 // tab.send(cdp.command(...))).
 func (s *StealthEngine) SendCDP(ctx context.Context, actions ...chromedp.Action) error {
 	if !s.config.StealthPlus {
-		return fmt.Errorf("StealthPlus is not enabled")
+		return errStealthPlusDisabled
 	}
 
 	tabCtx, cancel := chromedp.NewContext(s.allocCtx)
@@ -132,7 +135,7 @@ func (s *StealthEngine) SendCDP(ctx context.Context, actions ...chromedp.Action)
 // interception that nodriver exposes via EventRequestPaused handlers.
 func (s *StealthEngine) EnableFetchIntercept(ctx context.Context, patterns []*fetch.RequestPattern) error {
 	if !s.config.StealthPlus {
-		return fmt.Errorf("StealthPlus is not enabled")
+		return errStealthPlusDisabled
 	}
 
 	tabCtx, cancel := chromedp.NewContext(s.allocCtx)
@@ -206,7 +209,7 @@ type NavigationProfile struct {
 // the current document's origin.
 func (s *StealthEngine) SeedHistory(ctx context.Context, entries []HistoryEntry) error {
 	if !s.config.StealthPlus {
-		return fmt.Errorf("StealthPlus is not enabled")
+		return errStealthPlusDisabled
 	}
 	if len(entries) == 0 {
 		return nil
@@ -240,7 +243,7 @@ func (s *StealthEngine) SeedHistory(ctx context.Context, entries []HistoryEntry)
 // SeedSessionStorage injects keys into sessionStorage to imply prior browsing.
 func (s *StealthEngine) SeedSessionStorage(ctx context.Context, data map[string]string) error {
 	if !s.config.StealthPlus {
-		return fmt.Errorf("StealthPlus is not enabled")
+		return errStealthPlusDisabled
 	}
 	if len(data) == 0 {
 		return nil
@@ -263,7 +266,7 @@ func (s *StealthEngine) SeedSessionStorage(ctx context.Context, data map[string]
 // across origins).
 func (s *StealthEngine) NavigateWithReferrer(ctx context.Context, url, referrer string) error {
 	if !s.config.StealthPlus {
-		return fmt.Errorf("StealthPlus is not enabled")
+		return errStealthPlusDisabled
 	}
 
 	tabCtx, cancel := chromedp.NewContext(s.allocCtx)
@@ -288,7 +291,7 @@ func (s *StealthEngine) NavigateWithProfile(
 	profile NavigationProfile,
 ) error {
 	if !s.config.StealthPlus {
-		return fmt.Errorf("StealthPlus is not enabled")
+		return errStealthPlusDisabled
 	}
 
 	s.logger.Info("StealthPlus: navigating with profile",

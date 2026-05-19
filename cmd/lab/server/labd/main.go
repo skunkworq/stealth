@@ -22,7 +22,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/fingerprint/lab"
+	lab "github.com/skunkworq/stealth/brws/research/fingerprint/capture"
 )
 
 func main() {

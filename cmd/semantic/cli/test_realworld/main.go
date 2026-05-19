@@ -47,7 +47,7 @@ func main() {
 		resp, err := eng.Do(context.Background(), &engine.Request{
 			URL:               url,
 			Timeout:           60 * time.Second,
-			WaitForNavigation: true,
+			LoadStrategy: engine.LoadLoad,
 			WaitForSelector:   "body",
 		})
 		if err != nil {

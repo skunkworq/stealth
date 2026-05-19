@@ -20,52 +20,63 @@
 
 ---
 
-## `brws/*` — The Core Go Library (35 packages)
+## `brws/*` — The Core Go Library
 
 These are the heart of the project. They're organized by concern, not by layer. Most real-world Go projects of this size split into ~20–40 packages.
 
-### The five layers you already know
+### The four layers + cross-cutting
 
-| Package | What it does | Size |
-|---------|-------------|------|
-| `brws/browser/engine` | Engine interface + registry (`native`, `chromium`, `firefox`, `webkit`) | Core |
-| `brws/stealth` | Main client — orchestrates engine, session, challenges, escalation | Core |
-| `brws/content/semantic` | DOM extraction, LLM compression, semantic trees, form schemas | Core |
-| `brws/content/agent` | Observation-action loop for autonomous agents | Core |
-| `brws/content/agentic` | ScrapeGraphAI-style graph execution for LLM-driven scraping | Core |
+| Package | What it does | Layer |
+|---------|-------------|-------|
+| `brws/browser/engine` | Engine interface + registry (`native`, `http3`, `chromium`, `firefox`, `webkit`) | 1 — Engine |
+| `brws/network/` | HTTP client, MITM proxy, packet sniffer | 1 — Engine |
+| `brws/stealth` | Main client — orchestrates engine, session, challenges, escalation | 2 — Stealth |
+| `brws/content/understand` | DOM extraction, LLM compression, semantic trees, form schemas | 3 — Content |
+| `brws/content/agent` | Observation-action loop for autonomous agents | 3 — Content |
+| `brws/content/scrapegraph` | ScrapeGraphAI-style graph execution for LLM-driven scraping | 3 — Content |
+| `brws/crawl/` | Crawler, spider, integration layer, ingest pipeline | 4 — Scale |
+| `brws/fingerprint/` | TLS/HTTP fingerprint capture and spoofing | 4 — Scale |
+| `brws/core/` | Shared infrastructure (instrumentation, resilience, events, config…) | Cross-cutting |
+| `brws/llm/` | LLM abstraction (completions + embeddings) used by Layers 2–4 | Cross-cutting |
+| `brws/research/` | Offline benchmarks, training data, detection analysis, evasion labs | Out-of-band |
 
 ### Engine sub-packages
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
 | `brws/browser/engine/http/native` | Go `net/http` + uTLS fingerprint spoofing | Fast, no-JS requests that look like Chrome/Firefox |
+| `brws/browser/engine/http/http3` | QUIC/HTTP3 via quic-go | Modern transport for sites that require HTTP3 |
 | `brws/browser/engine/browser/chromium` | Full Chrome via chromedp/CDP | JS execution, NetLog, request interception |
 | `brws/browser/engine/browser/firefox` | Firefox via Playwright | Alternative browser fingerprint |
 | `brws/browser/engine/browser/webkit` | Safari via Playwright | Mobile/Apple testing |
-| `brws/browser/pool` | Browser instance pooling | Recycle expensive browser instances |
+| `brws/browser/instancepool` | Browser instance pooling | Recycle expensive browser instances |
 | `brws/browser/engine/meta/waterfall` | Engine fallback logic (native → chromium → etc.) | Automatic retry with harder configs |
 | `brws/fingerprint/tls` | TLS fingerprint generation and spoofing | Impersonate Chrome/Firefox TLS handshakes |
 | `brws/fingerprint/tls/parser` | Raw TLS ClientHello parsing | Inspect TLS from packet captures |
-| `brws/fingerprint/lab` | Fingerprint capture lab server | Capture real browser signatures for training |
 
 ### Anti-detection & evasion
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
 | `brws/stealth/behavior` | Human-like event generation (mouse, typing, scroll) + evasion strategies | Bot detectors check mouse paths and keystroke timing |
-| `brws/stealth/challenge` | Challenge type detection (Cloudflare, reCAPTCHA, hCaptcha, DataDome) | Know what you're facing before trying to solve it |
-| `brws/stealth/captcha` | CAPTCHA solving (segmentation, ML model, external services) | Auto-solve when browser automation isn't enough |
-| `brws/ml/adaptive` | Adaptive strategy tracking and storage | Remember which evasion strategies worked on which sites |
+| `brws/stealth/challenge` | Challenge detection + FSM solver (Cloudflare, reCAPTCHA, hCaptcha, DataDome) | Know what you're facing before trying to solve it |
+| `brws/stealth/challenge/cloudflare` | Cloudflare-specific solve handlers | Isolated from the generic FSM for faster iteration |
+| `brws/stealth/captcha` | CAPTCHA solving — ML model, vision LLM, external services (CapSolver) | Auto-solve when browser automation isn't enough |
+| `brws/stealth/script/spoof` | JS payload injection for navigator/canvas/WebGL spoofing | Patch browser APIs to remove headless signals |
+| `brws/stealth/solver` | Adapters bridging `challenge/fsm` to external solver APIs | Decouple challenge FSM from service integrations |
+| `brws/stealth/profile/session` | Persistent browser profiles and session storage | Maintain identity across requests |
+| `brws/research/rl/adaptive` | Adaptive strategy tracking and RL-based performance storage | Remember which evasion strategies worked on which sites |
 
 ### Content extraction & processing
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/content/semantic` | DOM → semantic tree compression | LLM-friendly page representation |
-| `brws/content/agentic` | ScrapeGraphAI-style graph scraping engine | LLM-driven structured data extraction |
-| `brws/content/text` | Text processing utilities | Language-aware chunking and cleaning |
-| `brws/crawl/pipeline` | Integrated crawler pipeline with tracing + metrics | Production-grade crawling with observability |
+| `brws/content/understand` | DOM → semantic tree compression | LLM-friendly page representation |
+| `brws/content/scrapegraph` | ScrapeGraphAI-style graph scraping engine | LLM-driven structured data extraction |
+| `brws/crawl/ingest` | Integrated crawler pipeline with distributed tracing + Prometheus metrics | Production-grade crawling with observability |
 | `brws/fingerprint/http/diff` | Diff between HTTP responses/fingerprints | Detect page changes, validate stealth |
+| `brws/llm/completions` | `LLM` interface + OpenAI and Anthropic implementations | Shared LLM abstraction across layers |
+| `brws/llm/embed` | `Embedder` interface for vector embeddings | Shared embedding abstraction |
 
 ### Crawling & spidering
 
@@ -79,8 +90,8 @@ These are the heart of the project. They're organized by concern, not by layer. 
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/browser/pool` | Browser instance pooling and session reuse | Stay logged in across requests |
-| `brws/core/signals` | Event bus for crawler lifecycle events | Decouple components |
+| `brws/browser/instancepool` | Browser instance pooling and session reuse | Stay logged in across requests |
+| `brws/core/events` | Event bus for crawler lifecycle signals (ban, challenge, complete) | Decouple components across layer boundaries |
 | `brws/core/types` | Shared domain types | Common structs used across packages |
 
 ### Resilience & reliability
@@ -93,24 +104,25 @@ These are the heart of the project. They're organized by concern, not by layer. 
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/ml` | RL policy loader (PyTorch DQN models) | Adapt stealth config based on detection feedback |
-| `brws/fingerprint/bench` | Performance benchmarks | Measure engine speed, memory, success rates |
+| `brws/ml` | RL policy loader (PyTorch DQN models) | Load trained stealth policies at runtime |
+| `brws/research/rl/adaptive` | Per-domain strategy storage and performance tracking | Research loop for the RL training pipeline |
 
 ### Observability & ops
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
 | `brws/core/instrumentation` | Logging, tracing, hooks, FSM state tracking | Debug why a request failed |
-| `brws/core/observability` | Metrics and health checks | Production monitoring |
-| `brws/core/telemetry` | Usage telemetry and analytics | Understand system behavior at scale |
-| `brws/core/log` | Structured logging utilities | Consistent log format across the project |
+| `brws/core/observability` | Health checks, metrics HTTP handler | Production monitoring |
+| `brws/core/telemetry` | OpenTelemetry integration | Distributed tracing in production |
+| `brws/core/detection` | Bot-detection vector analysis | Understand which signals are being checked |
+| `brws/core/trust` | Proxy/identity trust scoring | Route requests through the right proxy tier |
 
 ### Network & proxy
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
 | `brws/network/proxy` | MITM TLS/HTTP proxy for fingerprint capture | Inspect TLS handshakes and HTTP/2 frames |
-| `brws/network/sniffer` | Packet capture via libpcap + Rust bridge | Capture raw network traffic for analysis |
+| `brws/network/sniff` | Packet capture via libpcap + Rust bridge (`sniff/rust`) | Capture raw network traffic for analysis |
 
 ### Configuration & constants
 
@@ -119,18 +131,21 @@ These are the heart of the project. They're organized by concern, not by layer. 
 | `brws/core/config` | Configuration loading and validation | YAML/JSON config files |
 | `brws/core/constants` | Shared constants | Magic numbers, header names, etc. |
 
-### Lab & training
+### Research & training (`brws/research/`)
+
+All research, benchmarking, and training-data packages live here. Nothing in the production layers imports from `research/`.
 
 | Package | What it does | Why it exists |
 |---------|-------------|---------------|
-| `brws/fingerprint/lab` | Fingerprint capture lab (covered in ARCHITECTURE.md) | Capture real browser signatures for training |
-| `brws/fingerprint/train/datagen` | ML training data collection | SQLite-backed episode storage for RL training |
-
-### Integration
-
-| Package | What it does | Why it exists |
-|---------|-------------|---------------|
-| `brws/integration` | Third-party integrations | Connect to external services |
+| `brws/research/evasion/cloudflare` | Local Cloudflare emulator (formerly `brws/adversarial`) | Test challenge solver without hitting production |
+| `brws/research/evasion/recaptcha` | reCAPTCHA evasion research server | Offline experimentation |
+| `brws/research/detection/` | Detection analysis: analyzers, scoring, trace lab | Understand and replay bot-detection signals |
+| `brws/research/fingerprint/capture` | Live fingerprint capture harness | Capture real browser signatures for training |
+| `brws/research/fingerprint/training` | Training data generation for TLS/HTTP fingerprint models | SQLite-backed episode storage for RL training |
+| `brws/research/captcha/ml` | Vision LLM CAPTCHA solver experiments | Prototype before promoting to `stealth/captcha` |
+| `brws/research/captcha/training` | CAPTCHA training data collection | Build labelled datasets |
+| `brws/research/bench/fingerprint` | Fingerprint detection benchmarks and blackbox probing | Measure engine speed, memory, success rates |
+| `brws/research/bench/understand` | SemanticTree compression benchmarks | Measure token reduction and latency |
 
 ---
 
@@ -291,12 +306,14 @@ Each `cmd/<name>/main.go` compiles to a standalone binary. This is standard Go p
 
 ---
 
-## `training-data/` — Training Data
+## Training Data
+
+Training data lives under the relevant `brws/research/` subpackage alongside the code that uses it.
 
 | Path | What it does |
 |------|-------------|
-| `training-data/session-001/` | Captured fingerprint session |
-| `training-data/traces/` | Human interaction traces |
+| `brws/research/fingerprint/training/session-001/` | Captured fingerprint sessions (TLS, HTTP headers, navigation traces) |
+| `brws/research/captcha/training/traces/` | Turnstile challenge recordings (session + per-challenge JSON) |
 
 **Why checked in?** Sample data for development and testing. Real production data is not checked in.
 
@@ -312,6 +329,6 @@ Each `cmd/<name>/main.go` compiles to a standalone binary. This is standard Go p
 | **Team scale** | Multiple developers can work on different packages without conflicts. |
 | **CLI granularity** | Each binary is a focused tool. You don't ship a 500MB monolith when you just need `gencert`. |
 | **Language boundaries** | Go does the heavy lifting (browser automation, crypto, ML). Python does the UX (notebooks, AI frameworks). |
-| **Research vs production** | `lab/`, `adversarial/`, `benchmark/` are research tools. `pipeline/`, `resilience/`, `observability/` are production tools. Both coexist. |
+| **Research vs production** | `brws/research/` contains labs, benchmarks, and training-data tools. `crawl/ingest`, `core/resilience`, and `core/observability` are production tools. Both coexist without cross-importing. |
 
 **The project looks big, but it's organized.** If you just want to scrape a page, you only touch 3–4 packages. If you want to research TLS fingerprints, you dive into `tlsfprint/` and `lab/`. If you want to build an AI agent, you use `agent/` and `semantic/`.

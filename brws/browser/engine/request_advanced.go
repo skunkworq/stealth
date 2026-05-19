@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -88,7 +89,7 @@ func (r *JsonRequest) SetJsonData(key string, value interface{}) error {
 		m[key] = value
 		return r.SetData(m)
 	}
-	return fmt.Errorf("JsonRequest data is not a map")
+	return errors.New("JsonRequest data is not a map")
 }
 
 type RequestWithCallback struct {
@@ -105,4 +106,16 @@ func NewRequestWithCallback(url string, callback func(*Response) ([]Request, err
 		},
 		Callback: callback,
 	}
+}
+
+// FlattenHeaders returns a single-value map from a multi-value header map,
+// keeping the first value for each key.
+func FlattenHeaders(h map[string][]string) map[string]string {
+	result := make(map[string]string, len(h))
+	for k, v := range h {
+		if len(v) > 0 {
+			result[k] = v[0]
+		}
+	}
+	return result
 }

@@ -99,6 +99,16 @@ Key config sections:
 | `defaults.go` | Default values for timeouts, delays, thresholds |
 | `headers.go` | Known header names used in fingerprinting |
 
+Key timeout constants in `defaults.go`:
+
+| Constant | Value | Used by |
+|---|---|---|
+| `DefaultTimeout` | 30s | General HTTP, solver config default |
+| `ShortTimeout` | 5s | Quick operations |
+| `SolverPollRate` | 5s | CAPTCHA solver result-check interval |
+| `SolverTimeout` | 120s | Total CAPTCHA solve wait (all poll iterations) |
+| `LLMTimeout` | 120s | LLM and embedding API HTTP client timeout |
+
 ### Telemetry (`core/telemetry/`)
 
 | File | Description |
@@ -113,12 +123,14 @@ Key config sections:
 | **Metrics** | Prometheus-compatible metrics export |
 | **HTTP** | HTTP middleware for request logging |
 
-### Signals (`core/signals/`)
+### Events (`core/events/`)
+
+Pub/sub signal bus used to propagate ban, challenge, and lifecycle events across layers without direct imports.
 
 | Component | Purpose |
 |---|---|
-| **Manager** | OS signal handling for graceful shutdown |
-| **Types** | Signal event types |
+| **Manager** | `Send(signal)`, `Connect(ch)`, `ConnectHandler(fn)` |
+| **Signal types** | `CrawlerStarted`, `CrawlerStopped`, `SpiderOpened`, `SpiderClosed`, `RequestScheduled`, `ResponseReceived`, `RequestError`, `ItemScraped` |
 
 ---
 
@@ -150,6 +162,18 @@ Configurable retry logic:
 ---
 
 ## Instrumentation (`core/instrumentation/`)
+
+### Logger (`logger.go`)
+
+Structured zap-backed logger with level-gated output.
+
+| Factory | Returns |
+|---|---|
+| `NewLogger(cfg *Config) (*Logger, error)` | Logger at the configured level |
+| `Default() *Logger` | Logger at `info` level; allocates a new instance each call |
+| `ForLevel(level string) *Logger` | Logger at the given level (`debug`/`info`/`warn`/`error`); use instead of `NewLogger(&Config{LogLevel: level})` everywhere |
+| `GetDefault() *Logger` | Lazy singleton at `info` level |
+| `InitDefault(cfg *Config)` | One-time initialization of the singleton |
 
 ### FSM (`fsm.go`)
 

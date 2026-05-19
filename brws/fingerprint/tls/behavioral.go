@@ -81,17 +81,21 @@ type ResourceTiming struct {
 	DecodedSize  int64
 }
 
-type BehavioralAnalyzer struct {
+// BehaviorProfileAnalyzer analyzes raw behavioral fingerprint data (mouse, typing,
+// scroll, network) captured from a live browser session. Distinct from
+// challenge.BehavioralAnalyzer, which scores EnhancedBehavioralEvents against
+// shield detection vectors.
+type BehaviorProfileAnalyzer struct {
 	fingerprints []BehavioralFingerprint
 }
 
-func NewBehavioralAnalyzer() *BehavioralAnalyzer {
-	return &BehavioralAnalyzer{
+func NewBehaviorProfileAnalyzer() *BehaviorProfileAnalyzer {
+	return &BehaviorProfileAnalyzer{
 		fingerprints: make([]BehavioralFingerprint, 0),
 	}
 }
 
-func (a *BehavioralAnalyzer) AnalyzeMouseMovement(movements []MouseMovement) MouseAnalysisResult {
+func (a *BehaviorProfileAnalyzer) AnalyzeMouseMovement(movements []MouseMovement) MouseAnalysisResult {
 	if len(movements) < 2 {
 		return MouseAnalysisResult{IsHuman: false, Confidence: 0}
 	}
@@ -146,7 +150,7 @@ func (a *BehavioralAnalyzer) AnalyzeMouseMovement(movements []MouseMovement) Mou
 	}
 }
 
-func (a *BehavioralAnalyzer) AnalyzeTyping(typing []KeystrokeTiming) TypingAnalysisResult {
+func (a *BehaviorProfileAnalyzer) AnalyzeTyping(typing []KeystrokeTiming) TypingAnalysisResult {
 	if len(typing) < 2 {
 		return TypingAnalysisResult{IsHuman: false, Confidence: 0}
 	}
@@ -185,7 +189,7 @@ func (a *BehavioralAnalyzer) AnalyzeTyping(typing []KeystrokeTiming) TypingAnaly
 	}
 }
 
-func (a *BehavioralAnalyzer) AnalyzeScrolling(scrolls []ScrollEvent) ScrollAnalysisResult {
+func (a *BehaviorProfileAnalyzer) AnalyzeScrolling(scrolls []ScrollEvent) ScrollAnalysisResult {
 	if len(scrolls) < 2 {
 		return ScrollAnalysisResult{IsHuman: false, Confidence: 0}
 	}
@@ -231,7 +235,7 @@ func (a *BehavioralAnalyzer) AnalyzeScrolling(scrolls []ScrollEvent) ScrollAnaly
 	}
 }
 
-func (a *BehavioralAnalyzer) AnalyzeNetworkPatterns(requests []NetworkRequest) NetworkAnalysisResult {
+func (a *BehaviorProfileAnalyzer) AnalyzeNetworkPatterns(requests []NetworkRequest) NetworkAnalysisResult {
 	if len(requests) == 0 {
 		return NetworkAnalysisResult{IsHuman: false, Confidence: 0}
 	}

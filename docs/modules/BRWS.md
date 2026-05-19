@@ -550,6 +550,11 @@ type Node interface {
 - Token-aware chunking (`splitText` with sentence/word boundary preference).
 - Optionally extracts URLs.
 
+**`ExtractorNode`** — Drop-in replacement for `ParseNode + GenerateAnswerNode`:
+- Delegates to `content/extract.Extract()` — handles chunking, schema validation, and multi-provider extraction internally.
+- No LLM parameter required at the graph level; configure via `extract.Option` values.
+- Best when fidelity or schema conformance matters more than latency.
+
 **`GenerateAnswerNode`** — Extracts structured answers from content:
 - Single chunk: direct extraction
 - Multi-chunk: MapReduce with 4 concurrent goroutines → merge step
@@ -572,6 +577,7 @@ Fetch → Parse → GenerateAnswer
 - Optional: `reasoning` node, `reattempt` conditional + regen node
 - 8 strategy combinations based on `html_mode`, `reasoning`, `reattempt` flags
 - `NewSmartScraperGraphWithStealth()` injects stealth client into `FetchNode`
+- `NewSmartScraperGraphWithExtractor(prompt, source, config, opts...)` — uses `Fetch → ExtractorNode` instead; no LLM param, configured via `extract.Option` values
 
 **`SearchGraph`** — Autonomous web search:
 ```

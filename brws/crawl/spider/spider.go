@@ -284,11 +284,7 @@ func matchesSelector(n *html.Node, sel string) bool {
 	return strings.EqualFold(n.Data, sel)
 }
 
-type Element interface {
-	Text() string
-	Attr(key string) string
-	AllAttr() map[string]string
-}
+type Element = engine.HtmlElement
 
 type htmlElement struct {
 	node *html.Node

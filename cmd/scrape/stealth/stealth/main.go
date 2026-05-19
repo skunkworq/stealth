@@ -25,7 +25,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
-	"github.com/skunkworq/stealth/brws/fingerprint/lab"
+	labcapture "github.com/skunkworq/stealth/brws/research/fingerprint/capture"
 	semantic "github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/crawl/spider"
 )
@@ -169,7 +169,7 @@ func runFetch(args []string) error {
 		resp, err = eng.Do(ctx, &engine.Request{
 			URL:               url,
 			Timeout:           30 * time.Second,
-			WaitForNavigation: engName == "chromium",
+			LoadStrategy: engine.LoadLoad,
 		})
 		if err == nil {
 			break
@@ -457,7 +457,7 @@ Once running:
 		}(),
 		*proxyPort, *httpPort)
 
-	config := &lab.ServerConfig{
+	config := &labcapture.ServerConfig{
 		BindAddr:        "0.0.0.0",
 		HTTPPort:        *httpPort,
 		HTTPSPort:       *httpsPort,
@@ -472,7 +472,7 @@ Once running:
 		EnableProxy:     enableProxy,
 	}
 
-	server := lab.NewEnhancedServer(config, logger)
+	server := labcapture.NewEnhancedServer(config, logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -683,7 +683,7 @@ Output:
 
 `, strings.Join(urlList, ", "), *outputDir, *proxyPort, *pageWait, !*noScroll)
 
-	config := &lab.TrainerConfig{
+	config := &labcapture.TrainerConfig{
 		URLs:         urlList,
 		OutputDir:    *outputDir,
 		ProxyPort:    *proxyPort,
@@ -707,7 +707,7 @@ Output:
 		cancel()
 	}()
 
-	trainer := lab.NewTrainer(config, logger)
+	trainer := labcapture.NewTrainer(config, logger)
 	report, err := trainer.Run(ctx)
 	if err != nil {
 		return fmt.Errorf("training failed: %w", err)

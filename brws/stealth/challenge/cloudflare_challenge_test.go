@@ -815,7 +815,7 @@ func TestP12_ManagedJS_ServesScript(t *testing.T) {
 func TestP12_MountRoutes_WithRateLimiting(t *testing.T) {
 	cc := NewCloudflareChallenger(nil, nil)
 	// Set a very low rate limit for testing
-	cc.RateLimiter = NewTokenBucket(RateLimitConfig{
+	cc.RateLimiter = NewTokenBucket(TokenBucketConfig{
 		Capacity:   1,
 		RefillRate: 0.01,
 	})

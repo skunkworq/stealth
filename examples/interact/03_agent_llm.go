@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Quick Start 3: LLM-Driven Agent — Observe → Prompt → Decide → Execute
 //
 // Usage:

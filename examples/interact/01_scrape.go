@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Quick Start 1: Scrape — Extract structured page state via CDP
 //
 // Usage:

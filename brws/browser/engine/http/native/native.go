@@ -106,7 +106,7 @@ func New(opts engine.Options) (engine.Engine, error) {
 
 	timeout := opts.Timeout
 	if timeout == 0 {
-		timeout = 30 * time.Second
+		timeout = constants.DefaultTimeout
 	}
 
 	client := &http.Client{
@@ -284,11 +284,11 @@ func (n *Native) Do(ctx context.Context, req *engine.Request) (*engine.Response,
 		RequestTime: start,
 		Timing:      timing,
 		Request: engine.TraceRequest{
-			Headers:  flattenHeaders(httpReq.Header), // Capture actual headers sent (includes stealth headers)
+			Headers:  engine.FlattenHeaders(httpReq.Header),
 			BodySize: int64(len(req.Body)),
 		},
 		Response: engine.TraceResponse{
-			Headers:  flattenHeaders(headers),
+			Headers:  engine.FlattenHeaders(headers),
 			BodySize: int64(len(body)),
 			MimeType: httpResp.Header.Get("Content-Type"),
 		},
@@ -338,15 +338,6 @@ func readAndDecompress(resp *http.Response) ([]byte, error) {
 	return io.ReadAll(reader)
 }
 
-func flattenHeaders(headers map[string][]string) map[string]string {
-	result := make(map[string]string)
-	for key, values := range headers {
-		if len(values) > 0 {
-			result[key] = values[0]
-		}
-	}
-	return result
-}
 
 // h2Profile holds browser-specific HTTP/2 settings for the transport layer.
 type h2Profile struct {

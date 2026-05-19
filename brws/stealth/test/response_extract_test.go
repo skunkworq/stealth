@@ -3,6 +3,7 @@ package stealth_test
 import (
 	"testing"
 
+	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
@@ -53,7 +54,7 @@ const testHTML = `<!DOCTYPE html>
 </html>`
 
 func TestResponse_Title(t *testing.T) {
-	r := &stealth.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}}
 	title := r.Title()
 	if title != "Acme Corp - Building the Future" {
 		t.Errorf("expected 'Acme Corp - Building the Future', got %q", title)
@@ -62,7 +63,7 @@ func TestResponse_Title(t *testing.T) {
 
 func TestResponse_TitleFallbackOG(t *testing.T) {
 	html := `<html><head><meta property="og:title" content="OG Title Only"></head><body></body></html>`
-	r := &stealth.Response{Body: []byte(html)}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(html)}}
 	title := r.Title()
 	if title != "OG Title Only" {
 		t.Errorf("expected 'OG Title Only', got %q", title)
@@ -70,7 +71,7 @@ func TestResponse_TitleFallbackOG(t *testing.T) {
 }
 
 func TestResponse_TitleEmpty(t *testing.T) {
-	r := &stealth.Response{Body: []byte{}}
+	r := &stealth.Response{Response: engine.Response{Body: []byte{}}}
 	title := r.Title()
 	if title != "" {
 		t.Errorf("expected empty title, got %q", title)
@@ -78,7 +79,7 @@ func TestResponse_TitleEmpty(t *testing.T) {
 }
 
 func TestResponse_Meta(t *testing.T) {
-	r := &stealth.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}}
 	meta := r.Meta()
 
 	if meta.Title != "Acme Corp - Building the Future" {
@@ -117,7 +118,7 @@ func TestResponse_Meta(t *testing.T) {
 }
 
 func TestResponse_Links(t *testing.T) {
-	r := &stealth.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}}
 	links := r.Links()
 
 	if len(links) == 0 {
@@ -158,7 +159,7 @@ func TestResponse_LinksDedup(t *testing.T) {
 		<a href="https://acme.com/page">Link 2</a>
 		<a href="https://acme.com/page#section">Link 3</a>
 	</body></html>`
-	r := &stealth.Response{Body: []byte(html), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(html), FinalURL: "https://acme.com/"}}
 	links := r.Links()
 	if len(links) != 1 {
 		t.Errorf("expected 1 deduplicated link, got %d", len(links))
@@ -166,7 +167,7 @@ func TestResponse_LinksDedup(t *testing.T) {
 }
 
 func TestResponse_Images(t *testing.T) {
-	r := &stealth.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}}
 	images := r.Images()
 
 	if len(images) < 3 {
@@ -190,7 +191,7 @@ func TestResponse_Images(t *testing.T) {
 }
 
 func TestResponse_SocialLinks(t *testing.T) {
-	r := &stealth.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}}
 	social := r.SocialLinks()
 
 	if social.LinkedIn != "https://linkedin.com/company/acme-corp" {
@@ -211,7 +212,7 @@ func TestResponse_SocialLinksXDotCom(t *testing.T) {
 	html := `<html><body>
 		<a href="https://x.com/acmecorp">Follow us on X</a>
 	</body></html>`
-	r := &stealth.Response{Body: []byte(html)}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(html)}}
 	social := r.SocialLinks()
 	if social.Twitter != "https://x.com/acmecorp" {
 		t.Errorf("expected x.com recognized as twitter, got %q", social.Twitter)
@@ -219,7 +220,7 @@ func TestResponse_SocialLinksXDotCom(t *testing.T) {
 }
 
 func TestResponse_Colors(t *testing.T) {
-	r := &stealth.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}}
 	colors := r.Colors()
 
 	if len(colors) == 0 {
@@ -250,7 +251,7 @@ func TestResponse_Colors(t *testing.T) {
 }
 
 func TestResponse_Fonts(t *testing.T) {
-	r := &stealth.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}}
 	fonts := r.Fonts()
 
 	if len(fonts) == 0 {
@@ -281,7 +282,7 @@ func TestResponse_Fonts(t *testing.T) {
 
 func TestResponse_FontsFiltersGeneric(t *testing.T) {
 	html := `<html><head><style>body { font-family: sans-serif; } h1 { font-family: system-ui; }</style></head><body></body></html>`
-	r := &stealth.Response{Body: []byte(html)}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(html)}}
 	fonts := r.Fonts()
 	if len(fonts) != 0 {
 		t.Errorf("expected no fonts (all generic), got %d: %v", len(fonts), fonts)
@@ -289,7 +290,7 @@ func TestResponse_FontsFiltersGeneric(t *testing.T) {
 }
 
 func TestResponse_EmptyBody(t *testing.T) {
-	r := &stealth.Response{Body: nil}
+	r := &stealth.Response{Response: engine.Response{Body: nil}}
 
 	if title := r.Title(); title != "" {
 		t.Errorf("title: got %q", title)
@@ -317,7 +318,7 @@ func TestResponse_EmptyBody(t *testing.T) {
 
 func TestResponse_NonHTML(t *testing.T) {
 	jsonBody := `{"status":"ok","data":{"count":42}}`
-	r := &stealth.Response{Body: []byte(jsonBody)}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(jsonBody)}}
 
 	// All methods should return zero values gracefully
 	if title := r.Title(); title != "" {
@@ -358,7 +359,7 @@ func TestResponse_Meta_DelegatesToTree(t *testing.T) {
 		},
 	}
 
-	r := &stealth.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}}
 	r.AttachSemanticTree(tree)
 
 	// Title delegates to tree.
@@ -418,7 +419,7 @@ func TestResponse_ImagesWithContext_CustomerSection(t *testing.T) {
 	</section>
 	</body></html>`
 
-	r := &stealth.Response{Body: []byte(html), FinalURL: "https://acme.com"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(html), FinalURL: "https://acme.com"}}
 	imgs := r.ImagesWithContext()
 
 	if len(imgs) != 4 {
@@ -478,7 +479,7 @@ func TestResponse_ImagesWithContext_CSSModules(t *testing.T) {
 	</div>
 	</body></html>`
 
-	r := &stealth.Response{Body: []byte(html), FinalURL: "https://example.com"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(html), FinalURL: "https://example.com"}}
 	imgs := r.ImagesWithContext()
 
 	if len(imgs) != 2 {
@@ -501,7 +502,7 @@ func TestResponse_ImagesWithContext_DataAttributes(t *testing.T) {
 	</div>
 	</body></html>`
 
-	r := &stealth.Response{Body: []byte(html), FinalURL: "https://example.com"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(html), FinalURL: "https://example.com"}}
 	imgs := r.ImagesWithContext()
 
 	if len(imgs) != 2 {
@@ -515,7 +516,7 @@ func TestResponse_ImagesWithContext_DataAttributes(t *testing.T) {
 }
 
 func TestResponse_ImagesWithContext_EmptyBody(t *testing.T) {
-	r := &stealth.Response{Body: nil}
+	r := &stealth.Response{Response: engine.Response{Body: nil}}
 	imgs := r.ImagesWithContext()
 	if imgs != nil {
 		t.Errorf("expected nil for empty body, got %v", imgs)
@@ -530,7 +531,7 @@ func TestResponse_ImagesWithContext_NoCustomerSection(t *testing.T) {
 	</main>
 	</body></html>`
 
-	r := &stealth.Response{Body: []byte(html), FinalURL: "https://example.com"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(html), FinalURL: "https://example.com"}}
 	imgs := r.ImagesWithContext()
 
 	if len(imgs) != 2 {
@@ -549,7 +550,7 @@ func TestResponse_ImagesWithContext_NoCustomerSection(t *testing.T) {
 
 func TestResponse_Meta_FallsBackWhenNoTree(t *testing.T) {
 	// No tree attached — should fall back to regex extraction.
-	r := &stealth.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}
+	r := &stealth.Response{Response: engine.Response{Body: []byte(testHTML), FinalURL: "https://acme.com/"}}
 
 	if title := r.Title(); title != "Acme Corp - Building the Future" {
 		t.Errorf("Title fallback: got %q", title)

@@ -8,7 +8,7 @@ import (
 )
 
 func TestTokenBucket_AllowsBurst(t *testing.T) {
-	tb := NewTokenBucket(RateLimitConfig{
+	tb := NewTokenBucket(TokenBucketConfig{
 		Capacity:   5,
 		RefillRate: 1.0,
 	})
@@ -35,7 +35,7 @@ func TestTokenBucket_AllowsBurst(t *testing.T) {
 }
 
 func TestTokenBucket_DifferentIPsIndependent(t *testing.T) {
-	tb := NewTokenBucket(RateLimitConfig{
+	tb := NewTokenBucket(TokenBucketConfig{
 		Capacity:   2,
 		RefillRate: 1.0,
 	})
@@ -56,21 +56,21 @@ func TestTokenBucket_DifferentIPsIndependent(t *testing.T) {
 }
 
 func TestTokenBucket_RateLimitMiddleware_Returns429(t *testing.T) {
-	tb := NewTokenBucket(RateLimitConfig{
+	tb := NewTokenBucket(TokenBucketConfig{
 		Capacity:   1,
 		RefillRate: 0.1, // very slow refill
 	})
 
-	handler := tb.RateLimitMiddleware(func(w http.ResponseWriter, r *http.Request) {
+	handler := tb.RateLimitMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
-	})
+	}))
 
 	// First request should pass
 	req := httptest.NewRequest(http.MethodPost, "/solve", nil)
 	req.RemoteAddr = "1.2.3.4:12345"
 	w := httptest.NewRecorder()
-	handler(w, req)
+	handler.ServeHTTP(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Errorf("first request: expected 200, got %d", w.Code)
@@ -78,7 +78,7 @@ func TestTokenBucket_RateLimitMiddleware_Returns429(t *testing.T) {
 
 	// Second request should be rate limited
 	w2 := httptest.NewRecorder()
-	handler(w2, req)
+	handler.ServeHTTP(w2, req)
 
 	if w2.Code != http.StatusTooManyRequests {
 		t.Errorf("second request: expected 429, got %d", w2.Code)
@@ -121,7 +121,7 @@ func TestTokenBucket_RateLimitMiddleware_Returns429(t *testing.T) {
 }
 
 func TestTokenBucket_XForwardedFor(t *testing.T) {
-	tb := NewTokenBucket(RateLimitConfig{
+	tb := NewTokenBucket(TokenBucketConfig{
 		Capacity:   1,
 		RefillRate: 0.1,
 	})

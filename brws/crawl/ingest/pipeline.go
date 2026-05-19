@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	httpclient "github.com/skunkworq/stealth/brws/network/client"
 	"github.com/skunkworq/stealth/brws/core/observability"
 	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/content/understand/index"
@@ -57,12 +58,12 @@ type PageResult struct {
 }
 
 func NewPipeline(config *Config) (*Pipeline, error) {
+	cfg := httpclient.DefaultConfig()
+	cfg.Timeout = config.RequestTimeout
 	p := &Pipeline{
-		config:  config,
-		metrics: observability.NewInMemoryCollector(),
-		httpClient: &http.Client{
-			Timeout: config.RequestTimeout,
-		},
+		config:     config,
+		metrics:    observability.NewInMemoryCollector(),
+		httpClient: httpclient.New(cfg),
 	}
 
 	if config.EnableCache {

@@ -125,7 +125,7 @@ func TestBehavioralGenerator(t *testing.T) {
 }
 
 func TestCompleteFingerprintAllLayers(t *testing.T) {
-	fp := &CompleteFingerprint{
+	fp := &MultiProtocolCapture{
 		TraceID:         "trace-all-layers",
 		TLS:             &TLSFingerprint{Version: "TLS 1.3", JA4: "t13d0003"},
 		HTTP1:           &HTTP1Fingerprint{JA3H1: "h1-fp"},
@@ -172,7 +172,7 @@ func TestCompleteFingerprintAllLayers(t *testing.T) {
 }
 
 func TestFingerprintFilterEmpty(t *testing.T) {
-	fps := []*CompleteFingerprint{}
+	fps := []*MultiProtocolCapture{}
 
 	filtered := NewFingerprintFilter().Filter(fps)
 
@@ -183,7 +183,7 @@ func TestFingerprintFilterEmpty(t *testing.T) {
 
 func TestFingerprintFilterChainWithAll(t *testing.T) {
 	now := time.Now()
-	fps := []*CompleteFingerprint{
+	fps := []*MultiProtocolCapture{
 		{TraceID: "1", DetectedBrowser: "chrome", Confidence: 0.95, Timestamp: now},
 		{TraceID: "2", DetectedBrowser: "chrome", Confidence: 0.85, Timestamp: now},
 		{TraceID: "3", DetectedBrowser: "firefox", Confidence: 0.90, Timestamp: now},
@@ -201,8 +201,8 @@ func TestFingerprintFilterChainWithAll(t *testing.T) {
 }
 
 func TestCompareFingerprintsEmpty(t *testing.T) {
-	fp1 := &CompleteFingerprint{TLS: &TLSFingerprint{JA3: "a"}}
-	fp2 := &CompleteFingerprint{TLS: &TLSFingerprint{JA3: "b"}}
+	fp1 := &MultiProtocolCapture{TLS: &TLSFingerprint{JA3: "a"}}
+	fp2 := &MultiProtocolCapture{TLS: &TLSFingerprint{JA3: "b"}}
 
 	comp := CompareFingerprints(fp1, fp2)
 
@@ -212,14 +212,14 @@ func TestCompareFingerprintsEmpty(t *testing.T) {
 }
 
 func TestCompareFingerprintsFullMatch(t *testing.T) {
-	fp1 := &CompleteFingerprint{
+	fp1 := &MultiProtocolCapture{
 		TLS:             &TLSFingerprint{JA3: "test", JA4: "test", Version: "TLS 1.3"},
 		HTTP1:           &HTTP1Fingerprint{JA3H1: "test"},
 		HTTP2:           &HTTP2Fingerprint{JA3H2: "test"},
 		DetectedBrowser: "chrome",
 	}
 
-	fp2 := &CompleteFingerprint{
+	fp2 := &MultiProtocolCapture{
 		TLS:             &TLSFingerprint{JA3: "test", JA4: "test", Version: "TLS 1.3"},
 		HTTP1:           &HTTP1Fingerprint{JA3H1: "test"},
 		HTTP2:           &HTTP2Fingerprint{JA3H2: "test"},
@@ -255,7 +255,7 @@ func TestFingerprintExporterMultiple(t *testing.T) {
 	exporter := NewFingerprintExporter()
 
 	for i := 0; i < 100; i++ {
-		exporter.Add(&CompleteFingerprint{
+		exporter.Add(&MultiProtocolCapture{
 			TraceID:         "test",
 			JA3:             "test",
 			DetectedBrowser: "chrome",
@@ -286,7 +286,7 @@ func TestFingerprintExporterMultiple(t *testing.T) {
 }
 
 func TestBehavioralAnalyzerMouse(t *testing.T) {
-	analyzer := NewBehavioralAnalyzer()
+	analyzer := NewBehaviorProfileAnalyzer()
 
 	now := time.Now()
 	movements := []MouseMovement{
@@ -301,7 +301,7 @@ func TestBehavioralAnalyzerMouse(t *testing.T) {
 }
 
 func TestBehavioralAnalyzerTyping(t *testing.T) {
-	analyzer := NewBehavioralAnalyzer()
+	analyzer := NewBehaviorProfileAnalyzer()
 
 	now := time.Now()
 	typing := []KeystrokeTiming{
@@ -317,7 +317,7 @@ func TestBehavioralAnalyzerTyping(t *testing.T) {
 }
 
 func TestBehavioralAnalyzerScrolling(t *testing.T) {
-	analyzer := NewBehavioralAnalyzer()
+	analyzer := NewBehaviorProfileAnalyzer()
 
 	now := time.Now()
 	scrolls := []ScrollEvent{
@@ -332,7 +332,7 @@ func TestBehavioralAnalyzerScrolling(t *testing.T) {
 }
 
 func TestBehavioralAnalyzerNetwork(t *testing.T) {
-	analyzer := NewBehavioralAnalyzer()
+	analyzer := NewBehaviorProfileAnalyzer()
 
 	now := time.Now()
 	requests := []NetworkRequest{

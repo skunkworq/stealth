@@ -4,44 +4,53 @@ import (
 	"testing"
 )
 
-func TestClassifierNone(t *testing.T) {
-	c := NewClassifier()
-	result := c.Classify([]byte("<html><body>Hello World</body></html>"))
-	if result.Type != None {
-		t.Fatalf("expected None, got %s", result.Type)
-	}
-	if result.Confidence != 1.0 {
-		t.Fatalf("expected confidence 1.0, got %f", result.Confidence)
+func TestDetector_NoChallenge(t *testing.T) {
+	d := NewDetector()
+	ch := d.Detect([]byte("<html><body>Hello World</body></html>"), map[string][]string{})
+	if ch != nil {
+		t.Fatalf("expected nil (no challenge), got %v", ch)
 	}
 }
 
-func TestClassifierCloudflareJS(t *testing.T) {
-	c := NewClassifier()
+func TestDetector_CloudflareJS(t *testing.T) {
+	d := NewDetector()
 	body := []byte(`<html><head><title>Attention Required!</title></head>
 	<body><div class="cf-challenge">Please wait...</div></body></html>`)
-	result := c.Classify(body)
-	if result.Type != CloudflareJS {
-		t.Fatalf("expected CloudflareJS, got %s", result.Type)
+	headers := map[string][]string{"Server": {"cloudflare"}}
+	ch := d.Detect(body, headers)
+	if ch == nil {
+		t.Fatal("expected challenge detection, got nil")
 	}
-	if result.Confidence < 0.5 {
-		t.Fatalf("expected confidence >= 0.5, got %f", result.Confidence)
+	if ch.Type != ChallengeCloudflare {
+		t.Fatalf("expected ChallengeCloudflare, got %v", ch.Type)
 	}
 }
 
-func TestClassifierTurnstile(t *testing.T) {
-	c := NewClassifier()
+func TestDetector_Turnstile(t *testing.T) {
+	d := NewDetector()
 	body := []byte(`<html><body><div class="cf-turnstile" data-sitekey="abc123"></div></body></html>`)
-	result := c.Classify(body)
-	if result.Type != CloudflareTurnstile {
-		t.Fatalf("expected CloudflareTurnstile, got %s", result.Type)
+	headers := map[string][]string{"Server": {"cloudflare"}}
+	ch := d.Detect(body, headers)
+	if ch == nil {
+		t.Fatal("expected challenge detection, got nil")
+	}
+	if ch.Type != ChallengeTurnstile {
+		t.Fatalf("expected ChallengeTurnstile, got %v", ch.Type)
 	}
 }
 
-func TestClassifierReCAPTCHAv2(t *testing.T) {
-	c := NewClassifier()
-	body := []byte(`<html><body><div class="g-recaptcha" data-sitekey="abc123"></div></body></html>`)
-	result := c.Classify(body)
-	if result.Type != ReCAPTCHAv2 {
-		t.Fatalf("expected ReCAPTCHAv2, got %s", result.Type)
+func TestDetector_ReCAPTCHAv2(t *testing.T) {
+	d := NewDetector()
+	// g-recaptcha-response is the distinguishing marker for v2
+	body := []byte(`<html><body>
+		<div class="g-recaptcha" data-sitekey="abc123"></div>
+		<input type="hidden" name="g-recaptcha-response">
+	</body></html>`)
+	ch := d.Detect(body, map[string][]string{})
+	if ch == nil {
+		t.Fatal("expected challenge detection, got nil")
+	}
+	if ch.Type != ChallengeRecaptchaV2 {
+		t.Fatalf("expected ChallengeRecaptchaV2, got %v", ch.Type)
 	}
 }

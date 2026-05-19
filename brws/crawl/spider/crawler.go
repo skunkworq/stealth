@@ -12,6 +12,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
+	"github.com/skunkworq/stealth/brws/core/events"
 )
 
 type Crawler struct {
@@ -30,6 +31,8 @@ type Crawler struct {
 	downloadDelay      time.Duration
 	maxDepth           int
 	closeSignal        chan struct{}
+
+	events *events.Manager
 }
 
 type CrawlerOption func(*Crawler)
@@ -61,6 +64,18 @@ func WithDownloadDelay(d time.Duration) CrawlerOption {
 func WithMaxDepth(depth int) CrawlerOption {
 	return func(c *Crawler) {
 		c.maxDepth = depth
+	}
+}
+
+func WithEventManager(m *events.Manager) CrawlerOption {
+	return func(c *Crawler) {
+		c.events = m
+	}
+}
+
+func (c *Crawler) sendEvent(signal events.Signal) {
+	if c.events != nil {
+		c.events.Send(signal)
 	}
 }
 
@@ -142,10 +157,14 @@ func (c *Crawler) Open() error {
 		return fmt.Errorf("failed to open pipelines: %w", err)
 	}
 
+	c.sendEvent(events.SpiderOpened{Spider: c.spider})
+	c.sendEvent(events.CrawlerStarted{Crawler: c})
 	return nil
 }
 
 func (c *Crawler) Close() error {
+	c.sendEvent(events.SpiderClosed{Spider: c.spider})
+	c.sendEvent(events.CrawlerStopped{Crawler: c})
 	c.cancel()
 
 	if c.mw != nil {
@@ -248,6 +267,7 @@ func (c *Crawler) worker(requestChan <-chan *Request, resultChan chan<- *CrawlRe
 }
 
 func (c *Crawler) executeRequest(req *Request) *CrawlResult {
+	c.sendEvent(events.RequestScheduled{Request: req})
 	c.stats.IncValue("scheduler/dequeued")
 
 	engineReq := ToEngineRequest(req)
@@ -256,6 +276,7 @@ func (c *Crawler) executeRequest(req *Request) *CrawlResult {
 	if err != nil {
 		c.stats.IncValue("error")
 		c.stats.IncValue("error/" + err.Error())
+		c.sendEvent(events.RequestError{Request: req, Error: err})
 		return &CrawlResult{
 			Request: req,
 			Error:   err,
@@ -271,11 +292,13 @@ func (c *Crawler) executeRequest(req *Request) *CrawlResult {
 		Body:    resp.Body,
 		Text:    string(resp.Body),
 		URL:     resp.FinalURL,
-		Headers: flattenHeaders(resp.Headers),
+		Headers: engine.FlattenHeaders(resp.Headers),
 		Meta:    req.Meta,
 		Engine:  c.engine.Name(),
 		Timing:  resp.Timing.Total,
 	}
+
+	c.sendEvent(events.ResponseReceived{Request: req, Response: &spiderResp})
 
 	requests := c.mw.ProcessResponse(&spiderResp)
 	if len(requests) == 0 {
@@ -319,6 +342,7 @@ func (c *Crawler) resultWorker(resultChan <-chan *CrawlResult) {
 
 		if result.Response != nil {
 			_ = c.pipelines.ProcessItem(result.Response)
+			c.sendEvent(events.ItemScraped{Item: result.Response})
 		}
 	}
 }
@@ -330,12 +354,3 @@ type CrawlResult struct {
 	Error    error
 }
 
-func flattenHeaders(h map[string][]string) map[string]string {
-	result := make(map[string]string)
-	for k, v := range h {
-		if len(v) > 0 {
-			result[k] = v[0]
-		}
-	}
-	return result
-}

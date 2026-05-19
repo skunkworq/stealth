@@ -5,6 +5,7 @@ package chromium
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/skunkworq/stealth/brws/core/constants"
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
 )
+
+var errNoActiveTab = errors.New("no active tab: call DoOnTab first")
 
 func init() {
 	engine.Register("chromium", New)
@@ -65,7 +68,7 @@ func New(opts engine.Options) (engine.Engine, error) {
 
 	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), allocOpts...)
 
-	logger, _ := instrumentation.NewLogger(&instrumentation.Config{LogLevel: "info"})
+	logger := instrumentation.Default()
 	tracer := instrumentation.NewTracer()
 	hooks := instrumentation.DefaultHookRegistry()
 	fsm := instrumentation.NewRequestFSM()
@@ -255,7 +258,7 @@ func (c *Chromium) NewTab() (context.Context, context.CancelFunc) {
 // Mouse moves the cursor to the specified coordinates via CDP input events.
 func (c *Chromium) Mouse(x, y float64) error {
 	if c.tabCtx == nil {
-		return fmt.Errorf("no active tab: call DoOnTab first")
+		return errNoActiveTab
 	}
 	return chromedp.Run(c.tabCtx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
@@ -267,7 +270,7 @@ func (c *Chromium) Mouse(x, y float64) error {
 // Click performs a mouse click at the specified coordinates.
 func (c *Chromium) Click(x, y float64) error {
 	if c.tabCtx == nil {
-		return fmt.Errorf("no active tab: call DoOnTab first")
+		return errNoActiveTab
 	}
 	return chromedp.Run(c.tabCtx, chromedp.MouseClickXY(x, y))
 }
@@ -275,7 +278,7 @@ func (c *Chromium) Click(x, y float64) error {
 // Type sends keystrokes to the currently focused element.
 func (c *Chromium) Type(text string) error {
 	if c.tabCtx == nil {
-		return fmt.Errorf("no active tab: call DoOnTab first")
+		return errNoActiveTab
 	}
 	return chromedp.Run(c.tabCtx, chromedp.SendKeys("body", text, chromedp.ByQuery))
 }
@@ -283,7 +286,7 @@ func (c *Chromium) Type(text string) error {
 // Scroll scrolls the page by the specified number of pixels.
 func (c *Chromium) Scroll(pixels float64) error {
 	if c.tabCtx == nil {
-		return fmt.Errorf("no active tab: call DoOnTab first")
+		return errNoActiveTab
 	}
 	return chromedp.Run(c.tabCtx,
 		chromedp.Evaluate(fmt.Sprintf("window.scrollBy(0, %f)", pixels), nil),
@@ -293,7 +296,7 @@ func (c *Chromium) Scroll(pixels float64) error {
 // ScrollTo scrolls to a specific Y position on the page.
 func (c *Chromium) ScrollTo(y float64) error {
 	if c.tabCtx == nil {
-		return fmt.Errorf("no active tab: call DoOnTab first")
+		return errNoActiveTab
 	}
 	return chromedp.Run(c.tabCtx,
 		chromedp.Evaluate(fmt.Sprintf("window.scrollTo(0, %f)", y), nil),

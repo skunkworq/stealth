@@ -144,9 +144,9 @@ func TestFSM_GenerateAdaptiveRequest_AllCaught(t *testing.T) {
 	profile := ChromeWindowsProfile()
 
 	calls := 0
-	alwaysCaught := DetectionAnalyzer(func(req *http.Request) DetectionResult {
+	alwaysCaught := DetectionAnalyzer(func(req *http.Request) RequestEvaluation {
 		calls++
-		return DetectionResult{IsBot: true, Score: 0.90, Indicators: []string{"test_always_caught"}}
+		return RequestEvaluation{IsBot: true, Score: 0.90, Indicators: []string{"test_always_caught"}}
 	})
 
 	req := fsm.GenerateAdaptiveRequest(profile, "https://example.com/api/telemetry", alwaysCaught)
@@ -189,12 +189,12 @@ func TestFSM_GenerateAdaptiveRequest_EarlySuccess(t *testing.T) {
 	targetStrategy := strategies[targetIdx].Name()
 
 	calls := 0
-	analyzer := DetectionAnalyzer(func(req *http.Request) DetectionResult {
+	analyzer := DetectionAnalyzer(func(req *http.Request) RequestEvaluation {
 		calls++
 		if calls <= targetIdx {
-			return DetectionResult{IsBot: true, Score: 0.80, Indicators: []string{"caught"}}
+			return RequestEvaluation{IsBot: true, Score: 0.80, Indicators: []string{"caught"}}
 		}
-		return DetectionResult{IsBot: false, Score: 0.10}
+		return RequestEvaluation{IsBot: false, Score: 0.10}
 	})
 
 	req := fsm.GenerateAdaptiveRequest(profile, "https://example.com/page", analyzer)

@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// CompleteFingerprint represents a complete browser fingerprint including all protocols.
-type CompleteFingerprint struct {
+// MultiProtocolCapture represents a complete browser fingerprint including all protocols.
+type MultiProtocolCapture struct {
 	TraceID         string            `json:"trace_id"`
 	Timestamp       time.Time         `json:"timestamp"`
 	TLS             *TLSFingerprint   `json:"tls,omitempty"`
@@ -66,13 +66,13 @@ type BehavioralPrint struct {
 
 // FingerprintBuilder provides a fluent API for building fingerprints.
 type FingerprintBuilder struct {
-	fingerprint *CompleteFingerprint
+	fingerprint *MultiProtocolCapture
 }
 
 // NewFingerprint creates a new fingerprint builder.
 func NewFingerprint() *FingerprintBuilder {
 	return &FingerprintBuilder{
-		fingerprint: &CompleteFingerprint{
+		fingerprint: &MultiProtocolCapture{
 			Timestamp:       time.Now(),
 			TraceID:         generateTraceID(),
 			Metadata:        make(map[string]string),
@@ -144,7 +144,7 @@ func (b *FingerprintBuilder) WithConfidence(confidence float64) *FingerprintBuil
 }
 
 // Build returns the complete fingerprint.
-func (b *FingerprintBuilder) Build() *CompleteFingerprint {
+func (b *FingerprintBuilder) Build() *MultiProtocolCapture {
 	b.detectBrowser()
 	return b.fingerprint
 }
@@ -242,7 +242,7 @@ func (c *FingerprintCapture) CaptureWebSocket(headers map[string]string) {
 	c.wsAnalyzer.Record(headers)
 }
 
-func (c *FingerprintCapture) GetFingerprint() *CompleteFingerprint {
+func (c *FingerprintCapture) GetFingerprint() *MultiProtocolCapture {
 	fp := NewFingerprint().
 		WithDetectedBrowser("unknown").
 		WithConfidence(0.0).
@@ -304,16 +304,16 @@ func (c *FingerprintCapture) Reset() {
 }
 
 type FingerprintExporter struct {
-	fingerprints []*CompleteFingerprint
+	fingerprints []*MultiProtocolCapture
 }
 
 func NewFingerprintExporter() *FingerprintExporter {
 	return &FingerprintExporter{
-		fingerprints: make([]*CompleteFingerprint, 0),
+		fingerprints: make([]*MultiProtocolCapture, 0),
 	}
 }
 
-func (e *FingerprintExporter) Add(fp *CompleteFingerprint) {
+func (e *FingerprintExporter) Add(fp *MultiProtocolCapture) {
 	e.fingerprints = append(e.fingerprints, fp)
 }
 
@@ -401,8 +401,8 @@ func (f *FingerprintFilter) WithTimeRange(start, end time.Time) *FingerprintFilt
 	return f
 }
 
-func (f *FingerprintFilter) Filter(fingerprints []*CompleteFingerprint) []*CompleteFingerprint {
-	result := make([]*CompleteFingerprint, 0)
+func (f *FingerprintFilter) Filter(fingerprints []*MultiProtocolCapture) []*MultiProtocolCapture {
+	result := make([]*MultiProtocolCapture, 0)
 
 	for _, fp := range fingerprints {
 		if fp.Confidence < f.minConfidence {
@@ -434,7 +434,7 @@ func (f *FingerprintFilter) Filter(fingerprints []*CompleteFingerprint) []*Compl
 	return result
 }
 
-func CompareFingerprints(fp1, fp2 *CompleteFingerprint) *FingerprintComparison {
+func CompareFingerprints(fp1, fp2 *MultiProtocolCapture) *FingerprintComparison {
 	comp := &FingerprintComparison{
 		Similarity:   0.0,
 		Differences:  make([]string, 0),

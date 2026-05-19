@@ -8,6 +8,9 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/skunkworq/stealth/brws/core/constants"
+	httpclient "github.com/skunkworq/stealth/brws/network/client"
 )
 
 // Solver defines the interface for CAPTCHA solving services.
@@ -48,12 +51,31 @@ type TurnstileSolution struct {
 	Token string `json:"token"`
 }
 
+// NewCapSolver creates a CapSolver with default timeouts.
 func NewCapSolver(apiKey string) *CapSolver {
+	return NewCapSolverWithConfig(SolverConfig{APIKey: apiKey})
+}
+
+// NewCapSolverWithConfig creates a CapSolver from a SolverConfig.
+// Zero-value Timeout falls back to constants.SolverTimeout; zero-value
+// PollRate falls back to constants.SolverPollRate.
+func NewCapSolverWithConfig(cfg SolverConfig) *CapSolver {
+	timeout := cfg.Timeout
+	if timeout == 0 {
+		timeout = constants.SolverTimeout
+	}
+	pollRate := cfg.PollRate
+	if pollRate == 0 {
+		pollRate = constants.SolverPollRate
+	}
+	// HTTP client timeout governs individual API calls; the total solve wait is
+	// tracked separately via c.timeout.
+	httpCfg := httpclient.DefaultConfig()
 	return &CapSolver{
-		apiKey:   apiKey,
-		client:   &http.Client{Timeout: 120 * time.Second},
-		timeout:  120 * time.Second,
-		pollRate: 5 * time.Second,
+		apiKey:   cfg.APIKey,
+		client:   httpclient.New(httpCfg),
+		timeout:  timeout,
+		pollRate: pollRate,
 	}
 }
 
@@ -274,13 +296,18 @@ type SolverConfig struct {
 	APIKey     string
 	AutoSolve  bool
 	MaxRetries int
-	Timeout    time.Duration
+	// Timeout is the total time to wait for a solve to complete across all
+	// polling iterations. Defaults to constants.SolverTimeout when zero.
+	Timeout time.Duration
+	// PollRate is how often to check for a completed task result.
+	// Defaults to constants.SolverPollRate when zero.
+	PollRate time.Duration
 }
 
 func NewSolver(config SolverConfig) (Solver, error) {
 	switch config.Provider {
 	case "capsolver":
-		return NewCapSolver(config.APIKey), nil
+		return NewCapSolverWithConfig(config), nil
 	default:
 		return nil, fmt.Errorf("unknown solver provider: %s", config.Provider)
 	}

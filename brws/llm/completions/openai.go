@@ -61,7 +61,7 @@ func (c *chatClient) Complete(ctx context.Context, system, user string) (string,
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%s request: %w", c.model, err)
 	}
@@ -163,7 +163,7 @@ func (c *chatClient) doVisionRequest(ctx context.Context, prompt, b64, mime stri
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("%s vision request: %w", c.model, err)
 	}

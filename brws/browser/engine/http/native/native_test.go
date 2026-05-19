@@ -115,7 +115,7 @@ func TestFlattenHeaders(t *testing.T) {
 		"X-Multi": {"value1", "value2"},
 	}
 
-	result := flattenHeaders(input)
+	result := engine.FlattenHeaders(input)
 
 	if result["Accept"] != "application/json" {
 		t.Errorf("Unexpected Accept header: %s", result["Accept"])

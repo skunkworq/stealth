@@ -8,9 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
+	"github.com/skunkworq/stealth/brws/core/constants"
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 // ChallengeSolver is the interface that all challenge solvers implement.
@@ -64,9 +65,24 @@ type SolveAttemptMetrics struct {
 
 // SolverConfig holds configuration shared across solvers.
 type SolverConfig struct {
-	APIKey     string
+	APIKey string
+	// MaxRetries is the number of solve attempts before giving up.
+	// Defaults to 1 via DefaultSolverConfig.
 	MaxRetries int
+	// Timeout is the per-solve deadline. Zero falls back to the timeout supplied
+	// by the caller at HandleResponse time. Use DefaultSolverConfig to get
+	// constants.DefaultTimeout as the explicit default.
 	Timeout    time.Duration
 	HumanDelay bool
 	VerifyURL  string
+}
+
+// DefaultSolverConfig returns a SolverConfig with sensible defaults drawn from
+// core/constants. Use this instead of constructing a zero-value struct.
+func DefaultSolverConfig() *SolverConfig {
+	return &SolverConfig{
+		MaxRetries: 1,
+		Timeout:    constants.DefaultTimeout,
+		HumanDelay: true,
+	}
 }

@@ -18,6 +18,8 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/net/publicsuffix"
 
+	"github.com/skunkworq/stealth/brws/core/resilience"
+	"github.com/skunkworq/stealth/brws/core/trust"
 	"github.com/skunkworq/stealth/brws/core/types"
 )
 
@@ -381,15 +383,8 @@ func (m *Manager) RetireBlocked() []*Session {
 	return retired
 }
 
-// DomainStats tracks request statistics for a domain
-type DomainStats struct {
-	Domain        string    `json:"domain"`
-	SuccessCount  int       `json:"success_count"`
-	FailureCount  int       `json:"failure_count"`
-	LastSuccess   time.Time `json:"last_success"`
-	LastFailure   time.Time `json:"last_failure"`
-	AvgResponseMs int64     `json:"avg_response_ms"`
-}
+// DomainStats is an alias for the canonical definition in core/trust.
+type DomainStats = trust.DomainStats
 
 // GetDomainStats retrieves statistics for a specific domain
 func (s *Session) GetDomainStats(domain string) *DomainStats {
@@ -505,10 +500,7 @@ func (s *Session) GetTrustScore(domain string) float64 {
 	// Apply health penalty: as score approaches block threshold, trust drops to 0
 	healthPenalty := 0.0
 	if s.health != nil {
-		healthPenalty = s.health.Score() / s.health.cfg.BlockThreshold
-		if healthPenalty > 1.0 {
-			healthPenalty = 1.0
-		}
+		healthPenalty = s.health.NormalizedScore()
 	}
 
 	return successRate * freshness * (1.0 - healthPenalty)
@@ -532,47 +524,9 @@ func (s *Session) ShouldRetry(domain string) bool {
 	return ds.FailureCount < 3
 }
 
-// RetryConfig configures retry behavior for failed requests.
-type RetryConfig struct {
-	MaxRetries    int
-	InitialDelay  time.Duration
-	MaxDelay      time.Duration
-	BackoffFactor float64
-}
-
-// NewRetryConfig creates a new RetryConfig with default values.
-func NewRetryConfig() *RetryConfig {
-	return &RetryConfig{
-		MaxRetries:    3,
-		InitialDelay:  1 * time.Second,
-		MaxDelay:      30 * time.Second,
-		BackoffFactor: 2.0,
-	}
-}
-
-// ExecuteWithRetry executes the given function with retry logic.
-func ExecuteWithRetry(ctx context.Context, fn func() error, config *RetryConfig) error {
-	var lastErr error
-	delay := config.InitialDelay
-
-	for attempt := 0; attempt <= config.MaxRetries; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(delay):
-			}
-			delay = time.Duration(float64(delay) * config.BackoffFactor)
-			if delay > config.MaxDelay {
-				delay = config.MaxDelay
-			}
-		}
-
-		lastErr = fn()
-		if lastErr == nil {
-			return nil
-		}
-	}
-
-	return fmt.Errorf("max retries exceeded: %w", lastErr)
+// ExecuteWithRetry executes fn with exponential backoff, delegating to core/resilience.
+func ExecuteWithRetry(ctx context.Context, fn func() error, config *resilience.Config) error {
+	return resilience.RetryContext(ctx, config, func(ctx context.Context) error {
+		return fn()
+	})
 }

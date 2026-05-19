@@ -70,11 +70,7 @@ func (co *ChallengeOrchestrator) HandleResponse(
 	// Build context
 	cfg := co.config
 	if cfg == nil {
-		cfg = &SolverConfig{
-			MaxRetries: 1,
-			Timeout:    timeout,
-			HumanDelay: true,
-		}
+		cfg = DefaultSolverConfig()
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = timeout
@@ -152,7 +148,7 @@ func (co *ChallengeOrchestrator) HandleResponseWithTraceEvents(
 
 	cfg := co.config
 	if cfg == nil {
-		cfg = &SolverConfig{MaxRetries: 1, Timeout: timeout, HumanDelay: true}
+		cfg = DefaultSolverConfig()
 	}
 	if cfg.Timeout == 0 {
 		cfg.Timeout = timeout

@@ -171,6 +171,7 @@ Mock HTTP/TLS server for testing:
 | File | Description |
 |---|---|
 | `engine/engine.go` | Core `Engine` interface, `Request`/`Response` types, registry |
+| `engine/request_advanced.go` | `FormRequest`, `JsonRequest`, `RequestWithCallback`; `FlattenHeaders(map[string][]string) map[string]string` shared utility |
 | `engine/chromium/chromium.go` | Basic CDP-based Chromium engine |
 | `stealth/chromium/engine.go` | Advanced stealth engine with FSM, WAF detection, human-like interactions |
 | `engine/chromium/stealth_script.go` | JS injection patches (~25 API patches) |

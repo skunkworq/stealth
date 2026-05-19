@@ -1172,9 +1172,9 @@ func (cc *CloudflareChallenger) MountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/cloudflare/status", cc.HandleStatus)
 
 	// Solve endpoints are rate-limited
-	mux.HandleFunc("/api/cloudflare/solve/js", cc.RateLimiter.RateLimitMiddleware(cc.HandleSolveJS))
-	mux.HandleFunc("/api/cloudflare/solve/managed", cc.RateLimiter.RateLimitMiddleware(cc.HandleSolveManaged))
-	mux.HandleFunc("/api/cloudflare/solve/turnstile", cc.RateLimiter.RateLimitMiddleware(cc.HandleSolveTurnstile))
+	mux.Handle("/api/cloudflare/solve/js", cc.RateLimiter.RateLimitMiddleware(http.HandlerFunc(cc.HandleSolveJS)))
+	mux.Handle("/api/cloudflare/solve/managed", cc.RateLimiter.RateLimitMiddleware(http.HandlerFunc(cc.HandleSolveManaged)))
+	mux.Handle("/api/cloudflare/solve/turnstile", cc.RateLimiter.RateLimitMiddleware(http.HandlerFunc(cc.HandleSolveTurnstile)))
 
 	// XHR callback endpoints (used by challenge page JS)
 	mux.HandleFunc("/cdn-cgi/challenge-platform/h/g/cv/result/", cc.HandleChallengeCallback)

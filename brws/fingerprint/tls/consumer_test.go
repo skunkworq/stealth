@@ -121,7 +121,7 @@ func TestConsumerJourney_MultiLayerFingerprintCapture(t *testing.T) {
 }
 
 func TestConsumerJourney_BehavioralAnalysis(t *testing.T) {
-	analyzer := NewBehavioralAnalyzer()
+	analyzer := NewBehaviorProfileAnalyzer()
 	generator := NewBehavioralGenerator(BehavioralSignatures["chrome-human"], 12345)
 
 	typing := generator.GenerateTyping("Hello, world!")
@@ -160,7 +160,7 @@ func TestConsumerJourney_FingerprintComparison(t *testing.T) {
 func TestConsumerJourney_FilterAndExport(t *testing.T) {
 	now := time.Now()
 
-	fingerprints := []*CompleteFingerprint{
+	fingerprints := []*MultiProtocolCapture{
 		{TraceID: "1", Timestamp: now, DetectedBrowser: "chrome", Confidence: 0.95},
 		{TraceID: "2", Timestamp: now.Add(-1 * time.Hour), DetectedBrowser: "firefox", Confidence: 0.85},
 		{TraceID: "3", Timestamp: now.Add(-2 * time.Hour), DetectedBrowser: "chrome", Confidence: 0.70},
@@ -292,9 +292,9 @@ func TestConsumerJourney_ConnectionTracking(t *testing.T) {
 func TestConsumerJourney_TimeRangeFiltering(t *testing.T) {
 	now := time.Now()
 
-	fingerprints := make([]*CompleteFingerprint, 0)
+	fingerprints := make([]*MultiProtocolCapture, 0)
 	for i := 0; i < 10; i++ {
-		fp := &CompleteFingerprint{
+		fp := &MultiProtocolCapture{
 			TraceID:         "fp-" + string(rune('0'+i)),
 			Timestamp:       now.Add(-time.Duration(i) * time.Hour),
 			DetectedBrowser: []string{"chrome", "firefox", "safari"}[i%3],
@@ -341,7 +341,7 @@ func TestConsumerJourney_ExportForML(t *testing.T) {
 	exporter := NewFingerprintExporter()
 
 	for i := 0; i < 20; i++ {
-		fp := &CompleteFingerprint{
+		fp := &MultiProtocolCapture{
 			TraceID:    "ml-" + string(rune('0'+i%10)),
 			Timestamp:  time.Now(),
 			TLS:        &TLSFingerprint{JA3: "test"},

@@ -53,6 +53,24 @@ Identifies challenge type from page content:
 - PerimeterX
 - Custom WAF pages
 
+### External Solver Config (`captcha/external_service/capsolver.go`)
+
+`SolverConfig` governs both the external service constructor and the FSM solver:
+
+```go
+type SolverConfig struct {
+    Provider   string
+    APIKey     string
+    AutoSolve  bool
+    MaxRetries int
+    Timeout    time.Duration // total solve wait; 0 → constants.SolverTimeout (120s)
+    PollRate   time.Duration // result-check interval; 0 → constants.SolverPollRate (5s)
+}
+```
+
+`NewCapSolverWithConfig(cfg SolverConfig)` applies zero-value fallbacks from `core/constants`.
+`NewCapSolver(apiKey)` is a convenience wrapper calling `NewCapSolverWithConfig`.
+
 ---
 
 ## Behavioral Evasion (`behavior/`)
@@ -140,6 +158,8 @@ States:
 - `Complete`: success
 - `Fail`: failure, trigger escalation
 
+`SolverConfig` (`challenge/fsm/types.go`) holds per-solve configuration. Use `DefaultSolverConfig()` to get defaults from `core/constants` (`MaxRetries: 1`, `Timeout: constants.DefaultTimeout`, `HumanDelay: true`) rather than constructing a zero-value struct. When `Timeout == 0` the orchestrator falls back to the caller-supplied deadline.
+
 ---
 
 ## Detection Vectors (`challenge/vectors.go`)
@@ -162,11 +182,13 @@ Catalog of anti-bot detection signals:
 | `escalation.go` | Escalation logic, retry with increasing sophistication |
 | `policy.go` | Rules engine for stealth decisions |
 | `captcha_solver.go` | CAPTCHA solving orchestrator |
+| `captcha/external_service/capsolver.go` | CapSolver API client; `SolverConfig`, `NewCapSolverWithConfig` |
 | `cloudflare_solver.go` | Cloudflare-specific challenge solver |
 | `turnstile_verifier.go` | Cloudflare Turnstile verification |
 | `recaptcha_integration_test.go` | reCAPTCHA integration tests |
 | `challenge/challenge_classifier.go` | Challenge type identification |
 | `challenge/fsm/orchestrator.go` | FSM lifecycle management |
+| `challenge/fsm/types.go` | `SolverConfig`, `DefaultSolverConfig()`, `ChallengeSolver` interface |
 | `challenge/vectors.go` | Detection signal catalog |
 | `challenge/stealth_detector.go` | Stealth detection analyzer |
 | `challenge/cloudflare_detector.go` | Cloudflare-specific detection |

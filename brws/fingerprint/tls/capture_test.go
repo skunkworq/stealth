@@ -6,7 +6,7 @@ import (
 )
 
 func TestCompleteFingerprint(t *testing.T) {
-	fp := &CompleteFingerprint{
+	fp := &MultiProtocolCapture{
 		TraceID:         "test-123",
 		Timestamp:       time.Now(),
 		JA3:             "771,47-53-192-47",
@@ -242,7 +242,7 @@ func TestFingerprintCaptureReset(t *testing.T) {
 func TestFingerprintExporter(t *testing.T) {
 	exporter := NewFingerprintExporter()
 
-	exporter.Add(&CompleteFingerprint{
+	exporter.Add(&MultiProtocolCapture{
 		TraceID:         "test-1",
 		Timestamp:       time.Now(),
 		JA3:             "771,47-53",
@@ -250,7 +250,7 @@ func TestFingerprintExporter(t *testing.T) {
 		Confidence:      0.9,
 	})
 
-	exporter.Add(&CompleteFingerprint{
+	exporter.Add(&MultiProtocolCapture{
 		TraceID:         "test-2",
 		Timestamp:       time.Now(),
 		JA3:             "771,47-53-192",
@@ -273,7 +273,7 @@ func TestFingerprintExporter(t *testing.T) {
 func TestFingerprintExporterToCSV(t *testing.T) {
 	exporter := NewFingerprintExporter()
 
-	exporter.Add(&CompleteFingerprint{
+	exporter.Add(&MultiProtocolCapture{
 		TraceID:         "test-1",
 		Timestamp:       time.Now(),
 		JA3:             "771,47-53",
@@ -282,7 +282,7 @@ func TestFingerprintExporterToCSV(t *testing.T) {
 		Confidence:      0.9,
 	})
 
-	exporter.Add(&CompleteFingerprint{
+	exporter.Add(&MultiProtocolCapture{
 		TraceID:         "test-2",
 		Timestamp:       time.Now(),
 		JA3:             "771,47-53-192",
@@ -313,7 +313,7 @@ func TestFingerprintExporterToCSV(t *testing.T) {
 }
 
 func TestFingerprintFilter(t *testing.T) {
-	fps := []*CompleteFingerprint{
+	fps := []*MultiProtocolCapture{
 		{TraceID: "1", DetectedBrowser: "chrome", Confidence: 0.9, Timestamp: time.Now()},
 		{TraceID: "2", DetectedBrowser: "firefox", Confidence: 0.7, Timestamp: time.Now()},
 		{TraceID: "3", DetectedBrowser: "chrome", Confidence: 0.5, Timestamp: time.Now()},
@@ -330,7 +330,7 @@ func TestFingerprintFilter(t *testing.T) {
 }
 
 func TestFingerprintFilterByBrowser(t *testing.T) {
-	fps := []*CompleteFingerprint{
+	fps := []*MultiProtocolCapture{
 		{TraceID: "1", DetectedBrowser: "chrome", Confidence: 0.9},
 		{TraceID: "2", DetectedBrowser: "firefox", Confidence: 0.8},
 		{TraceID: "3", DetectedBrowser: "chrome", Confidence: 0.7},
@@ -353,7 +353,7 @@ func TestFingerprintFilterByBrowser(t *testing.T) {
 
 func TestFingerprintFilterByTimeRange(t *testing.T) {
 	now := time.Now()
-	fps := []*CompleteFingerprint{
+	fps := []*MultiProtocolCapture{
 		{TraceID: "1", Timestamp: now.Add(-2 * time.Hour)},
 		{TraceID: "2", Timestamp: now.Add(-1 * time.Hour)},
 		{TraceID: "3", Timestamp: now},
@@ -372,7 +372,7 @@ func TestFingerprintFilterByTimeRange(t *testing.T) {
 }
 
 func TestFingerprintFilterChain(t *testing.T) {
-	fps := []*CompleteFingerprint{
+	fps := []*MultiProtocolCapture{
 		{TraceID: "1", DetectedBrowser: "chrome", Confidence: 0.95, Timestamp: time.Now()},
 		{TraceID: "2", DetectedBrowser: "firefox", Confidence: 0.85, Timestamp: time.Now()},
 		{TraceID: "3", DetectedBrowser: "chrome", Confidence: 0.5, Timestamp: time.Now()},
@@ -393,13 +393,13 @@ func TestFingerprintFilterChain(t *testing.T) {
 }
 
 func TestCompareFingerprints(t *testing.T) {
-	fp1 := &CompleteFingerprint{
+	fp1 := &MultiProtocolCapture{
 		TLS:             &TLSFingerprint{JA3: "771,47-53", JA4: "t12d0005h2e1267", Version: "TLS 1.2"},
 		HTTP1:           &HTTP1Fingerprint{JA3H1: "test1"},
 		DetectedBrowser: "chrome",
 	}
 
-	fp2 := &CompleteFingerprint{
+	fp2 := &MultiProtocolCapture{
 		TLS:             &TLSFingerprint{JA3: "771,47-53", JA4: "t12d0005h2e1267", Version: "TLS 1.2"},
 		HTTP1:           &HTTP1Fingerprint{JA3H1: "test1"},
 		DetectedBrowser: "chrome",
@@ -417,12 +417,12 @@ func TestCompareFingerprints(t *testing.T) {
 }
 
 func TestCompareFingerprintsNoMatch(t *testing.T) {
-	fp1 := &CompleteFingerprint{
+	fp1 := &MultiProtocolCapture{
 		TLS:             &TLSFingerprint{JA3: "771,47-53", JA4: "t12d0005h2e1267"},
 		DetectedBrowser: "chrome",
 	}
 
-	fp2 := &CompleteFingerprint{
+	fp2 := &MultiProtocolCapture{
 		TLS:             &TLSFingerprint{JA3: "771,99-99", JA4: "t99d9999h9e9999"},
 		DetectedBrowser: "firefox",
 	}
@@ -439,12 +439,12 @@ func TestCompareFingerprintsNoMatch(t *testing.T) {
 }
 
 func TestCompareFingerprintsPartial(t *testing.T) {
-	fp1 := &CompleteFingerprint{
+	fp1 := &MultiProtocolCapture{
 		TLS:             &TLSFingerprint{JA3: "771,47-53", JA4: "t12d0005h2e1267"},
 		DetectedBrowser: "chrome",
 	}
 
-	fp2 := &CompleteFingerprint{
+	fp2 := &MultiProtocolCapture{
 		TLS:             &TLSFingerprint{JA3: "771,47-53", JA4: "different"},
 		DetectedBrowser: "firefox",
 	}

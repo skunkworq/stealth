@@ -9,9 +9,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
+
+	"github.com/skunkworq/stealth/brws/core/constants"
 )
+
+// llmHTTPClient is the shared HTTP client for all LLM API calls.
+// Timeout drawn from constants.LLMTimeout — completions can be slow on large
+// prompts, and http.DefaultClient has no timeout at all.
+var llmHTTPClient = &http.Client{Timeout: constants.LLMTimeout}
 
 // LLM is the shared interface for all chat-completion providers.
 // All providers implement the full interface; vision methods return an error

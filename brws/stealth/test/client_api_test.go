@@ -57,7 +57,7 @@ func TestResponseAsHTML(t *testing.T) {
 		<div id="main">Main section</div>
 	</body></html>`)
 
-	resp := &stealth.Response{Body: htmlBody}
+	resp := &stealth.Response{Response: engine.Response{Body: htmlBody}}
 	doc, err := resp.AsHTML()
 	if err != nil {
 		t.Fatalf("AsHTML failed: %v", err)
@@ -103,7 +103,7 @@ func TestResponseAsHTML(t *testing.T) {
 }
 
 func TestResponseAsHTMLEmptyBody(t *testing.T) {
-	resp := &stealth.Response{Body: []byte("")}
+	resp := &stealth.Response{Response: engine.Response{Body: []byte("")}}
 	doc, err := resp.AsHTML()
 	if err != nil {
 		t.Fatalf("AsHTML failed: %v", err)

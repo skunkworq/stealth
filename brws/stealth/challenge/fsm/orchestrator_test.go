@@ -26,15 +26,8 @@ func (m *mockSolver) Solve(_ *ChallengeContext) (*SolveResult, error) {
 	return m.solveResult, m.solveErr
 }
 
-func newTestLogger(t *testing.T) *instrumentation.Logger {
-	t.Helper()
-	logger, err := instrumentation.NewLogger(&instrumentation.Config{
-		LogLevel: "warn",
-	})
-	if err != nil {
-		t.Fatalf("create logger: %v", err)
-	}
-	return logger
+func newTestLogger(_ *testing.T) *instrumentation.Logger {
+	return instrumentation.ForLevel("warn")
 }
 
 func TestOrchestratorNoChallenge(t *testing.T) {

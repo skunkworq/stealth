@@ -7,6 +7,29 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/skunkworq/stealth/brws/core/detection"
+)
+
+// Type aliases so dynamic_solver.go can reference classifier types without qualification.
+type (
+	InteractionType  = detection.InteractionType
+	ChallengeSignature = detection.ChallengeSignature
+)
+
+// ClassifyChallenge delegates to detection.ClassifyChallenge.
+func ClassifyChallenge(body []byte, headers map[string][]string) *ChallengeSignature {
+	return detection.ClassifyChallenge(body, headers)
+}
+
+// TraceVariantForInteraction delegates to the detection package mapping.
+var TraceVariantForInteraction = detection.TraceVariantForInteraction
+
+// Interaction constants re-exported from core/detection for use in this package.
+const (
+	InteractionClickButtons = detection.InteractionClickButtons
+	InteractionWait         = detection.InteractionWait
+	InteractionCheckbox     = detection.InteractionCheckbox
 )
 
 // DynamicSolver handles unknown challenges by classifying them, matching to

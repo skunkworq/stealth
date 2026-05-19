@@ -14,11 +14,11 @@ import (
 type TokenBucket struct {
 	mu      sync.Mutex
 	buckets map[string]*bucket
-	config  RateLimitConfig
+	config  TokenBucketConfig
 }
 
-// RateLimitConfig controls rate limiting behavior.
-type RateLimitConfig struct {
+// TokenBucketConfig controls rate limiting behavior.
+type TokenBucketConfig struct {
 	// Capacity is the maximum number of tokens (burst size).
 	Capacity int
 	// RefillRate is tokens added per second.
@@ -30,8 +30,8 @@ type RateLimitConfig struct {
 // DefaultRateLimitConfig returns sensible defaults for CF challenge endpoints.
 // 10 requests burst, 2 per second refill — allows legitimate solving but blocks
 // rapid automated cycling.
-func DefaultRateLimitConfig() RateLimitConfig {
-	return RateLimitConfig{
+func DefaultRateLimitConfig() TokenBucketConfig {
+	return TokenBucketConfig{
 		Capacity:        10,
 		RefillRate:      2.0,
 		CleanupInterval: 5 * time.Minute,
@@ -45,7 +45,7 @@ type bucket struct {
 }
 
 // NewTokenBucket creates a new rate limiter.
-func NewTokenBucket(config RateLimitConfig) *TokenBucket {
+func NewTokenBucket(config TokenBucketConfig) *TokenBucket {
 	if config.CleanupInterval <= 0 {
 		config.CleanupInterval = 5 * time.Minute
 	}
@@ -111,10 +111,10 @@ func (tb *TokenBucket) cleanupLoop() {
 	}
 }
 
-// RateLimitMiddleware wraps an http.HandlerFunc with rate limiting.
+// RateLimitMiddleware wraps an http.Handler with rate limiting.
 // Returns 429 Too Many Requests with CF-style headers when the limit is exceeded.
-func (tb *TokenBucket) RateLimitMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
+func (tb *TokenBucket) RateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ip := extractIP(r)
 		allowed, remaining, retryAfter := tb.Allow(ip)
 
@@ -132,8 +132,8 @@ func (tb *TokenBucket) RateLimitMiddleware(next http.HandlerFunc) http.HandlerFu
 			return
 		}
 
-		next(w, r)
-	}
+		next.ServeHTTP(w, r)
+	})
 }
 
 // extractIP gets the client IP from the request, checking X-Forwarded-For first.

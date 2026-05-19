@@ -101,6 +101,14 @@ func Default() *Logger {
 	return logger
 }
 
+// ForLevel returns a logger at the given level, ignoring the error.
+// Valid levels: debug, info, warn, error. Unknown levels default to info.
+// Use this instead of inlining NewLogger(&Config{LogLevel: level}) everywhere.
+func ForLevel(level string) *Logger {
+	logger, _ := NewLogger(&Config{LogLevel: level})
+	return logger
+}
+
 var (
 	defaultLogger *Logger
 	defaultOnce   sync.Once

@@ -89,8 +89,16 @@ const (
 	// KeepAliveTimeout is the keep-alive duration for connections
 	KeepAliveTimeout = 30 * time.Second
 
-	// SolverPollRate is the polling rate for captcha solvers
+	// SolverPollRate is the polling interval for CAPTCHA solver result checks.
 	SolverPollRate = 5 * time.Second
+
+	// SolverTimeout is the maximum total time to wait for a CAPTCHA solver to
+	// return a result (covers all polling iterations, not a single HTTP call).
+	SolverTimeout = 120 * time.Second
+
+	// LLMTimeout is the HTTP client timeout for LLM and embedding API calls.
+	// Completions can be slow on large prompts, so this is intentionally generous.
+	LLMTimeout = 120 * time.Second
 )
 
 // HTTP server timeouts.

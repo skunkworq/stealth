@@ -11,16 +11,6 @@ import (
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
 )
 
-// CaptchaSolverClient is the interface for the existing captcha solver we wrap.
-type CaptchaSolverClient interface {
-	DetectCaptchaResponse(body []byte, headers map[string][]string) *CaptchaDetection
-	SolveFromResponse(body []byte, headers map[string][]string) (*CaptchaSolveOutput, *CaptchaDetection, error)
-	SolveReCaptchaV2(baseURL string) (*ReCaptchaV2Output, error)
-	SubmitSolution(verifyURL, challengeID, solution string, events []challenge.CaptchaEvent) (bool, error)
-	GenerateHumanEvents(solveTimeMs int64, opts ...HumanEventOption) []challenge.CaptchaEvent
-	LastToken() string
-}
-
 // CaptchaDetection mirrors stealth.CaptchaResponse for the interface.
 type CaptchaDetection struct {
 	ChallengeID   string

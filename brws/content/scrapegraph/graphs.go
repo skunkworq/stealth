@@ -7,6 +7,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
+	"github.com/skunkworq/stealth/brws/content/extract"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 
@@ -108,6 +109,28 @@ func NewSmartScraperGraphWithStealth(prompt, source string, config map[string]in
 	}
 	ss.StealthClient = client
 	graph, err := ss.buildGraph()
+	if err != nil {
+		return nil, err
+	}
+	ss.Graph = graph
+	return ss, nil
+}
+
+// NewSmartScraperGraphWithExtractor builds a SmartScraperGraph that uses
+// content/extract instead of ParseNode + GenerateAnswerNode. Pass any
+// extract.Option values to configure the underlying extractor (model, schema,
+// prompt, etc.). This path is best when you need chunking, schema validation,
+// or multi-provider extraction without a separate LLM dependency.
+func NewSmartScraperGraphWithExtractor(prompt, source string, config map[string]interface{}, opts ...extract.Option) (*SmartScraperGraph, error) {
+	pipe, err := NewPipeline(prompt, source, config, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	ss := &SmartScraperGraph{Pipeline: *pipe}
+
+	fetch := NewFetchNode("url | local_dir", "doc", config)
+	extractor := NewExtractorNode("user_prompt & doc", "answer", config, opts...)
+	graph, err := NewBaseGraph([]Node{fetch, extractor}, [][2]string{{fetch.Name(), extractor.Name()}}, fetch, "SmartScraperGraph")
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,7 @@
 | **Network** | [`MODEL_NETWORK.md`](MODEL_NETWORK.md) | MITM proxy, certificate management, proxy rotation, tier escalation |
 | **Content** | [`MODEL_CONTENT.md`](MODEL_CONTENT.md) | CDP agent, semantic pipeline, agentic graph scraping, crawl spider |
 | **ML & Core** | [`MODEL_ML.md`](MODEL_ML.md) | RL models, shield/sword training, types, config, telemetry, resilience |
+| **Research** | [`MODEL_RESEARCH.md`](MODEL_RESEARCH.md) | Offline benchmarks, challenge emulators, fingerprint capture lab, training data pipeline, RL strategy storage |
 
 ---
 

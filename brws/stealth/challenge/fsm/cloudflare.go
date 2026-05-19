@@ -12,14 +12,6 @@ import (
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
 )
 
-// CloudflareSolverClient is the interface for the existing CF solver we wrap.
-// Defined as an interface to allow testing with mocks.
-type CloudflareSolverClient interface {
-	SolveJSChallenge(baseURL string) (*CloudflareSolveResult, error)
-	SolveManagedChallenge(baseURL string) (*CloudflareSolveResult, error)
-	SolveTurnstile(baseURL string) (*CloudflareSolveResult, error)
-}
-
 // CloudflareSolveResult mirrors stealth.CloudflareSolveResult for the interface.
 type CloudflareSolveResult struct {
 	SessionID        string

@@ -1,3 +1,5 @@
+//go:build ignore
+
 // Quick Start 2: Heuristic Agent — Autonomous browsing without an LLM
 //
 // Usage:

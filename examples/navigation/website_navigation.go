@@ -57,7 +57,7 @@ func main() {
 	resp, err := eng.Do(ctx, &engine.Request{
 		URL:               landingURL,
 		Method:            "GET",
-		WaitForNavigation: true,            // Wait for page load complete
+		LoadStrategy: engine.LoadLoad,
 		WaitForSelector:   "body",          // Wait until <body> is visible
 		Timeout:           30 * time.Second,
 	})

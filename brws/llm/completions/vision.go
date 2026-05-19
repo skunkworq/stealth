@@ -19,7 +19,7 @@ func fetchImageBase64(ctx context.Context, imageURL string) (b64 string, mimeTyp
 	if err != nil {
 		return "", "", fmt.Errorf("image fetch: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("image fetch: %w", err)
 	}

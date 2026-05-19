@@ -56,7 +56,7 @@ func (c *anthropicClient) Complete(ctx context.Context, system, user string) (st
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", c.apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("anthropic request: %w", err)
 	}
@@ -156,7 +156,7 @@ func (c *anthropicClient) doVisionRequest(ctx context.Context, system, prompt, b
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("x-api-key", c.apiKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := llmHTTPClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("anthropic vision request: %w", err)
 	}

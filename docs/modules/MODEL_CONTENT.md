@@ -160,6 +160,7 @@ func (c *LLMClient) CompleteJSON(ctx, systemPrompt, userPrompt string, v interfa
 | **FetchNode** | Ingest URLs (HTTP) or local files |
 | **ParseNode** | HTML→text, token-aware chunking |
 | **GenerateAnswerNode** | LLM extraction (single + map-reduce) |
+| **ExtractorNode** | Replaces Parse + GenerateAnswer with a single `content/extract` call; provides chunking, schema validation, and multi-provider extraction without a separate LLM dependency |
 | **ReasoningNode** | Pre-process prompt against schema |
 | **MergeAnswersNode** | Synthesize multiple partial answers |
 | **SearchInternetNode** | LLM-generated queries + DuckDuckGo scrape |
@@ -171,6 +172,7 @@ func (c *LLMClient) CompleteJSON(ctx, systemPrompt, userPrompt string, v interfa
 | Graph | Pipeline | Config Flags |
 |---|---|---|
 | **SmartScraperGraph** | Fetch → Parse → (Reasoning) → GenerateAnswer → (Conditional → Regen) | `html_mode`, `reasoning`, `reattempt` |
+| **SmartScraperGraph** (extractor path) | Fetch → ExtractorNode | pass `extract.Option` values to `NewSmartScraperGraphWithExtractor`; no LLM param required |
 | **SearchGraph** | SearchInternet → GraphIterator → MergeAnswers | `max_results` |
 
 ### Map-Reduce

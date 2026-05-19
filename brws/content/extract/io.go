@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	httpclient "github.com/skunkworq/stealth/brws/network/client"
 )
 
 // IsURL reports whether text is a standalone http(s) URL.
@@ -51,7 +53,9 @@ func DownloadTextFromURL(ctx context.Context, rawURL string, timeout time.Durati
 	}
 	req.Header.Set("User-Agent", "stealth-langextract/1.0")
 
-	client := &http.Client{Timeout: timeout}
+	cfg := httpclient.DefaultConfig()
+	cfg.Timeout = timeout
+	client := httpclient.New(cfg)
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

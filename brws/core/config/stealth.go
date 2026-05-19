@@ -113,8 +113,11 @@ type SessionConfig struct {
 	// Enable session persistence
 	Enabled bool `json:"enabled"`
 
-	// Profile directory for session storage
+	// ProfileDir is the directory for session storage.
 	ProfileDir string `json:"profile_dir,omitempty"`
+
+	// SessionName is an optional human-readable label for this session.
+	SessionName string `json:"session_name,omitempty"`
 
 	// Save cookies
 	SaveCookies bool `json:"save_cookies"`

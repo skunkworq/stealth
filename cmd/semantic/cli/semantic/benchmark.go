@@ -7,7 +7,7 @@ import (
 	"time"
 
 	semantic "github.com/skunkworq/stealth/brws/content/understand"
-	bench "github.com/skunkworq/stealth/brws/content/understand/bench"
+	bench "github.com/skunkworq/stealth/brws/research/bench/understand"
 )
 
 func runBenchmark(urls []string, outputFile string) error {

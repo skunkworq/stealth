@@ -12,7 +12,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/skunkworq/stealth/brws/core/constants"
 )
+
+// embeddingHTTPClient is shared across all embedding requests.
+// Timeout drawn from constants.LLMTimeout — same budget as chat completions.
+var embeddingHTTPClient = &http.Client{Timeout: constants.LLMTimeout}
 
 const DefaultEmbeddingModel = "qwen/qwen3-embedding-8b"
 
@@ -101,7 +107,7 @@ func (c *EmbeddingClient) EmbedBatch(ctx context.Context, texts []string) ([][]f
 	if c.apiKey != "" {
 		req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := embeddingHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("embedding request: %w", err)
 	}
