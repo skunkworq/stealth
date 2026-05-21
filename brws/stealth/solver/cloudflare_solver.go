@@ -78,9 +78,6 @@ type CFInitResp struct {
 	Turnstile           *challenge.TurnstileWidgetConfig `json:"turnstile,omitempty"`
 }
 
-// cfInitResp is an alias kept for internal use.
-type cfInitResp = CFInitResp
-
 // cfSolveResp mirrors the server's solve response.
 type cfSolveResp struct {
 	Success         bool                           `json:"success"`
@@ -343,7 +340,7 @@ func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSol
 	return cs.SolveTurnstileLab(baseURL)
 }
 
-func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initResp *cfInitResp, plan *TurnstileInteractionPlan) error {
+func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initResp *CFInitResp, plan *TurnstileInteractionPlan) error {
 	widgetURL := fmt.Sprintf(
 		"%s/api/cloudflare/turnstile/widget?session_id=%s&site_key=%s",
 		strings.TrimRight(baseURL, "/"),
@@ -511,12 +508,12 @@ func (cs *CloudflareSolverClient) EventGen() *CaptchaSolver {
 }
 
 // InitChallenge sends a POST to /api/cloudflare/init and returns the session.
-func (cs *CloudflareSolverClient) InitChallenge(baseURL, challengeType string, score float64, siteKey string) (*cfInitResp, error) {
+func (cs *CloudflareSolverClient) InitChallenge(baseURL, challengeType string, score float64, siteKey string) (*CFInitResp, error) {
 	return cs.initChallenge(baseURL, challengeType, score, siteKey)
 }
 
 // initChallenge sends a POST to /api/cloudflare/init and returns the session.
-func (cs *CloudflareSolverClient) initChallenge(baseURL, challengeType string, score float64, siteKey string) (*cfInitResp, error) {
+func (cs *CloudflareSolverClient) initChallenge(baseURL, challengeType string, score float64, siteKey string) (*CFInitResp, error) {
 	body, _ := json.Marshal(map[string]interface{}{
 		"challenge_type":  challengeType,
 		"detection_score": score,
@@ -529,7 +526,7 @@ func (cs *CloudflareSolverClient) initChallenge(baseURL, challengeType string, s
 	}
 	defer resp.Body.Close()
 
-	var initResp cfInitResp
+	var initResp CFInitResp
 	if err := json.NewDecoder(resp.Body).Decode(&initResp); err != nil {
 		return nil, err
 	}
