@@ -15,10 +15,9 @@ import (
 const labBaseURL = "http://localhost:9080"
 
 func traceDataDir() string {
-	// Use the project's training-data directory
+	// Use the project's training-data directory (three levels up from brws/stealth/challenge)
 	wd, _ := os.Getwd()
-	// We're in brws/adversarial, go up two levels
-	return wd + "/../../training-data"
+	return wd + "/../../../training-data"
 }
 
 func skipIfNoTraces(t *testing.T, lib *TraceLibrary) {

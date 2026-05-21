@@ -93,7 +93,7 @@ func (s *Suite) RunFile(ctx context.Context, path, baseURL string) *Result {
 	result.HTMLSize = len(html)
 
 	start := time.Now()
-	tree, stats, err := understand.HTMLToSemanticTree(ctx, html, baseURL, s.config)
+	tree, stats, err := understand.HTMLToSemanticTreeCached(ctx, html, baseURL, s.config)
 	if err != nil {
 		result.Error = err.Error()
 		return result

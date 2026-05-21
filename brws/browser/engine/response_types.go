@@ -270,16 +270,7 @@ func (r *HTMLResponse) xpathAll(xpath string) []HTMLElement {
 	if r.doc == nil {
 		return nil
 	}
-	var results []HTMLElement
-	var walk func(n *html.Node)
-	walk = func(n *html.Node) {
-		results = append(results, &htmlNode{n})
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			walk(c)
-		}
-	}
-	walk(r.doc)
-	return results
+	return r.queryXPath(xpath)
 }
 
 func (r *HTMLResponse) GetForms() []FormInfo {

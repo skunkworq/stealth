@@ -326,6 +326,9 @@ func (t *Trainer) validate(data *TrainingData) (float64, float64) {
 		}
 	}
 
+	if total == 0 {
+		return 0, 0
+	}
 	avgLoss := totalLoss / float64(total)
 	accuracy := float64(correct) / float64(total)
 

@@ -163,18 +163,27 @@ func modelSoftmax(logits []float64) []float64 {
 }
 
 // Backward performs backpropagation to update model weights.
+// target must be a one-hot encoded slice of length numClasses (e.g. [0,0,1,0,...])
+// where target[i]=1 for the correct class and 0 elsewhere.
 func (m *Model) Backward(target []int, learningRate float64) {
-	numClasses := len(target)
-	if numClasses == 0 {
+	if len(target) == 0 {
 		return
 	}
 
+	// Guard against misuse: single class-index instead of one-hot.
+	if len(target) == 1 && len(m.classify.bias) > 1 {
+		return
+	}
+
+	// Cross-entropy gradient: dL/dlogit_i = prob_i - target_i (one-hot)
+	probs := m.classify.forward(m.layers[len(m.layers)-1].Output)
 	gradOutput := make([]float64, len(m.classify.bias))
 	for i := range gradOutput {
+		label := 0.0
 		if i < len(target) {
-			prob := m.classify.forward(m.layers[len(m.layers)-1].Output)[i]
-			gradOutput[i] = prob - 1.0/float64(numClasses)
+			label = float64(target[i])
 		}
+		gradOutput[i] = probs[i] - label
 	}
 
 	for i := len(m.layers) - 1; i >= 0; i-- {

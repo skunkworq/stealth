@@ -280,10 +280,6 @@ func TestOptimizer(t *testing.T) {
 	if opt.learningRate != 0.01 {
 		t.Errorf("expected learning rate 0.01, got %f", opt.learningRate)
 	}
-
-	if opt.momentum != 0.9 {
-		t.Errorf("expected momentum 0.9, got %f", opt.momentum)
-	}
 }
 
 func TestLearningRateScheduler(t *testing.T) {

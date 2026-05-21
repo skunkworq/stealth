@@ -35,7 +35,7 @@ func (e *SemanticExtractor) Extract(ctx context.Context, url string) (*SemanticT
 		return nil, nil, err
 	}
 
-	return HTMLToSemanticTree(ctx, html, url, e.config)
+	return HTMLToSemanticTreeCached(ctx, html, url, e.config)
 }
 
 func (e *SemanticExtractor) ExtractWithBudget(ctx context.Context, url string, initialBudget, maxBudget uint32) (*SemanticTree, *UnfoldState, *CompressionStats, error) {
@@ -79,7 +79,7 @@ func FromHTMLResponse(resp *engine.Response, config *PipelineConfig) (*SemanticT
 	if url == "" {
 		url = "https://unknown.com"
 	}
-	return HTMLToSemanticTree(ctx, string(resp.Body), url, config)
+	return HTMLToSemanticTreeCached(ctx, string(resp.Body), url, config)
 }
 
 func NewConfigFromEnv() (*PipelineConfig, error) {

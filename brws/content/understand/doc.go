@@ -20,7 +20,7 @@
 // Basic extraction:
 //
 //	config, _ := understand.NewConfigFromEnv()
-//	tree, stats, err := understand.HTMLToSemanticTree(ctx, html, url, config)
+//	tree, stats, err := understand.HTMLToSemanticTreeCached(ctx, html, url, config)
 //	// tree: hierarchical semantic structure
 //	// stats: compression metrics (tokens, chunks, cache hits)
 //
@@ -212,6 +212,6 @@
 //
 // Without OPENROUTER_API_KEY, the system falls back to structural extraction:
 //
-//	tree, stats, err := understand.HTMLToSemanticTree(ctx, html, url, &understand.PipelineConfig{})
+//	tree, stats, err := understand.HTMLToSemanticTreeCached(ctx, html, url, &understand.PipelineConfig{})
 //	// No LLM calls, structural nodes only, minimal token usage
 package understand

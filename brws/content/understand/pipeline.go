@@ -6,12 +6,6 @@ import (
 	"time"
 )
 
-// HTMLToSemanticTree converts HTML to a semantic tree.
-// Deprecated: Use HTMLToSemanticTreeCached instead.
-func HTMLToSemanticTree(ctx context.Context, htmlStr, url string, config *PipelineConfig) (*SemanticTree, *CompressionStats, error) {
-	return HTMLToSemanticTreeCached(ctx, htmlStr, url, config)
-}
-
 // HTMLToSemanticTreeCached converts HTML to a semantic tree with caching support.
 func HTMLToSemanticTreeCached(ctx context.Context, htmlStr, url string, config *PipelineConfig) (*SemanticTree, *CompressionStats, error) {
 	if err := ctx.Err(); err != nil {

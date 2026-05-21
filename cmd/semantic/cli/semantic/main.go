@@ -122,7 +122,7 @@ Options:
 
 	fmt.Fprintf(os.Stderr, "Compressing semantic tree (%d bytes)...\n", len(html))
 
-	tree, stats, err := semantic.HTMLToSemanticTree(ctx, html, fetchURL, config)
+	tree, stats, err := semantic.HTMLToSemanticTreeCached(ctx, html, fetchURL, config)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

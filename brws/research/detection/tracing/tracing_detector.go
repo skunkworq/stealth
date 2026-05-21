@@ -69,7 +69,6 @@ func (td *TracingDetector) AnalyzeWithTrace(req *http.Request, tlsConn *tls.Conn
 	// Capture raw headers
 	for k, v := range req.Header {
 		if len(v) > 0 {
-			trace.RequestID = k + ": " + v[0]
 			trace.RawHeaders[k] = v[0]
 		}
 	}

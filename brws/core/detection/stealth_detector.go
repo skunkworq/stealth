@@ -3607,36 +3607,3 @@ func (sd *StealthDetector) analyzeGenericFingerprint(req *http.Request) *Detecti
 
 	return vec
 }
-
-//nolint:unused
-func (sd *StealthDetector) detectOurStealthBrowser(detection *StealthDetection) bool {
-	stealthScore := 0.0
-	reasons := make([]string, 0)
-
-	for _, vec := range detection.Vectors {
-		switch vec.Name {
-		case "Navigator Properties":
-			if strings.Contains(strings.Join(vec.Indicators, ","), "webdriver") {
-				stealthScore += 0.4
-				_ = append(reasons, "webdriver_flag")
-			}
-		case "Behavioral Patterns":
-			if strings.Contains(strings.Join(vec.Indicators, ","), "zero") {
-				stealthScore += 0.4
-				_ = append(reasons, "zero_variance")
-			}
-		case "Canvas/WebGL Fingerprint":
-			if strings.Contains(strings.Join(vec.Indicators, ","), "random") {
-				stealthScore += 0.3
-				_ = append(reasons, "canvas_randomization")
-			}
-		case "HTTP Headers":
-			if len(vec.Indicators) > 2 {
-				stealthScore += 0.2
-				reasons = append(reasons, "multiple_header_issues")
-			}
-		}
-	}
-
-	return stealthScore >= 0.5
-}

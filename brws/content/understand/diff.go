@@ -196,7 +196,7 @@ func NewIncrementalUpdater(cache *CacheStore, config *PipelineConfig) *Increment
 }
 
 func (u *IncrementalUpdater) Update(ctx context.Context, url, html string) (*SemanticTree, *DiffResult, error) {
-	newTree, _, err := HTMLToSemanticTree(ctx, html, url, u.config)
+	newTree, _, err := HTMLToSemanticTreeCached(ctx, html, url, u.config)
 	if err != nil {
 		return nil, nil, err
 	}

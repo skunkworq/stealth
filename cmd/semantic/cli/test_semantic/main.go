@@ -104,7 +104,7 @@ func main() {
 	}
 
 	start := time.Now()
-	tree, stats, err := semantic.HTMLToSemanticTree(ctx, html, testURL, config)
+	tree, stats, err := semantic.HTMLToSemanticTreeCached(ctx, html, testURL, config)
 	elapsed := time.Since(start)
 
 	if err != nil {

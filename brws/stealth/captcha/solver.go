@@ -8,7 +8,6 @@ import (
 )
 
 // Solver provides CAPTCHA solving capabilities using contrastive learning.
-// Solver provides CAPTCHA solving capabilities using contrastive learning.
 type Solver struct {
 	encoder    *ContrastiveEncoder
 	projector  *ProjectionHead
@@ -16,7 +15,6 @@ type Solver struct {
 	config     *CaptchaEncoderConfig
 }
 
-// CaptchaEncoderConfig holds configuration for the CAPTCHA solver.
 // CaptchaEncoderConfig holds configuration for the CAPTCHA solver.
 type CaptchaEncoderConfig struct {
 	EmbeddingDim  int
@@ -30,7 +28,6 @@ type CaptchaEncoderConfig struct {
 }
 
 // AugmentationConfig holds image augmentation settings for training.
-// AugmentationConfig holds image augmentation settings for training.
 type AugmentationConfig struct {
 	Rotation    bool
 	Noise       bool
@@ -42,7 +39,6 @@ type AugmentationConfig struct {
 }
 
 // DefaultCaptchaEncoderConfig provides default settings for the CAPTCHA solver.
-// DefaultCaptchaEncoderConfig provides default settings for the solver.
 var DefaultCaptchaEncoderConfig = CaptchaEncoderConfig{
 	EmbeddingDim:  128,
 	HiddenDim:     256,
@@ -63,7 +59,6 @@ var DefaultCaptchaEncoderConfig = CaptchaEncoderConfig{
 }
 
 // ContrastiveEncoder encodes images into embedding vectors.
-// ContrastiveEncoder encodes images into embedding vectors.
 type ContrastiveEncoder struct {
 	weights [][]float64
 	bias    []float64
@@ -71,7 +66,6 @@ type ContrastiveEncoder struct {
 }
 
 // NewContrastiveEncoder creates a new contrastive encoder.
-// NewContrastiveEncoder creates a new contrastive encoder with the given configuration.
 func NewContrastiveEncoder(config *CaptchaEncoderConfig) *ContrastiveEncoder {
 	if config == nil {
 		config = &DefaultCaptchaEncoderConfig
@@ -101,7 +95,6 @@ func gaussianRandom(mean, std float64) float64 {
 }
 
 // ProjectionHead projects embeddings into the contrastive learning space.
-// ProjectionHead projects embeddings into contrastive learning space.
 type ProjectionHead struct {
 	weights [][]float64
 	bias    []float64
@@ -109,7 +102,6 @@ type ProjectionHead struct {
 }
 
 // NewProjectionHead creates a new projection head.
-// NewProjectionHead creates a new projection head with the given configuration.
 func NewProjectionHead(config *CaptchaEncoderConfig) *ProjectionHead {
 	if config == nil {
 		config = &DefaultCaptchaEncoderConfig
@@ -122,7 +114,6 @@ func NewProjectionHead(config *CaptchaEncoderConfig) *ProjectionHead {
 }
 
 // CharacterClassifier classifies character embeddings into character classes.
-// CharacterClassifier classifies characters from embeddings.
 type CharacterClassifier struct {
 	weights [][]float64
 	bias    []float64
@@ -130,7 +121,6 @@ type CharacterClassifier struct {
 }
 
 // NewCharacterClassifier creates a new character classifier.
-// NewCharacterClassifier creates a new character classifier with the given configuration.
 func NewCharacterClassifier(config *CaptchaEncoderConfig) *CharacterClassifier {
 	if config == nil {
 		config = &DefaultCaptchaEncoderConfig
@@ -143,7 +133,6 @@ func NewCharacterClassifier(config *CaptchaEncoderConfig) *CharacterClassifier {
 }
 
 // NewSolver creates a new CAPTCHA solver instance.
-// NewSolver creates a new CAPTCHA solver with the given configuration.
 func NewSolver(config *CaptchaEncoderConfig) *Solver {
 	if config == nil {
 		config = &DefaultCaptchaEncoderConfig
@@ -157,7 +146,6 @@ func NewSolver(config *CaptchaEncoderConfig) *Solver {
 }
 
 // Train trains the solver on the provided dataset for the specified number of epochs.
-// Train trains the solver on the given dataset for the specified number of epochs.
 func (s *Solver) Train(dataset *ContrastiveDataset, epochs int) error {
 	for epoch := 0; epoch < epochs; epoch++ {
 		batches := dataset.GetBatches(s.config.BatchSize)
@@ -305,7 +293,6 @@ func (s *Solver) backprop(proj1, proj2 []float64, _, _ int) {
 }
 
 // Solve attempts to solve the provided CAPTCHA and returns the solution with confidence.
-// Solve attempts to solve the given CAPTCHA and returns the solution with confidence.
 func (s *Solver) Solve(captcha *Captcha) (string, float64) {
 	img := captcha.Image
 	width := img.Bounds().Dx()
@@ -343,13 +330,11 @@ func (s *Solver) extractCharacterEmbedding(img image.Image) []float64 {
 }
 
 // Save persists the solver model to the specified path.
-// Save saves the solver model to the given path.
 func (s *Solver) Save(_ string) error {
 	return nil
 }
 
 // Load loads the solver model from the specified path.
-// Load loads the solver model from the given path.
 func (s *Solver) Load(_ string) error {
 	return nil
 }
@@ -373,7 +358,6 @@ func imageToFloatArray(img image.Image) []float64 {
 }
 
 // ContrastiveDataset holds training data for contrastive learning.
-// ContrastiveDataset holds training data for contrastive learning.
 type ContrastiveDataset struct {
 	images  []image.Image
 	labels  []int
@@ -382,7 +366,6 @@ type ContrastiveDataset struct {
 }
 
 // NewContrastiveDataset creates a new contrastive learning dataset.
-// NewContrastiveDataset creates a new dataset for the given character set.
 func NewContrastiveDataset(charSet string) *ContrastiveDataset {
 	return &ContrastiveDataset{
 		charSet: charSet,
@@ -392,7 +375,6 @@ func NewContrastiveDataset(charSet string) *ContrastiveDataset {
 }
 
 // Add adds an image with its label to the dataset.
-// Add adds an image with its label to the dataset.
 func (d *ContrastiveDataset) Add(img image.Image, label int) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -400,7 +382,6 @@ func (d *ContrastiveDataset) Add(img image.Image, label int) {
 	d.labels = append(d.labels, label)
 }
 
-// GetBatches returns the dataset divided into batches of the specified size.
 // GetBatches returns the dataset divided into batches of the specified size.
 func (d *ContrastiveDataset) GetBatches(batchSize int) []*ContrastiveBatch {
 	d.mu.RLock()
@@ -425,7 +406,6 @@ func (d *ContrastiveDataset) GetBatches(batchSize int) []*ContrastiveBatch {
 }
 
 // Size returns the number of images in the dataset.
-// Size returns the number of images in the dataset.
 func (d *ContrastiveDataset) Size() int {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
@@ -433,14 +413,12 @@ func (d *ContrastiveDataset) Size() int {
 }
 
 // ContrastiveBatch represents a batch of training data.
-// ContrastiveBatch represents a batch of images and labels for training.
 type ContrastiveBatch struct {
 	Images []image.Image
 	Labels []int
 }
 
 // Forward computes the embedding for the given input.
-// Forward computes the forward pass through the encoder.
 func (e *ContrastiveEncoder) Forward(input []float64) []float64 {
 	output := make([]float64, len(e.bias))
 
@@ -465,7 +443,6 @@ func relu(x float64) float64 {
 }
 
 // Forward projects the input embedding into the contrastive space.
-// Forward computes the forward pass through the projection head.
 func (p *ProjectionHead) Forward(input []float64) []float64 {
 	output := make([]float64, len(p.bias))
 
@@ -501,7 +478,6 @@ func l2Normalize(v []float64) []float64 {
 }
 
 // Prediction represents a character classification prediction.
-// Prediction holds the classification result with confidence scores.
 type Prediction struct {
 	Class         int
 	Confidence    float64
@@ -509,7 +485,6 @@ type Prediction struct {
 }
 
 // Predict classifies the embedding and returns the prediction result.
-// Predict classifies the given embedding and returns the prediction.
 func (c *CharacterClassifier) Predict(embedding []float64) *Prediction {
 	logits := make([]float64, len(c.bias))
 
@@ -563,7 +538,6 @@ func softmax(logits []float64) []float64 {
 }
 
 // ContrastiveLearner provides contrastive learning-based CAPTCHA solving.
-// ContrastiveLearner provides contrastive learning for CAPTCHA solving.
 type ContrastiveLearner struct {
 	solver  *Solver
 	dataset *ContrastiveDataset
@@ -571,7 +545,6 @@ type ContrastiveLearner struct {
 }
 
 // NewContrastiveLearner creates a new contrastive learner instance.
-// NewContrastiveLearner creates a new contrastive learner with the given configuration.
 func NewContrastiveLearner(config *CaptchaEncoderConfig) *ContrastiveLearner {
 	if config == nil {
 		config = &DefaultCaptchaEncoderConfig
@@ -584,7 +557,6 @@ func NewContrastiveLearner(config *CaptchaEncoderConfig) *ContrastiveLearner {
 }
 
 // GenerateTrainingData generates synthetic training data using the provided generator.
-// GenerateTrainingData generates training data using the given generator and count.
 func (l *ContrastiveLearner) GenerateTrainingData(_ *Generator, count int) error {
 	charSet := "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
@@ -619,13 +591,11 @@ func (l *ContrastiveLearner) GenerateTrainingData(_ *Generator, count int) error
 }
 
 // Train trains the learner for the specified number of epochs.
-// Train trains the learner for the specified number of epochs.
 func (l *ContrastiveLearner) Train(epochs int) error {
 	return l.solver.Train(l.dataset, epochs)
 }
 
 // Solve attempts to solve the provided CAPTCHA using the trained model.
-// Solve attempts to solve the given CAPTCHA using contrastive learning.
 func (l *ContrastiveLearner) Solve(captcha *Captcha) (string, float64) {
 	return l.solver.Solve(captcha)
 }

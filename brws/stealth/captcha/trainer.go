@@ -43,25 +43,21 @@ var DefaultTrainerConfig = TrainerConfig{
 	LogInterval:     10,
 }
 
-// Optimizer implements SGD with weight decay and momentum.
+// Optimizer implements SGD with weight decay.
 type Optimizer struct {
 	learningRate float64
-	momentum     float64
 	weightDecay  float64
-	velocities   [][][]float64
-	biasVelocity [][]float64
 }
 
 // NewOptimizer creates a new optimizer with the given parameters.
-func NewOptimizer(learningRate, momentum, weightDecay float64) *Optimizer {
+func NewOptimizer(learningRate, _ /* momentum */, weightDecay float64) *Optimizer {
 	return &Optimizer{
 		learningRate: learningRate,
-		momentum:     momentum,
 		weightDecay:  weightDecay,
 	}
 }
 
-// Update updates weights and biases using SGD with momentum and weight decay.
+// Update updates weights and biases using SGD with weight decay.
 func (o *Optimizer) Update(weights, gradients [][]float64, biases, biasGradients []float64) {
 	for i := range weights {
 		for j := range weights[i] {
@@ -330,6 +326,9 @@ func (t *Trainer) validate(data *TrainingData) (float64, float64) {
 		}
 	}
 
+	if total == 0 {
+		return 0, 0
+	}
 	avgLoss := totalLoss / float64(total)
 	accuracy := float64(correct) / float64(total)
 
