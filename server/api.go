@@ -24,21 +24,23 @@ type AgentOrchestrator interface {
 
 // APIHandler serves the REST API.
 type APIHandler struct {
-	sessions  *SessionManager
-	hub       *Hub
-	orch      AgentOrchestrator
-	llmProv   LLMProvider
-	workspace *Workspace
+	sessions     *SessionManager
+	hub          *Hub
+	orch         AgentOrchestrator
+	llmProv      LLMProvider
+	workspace    *Workspace
+	serverLLMKey string // server-side LLM key; overrides per-request key when set
 }
 
 // NewAPIHandler creates the handler.
-func NewAPIHandler(sessions *SessionManager, hub *Hub, orch AgentOrchestrator, llmProv LLMProvider, ws *Workspace) *APIHandler {
+func NewAPIHandler(sessions *SessionManager, hub *Hub, orch AgentOrchestrator, llmProv LLMProvider, ws *Workspace, serverLLMKey string) *APIHandler {
 	return &APIHandler{
-		sessions:  sessions,
-		hub:       hub,
-		orch:      orch,
-		llmProv:   llmProv,
-		workspace: ws,
+		sessions:     sessions,
+		hub:          hub,
+		orch:         orch,
+		llmProv:      llmProv,
+		workspace:    ws,
+		serverLLMKey: serverLLMKey,
 	}
 }
 
@@ -166,7 +168,11 @@ func (a *APIHandler) runAgentForMessage(sessionID string, req SendMessageRequest
 	if model == "" {
 		model = a.orch.DefaultModel()
 	}
-	llm, err := a.llmProv(provider, model, req.APIKey)
+	llmKey := req.APIKey
+	if a.serverLLMKey != "" {
+		llmKey = a.serverLLMKey
+	}
+	llm, err := a.llmProv(provider, model, llmKey)
 	if err != nil {
 		slog.Error("failed to create llm", "err", err)
 		a.emitError(sessionID, "", "failed to create LLM: "+err.Error())

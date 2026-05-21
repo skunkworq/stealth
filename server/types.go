@@ -152,6 +152,10 @@ type Config struct {
 	// APIKey is an optional shared secret. When non-empty, all API and WebSocket
 	// requests must include Authorization: Bearer <key> or X-API-Key: <key>.
 	APIKey string `json:"api_key,omitempty"`
+	// LLMAPIKey is the server-side LLM provider API key. When set, callers do not
+	// need to supply api_key in SendMessageRequest — the server uses this value.
+	// This avoids sending LLM keys over HTTP in request bodies.
+	LLMAPIKey string `json:"llm_api_key,omitempty"`
 }
 
 // DefaultConfig returns sensible defaults.

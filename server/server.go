@@ -28,7 +28,7 @@ func NewServer(cfg Config, llmProv LLMProvider) *Server {
 	reg := NewRegistry()
 	ws := NewWorkspace("./workspace")
 	orch := NewOrchestrator(cfg, reg, hub, llmProv, ws)
-	api := NewAPIHandler(sessions, hub, orch, llmProv, ws)
+	api := NewAPIHandler(sessions, hub, orch, llmProv, ws, cfg.LLMAPIKey)
 	wsh := NewWebSocketHandler(hub)
 
 	return &Server{
