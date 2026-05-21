@@ -144,11 +144,14 @@ type GetAgentTreeResponse struct {
 
 // Config holds server-wide settings.
 type Config struct {
-	Addr        string `json:"addr"`         // HTTP listen address, default :8080
-	WSPath      string `json:"ws_path"`      // WebSocket path, default /ws
-	APIPath     string `json:"api_path"`     // API prefix, default /api
-	DefaultLLM  string `json:"default_llm"`  // default provider name
+	Addr         string `json:"addr"`          // HTTP listen address, default :8080
+	WSPath       string `json:"ws_path"`       // WebSocket path, default /ws
+	APIPath      string `json:"api_path"`      // API prefix, default /api
+	DefaultLLM   string `json:"default_llm"`   // default provider name
 	DefaultModel string `json:"default_model"` // default model name
+	// APIKey is an optional shared secret. When non-empty, all API and WebSocket
+	// requests must include Authorization: Bearer <key> or X-API-Key: <key>.
+	APIKey string `json:"api_key,omitempty"`
 }
 
 // DefaultConfig returns sensible defaults.

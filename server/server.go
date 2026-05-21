@@ -55,17 +55,38 @@ func (s *spaFileServer) Open(name string) (http.File, error) {
 	return f, nil
 }
 
+// requireAPIKey returns a middleware that checks Authorization: Bearer <key>
+// or X-API-Key: <key>. Only active when cfg.APIKey is non-empty.
+func (s *Server) requireAPIKey(next http.Handler) http.Handler {
+	if s.cfg.APIKey == "" {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := r.Header.Get("X-API-Key")
+		if key == "" {
+			if auth := r.Header.Get("Authorization"); len(auth) > 7 && auth[:7] == "Bearer " {
+				key = auth[7:]
+			}
+		}
+		if key != s.cfg.APIKey {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Handler returns the root HTTP handler.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// API routes.
-	mux.Handle(s.cfg.APIPath+"/", s.api.Router(s.cfg.APIPath))
+	// API routes — gated by API key when configured.
+	mux.Handle(s.cfg.APIPath+"/", s.requireAPIKey(s.api.Router(s.cfg.APIPath)))
 
-	// WebSocket route.
-	mux.Handle(s.cfg.WSPath, s.ws.Handler())
+	// WebSocket route — gated by API key when configured.
+	mux.Handle(s.cfg.WSPath, s.requireAPIKey(s.ws.Handler()))
 
-	// Static web UI with SPA fallback.
+	// Static web UI with SPA fallback (unauthenticated — serves only bundled assets).
 	static, err := fs.Sub(webFS, "web")
 	if err != nil {
 		slog.Error("failed to create static subfs", "err", err)
