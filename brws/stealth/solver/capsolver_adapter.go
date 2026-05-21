@@ -44,7 +44,7 @@ func (a *CapSolverAdapter) Solve(cctx *challengefsm.ChallengeContext) (*challeng
 	case challenge.ChallengeRecaptchaV3:
 		token, err = a.solver.SolveRecaptchaV3(ctx, ch.SiteKey, url, 0.5)
 	case challenge.ChallengeHCaptcha:
-		token, err = a.solver.SolveHCaptcha(ctx, ch.SiteKey, url)
+		token, err = a.solver.SolveHcaptcha(ctx, ch.SiteKey, url)
 	case challenge.ChallengeTurnstile:
 		token, err = a.solver.SolveTurnstile(ctx, ch.SiteKey, url)
 	default:

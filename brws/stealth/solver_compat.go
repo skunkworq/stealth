@@ -33,4 +33,3 @@ func NewCaptchaSolver() *CaptchaSolver               { return solver.NewCaptchaS
 func NewCloudflareSolverClient() *CloudflareSolverClient { return solver.NewCloudflareSolverClient() }
 func TimezoneToOffset(tz string) int                 { return solver.TimezoneToOffset(tz) }
 
-func deriveBaseURL(targetURL string) string { return solver.DeriveBaseURL(targetURL) }

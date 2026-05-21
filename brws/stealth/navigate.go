@@ -15,6 +15,7 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	challengefsm "github.com/skunkworq/stealth/brws/stealth/challenge/fsm"
+	"github.com/skunkworq/stealth/brws/stealth/solver"
 )
 
 // Navigate performs a GET request to the specified URL.
@@ -439,7 +440,7 @@ func (c *Adaptive) solveCFChallenge(ctx context.Context, targetURL string, resp 
 		time.Sleep(time.Duration(1500+rand.Intn(3000)) * time.Millisecond)
 
 		// Submit solution to the challenge API endpoint
-		baseURL := deriveBaseURL(targetURL)
+		baseURL := solver.DeriveBaseURL(targetURL)
 		clearanceCookie, err := c.cfSolver.SubmitSolution(baseURL, ch, solution, fp, events)
 		if err != nil {
 			return nil, err

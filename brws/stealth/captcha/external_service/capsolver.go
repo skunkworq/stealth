@@ -17,7 +17,7 @@ import (
 type Solver interface {
 	SolveRecaptchaV2(ctx context.Context, siteKey, url string) (string, error)
 	SolveRecaptchaV3(ctx context.Context, siteKey, url string, minScore float64) (string, error)
-	SolveHCaptcha(ctx context.Context, siteKey, url string) (string, error)
+	SolveHcaptcha(ctx context.Context, siteKey, url string) (string, error)
 	SolveTurnstile(ctx context.Context, siteKey, url string) (string, error)
 	GetBalance(ctx context.Context) (float64, error)
 }
@@ -212,7 +212,7 @@ func (c *CapSolver) SolveRecaptchaV3(ctx context.Context, siteKey, url string, m
 	return sol.GRecaptchaResponse, nil
 }
 
-func (c *CapSolver) SolveHCaptcha(ctx context.Context, siteKey, url string) (string, error) {
+func (c *CapSolver) SolveHcaptcha(ctx context.Context, siteKey, url string) (string, error) {
 	taskID, err := c.createTask(ctx, "HCaptchaTask", map[string]interface{}{
 		"websiteKey": siteKey,
 		"websiteURL": url,
