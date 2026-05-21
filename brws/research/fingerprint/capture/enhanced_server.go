@@ -79,10 +79,11 @@ type ServerConfig struct {
 	EnableProxy     bool // Enable the MITM proxy
 }
 
-// DefaultConfig returns default server configuration
+// DefaultConfig returns default server configuration. The research server
+// binds to localhost only; use BindAddr="0.0.0.0" explicitly for network access.
 func DefaultConfig() *ServerConfig {
 	return &ServerConfig{
-		BindAddr:        "0.0.0.0",
+		BindAddr:        "127.0.0.1",
 		HTTPPort:        8080,
 		HTTPSPort:       8443,
 		ProxyPort:       8081,
