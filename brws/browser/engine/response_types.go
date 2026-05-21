@@ -99,12 +99,14 @@ func (r *HTMLResponse) queryCSS(selector string) []HTMLElement {
 }
 
 func (r *HTMLResponse) queryXPath(expr string) []HTMLElement {
-	tag := xpathTagName(expr)
+	tag, preds := parseXPathExpr(expr)
 	var results []HTMLElement
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode && (tag == "" || strings.EqualFold(n.Data, tag)) {
-			results = append(results, &htmlNode{n})
+			if matchesXPathPredicates(n, preds) {
+				results = append(results, &htmlNode{n})
+			}
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
@@ -114,13 +116,67 @@ func (r *HTMLResponse) queryXPath(expr string) []HTMLElement {
 	return results
 }
 
-// xpathTagName extracts the element tag from simple //tagname[...] expressions.
-func xpathTagName(expr string) string {
-	s := strings.TrimPrefix(expr, "//")
-	if i := strings.IndexAny(s, "[/@"); i >= 0 {
-		s = s[:i]
+// xpathPredicate is a single [@attr] or [@attr='value'] constraint.
+type xpathPredicate struct {
+	attr  string
+	value string // empty means existence check only
+}
+
+// parseXPathExpr extracts the tag name and any attribute predicates from expressions
+// like //tag, //tag[@attr], //tag[@attr='val'], //tag[@a or @b].
+func parseXPathExpr(expr string) (tag string, preds []xpathPredicate) {
+	s := strings.TrimPrefix(expr, ".")
+	s = strings.TrimPrefix(s, "//")
+	bracketStart := strings.Index(s, "[")
+	if bracketStart < 0 {
+		// No predicates — strip trailing /... axis steps too
+		if i := strings.Index(s, "/"); i >= 0 {
+			s = s[:i]
+		}
+		return strings.ToLower(strings.TrimSpace(s)), nil
 	}
-	return strings.ToLower(strings.TrimSpace(s))
+	tag = strings.ToLower(strings.TrimSpace(s[:bracketStart]))
+	predStr := s[bracketStart:]
+	// Strip outer [ ]
+	predStr = strings.TrimPrefix(predStr, "[")
+	if i := strings.LastIndex(predStr, "]"); i >= 0 {
+		predStr = predStr[:i]
+	}
+	// Split on " or " to handle [@a or @b] patterns
+	parts := strings.Split(predStr, " or ")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if !strings.HasPrefix(p, "@") {
+			continue
+		}
+		p = p[1:] // strip @
+		if eqIdx := strings.Index(p, "="); eqIdx >= 0 {
+			attr := strings.TrimSpace(p[:eqIdx])
+			val := strings.Trim(strings.TrimSpace(p[eqIdx+1:]), `'"`)
+			preds = append(preds, xpathPredicate{attr: attr, value: val})
+		} else {
+			preds = append(preds, xpathPredicate{attr: strings.TrimSpace(p)})
+		}
+	}
+	return tag, preds
+}
+
+// matchesXPathPredicates returns true if the node satisfies at least one predicate
+// (OR semantics, matching how [@a or @b] is parsed), or all predicates when only one exists.
+func matchesXPathPredicates(n *html.Node, preds []xpathPredicate) bool {
+	if len(preds) == 0 {
+		return true
+	}
+	for _, p := range preds {
+		for _, a := range n.Attr {
+			if strings.EqualFold(a.Key, p.attr) {
+				if p.value == "" || a.Val == p.value {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func normalizeCSS(sel string) string {

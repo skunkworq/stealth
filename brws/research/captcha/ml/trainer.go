@@ -399,68 +399,57 @@ func NewDataAugmenter(config *AugmentationConfig) *DataAugmenter {
 	return &DataAugmenter{config: config}
 }
 
-// Augment applies augmentation to an image.
+// Augment applies Gaussian noise to an image and returns the result.
 func (a *DataAugmenter) Augment(img image.Image) image.Image {
-	return img
+	if !a.config.Noise {
+		return img
+	}
+	bounds := img.Bounds()
+	out := image.NewRGBA(bounds)
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, alpha := img.At(x, y).RGBA()
+			noise := uint32((x*31+y*17)%21) - 10
+			clamp := func(v uint32) uint8 {
+				if int32(v)+int32(noise) < 0 {
+					return 0
+				}
+				if int32(v)+int32(noise) > 65535 {
+					return 255
+				}
+				return uint8((v + noise) >> 8)
+			}
+			out.SetRGBA(x, y, struct{ R, G, B, A uint8 }{clamp(r), clamp(g), clamp(b), uint8(alpha >> 8)})
+		}
+	}
+	return out
 }
 
 // CreateAugmentedDataset creates an augmented dataset from the training data.
+// Only noise augmentation is applied; rotation and crop require known image
+// dimensions and are omitted to avoid silently producing identity duplicates.
 func (a *DataAugmenter) CreateAugmentedDataset(data *TrainingData) *TrainingData {
 	augmented := NewTrainingData()
 
 	for i, img := range data.Images {
 		augmented.Add(img, data.Labels[i])
 
-		for j := 0; j < 3; j++ {
-			augImg := img
-			if a.config.Rotation {
-				augImg = a.rotate(augImg)
+		if a.config.Noise {
+			for j := 0; j < 3; j++ {
+				augmented.Add(a.addNoise(img, j+1), data.Labels[i])
 			}
-			if a.config.Noise {
-				augImg = a.addNoise(augImg)
-			}
-			if a.config.Crop {
-				augImg = a.crop(augImg)
-			}
-			augmented.Add(augImg, data.Labels[i])
 		}
 	}
 
 	return augmented
 }
 
-func (a *DataAugmenter) rotate(img []float64) []float64 {
-	return img
-}
-
-func (a *DataAugmenter) addNoise(img []float64) []float64 {
+func (a *DataAugmenter) addNoise(img []float64, seed int) []float64 {
 	result := make([]float64, len(img))
+	scale := 0.02 * float64(seed)
 	for i, v := range img {
-		noise := (float64(i%10) - 5) * 0.01
-		result[i] = v + noise
+		noise := (float64((i*31+seed*17)%21) - 10) * scale * 0.01
+		result[i] = math.Max(0, math.Min(1, v+noise))
 	}
 	return result
-}
-
-func (a *DataAugmenter) crop(img []float64) []float64 {
-	return img
-}
-
-//nolint:unused
-func imageToFloatArray2(img image.Image) []float64 {
-	bounds := img.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
-
-	pixels := make([]float64, width*height)
-
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			r, g, b, _ := img.At(x+bounds.Min.X, y+bounds.Min.Y).RGBA()
-			avg := float64(r+g+b) / 3.0
-			pixels[y*width+x] = avg / 65535.0
-		}
-	}
-
-	return pixels
 }
