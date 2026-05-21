@@ -20,7 +20,7 @@ func main() {
 	urlsFile := flag.String("urls", "", "file with URLs (one per line)")
 	urlList := flag.String("url", "", "single URL or comma-separated URLs")
 	output := flag.String("output", "json", "output format: json, text, summary")
-	metricsAddr := flag.String("metrics", ":8080", "metrics server address")
+	metricsAddr := flag.String("metrics", "127.0.0.1:8080", "metrics server address")
 	concurrency := flag.Int("concurrency", 4, "number of concurrent workers")
 	timeout := flag.Duration("timeout", 2*time.Minute, "request timeout")
 	noCache := flag.Bool("no-cache", false, "disable caching")
