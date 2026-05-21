@@ -164,7 +164,7 @@ func TestClientEngineReturnsActiveEngine(t *testing.T) {
 	}
 	defer client.Close()
 
-	eng := client.Engine()
+	eng := client.ActiveEngine()
 	if eng == nil {
 		t.Fatal("expected non-nil engine")
 	}
@@ -191,5 +191,5 @@ func TestClientNewSemanticExtractor(t *testing.T) {
 // Compile-time checks for new method signatures.
 var _ func() (context.Context, context.CancelFunc, bool) = (*stealth.Adaptive)(nil).NewTab
 var _ func() (context.Context, bool) = (*stealth.Adaptive)(nil).BrowserContext
-var _ func() engine.Engine = (*stealth.Adaptive)(nil).Engine
+var _ func() engine.Engine = (*stealth.Adaptive)(nil).ActiveEngine
 var _ func(*understand.PipelineConfig) *understand.SemanticExtractor = (*stealth.Adaptive)(nil).NewSemanticExtractor

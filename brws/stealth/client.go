@@ -317,11 +317,6 @@ func (c *Adaptive) NewTab() (context.Context, context.CancelFunc, bool) {
 	return nil, nil, false
 }
 
-// Engine returns the underlying engine for advanced use cases.
-func (c *Adaptive) Engine() engine.Engine {
-	return c.ActiveEngine()
-}
-
 // ActiveEngine returns the waterfall engine if configured, otherwise the raw engine.
 func (c *Adaptive) ActiveEngine() engine.Engine {
 	if c.waterfall != nil {
