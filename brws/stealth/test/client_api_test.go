@@ -9,13 +9,13 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 
-func TestNewAdaptiveValueConfig(t *testing.T) {
+func TestNewAdaptiveWithConfig(t *testing.T) {
 	cfg := *stealth.DefaultConfig()
 	cfg.EngineName = "native"
 	cfg.Headless = true
-	client, err := stealth.NewAdaptiveFromConfig(cfg)
+	client, err := stealth.NewAdaptiveWithConfig(&cfg)
 	if err != nil {
-		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
+		t.Fatalf("NewAdaptiveWithConfig failed: %v", err)
 	}
 	if client == nil {
 		t.Fatal("expected non-nil client")
@@ -29,9 +29,9 @@ func TestNewAdaptiveValueConfig(t *testing.T) {
 func TestScrapeAlias(t *testing.T) {
 	// Scrape is an alias for Navigate; verify it exists and calls through.
 	cfg := *stealth.DefaultConfig()
-	client, err := stealth.NewAdaptiveFromConfig(cfg)
+	client, err := stealth.NewAdaptiveWithConfig(&cfg)
 	if err != nil {
-		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
+		t.Fatalf("NewAdaptiveWithConfig failed: %v", err)
 	}
 	defer client.Close()
 
@@ -128,9 +128,9 @@ func TestClientNewTabNativeEngine(t *testing.T) {
 	// With a native engine, NewTab should return false.
 	cfg := *stealth.DefaultConfig()
 	cfg.EngineName = "native"
-	client, err := stealth.NewAdaptiveFromConfig(cfg)
+	client, err := stealth.NewAdaptiveWithConfig(&cfg)
 	if err != nil {
-		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
+		t.Fatalf("NewAdaptiveWithConfig failed: %v", err)
 	}
 	defer client.Close()
 
@@ -143,9 +143,9 @@ func TestClientNewTabNativeEngine(t *testing.T) {
 func TestClientBrowserContextNativeEngine(t *testing.T) {
 	cfg := *stealth.DefaultConfig()
 	cfg.EngineName = "native"
-	client, err := stealth.NewAdaptiveFromConfig(cfg)
+	client, err := stealth.NewAdaptiveWithConfig(&cfg)
 	if err != nil {
-		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
+		t.Fatalf("NewAdaptiveWithConfig failed: %v", err)
 	}
 	defer client.Close()
 
@@ -158,9 +158,9 @@ func TestClientBrowserContextNativeEngine(t *testing.T) {
 func TestClientEngineReturnsActiveEngine(t *testing.T) {
 	cfg := *stealth.DefaultConfig()
 	cfg.EngineName = "native"
-	client, err := stealth.NewAdaptiveFromConfig(cfg)
+	client, err := stealth.NewAdaptiveWithConfig(&cfg)
 	if err != nil {
-		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
+		t.Fatalf("NewAdaptiveWithConfig failed: %v", err)
 	}
 	defer client.Close()
 
@@ -176,9 +176,9 @@ func TestClientEngineReturnsActiveEngine(t *testing.T) {
 func TestClientNewSemanticExtractor(t *testing.T) {
 	cfg := *stealth.DefaultConfig()
 	cfg.EngineName = "native"
-	client, err := stealth.NewAdaptiveFromConfig(cfg)
+	client, err := stealth.NewAdaptiveWithConfig(&cfg)
 	if err != nil {
-		t.Fatalf("NewAdaptiveFromConfig failed: %v", err)
+		t.Fatalf("NewAdaptiveWithConfig failed: %v", err)
 	}
 	defer client.Close()
 

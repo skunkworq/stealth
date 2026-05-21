@@ -105,11 +105,6 @@ func NewAdaptive(opts ...Option) (*Adaptive, error) {
 	return NewAdaptiveWithConfig(cfg)
 }
 
-// NewAdaptiveFromConfig creates an Adaptive from a value-typed Config.
-func NewAdaptiveFromConfig(cfg Config) (*Adaptive, error) {
-	return NewAdaptiveWithConfig(&cfg)
-}
-
 // NewAdaptiveWithConfig creates an Adaptive from a pointer-typed Config.
 func NewAdaptiveWithConfig(cfg *Config) (*Adaptive, error) {
 	logLevel := "info"

@@ -428,7 +428,7 @@ func ensureAgentSession(dir, chromePath string, useStealth bool) (context.Contex
 		// The stealth client doesn't accept chrome path directly,
 		// but we can set it via environment or accept the default discovery
 	}
-	sc, err := stealth.NewAdaptiveFromConfig(cfg)
+	sc, err := stealth.NewAdaptiveWithConfig(&cfg)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("creating stealth client: %w", err)
 	}
