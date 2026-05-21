@@ -7,7 +7,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -237,8 +236,3 @@ func (t *Tools) fetchTree(ctx context.Context, url string) (*semantic.SemanticTr
 	return tree, nil
 }
 
-func init() {
-	if os.Getenv("OPENROUTER_API_KEY") == "" {
-		os.Setenv("OPENROUTER_API_KEY", "-")
-	}
-}

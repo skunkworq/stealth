@@ -3,7 +3,6 @@ package fsm
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"time"
 
@@ -135,5 +134,3 @@ func (s *CloudflareFSMSolver) Solve(cctx *ChallengeContext) (*SolveResult, error
 // ensure compile-time interface satisfaction
 var _ ChallengeSolver = (*CloudflareFSMSolver)(nil)
 
-// Ensure rand is used (imported for potential future use in retry jitter).
-var _ = rand.Intn

@@ -249,10 +249,3 @@ func GenerateSpanID() SpanID {
 	return SpanID(fmt.Sprintf("%016x", time.Now().UnixNano()))
 }
 
-func init() {
-	// Generate IDs for each span
-	s := NewSpan("test", SpanKindInternal)
-	_ = s.Duration()
-	_ = GenerateTraceID()
-	_ = GenerateSpanID()
-}
