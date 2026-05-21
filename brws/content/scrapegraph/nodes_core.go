@@ -114,7 +114,7 @@ func (n *FetchNode) fetchWeb(ctx context.Context, source string) ([]Document, er
 	timeout := time.Duration(n.Timeout) * time.Second
 
 	if n.StealthClient != nil {
-		resp, err := n.StealthClient.Scrape(ctx, source)
+		resp, err := n.StealthClient.Navigate(ctx, source)
 		if err != nil {
 			return nil, fmt.Errorf("stealth fetch: %w", err)
 		}

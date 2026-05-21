@@ -264,13 +264,6 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 	}, nil
 }
 
-// Scrape fetches a URL and returns the response.
-// It is a convenience alias for Navigate with a name that reflects the
-// high-level scraping intent.
-func (c *Adaptive) Scrape(ctx context.Context, url string) (*Response, error) {
-	return c.Navigate(ctx, url)
-}
-
 // NavigateWithReferrer performs a navigation with an explicit referrer.
 // When the underlying engine is a Chromium StealthEngine with StealthPlus
 // enabled, this sets both the HTTP Referer header and document.referrer.

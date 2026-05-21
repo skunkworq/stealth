@@ -26,20 +26,6 @@ func TestNewAdaptiveWithConfig(t *testing.T) {
 	_ = client.Close()
 }
 
-func TestScrapeAlias(t *testing.T) {
-	// Scrape is an alias for Navigate; verify it exists and calls through.
-	cfg := *stealth.DefaultConfig()
-	client, err := stealth.NewAdaptiveWithConfig(&cfg)
-	if err != nil {
-		t.Fatalf("NewAdaptiveWithConfig failed: %v", err)
-	}
-	defer client.Close()
-
-	// Scrape method should exist (compile-time check above).
-	// We can't meaningfully test navigation without a real server,
-	// but we verify the method signature is correct.
-	_ = client.Scrape
-}
 
 func TestResponseChallengeSolvedField(t *testing.T) {
 	resp := &stealth.Response{ChallengeSolved: true}
@@ -117,8 +103,8 @@ func TestResponseAsHTMLEmptyBody(t *testing.T) {
 	}
 }
 
-// Compile-time check that Scrape matches the expected signature.
-var _ func(context.Context, string) (*stealth.Response, error) = (*stealth.Adaptive)(nil).Scrape
+// Compile-time check that Navigate matches the expected signature.
+var _ func(context.Context, string) (*stealth.Response, error) = (*stealth.Adaptive)(nil).Navigate
 
 // ---------------------------------------------------------------------------
 // Stealth client persistent tab & semantic integration tests
