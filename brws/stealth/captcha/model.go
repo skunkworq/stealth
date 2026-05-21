@@ -30,12 +30,12 @@ var DefaultModelConfig = ModelConfig{
 // Model represents a neural network for CAPTCHA solving.
 type Model struct {
 	config   *ModelConfig
-	layers   []Layer
+	layers   []layer
 	classify *ClassificationHead
 }
 
-// Layer represents a neural network layer.
-type Layer struct {
+// layer represents a neural network layer.
+type layer struct {
 	Weights     [][]float64
 	Bias        []float64
 	Output      []float64
@@ -59,13 +59,13 @@ func NewModel(config *ModelConfig) *Model {
 
 	m := &Model{
 		config:   config,
-		layers:   make([]Layer, 0),
+		layers:   make([]layer, 0),
 		classify: &ClassificationHead{},
 	}
 
 	prevDim := config.InputDim
 	for i, hiddenDim := range config.HiddenDims {
-		layer := Layer{
+		layer := layer{
 			Weights:     initWeightMatrix(hiddenDim, prevDim),
 			Bias:        make([]float64, hiddenDim),
 			Output:      make([]float64, hiddenDim),
@@ -100,7 +100,7 @@ func (m *Model) Forward(input []float64) []float64 {
 	return m.classify.forward(current)
 }
 
-func (l *Layer) forward(input []float64) []float64 {
+func (l *layer) forward(input []float64) []float64 {
 	output := make([]float64, len(l.Bias))
 
 	for i := range output {
@@ -230,23 +230,23 @@ func (m *Model) Predict(input []float64) (int, float64) {
 
 // ResNetBlock represents a residual network block.
 type ResNetBlock struct {
-	conv1    *Conv2DLayer
-	conv2    *Conv2DLayer
-	shortcut *Conv2DLayer
-	bn1      *BatchNormLayer
-	bn2      *BatchNormLayer
+	conv1    *conv2DLayer
+	conv2    *conv2DLayer
+	shortcut *conv2DLayer
+	bn1      *batchNormLayer
+	bn2      *batchNormLayer
 }
 
-// Conv2DLayer represents a 2D convolutional layer.
-type Conv2DLayer struct {
+// conv2DLayer represents a 2D convolutional layer.
+type conv2DLayer struct {
 	Weights [][][]float64
 	Bias    []float64
 	Stride  int
 	Padding int
 }
 
-// BatchNormLayer represents a batch normalization layer.
-type BatchNormLayer struct {
+// batchNormLayer represents a batch normalization layer.
+type batchNormLayer struct {
 	Gamma    []float64
 	Beta     []float64
 	Mean     []float64
@@ -258,7 +258,7 @@ type BatchNormLayer struct {
 func NewResNetBlock(inputChannels, outputChannels int) *ResNetBlock {
 	block := &ResNetBlock{}
 
-	block.conv1 = &Conv2DLayer{
+	block.conv1 = &conv2DLayer{
 		Weights: make([][][]float64, outputChannels),
 		Bias:    make([]float64, outputChannels),
 		Stride:  1,
@@ -271,7 +271,7 @@ func NewResNetBlock(inputChannels, outputChannels int) *ResNetBlock {
 		}
 	}
 
-	block.conv2 = &Conv2DLayer{
+	block.conv2 = &conv2DLayer{
 		Weights: make([][][]float64, outputChannels),
 		Bias:    make([]float64, outputChannels),
 		Stride:  1,
@@ -285,7 +285,7 @@ func NewResNetBlock(inputChannels, outputChannels int) *ResNetBlock {
 	}
 
 	if inputChannels != outputChannels {
-		block.shortcut = &Conv2DLayer{
+		block.shortcut = &conv2DLayer{
 			Weights: make([][][]float64, outputChannels),
 			Bias:    make([]float64, outputChannels),
 			Stride:  1,
@@ -293,7 +293,7 @@ func NewResNetBlock(inputChannels, outputChannels int) *ResNetBlock {
 		}
 	}
 
-	block.bn1 = &BatchNormLayer{
+	block.bn1 = &batchNormLayer{
 		Gamma:    make([]float64, outputChannels),
 		Beta:     make([]float64, outputChannels),
 		Mean:     make([]float64, outputChannels),
@@ -301,7 +301,7 @@ func NewResNetBlock(inputChannels, outputChannels int) *ResNetBlock {
 		Epsilon:  0.001,
 	}
 
-	block.bn2 = &BatchNormLayer{
+	block.bn2 = &batchNormLayer{
 		Gamma:    make([]float64, outputChannels),
 		Beta:     make([]float64, outputChannels),
 		Mean:     make([]float64, outputChannels),
@@ -327,7 +327,7 @@ func (r *ResNetBlock) Forward(x [][][]float64) [][][]float64 {
 	return out
 }
 
-func (c *Conv2DLayer) forward(x [][][]float64) [][][]float64 {
+func (c *conv2DLayer) forward(x [][][]float64) [][][]float64 {
 	if len(x) == 0 || len(x[0]) == 0 || len(x[0][0]) == 0 {
 		return x
 	}
@@ -393,7 +393,7 @@ func (c *Conv2DLayer) forward(x [][][]float64) [][][]float64 {
 	return output
 }
 
-func (b *BatchNormLayer) forward(x [][][]float64) [][][]float64 {
+func (b *batchNormLayer) forward(x [][][]float64) [][][]float64 {
 	if len(x) == 0 {
 		return x
 	}
@@ -448,9 +448,9 @@ func addTensors(a, b [][][]float64) [][][]float64 {
 // CNNModel represents a convolutional neural network model.
 type CNNModel struct {
 	config     *ModelConfig
-	convLayers []Conv2DLayer
-	bnLayers   []BatchNormLayer
-	fcLayers   []Layer
+	convLayers []conv2DLayer
+	bnLayers   []batchNormLayer
+	fcLayers   []layer
 	classify   *ClassificationHead
 }
 
@@ -462,14 +462,14 @@ func NewCNNModel(config *ModelConfig) *CNNModel {
 
 	m := &CNNModel{
 		config:     config,
-		convLayers: make([]Conv2DLayer, 0),
-		bnLayers:   make([]BatchNormLayer, 0),
-		fcLayers:   make([]Layer, 0),
+		convLayers: make([]conv2DLayer, 0),
+		bnLayers:   make([]batchNormLayer, 0),
+		fcLayers:   make([]layer, 0),
 	}
 
 	channels := []int{32, 64, 128}
 	for _, ch := range channels {
-		conv := Conv2DLayer{
+		conv := conv2DLayer{
 			Weights: make([][][]float64, ch),
 			Bias:    make([]float64, ch),
 			Stride:  1,
@@ -483,7 +483,7 @@ func NewCNNModel(config *ModelConfig) *CNNModel {
 		}
 		m.convLayers = append(m.convLayers, conv)
 
-		bn := BatchNormLayer{
+		bn := batchNormLayer{
 			Gamma:    make([]float64, ch),
 			Beta:     make([]float64, ch),
 			Mean:     make([]float64, ch),
