@@ -86,7 +86,10 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 		if err != nil {
 			span.SetAttribute("error", err.Error())
 			c.logger.Error("navigation failed", "url", url, "error", err)
-			return resilience.WithPermanentError(err)
+			if ctx.Err() != nil {
+				return resilience.WithPermanentError(err)
+			}
+			return err
 		}
 
 		// Check for WAF/challenge markers in the response body/headers.

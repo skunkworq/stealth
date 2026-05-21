@@ -26,8 +26,25 @@ func (r *TextResponse) JSON() (map[string]interface{}, error) {
 	return result, err
 }
 
+// JSONP extracts a nested value from the JSON body using a dot-separated path.
+// For example, path "user.name" returns body["user"]["name"].
 func (r *TextResponse) JSONP(path string) (interface{}, error) {
-	return nil, nil
+	var root interface{}
+	if err := json.Unmarshal(r.Body, &root); err != nil {
+		return nil, err
+	}
+	cur := root
+	for _, key := range strings.Split(path, ".") {
+		if key == "" {
+			continue
+		}
+		m, ok := cur.(map[string]interface{})
+		if !ok {
+			return nil, nil
+		}
+		cur = m[key]
+	}
+	return cur, nil
 }
 
 type HTMLResponse struct {

@@ -235,7 +235,6 @@ func (c *Collector) Stats() (*CollectionStats, error) {
 	// By engine
 	rows, err := c.db.Query("SELECT engine_name, COUNT(*) FROM episodes GROUP BY engine_name")
 	if err == nil {
-		defer rows.Close()
 		for rows.Next() {
 			var name string
 			var count int
@@ -243,12 +242,12 @@ func (c *Collector) Stats() (*CollectionStats, error) {
 				stats.ByEngine[name] = count
 			}
 		}
+		rows.Close()
 	}
 
 	// By outcome (outcome column is JSON; decode in Go)
 	outcomeRows, err := c.db.Query("SELECT outcome FROM episodes")
 	if err == nil {
-		defer outcomeRows.Close()
 		for outcomeRows.Next() {
 			var outcomeJSON string
 			if outcomeRows.Scan(&outcomeJSON) == nil {
@@ -267,6 +266,7 @@ func (c *Collector) Stats() (*CollectionStats, error) {
 				}
 			}
 		}
+		outcomeRows.Close()
 	}
 
 	// Date range
