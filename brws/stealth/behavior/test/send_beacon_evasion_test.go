@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 func TestSendBeaconEvasion(t *testing.T) {
@@ -19,7 +19,7 @@ func TestSendBeaconEvasion(t *testing.T) {
 
 			for i := 0; i < trials; i++ {
 				cfg := behavior.MaxEvasionConfig(profile)
-				cfg.EvasionStrategy = &behavior.SendBeaconStrategy{}
+				cfg.EvasionStrategy = &behavior.FirefoxInitNavStrategy{}
 				gen := behavior.NewRequestGenerator(cfg)
 				req := gen.GenerateRequest("https://api.example.com/telemetry")
 				detection := detector.AnalyzeRequest(req, nil)
@@ -39,7 +39,7 @@ func TestSendBeaconEvasion(t *testing.T) {
 
 			avgScore := totalScore / float64(trials)
 			detRate := float64(detections) / float64(trials)
-			fmt.Printf("  %s: detection=%.0f%% avg_score=%.3f\n", profile.Name, detRate*100, avgScore)
+			t.Logf("%s: detection=%.0f%% avg_score=%.3f", profile.Name, detRate*100, avgScore)
 		})
 	}
 }

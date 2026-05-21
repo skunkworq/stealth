@@ -43,13 +43,13 @@ var DefaultTrainerConfig = TrainerConfig{
 	LogInterval:     10,
 }
 
-// Optimizer implements gradient descent optimization.
+// Optimizer implements SGD with weight decay and momentum.
 type Optimizer struct {
-	learningRate   float64
-	momentum       float64
-	weightDecay    float64
-	velocities     [][][]float64
-	biasVelocities [][]float64 //nolint:unused
+	learningRate float64
+	momentum     float64
+	weightDecay  float64
+	velocities   [][][]float64
+	biasVelocity [][]float64
 }
 
 // NewOptimizer creates a new optimizer with the given parameters.
@@ -58,29 +58,21 @@ func NewOptimizer(learningRate, momentum, weightDecay float64) *Optimizer {
 		learningRate: learningRate,
 		momentum:     momentum,
 		weightDecay:  weightDecay,
-		velocities:   make([][][]float64, 0),
 	}
 }
 
-// Update updates weights and biases using computed gradients.
+// Update updates weights and biases using SGD with momentum and weight decay.
 func (o *Optimizer) Update(weights, gradients [][]float64, biases, biasGradients []float64) {
 	for i := range weights {
 		for j := range weights[i] {
-			grad := gradients[i][j]
-			grad += o.weightDecay * weights[i][j]
-
-			vel := o.momentum*0 - o.learningRate*grad
-
-			weights[i][j] += vel
+			grad := gradients[i][j] + o.weightDecay*weights[i][j]
+			weights[i][j] -= o.learningRate * grad
 		}
 	}
 
 	for i := range biases {
-		biasGrad := biasGradients[i]
-		biasGrad += o.weightDecay * biases[i]
-
-		biasVel := o.momentum*0 - o.learningRate*biasGrad
-		biases[i] += biasVel
+		biasGrad := biasGradients[i] + o.weightDecay*biases[i]
+		biases[i] -= o.learningRate * biasGrad
 	}
 }
 
@@ -248,16 +240,16 @@ func (t *Trainer) Train(data *TrainingData) error {
 		lr := t.scheduler.Step(epoch)
 		t.optimizer.learningRate = lr
 
-		trnLoss, trnAcc := t.trainEpoch(trn)
+		trainLoss, trainAcc := t.trainEpoch(trn)
 		valLoss, valAcc := t.validate(val)
 
 		epochTime := time.Since(startTime)
 
-		t.metrics.Record(epoch, trnLoss, trnAcc, valLoss, valAcc, epochTime, lr)
+		t.metrics.Record(epoch, trainLoss, trainAcc, valLoss, valAcc, epochTime, lr)
 
 		if epoch%t.config.LogInterval == 0 {
 			fmt.Printf("Epoch %d/%d - Time: %v - LR: %.6f - Train Loss: %.4f - Train Acc: %.4f - Val Loss: %.4f - Val Acc: %.4f\n",
-				epoch+1, t.config.Epochs, epochTime, lr, trnLoss, trnAcc, valLoss, valAcc)
+				epoch+1, t.config.Epochs, epochTime, lr, trainLoss, trainAcc, valLoss, valAcc)
 		}
 
 		if valLoss < bestValLoss {

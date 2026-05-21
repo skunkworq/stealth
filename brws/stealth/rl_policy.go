@@ -16,7 +16,11 @@ import (
 func BuildStateVector(anomalies []string, captcha *CaptchaState, behavioral *BehavioralState) []float64 {
 	vec := make([]float64, 18)
 
-	// Parse anomaly strings into detection dimensions
+	// Parse anomaly strings into detection dimensions.
+	// Recognises both detailed detection vocabulary ("webdriver_exposed", "hardware_mismatch")
+	// and the coarser challenge vocabulary emitted by extractAnomaliesFromResponse
+	// ("waf_challenge", "captcha_challenge", "blocked") so live inference and training
+	// operate over the same non-zero detection signal space.
 	for _, a := range anomalies {
 		aLower := strings.ToLower(a)
 		if strings.Contains(aLower, "webdriver") {
@@ -28,7 +32,10 @@ func BuildStateVector(anomalies []string, captcha *CaptchaState, behavioral *Beh
 		if strings.Contains(aLower, "client_hints") || strings.Contains(aLower, "inconsistent_ch") {
 			vec[2] = 1.0
 		}
-		if strings.Contains(aLower, "mismatch") && !strings.Contains(aLower, "timezone") {
+		// "mismatch" covers detection-layer anomalies; "waf_challenge" / "blocked" are
+		// HTTP-layer proxies indicating some fingerprint inconsistency was detected.
+		if (strings.Contains(aLower, "mismatch") && !strings.Contains(aLower, "timezone")) ||
+			strings.Contains(aLower, "waf_challenge") || strings.Contains(aLower, "blocked") {
 			vec[3] = 1.0
 		}
 		if strings.Contains(aLower, "hardware") || strings.Contains(aLower, "memory") {
@@ -51,6 +58,11 @@ func BuildStateVector(anomalies []string, captcha *CaptchaState, behavioral *Beh
 		}
 		if strings.Contains(aLower, "timezone") {
 			vec[10] = 1.0
+		}
+		// "captcha_challenge" sets the captcha-presented dimension when no explicit
+		// CaptchaState is passed (e.g. when called from the RL adaptation path).
+		if strings.Contains(aLower, "captcha") && captcha == nil {
+			vec[11] = 1.0
 		}
 	}
 
@@ -192,7 +204,7 @@ func extractAnomaliesFromResponse(resp *engine.Response) []string {
 		"access denied":           "blocked",
 	}
 	for marker, anomaly := range checks {
-		if strings.Contains(body, marker) {
+		if strings.Contains(body, strings.ToLower(marker)) {
 			anomalies = append(anomalies, anomaly)
 		}
 	}

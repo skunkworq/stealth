@@ -3,6 +3,7 @@ package stealth
 import (
 	"context"
 	"fmt"
+	"io"
 	"math/rand"
 	"net/http"
 	"strings"
@@ -71,7 +72,7 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 		doRequest = activeEngine.Do
 	}
 
-	_ = resilience.RetryContext(ctx, &resilience.Config{
+	if retryErr := resilience.RetryContext(ctx, &resilience.Config{
 		MaxAttempts:       3,
 		InitialBackoff:    2 * time.Second,
 		MaxBackoff:        8 * time.Second,
@@ -99,7 +100,11 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 
 			// RL-driven stealth adaptation or hardcoded fallback
 			if c.policyLoader != nil && c.config.Stealth != nil {
-				stateVec := BuildStateVector(extractAnomaliesFromResponse(resp), nil, nil)
+				var captchaState *CaptchaState
+				if c.isCaptchaResponse(resp) {
+					captchaState = &CaptchaState{Presented: true}
+				}
+				stateVec := BuildStateVector(extractAnomaliesFromResponse(resp), captchaState, nil)
 				actionIdx, qValue := c.policyLoader.SelectAction(stateVec)
 				applied, field := ApplyAction(c.config.Stealth, actionIdx)
 				c.logger.Info("RL policy action", "action", field, "q_value", qValue, "applied", applied)
@@ -113,7 +118,9 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 		}
 
 		return nil
-	})
+	}); retryErr != nil && err == nil {
+		err = retryErr
+	}
 
 	// EVASION FSM: on ban signal, rotate strategy and retry before escalating
 	if c.evasionFSM != nil && resp != nil {
@@ -126,7 +133,9 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 		if detected {
 			c.evasionFSM.RecordBanSignal(resp.Status)
 
-			// Retry with rotated strategy before escalating to browser mode
+			// Retry with rotated strategy before escalating to browser mode.
+			// Each iteration applies the FSM's current strategy to the engine request
+			// so header mutations (Sec-Fetch-*, Accept, method) actually take effect.
 			prevStrategy := c.evasionFSM.CurrentStrategy().Name()
 			for fsmRetry := 0; fsmRetry < len(c.evasionFSM.Strategies()) && !c.evasionFSM.ShouldEscalate(); fsmRetry++ {
 				nextStrategy := c.evasionFSM.CurrentStrategy().Name()
@@ -136,10 +145,9 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 				prevStrategy = nextStrategy
 				c.logger.Info("evasion FSM retry", "strategy", nextStrategy, "attempt", fsmRetry+1)
 
-				resp, err = doRequest(ctx, &engine.Request{
-					URL:     url,
-					Timeout: c.options.Timeout,
-				})
+				resp, err = doRequest(ctx, engineRequestWithStrategy(
+					c.evasionFSM.CurrentStrategy(), url, c.options.Timeout,
+				))
 				if err != nil {
 					break
 				}
@@ -233,6 +241,9 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 	}
 
 	if resp == nil {
+		if err != nil {
+			return nil, fmt.Errorf("navigation failed: %w", err)
+		}
 		return nil, fmt.Errorf("navigation failed: no response received")
 	}
 
@@ -305,16 +316,6 @@ func (c *Adaptive) NavigateWithSearchProfile(ctx context.Context, url string, pr
 		return nil, fmt.Errorf("unknown search profile: %s (use google, bing, duckduckgo, random)", profile)
 	}
 
-	// If the engine supports profile navigation, delegate to it
-	if pn, ok := c.engine.(engine.ProfileNavigator); ok {
-		if err := pn.NavigateWithReferrer(ctx, url, referrer); err != nil {
-			return nil, fmt.Errorf("profile navigation failed: %w", err)
-		}
-		// After profile navigation, fetch the page content to return a Response
-		return c.Navigate(ctx, url)
-	}
-
-	// Fallback: just use the referrer via the generic engine interface
 	return c.NavigateWithReferrer(ctx, url, referrer)
 }
 
@@ -498,4 +499,36 @@ func pickRandomSearchReferrer(domain string) string {
 		buildDuckDuckGoReferrer,
 	}
 	return builders[rand.Intn(len(builders))](domain)
+}
+
+// engineRequestWithStrategy applies an evasion strategy's header/method/body mutations
+// to an engine.Request. Strategies operate on *http.Request; this bridges the gap by
+// running Apply on a synthetic request and extracting the results into ExtraHeaders.
+// For browser engines (Chromium) these headers may be overridden by the engine itself;
+// for the native HTTP engine they are injected verbatim.
+func engineRequestWithStrategy(strategy behavior.EvasionStrategy, url string, timeout time.Duration) *engine.Request {
+	synthetic, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return &engine.Request{URL: url, Timeout: timeout}
+	}
+
+	strategy.Apply(synthetic, nil, url)
+
+	req := &engine.Request{
+		URL:          url,
+		Timeout:      timeout,
+		Method:       synthetic.Method,
+		ExtraHeaders: make(map[string]string, len(synthetic.Header)),
+	}
+	for k, vs := range synthetic.Header {
+		if len(vs) > 0 {
+			req.ExtraHeaders[k] = vs[0]
+		}
+	}
+	if synthetic.Body != nil {
+		if body, readErr := io.ReadAll(synthetic.Body); readErr == nil {
+			req.Body = body
+		}
+	}
+	return req
 }

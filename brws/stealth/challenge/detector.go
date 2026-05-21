@@ -65,24 +65,44 @@ type PluginAnalyzer = detection.PluginAnalyzer
 // TimingAnalyzer re-exports the core timing analyzer type.
 type TimingAnalyzer = detection.TimingAnalyzer
 
+// TimingAnalyzerConfig re-exports the core timing analyzer config type.
+type TimingAnalyzerConfig = detection.TimingAnalyzerConfig
+
 // RequestTimingSequence re-exports the core request timing sequence type.
 type RequestTimingSequence = detection.RequestTimingSequence
 
 // AdvancedDetection re-exports the core advanced detection type.
 type AdvancedDetection = detection.AdvancedDetection
 
-var NewStealthDetector = detection.NewStealthDetector
-var NewAdaptiveScorer = detection.NewAdaptiveScorer
-var NewAnalyzer = detection.NewAnalyzer
-var NewCloudflareDetector = detection.NewCloudflareDetector
-var NewIsomorphicAnalyzer = detection.NewIsomorphicAnalyzer
-var NewWebGLAnalyzer = detection.NewWebGLAnalyzer
-var NewFontAnalyzer = detection.NewFontAnalyzer
-var NewScreenAnalyzer = detection.NewScreenAnalyzer
-var NewPluginAnalyzer = detection.NewPluginAnalyzer
-var NewTimingAnalyzer = detection.NewTimingAnalyzer
-var NewRequestTimingSequenceFromMap = detection.NewRequestTimingSequenceFromMap
-var NewAdvancedDetection = detection.NewAdvancedDetection
+func NewStealthDetector() *StealthDetector { return detection.NewStealthDetector() }
+
+func NewAdaptiveScorer(config *AdaptiveScorerConfig) *AdaptiveScorer {
+	return detection.NewAdaptiveScorer(config)
+}
+
+func NewAnalyzer() *Analyzer { return detection.NewAnalyzer() }
+
+func NewCloudflareDetector() *CloudflareDetector { return detection.NewCloudflareDetector() }
+
+func NewIsomorphicAnalyzer() *IsomorphicAnalyzer { return detection.NewIsomorphicAnalyzer() }
+
+func NewWebGLAnalyzer() *WebGLAnalyzer { return detection.NewWebGLAnalyzer() }
+
+func NewFontAnalyzer() *FontAnalyzer { return detection.NewFontAnalyzer() }
+
+func NewScreenAnalyzer() *ScreenAnalyzer { return detection.NewScreenAnalyzer() }
+
+func NewPluginAnalyzer() *PluginAnalyzer { return detection.NewPluginAnalyzer() }
+
+func NewTimingAnalyzer(config *TimingAnalyzerConfig) *TimingAnalyzer {
+	return detection.NewTimingAnalyzer(config)
+}
+
+func NewRequestTimingSequenceFromMap(timing map[string]interface{}) *RequestTimingSequence {
+	return detection.NewRequestTimingSequenceFromMap(timing)
+}
+
+func NewAdvancedDetection() *AdvancedDetection { return detection.NewAdvancedDetection() }
 
 // ChallengeType represents the type of challenge detected.
 //

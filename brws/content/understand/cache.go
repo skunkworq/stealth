@@ -3,7 +3,6 @@ package understand
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -25,12 +24,12 @@ func NewCacheStore(ctx context.Context, dbPath string) (*CacheStore, error) {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
-		return nil, NewCacheError(fmt.Sprintf("failed to create cache directory: %v", err))
+		return nil, NewCacheError("failed to create cache directory", err)
 	}
 
 	db, err := sql.Open("sqlite3", dbPath+"?_journal=WAL&_busy_timeout=5000")
 	if err != nil {
-		return nil, NewCacheError(fmt.Sprintf("failed to open database: %v", err))
+		return nil, NewCacheError("failed to open database", err)
 	}
 
 	store := &CacheStore{db: db, path: dbPath}
@@ -69,7 +68,7 @@ func (s *CacheStore) ensureSchema(ctx context.Context) error {
 
 	for _, schema := range schemas {
 		if _, err := s.db.ExecContext(ctx, schema); err != nil {
-			return NewCacheError(fmt.Sprintf("failed to create schema: %v", err))
+			return NewCacheError("failed to create schema", err)
 		}
 	}
 
@@ -93,12 +92,12 @@ func (s *CacheStore) GetChunk(ctx context.Context, contentHash string) (*Semanti
 		return nil, nil
 	}
 	if err != nil {
-		return nil, NewCacheError(fmt.Sprintf("failed to query chunk: %v", err))
+		return nil, NewCacheError("failed to query chunk", err)
 	}
 
 	var node SemanticNode
 	if err := decodeJSON(nodeJSON, &node); err != nil {
-		return nil, NewCacheError(fmt.Sprintf("failed to decode node: %v", err))
+		return nil, NewCacheError("failed to decode node", err)
 	}
 
 	go func() {
@@ -126,7 +125,7 @@ func (s *CacheStore) PutChunk(ctx context.Context, contentHash string, node *Sem
 		contentHash, nodeJSON, now, now,
 	)
 	if err != nil {
-		return NewCacheError(fmt.Sprintf("failed to store chunk: %v", err))
+		return NewCacheError("failed to store chunk", err)
 	}
 
 	return nil
@@ -146,7 +145,7 @@ func (s *CacheStore) GetImageDescription(ctx context.Context, urlHash string) (s
 		return "", nil
 	}
 	if err != nil {
-		return "", NewCacheError(fmt.Sprintf("failed to query image description: %v", err))
+		return "", NewCacheError("failed to query image description", err)
 	}
 
 	return description, nil
@@ -162,7 +161,7 @@ func (s *CacheStore) PutImageDescription(ctx context.Context, urlHash, descripti
 		urlHash, description, time.Now().Unix(),
 	)
 	if err != nil {
-		return NewCacheError(fmt.Sprintf("failed to store image description: %v", err))
+		return NewCacheError("failed to store image description", err)
 	}
 
 	return nil
@@ -181,7 +180,7 @@ func (s *CacheStore) GetImageQueries(ctx context.Context, urlHash string) ([]str
 		urlHash,
 	)
 	if err != nil {
-		return nil, NewCacheError(fmt.Sprintf("failed to query image queries: %v", err))
+		return nil, NewCacheError("failed to query image queries", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -194,7 +193,7 @@ func (s *CacheStore) GetImageQueries(ctx context.Context, urlHash string) ([]str
 		var embeddingBytes []byte
 		var answer string
 		if err := rows.Scan(&embeddingBytes, &answer); err != nil {
-			return nil, NewCacheError(fmt.Sprintf("failed to scan image query: %v", err))
+			return nil, NewCacheError("failed to scan image query", err)
 		}
 
 		embedding := make([]float32, len(embeddingBytes)/4)
@@ -233,7 +232,7 @@ func (s *CacheStore) PutImageQuery(ctx context.Context, urlHash string, embeddin
 		urlHash, embeddingBytes, answer, time.Now().Unix(),
 	)
 	if err != nil {
-		return NewCacheError(fmt.Sprintf("failed to store image query: %v", err))
+		return NewCacheError("failed to store image query", err)
 	}
 
 	return nil
@@ -267,7 +266,7 @@ func (s *CacheStore) PruneOld(ctx context.Context, maxAge time.Duration) (int64,
 		cutoff,
 	)
 	if err != nil {
-		return 0, NewCacheError(fmt.Sprintf("failed to prune: %v", err))
+		return 0, NewCacheError("failed to prune", err)
 	}
 
 	affected, _ := result.RowsAffected()

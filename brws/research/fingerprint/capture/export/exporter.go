@@ -14,12 +14,12 @@ type Exporter interface {
 	Extension() string
 }
 
-type JsonExporter struct {
+type JSONExporter struct {
 	Indent      bool
 	EnsureASCII bool
 }
 
-func (e *JsonExporter) Export(items []map[string]any, w io.Writer) error {
+func (e *JSONExporter) Export(items []map[string]any, w io.Writer) error {
 	enc := json.NewEncoder(w)
 	if e.Indent {
 		enc.SetIndent("", "  ")
@@ -35,13 +35,13 @@ func (e *JsonExporter) Export(items []map[string]any, w io.Writer) error {
 	return nil
 }
 
-func (e *JsonExporter) Extension() string {
+func (e *JSONExporter) Extension() string {
 	return "json"
 }
 
-type JsonLinesExporter struct{}
+type JSONLinesExporter struct{}
 
-func (e *JsonLinesExporter) Export(items []map[string]any, w io.Writer) error {
+func (e *JSONLinesExporter) Export(items []map[string]any, w io.Writer) error {
 	for _, item := range items {
 		data, err := json.Marshal(item)
 		if err != nil {
@@ -54,7 +54,7 @@ func (e *JsonLinesExporter) Export(items []map[string]any, w io.Writer) error {
 	return nil
 }
 
-func (e *JsonLinesExporter) Extension() string {
+func (e *JSONLinesExporter) Extension() string {
 	return "jsonl"
 }
 
@@ -148,12 +148,12 @@ func (e *XmlExporter) Extension() string {
 	return "xml"
 }
 
-func NewJsonExporter() Exporter {
-	return &JsonExporter{Indent: true}
+func NewJSONExporter() Exporter {
+	return &JSONExporter{Indent: true}
 }
 
-func NewJsonLinesExporter() Exporter {
-	return &JsonLinesExporter{}
+func NewJSONLinesExporter() Exporter {
+	return &JSONLinesExporter{}
 }
 
 func NewCsvExporter() Exporter {
@@ -181,13 +181,13 @@ func ExportToFile(items []map[string]any, filename string) error {
 func GetExporterForFile(filename string) Exporter {
 	switch {
 	case hasSuffix(filename, ".jsonl"), hasSuffix(filename, ".ndjson"):
-		return &JsonLinesExporter{}
+		return &JSONLinesExporter{}
 	case hasSuffix(filename, ".csv"):
 		return &CsvExporter{IncludeHeaders: true}
 	case hasSuffix(filename, ".xml"):
 		return &XmlExporter{}
 	default:
-		return &JsonExporter{Indent: true}
+		return &JSONExporter{Indent: true}
 	}
 }
 

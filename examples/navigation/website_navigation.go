@@ -70,7 +70,7 @@ func main() {
 	// -------------------------------------------------------------------------
 	// Step 3: Extract structured data from the page.
 	// -------------------------------------------------------------------------
-	htmlResp := engine.NewHtmlResponse(resp)
+	htmlResp := engine.NewHTMLResponse(resp)
 
 	fmt.Printf("Title: %s\n", htmlResp.GetTitle())
 	fmt.Printf("Links found: %d\n", len(htmlResp.GetLinks()))
@@ -140,7 +140,7 @@ func main() {
 		log.Fatalf("Form page navigation failed: %v", err)
 	}
 
-	htmlResp3 := engine.NewHtmlResponse(resp3)
+	htmlResp3 := engine.NewHTMLResponse(resp3)
 	forms := htmlResp3.GetForms()
 	fmt.Printf("Forms detected: %d\n", len(forms))
 	for i, form := range forms {

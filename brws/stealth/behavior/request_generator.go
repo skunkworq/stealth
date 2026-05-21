@@ -158,7 +158,7 @@ func MaxEvasionConfig(profile *BrowserProfile) *RequestGeneratorConfig {
 		EvadeUADataDeep:            true,
 		EvadeRequestProvenance:     true,
 		EvadeAcceptDestConsistency: true,
-		EvasionStrategy:            &SendBeaconStrategy{},
+		EvasionStrategy:            &FirefoxInitNavStrategy{},
 	}
 }
 
@@ -330,9 +330,13 @@ func (rg *RequestGenerator) SetTargetURL(url string) {
 }
 
 // GenerateRequest creates a complete HTTP request with all stealth headers set.
+// Returns nil if targetURL cannot be parsed.
 func (rg *RequestGenerator) GenerateRequest(targetURL string) *http.Request {
 	rg.SetTargetURL(targetURL)
-	req, _ := http.NewRequest("GET", targetURL, nil)
+	req, err := http.NewRequest(http.MethodGet, targetURL, nil)
+	if err != nil {
+		return nil
+	}
 
 	if rg.config != nil && rg.config.EvadeHeaderOrder {
 		// Browser-consistent header order

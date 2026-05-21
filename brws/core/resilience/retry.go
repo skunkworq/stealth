@@ -142,6 +142,11 @@ func RetryContext(ctx context.Context, config *Config, fn RetryableFuncCtx) erro
 
 // shouldRetry determines if an error should be retried
 func shouldRetry(err error, config *Config) bool {
+	// Permanent errors are never retried regardless of other config
+	if IsPermanentError(err) {
+		return false
+	}
+
 	// Check non-retryable errors first
 	for _, nonRetryable := range config.NonRetryableErrors {
 		if errors.Is(err, nonRetryable) {
@@ -205,10 +210,6 @@ var (
 	ErrRetryCancelled     = errors.New("retry cancelled")
 )
 
-// RetryIfError wraps a function to retry only if it returns an error
-func RetryIfError(config *Config, fn func() error) error {
-	return Retry(config, fn)
-}
 
 // WithPermanentError marks an error as non-retryable
 func WithPermanentError(err error) error {

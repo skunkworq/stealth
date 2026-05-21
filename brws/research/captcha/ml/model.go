@@ -3,6 +3,7 @@ package captchaml
 import (
 	"fmt"
 	"math"
+	"math/rand"
 )
 
 // AugmentationConfig holds image augmentation settings for training.
@@ -28,9 +29,13 @@ func initWeightMatrix(rows, cols int) [][]float64 {
 }
 
 func gaussianRandom(mean, std float64) float64 {
-	u1 := math.Log(1 - float64(int64(len(fmt.Sprintf("%f", mean)))%256)/256.0) //nolint:mnd
-	u2 := 2 * math.Pi * float64(int64(len(fmt.Sprintf("%f", std)))%256) / 256.0 //nolint:mnd
-	return mean + std*math.Sqrt(-2*u1)*math.Sin(u2)
+	// Box-Muller transform
+	u1 := rand.Float64()
+	if u1 == 0 {
+		u1 = 1e-10
+	}
+	u2 := rand.Float64()
+	return mean + std*math.Sqrt(-2*math.Log(u1))*math.Cos(2*math.Pi*u2)
 }
 
 // ModelConfig holds configuration for a neural network model.
@@ -134,7 +139,7 @@ func (l *Layer) forward(input []float64) []float64 {
 	for i := range output {
 		sum := l.Bias[i]
 		for j := range input {
-			if j < len(l.Weights) && i < len(l.Weights[j]) {
+			if i < len(l.Weights) && j < len(l.Weights[i]) {
 				sum += l.Weights[i][j] * input[j]
 			}
 		}
@@ -159,7 +164,7 @@ func (c *ClassificationHead) forward(input []float64) []float64 {
 	for i := range logits {
 		sum := c.bias[i]
 		for j := range input {
-			if j < len(c.weights) && i < len(c.weights[j]) {
+			if i < len(c.weights) && j < len(c.weights[i]) {
 				sum += c.weights[i][j] * input[j]
 			}
 		}
@@ -191,18 +196,30 @@ func modelSoftmax(logits []float64) []float64 {
 }
 
 // Backward performs backpropagation to update model weights.
+// target must be a one-hot encoded slice of length numClasses (e.g. [0,0,1,0,...])
+// where target[i]=1 for the correct class and 0 elsewhere. Passing a class index
+// instead (e.g. [2]) will produce incorrect gradients.
 func (m *Model) Backward(target []int, learningRate float64) {
-	numClasses := len(target)
-	if numClasses == 0 {
+	if len(target) == 0 {
 		return
 	}
 
+	// Validate: one-hot means exactly one element should be 1 and the rest 0.
+	// If target looks like a single class index (len==1 and target[0] >= len(bias)),
+	// it's a misuse; skip silently to avoid corrupting weights.
+	if len(target) == 1 && len(m.classify.bias) > 1 {
+		return
+	}
+
+	// Cross-entropy gradient: dL/dlogit_i = prob_i - target_i (one-hot)
+	probs := m.classify.forward(m.layers[len(m.layers)-1].Output)
 	gradOutput := make([]float64, len(m.classify.bias))
 	for i := range gradOutput {
+		label := 0.0
 		if i < len(target) {
-			prob := m.classify.forward(m.layers[len(m.layers)-1].Output)[i]
-			gradOutput[i] = prob - 1.0/float64(numClasses)
+			label = float64(target[i])
 		}
+		gradOutput[i] = probs[i] - label
 	}
 
 	for i := len(m.layers) - 1; i >= 0; i-- {

@@ -322,8 +322,8 @@ func GenerateStealthScript(config *StealthConfig) string {
 
     Object.defineProperty(window, 'innerWidth', { get: () => %d });
     Object.defineProperty(window, 'innerHeight', { get: () => %d });
-    Object.defineProperty(window, 'outerWidth', { get: () => %d });
-    Object.defineProperty(window, 'outerHeight', { get: () => %d });
+    Object.defineProperty(window, 'outerWidth', { get: () => %d, configurable: true });
+    Object.defineProperty(window, 'outerHeight', { get: () => %d, configurable: true });
     Object.defineProperty(window, 'devicePixelRatio', { get: () => %f });
     Object.defineProperty(window, 'screenX', { get: () => 0 });
     Object.defineProperty(window, 'screenY', { get: () => %d });
@@ -865,11 +865,11 @@ func GenerateStealthScript(config *StealthConfig) string {
 	// --- Phase 16: Dynamic RL Mutable Evasion Logic ---
 
 	if config.NetworkSync {
-		script = strings.Replace(script, `downlink: 10,
-            effectiveType: '4g',
-            rtt: 50,`, fmt.Sprintf(`downlink: %f,
-            effectiveType: '4g',
-            rtt: %d,`, rand.Float64()*8.5+1.5, rand.Intn(100)+50), 1)
+		script = strings.Replace(script,
+			`    const connRtt = (Math.floor(random() * 6) + 1) * 25; // 25-150ms in 25ms steps
+    const connDownlink = Math.round((random() * 9.5 + 0.5) * 20) / 20; // 0.5-10 Mbps, 0.05 steps`,
+			fmt.Sprintf(`    const connRtt = %d;
+    const connDownlink = %g;`, rand.Intn(100)+50, rand.Float64()*8.5+1.5), 1)
 	}
 
 	if config.VideoSync {
@@ -885,16 +885,11 @@ func GenerateStealthScript(config *StealthConfig) string {
 	}
 
 	if !config.GeometrySync {
-		// Enforce penalty geometry anomaly
-		script = strings.Replace(script, fmt.Sprintf(`Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
-    Object.defineProperty(screen, 'pixelDepth', { get: () => 24 });
-
-    Object.defineProperty(window, 'innerWidth', { get: () => %d });`, screenWidth-80),
-			fmt.Sprintf(`Object.defineProperty(screen, 'colorDepth', { get: () => 24 });
-    Object.defineProperty(screen, 'pixelDepth', { get: () => 24 });
-
-    Object.defineProperty(window, 'innerWidth', { get: () => %d });
-    Object.defineProperty(window, 'outerWidth', { get: () => %d });`, screenWidth-80, screenWidth-80), 1)
+		// Enforce penalty geometry anomaly: collapse outerWidth to equal innerWidth
+		// (no browser chrome gap is a bot signal)
+		script = strings.Replace(script,
+			fmt.Sprintf(`Object.defineProperty(window, 'outerWidth', { get: () => %d });`, screenWidth),
+			fmt.Sprintf(`Object.defineProperty(window, 'outerWidth', { get: () => %d });`, screenWidth-80), 1)
 	}
 
 	if config.PermissionsSync {

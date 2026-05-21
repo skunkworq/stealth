@@ -1,6 +1,9 @@
 package understand
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
 	ErrParseError     = errors.New("html parsing failed")
@@ -10,17 +13,26 @@ var (
 	ErrSerialization  = errors.New("serialization error")
 	ErrNodeNotFound   = errors.New("node not found")
 	ErrBudgetExceeded = errors.New("budget exceeded")
-	ErrHTTTPError     = errors.New("http error")
+	ErrHTTPError      = errors.New("http error")
 	ErrJSONError      = errors.New("json error")
 )
 
 type SemanticError struct {
 	Type    error
 	Message string
+	cause   error
 }
 
 func (e *SemanticError) Error() string {
+	if e.cause != nil {
+		return e.Type.Error() + ": " + e.Message + ": " + e.cause.Error()
+	}
 	return e.Type.Error() + ": " + e.Message
+}
+
+// Unwrap returns the sentinel error type, enabling errors.Is checks against ErrCacheError etc.
+func (e *SemanticError) Unwrap() error {
+	return e.Type
 }
 
 func NewParseError(msg string) error {
@@ -35,8 +47,12 @@ func NewEmbeddingError(msg string) error {
 	return &SemanticError{Type: ErrEmbeddingError, Message: msg}
 }
 
-func NewCacheError(msg string) error {
-	return &SemanticError{Type: ErrCacheError, Message: msg}
+func NewCacheError(msg string, cause ...error) error {
+	e := &SemanticError{Type: ErrCacheError, Message: msg}
+	if len(cause) > 0 {
+		e.cause = cause[0]
+	}
+	return e
 }
 
 func NewSerializationError(msg string) error {
@@ -50,6 +66,6 @@ func NewNodeNotFoundError(nodeID string) error {
 func NewBudgetExceeded(requested, budget uint32) error {
 	return &SemanticError{
 		Type:    ErrBudgetExceeded,
-		Message: "requested tokens exceed budget",
+		Message: fmt.Sprintf("requested %d tokens exceeds budget of %d", requested, budget),
 	}
 }

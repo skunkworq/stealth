@@ -652,9 +652,9 @@ func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
 	}
 }
 
-func TestHandleTurnstileLabRejectsUnallowlistedHost(t *testing.T) {
+func TestSolveTurnstileLabRejectsUnallowlistedHost(t *testing.T) {
 	solver := stealth.NewCloudflareSolverClient()
-	if _, err := solver.HandleTurnstileLab("https://example.com"); err == nil {
+	if _, err := solver.SolveTurnstileLab("https://example.com"); err == nil {
 		t.Fatal("expected non-local host to be rejected")
 	}
 }

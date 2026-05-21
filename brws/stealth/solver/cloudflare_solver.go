@@ -240,8 +240,8 @@ func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*Cloudf
 	return result, nil
 }
 
-// HandleTurnstileLab performs the full local Turnstile challenge flow against owned environments only.
-func (cs *CloudflareSolverClient) HandleTurnstileLab(baseURL string) (*CloudflareSolveResult, error) {
+// SolveTurnstileLab performs the full local Turnstile challenge flow against owned environments only.
+func (cs *CloudflareSolverClient) SolveTurnstileLab(baseURL string) (*CloudflareSolveResult, error) {
 	return cs.ExerciseTurnstileFlow(baseURL, nil)
 }
 
@@ -340,7 +340,7 @@ func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *Tu
 
 // SolveTurnstile is kept as a compatibility wrapper around the lab-only handler.
 func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSolveResult, error) {
-	return cs.HandleTurnstileLab(baseURL)
+	return cs.SolveTurnstileLab(baseURL)
 }
 
 func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initResp *cfInitResp, plan *TurnstileInteractionPlan) error {

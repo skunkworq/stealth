@@ -1,8 +1,6 @@
 package stealth
 
 import (
-	"net/url"
-
 	solver "github.com/skunkworq/stealth/brws/stealth/solver"
 )
 
@@ -35,11 +33,4 @@ func NewCaptchaSolver() *CaptchaSolver               { return solver.NewCaptchaS
 func NewCloudflareSolverClient() *CloudflareSolverClient { return solver.NewCloudflareSolverClient() }
 func TimezoneToOffset(tz string) int                 { return solver.TimezoneToOffset(tz) }
 
-// deriveBaseURL is used internally by client.go when submitting CF challenge solutions.
-func deriveBaseURL(targetURL string) string {
-	u, err := url.Parse(targetURL)
-	if err != nil {
-		return targetURL
-	}
-	return u.Scheme + "://" + u.Host
-}
+func deriveBaseURL(targetURL string) string { return solver.DeriveBaseURL(targetURL) }

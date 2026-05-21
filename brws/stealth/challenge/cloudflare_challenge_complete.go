@@ -61,8 +61,9 @@ func (cc *CloudflareChallenger) CompleteChallengeManaged(
 	fpScore := cc.ValidateFingerprint(sessionID, fp)
 	behScore := cc.ValidateBehavioral(sessionID, events)
 
-	// Composite score: lower is better (more human-like)
-	// Weights: PoW=0.30 (binary pass/fail, already passed), fp=0.30, behavioral=0.40
+	// Composite score: lower is better (more human-like). Threshold is 0.50.
+	// PoW is binary pass/fail (already verified above) and contributes 0 to the score.
+	// Remaining weight split: fp=0.30, behavioral=0.40 (sum=0.70; threshold scaled accordingly).
 	compositeScore := fpScore*0.30 + behScore*0.40
 
 	// Hard reject: if any single signal is extremely bot-like, reject regardless of composite
@@ -242,7 +243,6 @@ func (cc *CloudflareChallenger) CompleteTurnstile(
 		session.Passed = true
 		session.SolvedAt = time.Now()
 		session.ClearanceCookie = cookie.Value
-		session.Score = behScore
 		session.Score = compositeScore
 		session.State = StateSolved
 		session.TurnstileToken = token
@@ -399,8 +399,6 @@ func evaluateTurnstileSnapshot(snapshot *TurnstileClientSnapshot) float64 {
 		score += 0.35
 	}
 	weights += 0.35
-
-	weights += 0.30
 
 	if snapshot.Language == "" || len(snapshot.Languages) == 0 || snapshot.Language != snapshot.Languages[0] {
 		score += 0.10

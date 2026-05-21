@@ -20,52 +20,52 @@ func NewTextResponse(resp *Response) *TextResponse {
 	}
 }
 
-func (r *TextResponse) Json() (map[string]interface{}, error) {
+func (r *TextResponse) JSON() (map[string]interface{}, error) {
 	var result map[string]interface{}
 	err := json.Unmarshal(r.Body, &result)
 	return result, err
 }
 
-func (r *TextResponse) JsonP(path string) (interface{}, error) {
+func (r *TextResponse) JSONP(path string) (interface{}, error) {
 	return nil, nil
 }
 
-type HtmlResponse struct {
+type HTMLResponse struct {
 	*TextResponse
 	doc *html.Node
 }
 
-func NewHtmlResponse(resp *Response) *HtmlResponse {
-	hr := &HtmlResponse{
+func NewHTMLResponse(resp *Response) *HTMLResponse {
+	hr := &HTMLResponse{
 		TextResponse: NewTextResponse(resp),
 	}
-	hr.parseHtml()
+	hr.parseHTML()
 	return hr
 }
 
-func (r *HtmlResponse) parseHtml() {
+func (r *HTMLResponse) parseHTML() {
 	doc, err := html.Parse(strings.NewReader(r.Text))
 	if err == nil {
 		r.doc = doc
 	}
 }
 
-func (r *HtmlResponse) CSS(selector string) []HtmlElement {
+func (r *HTMLResponse) CSS(selector string) []HTMLElement {
 	if r.doc == nil {
 		return nil
 	}
 	return r.queryCSS(selector)
 }
 
-func (r *HtmlResponse) XPath(xpathExpr string) []HtmlElement {
+func (r *HTMLResponse) XPath(xpathExpr string) []HTMLElement {
 	if r.doc == nil {
 		return nil
 	}
 	return r.queryXPath(xpathExpr)
 }
 
-func (r *HtmlResponse) queryCSS(selector string) []HtmlElement {
-	var results []HtmlElement
+func (r *HTMLResponse) queryCSS(selector string) []HTMLElement {
+	var results []HTMLElement
 	sel := normalizeCSS(selector)
 
 	var walk func(n *html.Node)
@@ -81,17 +81,29 @@ func (r *HtmlResponse) queryCSS(selector string) []HtmlElement {
 	return results
 }
 
-func (r *HtmlResponse) queryXPath(xpath string) []HtmlElement {
-	var results []HtmlElement
+func (r *HTMLResponse) queryXPath(expr string) []HTMLElement {
+	tag := xpathTagName(expr)
+	var results []HTMLElement
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
-		results = append(results, &htmlNode{n})
+		if n.Type == html.ElementNode && (tag == "" || strings.EqualFold(n.Data, tag)) {
+			results = append(results, &htmlNode{n})
+		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
 		}
 	}
 	walk(r.doc)
 	return results
+}
+
+// xpathTagName extracts the element tag from simple //tagname[...] expressions.
+func xpathTagName(expr string) string {
+	s := strings.TrimPrefix(expr, "//")
+	if i := strings.IndexAny(s, "[/@"); i >= 0 {
+		s = s[:i]
+	}
+	return strings.ToLower(strings.TrimSpace(s))
 }
 
 func normalizeCSS(sel string) string {
@@ -159,7 +171,7 @@ func matchesSelector(n *html.Node, sel string) bool {
 	return strings.EqualFold(n.Data, sel)
 }
 
-type HtmlElement interface {
+type HTMLElement interface {
 	Text() string
 	Attr(key string) string
 	AllAttr() map[string]string
@@ -201,7 +213,7 @@ func (e *htmlNode) AllAttr() map[string]string {
 	return result
 }
 
-func (r *HtmlResponse) GetTitle() string {
+func (r *HTMLResponse) GetTitle() string {
 	title := r.xpathFirst(".//title")
 	if title != nil {
 		return title.Text()
@@ -209,7 +221,7 @@ func (r *HtmlResponse) GetTitle() string {
 	return ""
 }
 
-func (r *HtmlResponse) GetLinks() []string {
+func (r *HTMLResponse) GetLinks() []string {
 	var links []string
 	for _, a := range r.xpathAll(".//a[@href]") {
 		href := a.Attr("href")
@@ -220,7 +232,7 @@ func (r *HtmlResponse) GetLinks() []string {
 	return links
 }
 
-func (r *HtmlResponse) GetImages() []string {
+func (r *HTMLResponse) GetImages() []string {
 	var images []string
 	for _, img := range r.xpathAll(".//img[@src]") {
 		src := img.Attr("src")
@@ -231,7 +243,7 @@ func (r *HtmlResponse) GetImages() []string {
 	return images
 }
 
-func (r *HtmlResponse) GetMeta() map[string]string {
+func (r *HTMLResponse) GetMeta() map[string]string {
 	meta := make(map[string]string)
 	for _, m := range r.xpathAll(".//meta[@name or @property]") {
 		name := m.Attr("name")
@@ -246,7 +258,7 @@ func (r *HtmlResponse) GetMeta() map[string]string {
 	return meta
 }
 
-func (r *HtmlResponse) xpathFirst(xpath string) HtmlElement {
+func (r *HTMLResponse) xpathFirst(xpath string) HTMLElement {
 	results := r.xpathAll(xpath)
 	if len(results) > 0 {
 		return results[0]
@@ -254,11 +266,11 @@ func (r *HtmlResponse) xpathFirst(xpath string) HtmlElement {
 	return nil
 }
 
-func (r *HtmlResponse) xpathAll(xpath string) []HtmlElement {
+func (r *HTMLResponse) xpathAll(xpath string) []HTMLElement {
 	if r.doc == nil {
 		return nil
 	}
-	var results []HtmlElement
+	var results []HTMLElement
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
 		results = append(results, &htmlNode{n})
@@ -270,7 +282,7 @@ func (r *HtmlResponse) xpathAll(xpath string) []HtmlElement {
 	return results
 }
 
-func (r *HtmlResponse) GetForms() []FormInfo {
+func (r *HTMLResponse) GetForms() []FormInfo {
 	var forms []FormInfo
 	for _, f := range r.xpathAll(".//form") {
 		form := extractFormInfo(f.(*htmlNode))

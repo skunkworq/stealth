@@ -64,7 +64,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	htmlResp := engine.NewHtmlResponse(resp)
+	htmlResp := engine.NewHTMLResponse(resp)
 
 	var results interface{}
 
@@ -79,7 +79,7 @@ func main() {
 	writeOutput(results)
 }
 
-func extractMultiple(resp *engine.HtmlResponse, extractions string) map[string]interface{} {
+func extractMultiple(resp *engine.HTMLResponse, extractions string) map[string]interface{} {
 	result := make(map[string]interface{})
 	parts := strings.Split(extractions, ",")
 
@@ -117,7 +117,7 @@ func extractMultiple(resp *engine.HtmlResponse, extractions string) map[string]i
 	return result
 }
 
-func extractCSS(resp *engine.HtmlResponse, selector string) interface{} {
+func extractCSS(resp *engine.HTMLResponse, selector string) interface{} {
 	els := resp.CSS(selector)
 
 	if len(els) == 0 {
@@ -163,7 +163,7 @@ func extractCSS(resp *engine.HtmlResponse, selector string) interface{} {
 	return items
 }
 
-func extractXPath(resp *engine.HtmlResponse, xpath string) interface{} {
+func extractXPath(resp *engine.HTMLResponse, xpath string) interface{} {
 	els := resp.XPath(xpath)
 
 	if len(els) == 0 {

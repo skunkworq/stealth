@@ -96,7 +96,7 @@ type Options struct {
 	Timeout time.Duration
 }
 
-// New creates a new stealth client with default configuration.
+// NewAdaptive creates an Adaptive stealth client with default configuration.
 func NewAdaptive(opts ...Option) (*Adaptive, error) {
 	cfg := DefaultConfig()
 	for _, opt := range opts {
@@ -171,7 +171,11 @@ func NewAdaptiveWithEngine(eng engine.Engine, cfg *Config) (*Adaptive, error) {
 func newAdaptiveWithEngine(eng engine.Engine, cfg *Config, logger *instrumentation.Logger) (*Adaptive, error) {
 	var sessMgr *session.Manager
 	if cfg.Session.Enabled && cfg.Session.ProfileDir != "" {
-		sessMgr, _ = session.NewManager(cfg.Session.ProfileDir)
+		var err error
+		sessMgr, err = session.NewManager(cfg.Session.ProfileDir)
+		if err != nil {
+			logger.Warn("failed to initialize session manager, sessions disabled", "path", cfg.Session.ProfileDir, "error", err)
+		}
 	}
 
 	tracer := instrumentation.NewTracer()
@@ -515,10 +519,9 @@ func (c *Adaptive) NewSemanticExtractor(config *understand.PipelineConfig) *unde
 	return understand.NewSemanticExtractorWithEngine(config, c.ActiveEngine())
 }
 
-// NewAdaptiveFromEngines builds a minimal Adaptive wrapping the provided engine
-// and optional waterfall. Intended for unit tests that need direct engine/waterfall
-// injection without going through the full constructor.
-func NewAdaptiveFromEngines(eng engine.Engine, wfall *wf.Waterfall) *Adaptive {
+// newAdaptiveFromEngines builds a minimal Adaptive wrapping the provided engine
+// and optional waterfall for tests that need direct engine/waterfall injection.
+func newAdaptiveFromEngines(eng engine.Engine, wfall *wf.Waterfall) *Adaptive {
 	logger := instrumentation.ForLevel("error")
 	return &Adaptive{
 		engine:    eng,

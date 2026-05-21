@@ -94,7 +94,7 @@ Generates realistic browser fingerprints for behavioral layers:
 ### Evasion Strategy (`behavior/evasion_strategy.go`)
 
 Implements request-shaping strategies to bypass detection:
-- **SendBeaconStrategy**: models `navigator.sendBeacon()` no-cors POST
+- **FirefoxInitNavStrategy**: models Firefox initial page navigation (`dest=document + mode=navigate + site=none`)
 - **RealBrowserStrategy**: Firefox telemetry POST with 0 X-* headers
 - **Document Navigation**: exploits `dest=document + mode=navigate` gate bypasses
 - **POST-based strategies**: compound JSON keys to evade body checks

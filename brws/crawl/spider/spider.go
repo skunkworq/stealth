@@ -87,7 +87,7 @@ func NewFormRequest(urlStr string, formData map[string]string, callback func(Res
 	}
 }
 
-func NewJsonRequest(url string, data interface{}, callback func(Response) []*Request) *Request {
+func NewJSONRequest(url string, data interface{}, callback func(Response) []*Request) *Request {
 	body, _ := json.Marshal(data)
 	return &Request{
 		URL:      url,
@@ -284,7 +284,7 @@ func matchesSelector(n *html.Node, sel string) bool {
 	return strings.EqualFold(n.Data, sel)
 }
 
-type Element = engine.HtmlElement
+type Element = engine.HTMLElement
 
 type htmlElement struct {
 	node *html.Node

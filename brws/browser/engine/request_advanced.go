@@ -49,17 +49,17 @@ func (r *FormRequest) SetField(name, value string) {
 	r.Body = []byte(r.FormData.Encode())
 }
 
-type JsonRequest struct {
+type JSONRequest struct {
 	*Request
 	Data interface{}
 }
 
-func NewJsonRequest(url string, data interface{}) (*JsonRequest, error) {
+func NewJSONRequest(url string, data interface{}) (*JSONRequest, error) {
 	body, err := json.Marshal(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal JSON data: %w", err)
 	}
-	return &JsonRequest{
+	return &JSONRequest{
 		Request: &Request{
 			Method:  "POST",
 			URL:     url,
@@ -70,7 +70,7 @@ func NewJsonRequest(url string, data interface{}) (*JsonRequest, error) {
 	}, nil
 }
 
-func (r *JsonRequest) SetData(data interface{}) error {
+func (r *JSONRequest) SetData(data interface{}) error {
 	r.Data = data
 	body, err := json.Marshal(data)
 	if err != nil {
@@ -81,7 +81,7 @@ func (r *JsonRequest) SetData(data interface{}) error {
 	return nil
 }
 
-func (r *JsonRequest) SetJsonData(key string, value interface{}) error {
+func (r *JSONRequest) SetJSONData(key string, value interface{}) error {
 	if r.Data == nil {
 		r.Data = make(map[string]interface{})
 	}
@@ -89,7 +89,7 @@ func (r *JsonRequest) SetJsonData(key string, value interface{}) error {
 		m[key] = value
 		return r.SetData(m)
 	}
-	return errors.New("JsonRequest data is not a map")
+	return errors.New("JSONRequest data is not a map")
 }
 
 type RequestWithCallback struct {

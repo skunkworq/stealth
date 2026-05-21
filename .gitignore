@@ -83,3 +83,7 @@ cmd/**/*
 
 # Build artifacts
 server/web/
+
+# Desloppify local state
+.desloppify/
+.desloppify-venv/

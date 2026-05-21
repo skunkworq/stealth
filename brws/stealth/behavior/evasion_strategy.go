@@ -27,6 +27,12 @@ type EvasionStrategy interface {
 	Apply(req *http.Request, rg *RequestGenerator, targetURL string)
 }
 
+// secChUaHeaders lists the Chromium client-hint headers absent in Firefox.
+var secChUaHeaders = []string{
+	"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
+	"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
+}
+
 // allRuntimeHeaders lists all 10 fingerprint header names the shield checks.
 var allRuntimeHeaders = []string{
 	constants.HeaderNavigatorData,
@@ -44,7 +50,7 @@ var allRuntimeHeaders = []string{
 // DefaultStrategies returns evasion strategies ordered by priority (highest first).
 func DefaultStrategies() []EvasionStrategy {
 	return []EvasionStrategy{
-		&SendBeaconStrategy{},                // Models navigator.sendBeacon() no-cors POST — bypasses ALL provenance gates (EVASION)
+		&FirefoxInitNavStrategy{},             // Models Firefox initial page navigation (address bar) — bypasses ALL provenance gates (EVASION)
 		&RealBrowserStrategy{},               // Models real Chrome telemetry POST from lab captures — 0 X-* headers (EVASION)
 		&NoneContextCorsStrategy{},           // cors + site=none = total gate bypass, 6 headers (CAUGHT)
 		&SameOriginSubThresholdStrategy{},    // same-origin + same-site, 6 headers (CAUGHT)
@@ -61,10 +67,11 @@ func DefaultStrategies() []EvasionStrategy {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Strategy B: SendBeaconStrategy (fidelity = 0.00)
+// Strategy B: FirefoxInitNavStrategy (fidelity = 0.00)
 // ─────────────────────────────────────────────────────────────────────────────
 // Models a real Firefox initial page load — the one request shape the shield
 // explicitly allows (proven by the real_firefox_should_pass test at score < 0.20).
+// This is direct navigation: typing a URL in the address bar or opening a bookmark.
 //
 // The key insight: dest=document + mode=navigate bypasses ALL provenance gates
 // because they ALL require dest=empty. Combined with site=none (initial
@@ -89,12 +96,12 @@ func DefaultStrategies() []EvasionStrategy {
 //
 // Result: zero provenance vectors, zero coverage, zero missing data.
 // Final score ≈ 0.00 — identical to a real Firefox navigation.
-type SendBeaconStrategy struct{}
+type FirefoxInitNavStrategy struct{}
 
-func (s *SendBeaconStrategy) Name() string      { return "send_beacon" }
-func (s *SendBeaconStrategy) Fidelity() float64 { return 0.00 }
+func (s *FirefoxInitNavStrategy) Name() string      { return "firefox_init_nav" }
+func (s *FirefoxInitNavStrategy) Fidelity() float64 { return 0.00 }
 
-func (s *SendBeaconStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
+func (s *FirefoxInitNavStrategy) Apply(req *http.Request, rg *RequestGenerator, targetURL string) {
 	// ── Phase 1: Strip ALL runtime headers ──
 	// Zero runtime headers → hasJSFingerprintHeaders=false → no missing_data penalties.
 	// Zero headers also means no per-header quality analysis vectors fire at all.
@@ -106,10 +113,7 @@ func (s *SendBeaconStrategy) Apply(req *http.Request, rg *RequestGenerator, targ
 	// Firefox doesn't send Sec-Ch-Ua → analyzeFingerprintCoverage returns nil
 	// (secChUa=="" && presentCount=0 < 8). This is the critical gate bypass.
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -147,10 +151,7 @@ func (s *SendBeaconStrategy) Apply(req *http.Request, rg *RequestGenerator, targ
 		"Referer":      true,
 		"Priority":     true,
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -179,10 +180,7 @@ func applyDocumentNavigation(req *http.Request, _ *RequestGenerator, targetURL, 
 
 	// Firefox identity — no Sec-Ch-Ua headers
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -227,10 +225,7 @@ func applyDocumentNavigation(req *http.Request, _ *RequestGenerator, targetURL, 
 		"Origin":       true,
 		"Priority":     true,
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -270,7 +265,7 @@ func (s *FullBrowserStrategy) Apply(req *http.Request, rg *RequestGenerator, tar
 // gates) with site=cross-site (bypasses the same-origin document navigation
 // sub-check at line 2307 which only fires for site=same-origin).
 //
-// This is a distinct evasion path from SendBeaconStrategy (which uses site=none).
+// This is a distinct evasion path from FirefoxInitNavStrategy (which uses site=none).
 // Both exploit the same structural gap: document navigation + non-same-origin
 // site value = no detection sub-checks fire.
 type RealBrowserStrategy struct{}
@@ -286,10 +281,7 @@ func (s *RealBrowserStrategy) Apply(req *http.Request, rg *RequestGenerator, tar
 
 	// ── Phase 2: Firefox identity ──
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -324,10 +316,7 @@ func (s *RealBrowserStrategy) Apply(req *http.Request, rg *RequestGenerator, tar
 		"Origin":       true,
 		"Priority":     true,
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -589,10 +578,7 @@ func applyPostLoadFetch(req *http.Request, targetURL, mode, site string, include
 
 	// ── Phase 2: Firefox identity (no Sec-Ch-Ua → coverage nil for <8 headers) ──
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -640,10 +626,7 @@ func applyPostLoadFetch(req *http.Request, targetURL, mode, site string, include
 	if !includeOrigin {
 		removed["Origin"] = true
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -709,10 +692,7 @@ func applySingleHeaderFetch(req *http.Request, targetURL, keepHeader, mode, site
 	fixBehavioralDataForFirefox(req)
 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -756,10 +736,7 @@ func applySingleHeaderFetch(req *http.Request, targetURL, keepHeader, mode, site
 	if !includeOrigin {
 		removed["Origin"] = true
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -801,10 +778,7 @@ func applyPostFetch(req *http.Request, targetURL string, keepHeaders map[string]
 
 	// ── Phase 2: Firefox identity (no Sec-Ch-Ua) ──
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -857,10 +831,7 @@ func applyPostFetch(req *http.Request, targetURL string, keepHeaders map[string]
 	if !includeOrigin {
 		removed["Origin"] = true
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -1023,10 +994,7 @@ func (s *ChromeSameOriginFetchStrategy) Apply(req *http.Request, rg *RequestGene
 
 	// ── Phase 2: Firefox identity (no Sec-Ch-Ua → coverage nil for <8 headers) ──
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -1061,10 +1029,7 @@ func (s *ChromeSameOriginFetchStrategy) Apply(req *http.Request, rg *RequestGene
 		"Sec-Fetch-User":            true,
 		"Priority":                  true,
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -1102,10 +1067,7 @@ func (s *ChromeCrossSiteFetchStrategy) Apply(req *http.Request, rg *RequestGener
 	fixBehavioralDataForFirefox(req)
 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -1134,10 +1096,7 @@ func (s *ChromeCrossSiteFetchStrategy) Apply(req *http.Request, rg *RequestGener
 		"Sec-Fetch-User":            true,
 		"Priority":                  true,
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -1174,10 +1133,7 @@ func (s *ChromeNoCORSBeaconStrategy) Apply(req *http.Request, rg *RequestGenerat
 	fixBehavioralDataForFirefox(req)
 
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -1209,10 +1165,7 @@ func (s *ChromeNoCORSBeaconStrategy) Apply(req *http.Request, rg *RequestGenerat
 		"Sec-Fetch-User":            true,
 		"Priority":                  true,
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -1288,10 +1241,7 @@ func applyExoticDest(req *http.Request, targetURL, dest, mode, site, accept stri
 
 	// Firefox identity — no Sec-Ch-Ua → analyzeFingerprintCoverage returns nil
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
@@ -1335,10 +1285,7 @@ func applyExoticDest(req *http.Request, targetURL, dest, mode, site, accept stri
 		"Upgrade-Insecure-Requests": true,
 		"Sec-Fetch-User":            true,
 	}
-	for _, h := range []string{
-		"Sec-Ch-Ua", "Sec-Ch-Ua-Mobile", "Sec-Ch-Ua-Platform",
-		"Sec-Ch-Ua-Full-Version-List", "Sec-Ch-Ua-Arch", "Sec-Ch-Ua-Bitness", "Sec-Ch-Ua-Model",
-	} {
+	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
@@ -1468,7 +1415,7 @@ func StrategiesForURL(targetURL string) []EvasionStrategy {
 			&StyleFetchStrategy{},
 			&WorkerImportStrategy{},
 			// Fallback to document navigation strategies
-			&SendBeaconStrategy{},
+			&FirefoxInitNavStrategy{},
 			&RealBrowserStrategy{},
 			&NoneContextCorsStrategy{},
 			&SameOriginSubThresholdStrategy{},
@@ -1485,7 +1432,7 @@ func StrategiesForURL(targetURL string) []EvasionStrategy {
 	default:
 		// Normal page URLs — document navigation first, F/E/D/C-series + exotic as fallback
 		return []EvasionStrategy{
-			&SendBeaconStrategy{},
+			&FirefoxInitNavStrategy{},
 			&RealBrowserStrategy{},
 			&PostSameOriginSmallStrategy{},
 			&PostNoCORSTwoHeaderStrategy{},
@@ -1557,6 +1504,7 @@ type AdaptiveEvasionFSM struct {
 	mu                 sync.Mutex
 	banSignals         int
 	banSignalThreshold int
+	lastBanStatus      int
 	exhausted          bool
 
 	// Captcha tracking
@@ -1656,6 +1604,7 @@ func (fsm *AdaptiveEvasionFSM) RecordBanSignal(statusCode int) {
 	fsm.mu.Lock()
 	defer fsm.mu.Unlock()
 	fsm.banSignals++
+	fsm.lastBanStatus = statusCode
 }
 
 // ShouldEscalate returns true if the FSM recommends escalating to browser mode,
@@ -1683,6 +1632,13 @@ func (fsm *AdaptiveEvasionFSM) EscalationReason() string {
 		return "ban_signals"
 	}
 	return ""
+}
+
+// LastBanStatus returns the HTTP status code of the most recent ban signal.
+func (fsm *AdaptiveEvasionFSM) LastBanStatus() int {
+	fsm.mu.Lock()
+	defer fsm.mu.Unlock()
+	return fsm.lastBanStatus
 }
 
 // ResetBanSignals clears the ban signal counter (e.g. after a successful browser request).

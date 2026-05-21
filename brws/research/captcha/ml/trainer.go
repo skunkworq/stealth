@@ -45,42 +45,30 @@ var DefaultTrainerConfig = TrainerConfig{
 
 // Optimizer implements gradient descent optimization.
 type Optimizer struct {
-	learningRate   float64
-	momentum       float64
-	weightDecay    float64
-	velocities     [][][]float64
-	biasVelocities [][]float64 //nolint:unused
+	learningRate float64
+	weightDecay  float64
 }
 
 // NewOptimizer creates a new optimizer with the given parameters.
-func NewOptimizer(learningRate, momentum, weightDecay float64) *Optimizer {
+func NewOptimizer(learningRate, _ /* momentum */, weightDecay float64) *Optimizer {
 	return &Optimizer{
 		learningRate: learningRate,
-		momentum:     momentum,
 		weightDecay:  weightDecay,
-		velocities:   make([][][]float64, 0),
 	}
 }
 
-// Update updates weights and biases using computed gradients.
+// Update updates weights and biases using computed gradients (SGD with weight decay).
 func (o *Optimizer) Update(weights, gradients [][]float64, biases, biasGradients []float64) {
 	for i := range weights {
 		for j := range weights[i] {
-			grad := gradients[i][j]
-			grad += o.weightDecay * weights[i][j]
-
-			vel := o.momentum*0 - o.learningRate*grad
-
-			weights[i][j] += vel
+			grad := gradients[i][j] + o.weightDecay*weights[i][j]
+			weights[i][j] -= o.learningRate * grad
 		}
 	}
 
 	for i := range biases {
-		biasGrad := biasGradients[i]
-		biasGrad += o.weightDecay * biases[i]
-
-		biasVel := o.momentum*0 - o.learningRate*biasGrad
-		biases[i] += biasVel
+		biasGrad := biasGradients[i] + o.weightDecay*biases[i]
+		biases[i] -= o.learningRate * biasGrad
 	}
 }
 

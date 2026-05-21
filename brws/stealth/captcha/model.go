@@ -106,7 +106,7 @@ func (l *Layer) forward(input []float64) []float64 {
 	for i := range output {
 		sum := l.Bias[i]
 		for j := range input {
-			if j < len(l.Weights) && i < len(l.Weights[j]) {
+			if i < len(l.Weights) && j < len(l.Weights[i]) {
 				sum += l.Weights[i][j] * input[j]
 			}
 		}
@@ -131,7 +131,7 @@ func (c *ClassificationHead) forward(input []float64) []float64 {
 	for i := range logits {
 		sum := c.bias[i]
 		for j := range input {
-			if j < len(c.weights) && i < len(c.weights[j]) {
+			if i < len(c.weights) && j < len(c.weights[i]) {
 				sum += c.weights[i][j] * input[j]
 			}
 		}

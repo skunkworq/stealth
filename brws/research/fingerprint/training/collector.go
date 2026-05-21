@@ -245,6 +245,30 @@ func (c *Collector) Stats() (*CollectionStats, error) {
 		}
 	}
 
+	// By outcome (outcome column is JSON; decode in Go)
+	outcomeRows, err := c.db.Query("SELECT outcome FROM episodes")
+	if err == nil {
+		defer outcomeRows.Close()
+		for outcomeRows.Next() {
+			var outcomeJSON string
+			if outcomeRows.Scan(&outcomeJSON) == nil {
+				var o RequestOutcome
+				if json.Unmarshal([]byte(outcomeJSON), &o) == nil {
+					switch {
+					case o.Success:
+						stats.ByOutcome["success"]++
+					case o.Blocked:
+						stats.ByOutcome["blocked"]++
+					case o.Challenged:
+						stats.ByOutcome["challenged"]++
+					default:
+						stats.ByOutcome["other"]++
+					}
+				}
+			}
+		}
+	}
+
 	// Date range
 	var minDate, maxDate sql.NullString
 	_ = c.db.QueryRow("SELECT MIN(timestamp), MAX(timestamp) FROM episodes").Scan(&minDate, &maxDate)
