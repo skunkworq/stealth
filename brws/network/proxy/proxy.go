@@ -21,10 +21,19 @@ import (
 	"github.com/skunkworq/stealth/brws/core/types"
 )
 
+// Logger is the minimal logging interface required by Proxy.
+// Both *slog.Logger and *instrumentation.Logger satisfy this interface.
+type Logger interface {
+	Info(msg string, args ...any)
+	Warn(msg string, args ...any)
+	Error(msg string, args ...any)
+	Debug(msg string, args ...any)
+}
+
 // Proxy is a MITM TLS/HTTP proxy for capturing fingerprints
 type Proxy struct {
 	config   *ProxyConfig
-	logger   *slog.Logger
+	logger   Logger
 	listener net.Listener
 
 	// Certificate management
@@ -68,7 +77,7 @@ func DefaultProxyConfig() *ProxyConfig {
 }
 
 // NewProxy creates a new fingerprint capture proxy
-func NewProxy(config *ProxyConfig, logger *slog.Logger) (*Proxy, error) {
+func NewProxy(config *ProxyConfig, logger Logger) (*Proxy, error) {
 	if config == nil {
 		config = DefaultProxyConfig()
 	}
