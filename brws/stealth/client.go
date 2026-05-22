@@ -124,6 +124,9 @@ func NewAdaptiveWithConfig(cfg *Config) (*Adaptive, error) {
 	if cfg.Stealth == nil {
 		cfg.Stealth = engine.DefaultStealthConfigFor(cfg.EngineName)
 	}
+	if cfg.Session == nil {
+		cfg.Session = &SessionConfig{}
+	}
 
 	stealthEnabled := cfg.Stealth != nil && cfg.Stealth.IsEnabled()
 	eng, err := engine.New(cfg.EngineName, engine.Options{
@@ -163,6 +166,12 @@ func NewAdaptiveWithEngine(eng engine.Engine, cfg *Config) (*Adaptive, error) {
 }
 
 func newAdaptiveWithEngine(eng engine.Engine, cfg *Config, logger *instrumentation.Logger) (*Adaptive, error) {
+	if cfg.Challenge == nil {
+		cfg.Challenge = &ChallengeConfig{}
+	}
+	if cfg.Session == nil {
+		cfg.Session = &SessionConfig{}
+	}
 	var sessMgr *session.Manager
 	if cfg.Session.Enabled && cfg.Session.ProfileDir != "" {
 		var err error
