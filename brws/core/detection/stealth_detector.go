@@ -73,7 +73,6 @@ func NewStealthDetector() *StealthDetector {
 // AnalyzeRequest performs comprehensive stealth detection analysis on an HTTP request,
 // examining TLS state, headers, and embedded fingerprint data.
 func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.ConnectionState) *StealthDetection {
-	// Early return if request is nil
 	if req == nil {
 		return &StealthDetection{
 			Timestamp:  time.Now(),
@@ -94,11 +93,9 @@ func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.Connec
 
 	var totalScore float64
 	var totalWeight float64
-
-	// Collect VectorResults for adaptive scoring
 	vectorResults := make(map[VectorCategory]*VectorResult)
 
-	// 1. TLS Fingerprint Analysis
+	// TLS fingerprint analysis has a unique signature (takes tlsConn, not *http.Request).
 	if sd.config.EnableTLSAnalysis && tlsConn != nil {
 		tlsInfo := sd.analyzeTLSFingerprint(tlsConn)
 		detection.TLSFingerprint = tlsInfo
@@ -109,27 +106,21 @@ func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.Connec
 		vectorResults[VectorTLS] = &VectorResult{Score: tlsVec.Score, Detected: tlsVec.Detected}
 	}
 
-	// 2. HTTP Header Analysis
+	// HTTP header analysis always runs; its result feeds the TLS cross-check and isomorphic analysis.
 	httpInfo := sd.analyzeHTTPHeaders(req)
 	detection.HTTPHeaders = httpInfo
 
-	// Phase 3: Cross-check TLS against User-Agent
+	// TLS × User-Agent cross-check: browser UA without GREASE is a strong spoofing signal.
 	if detection.TLSFingerprint != nil && httpInfo != nil {
 		ua := strings.ToLower(httpInfo.UserAgent)
 		isBrowser := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
-
-		// If UA claims to be a browser but TLS lacks GREASE, it's a strong indicator of Go/spoofing
 		if isBrowser && !detection.TLSFingerprint.HasGREASE {
 			detection.TLSFingerprint.Anomalies = append(detection.TLSFingerprint.Anomalies, "tls_go_fingerprint: browser_ua_with_go_tls")
-
-			// Update the TLS vector score and indicators
 			for i, v := range detection.Vectors {
 				if v.Category == "tls" {
 					detection.Vectors[i].Score = 0.50
 					detection.Vectors[i].Detected = true
 					detection.Vectors[i].Indicators = detection.TLSFingerprint.Anomalies
-
-					// Re-calculate totals
 					totalScore += 0.50*v.Weight - v.Score*v.Weight
 					vectorResults[VectorTLS].Score = 0.50
 					vectorResults[VectorTLS].Detected = true
@@ -144,223 +135,91 @@ func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.Connec
 	totalWeight += httpVec.Weight
 	vectorResults[VectorHTTP] = &VectorResult{Score: httpVec.Score, Detected: httpVec.Detected}
 
-	// 3. Navigator Properties Analysis (from injected scripts)
-	if sd.config.EnableNavigatorCheck {
-		navVec := sd.analyzeNavigatorData(req)
-		if navVec != nil {
-			detection.NavigatorData = &NavigatorCheckInfo{}
-			detection.Vectors = append(detection.Vectors, *navVec)
-			totalScore += navVec.Score * navVec.Weight
-			totalWeight += navVec.Weight
-			vectorResults[VectorNavigator] = &VectorResult{Score: navVec.Score, Detected: navVec.Detected}
+	// All remaining analysers are dispatched via a uniform loop.
+	// Entries with enabled == nil or requireScore == false follow relaxed inclusion rules
+	// that match the original per-step logic (see analyserEntry doc).
+	entries := []analyserEntry{
+		{category: VectorNavigator, enabled: &sd.config.EnableNavigatorCheck,
+			analyze:  sd.analyzeNavigatorData,
+			onResult: func(d *StealthDetection, _ *DetectionVector) { d.NavigatorData = &NavigatorCheckInfo{} }},
+		{category: VectorCanvas, enabled: &sd.config.EnableCanvasCheck,
+			analyze:  sd.analyzeCanvasData,
+			onResult: func(d *StealthDetection, _ *DetectionVector) { d.CanvasData = &CanvasCheckInfo{} }},
+		{category: VectorWebGL, enabled: &sd.config.EnableWebGLCheck,
+			analyze: sd.analyzeWebGLData},
+		{category: VectorTiming, enabled: &sd.config.EnableTimingCheck,
+			analyze:  sd.analyzeTimingData,
+			onResult: func(d *StealthDetection, _ *DetectionVector) { d.TimingData = &TimingCheckInfo{} }},
+		{category: VectorBehavioral, enabled: &sd.config.EnableBehavioralCheck,
+			analyze:  sd.analyzeBehavioralData,
+			onResult: func(d *StealthDetection, _ *DetectionVector) { d.BehavioralData = &BehavioralCheckInfo{} }},
+		// Isomorphic needs httpInfo from above; requireScore mirrors original "if score > 0" guard.
+		{category: VectorIsomorphic, requireScore: true,
+			analyze: func(r *http.Request) *DetectionVector { return sd.analyzeIsomorphicAnomalies(r, httpInfo) },
+			onResult: func(d *StealthDetection, v *DetectionVector) {
+				d.IsomorphicData = &IsomorphicCheckInfo{PlatformMismatch: true, SuspiciousPatterns: v.Indicators}
+			}},
+		// Hardware and IP have no named VectorCategory (empty → skipped in vectorResults map).
+		{requireScore: true, analyze: sd.analyzeHardwareExecution},
+		{enabled: &sd.config.EnableIPCheck, requireScore: true, analyze: sd.analyzeIPClassification},
+		{category: VectorAutomation, enabled: &sd.config.EnableAutomationCheck, requireScore: true,
+			analyze: sd.analyzeAutomationSignals},
+		{category: VectorHeadless, enabled: &sd.config.EnableHeadlessCheck, requireScore: true,
+			analyze: sd.analyzeHeadlessSignals},
+		{category: VectorWebRTC, enabled: &sd.config.EnableWebRTCCheck, requireScore: true,
+			analyze: sd.analyzeWebRTCData},
+		// HTTP/2 also requires the request to be HTTP/2.
+		{category: VectorHTTP2, enabled: &sd.config.EnableHTTP2Check, requireScore: true,
+			guard:   func(r *http.Request) bool { return r.Proto == "HTTP/2.0" },
+			analyze: sd.analyzeHTTP2Signals},
+		{category: VectorFont, enabled: &sd.config.EnableFontCheck, requireScore: true,
+			analyze: sd.analyzeFontData},
+		{category: VectorScreen, enabled: &sd.config.EnableScreenCheck, requireScore: true,
+			analyze: sd.analyzeScreenData},
+		{category: VectorPlugin, enabled: &sd.config.EnablePluginCheck, requireScore: true,
+			analyze: sd.analyzePluginData},
+		{category: VectorAudio, enabled: &sd.config.EnableAudioCheck, requireScore: true,
+			analyze: sd.analyzeAudioData},
+		{category: VectorFingerprintCoverage, requireScore: true, analyze: sd.analyzeFingerprintCoverage},
+		{category: VectorCrossVector, requireScore: true, analyze: sd.analyzeCrossVectorConsistency},
+	}
+
+	for _, e := range entries {
+		if e.enabled != nil && !*e.enabled {
+			continue
+		}
+		if e.guard != nil && !e.guard(req) {
+			continue
+		}
+		vec := e.analyze(req)
+		if vec == nil || (e.requireScore && vec.Score == 0) {
+			continue
+		}
+		if e.onResult != nil {
+			e.onResult(&detection, vec)
+		}
+		detection.Vectors = append(detection.Vectors, *vec)
+		totalScore += vec.Score * vec.Weight
+		totalWeight += vec.Weight
+		if e.category != "" {
+			vectorResults[e.category] = &VectorResult{Score: vec.Score, Detected: vec.Detected}
 		}
 	}
 
-	// 4. Canvas/WebGL Analysis
-	if sd.config.EnableCanvasCheck {
-		canvasVec := sd.analyzeCanvasData(req)
-		if canvasVec != nil {
-			detection.CanvasData = &CanvasCheckInfo{}
-			detection.Vectors = append(detection.Vectors, *canvasVec)
-			totalScore += canvasVec.Score * canvasVec.Weight
-			totalWeight += canvasVec.Weight
-			vectorResults[VectorCanvas] = &VectorResult{Score: canvasVec.Score, Detected: canvasVec.Detected}
-		}
-	}
-
-	// 4b. WebGL Deep Analysis
-	if sd.config.EnableWebGLCheck {
-		webglVec := sd.analyzeWebGLData(req)
-		if webglVec != nil {
-			detection.Vectors = append(detection.Vectors, *webglVec)
-			totalScore += webglVec.Score * webglVec.Weight
-			totalWeight += webglVec.Weight
-			vectorResults[VectorWebGL] = &VectorResult{Score: webglVec.Score, Detected: webglVec.Detected}
-		}
-	}
-
-	// 5. Timing Analysis (enhanced with deep TimingAnalyzer)
-	if sd.config.EnableTimingCheck {
-		timingVec := sd.analyzeTimingData(req)
-		if timingVec != nil {
-			detection.TimingData = &TimingCheckInfo{}
-			detection.Vectors = append(detection.Vectors, *timingVec)
-			totalScore += timingVec.Score * timingVec.Weight
-			totalWeight += timingVec.Weight
-			vectorResults[VectorTiming] = &VectorResult{Score: timingVec.Score, Detected: timingVec.Detected}
-		}
-	}
-
-	// 6. Behavioral Analysis
-	if sd.config.EnableBehavioralCheck {
-		behavVec := sd.analyzeBehavioralData(req)
-		if behavVec != nil {
-			detection.BehavioralData = &BehavioralCheckInfo{}
-			detection.Vectors = append(detection.Vectors, *behavVec)
-			totalScore += behavVec.Score * behavVec.Weight
-			totalWeight += behavVec.Weight
-			vectorResults[VectorBehavioral] = &VectorResult{Score: behavVec.Score, Detected: behavVec.Detected}
-		}
-	}
-
-	// 7. Isomorphic Cross-Validation
-	isomorphicVec := sd.analyzeIsomorphicAnomalies(req, httpInfo)
-	if isomorphicVec != nil {
-		if isomorphicVec.Score > 0 {
-			detection.IsomorphicData = &IsomorphicCheckInfo{
-				PlatformMismatch:   true,
-				SuspiciousPatterns: isomorphicVec.Indicators,
-			}
-			detection.Vectors = append(detection.Vectors, *isomorphicVec)
-			totalScore += isomorphicVec.Score * isomorphicVec.Weight
-			totalWeight += isomorphicVec.Weight
-			vectorResults[VectorIsomorphic] = &VectorResult{Score: isomorphicVec.Score, Detected: isomorphicVec.Detected}
-		}
-	}
-
-	// 8. Hardware Execution Parity
-	hardwareVec := sd.analyzeHardwareExecution(req)
-	if hardwareVec != nil {
-		if hardwareVec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *hardwareVec)
-			totalScore += hardwareVec.Score * hardwareVec.Weight
-			totalWeight += hardwareVec.Weight
-		}
-	}
-
-	// 9. IP Classification (from advanced_detection.go)
-	if sd.config.EnableIPCheck {
-		ipVec := sd.analyzeIPClassification(req)
-		if ipVec != nil && ipVec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *ipVec)
-			totalScore += ipVec.Score * ipVec.Weight
-			totalWeight += ipVec.Weight
-		}
-	}
-
-	// 10. Automation Deep Analysis (from advanced_detection.go)
-	if sd.config.EnableAutomationCheck {
-		autoVec := sd.analyzeAutomationSignals(req)
-		if autoVec != nil && autoVec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *autoVec)
-			totalScore += autoVec.Score * autoVec.Weight
-			totalWeight += autoVec.Weight
-			vectorResults[VectorAutomation] = &VectorResult{Score: autoVec.Score, Detected: autoVec.Detected}
-		}
-	}
-
-	// 11. Headless Detection (from advanced_detection.go)
-	if sd.config.EnableHeadlessCheck {
-		headlessVec := sd.analyzeHeadlessSignals(req)
-		if headlessVec != nil && headlessVec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *headlessVec)
-			totalScore += headlessVec.Score * headlessVec.Weight
-			totalWeight += headlessVec.Weight
-			vectorResults[VectorHeadless] = &VectorResult{Score: headlessVec.Score, Detected: headlessVec.Detected}
-		}
-	}
-
-	// 12. WebRTC Analysis (from advanced_detection.go)
-	if sd.config.EnableWebRTCCheck {
-		webrtcVec := sd.analyzeWebRTCData(req)
-		if webrtcVec != nil && webrtcVec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *webrtcVec)
-			totalScore += webrtcVec.Score * webrtcVec.Weight
-			totalWeight += webrtcVec.Weight
-			vectorResults[VectorWebRTC] = &VectorResult{Score: webrtcVec.Score, Detected: webrtcVec.Detected}
-		}
-	}
-
-	// 13. HTTP/2 Pseudo-Header Order (from advanced_detection.go)
-	if sd.config.EnableHTTP2Check && req.Proto == "HTTP/2.0" {
-		http2Vec := sd.analyzeHTTP2Signals(req)
-		if http2Vec != nil && http2Vec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *http2Vec)
-			totalScore += http2Vec.Score * http2Vec.Weight
-			totalWeight += http2Vec.Weight
-			vectorResults[VectorHTTP2] = &VectorResult{Score: http2Vec.Score, Detected: http2Vec.Detected}
-		}
-	}
-
-	// 14. Font Analysis
-	if sd.config.EnableFontCheck {
-		fontVec := sd.analyzeFontData(req)
-		if fontVec != nil && fontVec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *fontVec)
-			totalScore += fontVec.Score * fontVec.Weight
-			totalWeight += fontVec.Weight
-			vectorResults[VectorFont] = &VectorResult{Score: fontVec.Score, Detected: fontVec.Detected}
-		}
-	}
-
-	// 15. Screen Analysis
-	if sd.config.EnableScreenCheck {
-		screenVec := sd.analyzeScreenData(req)
-		if screenVec != nil && screenVec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *screenVec)
-			totalScore += screenVec.Score * screenVec.Weight
-			totalWeight += screenVec.Weight
-			vectorResults[VectorScreen] = &VectorResult{Score: screenVec.Score, Detected: screenVec.Detected}
-		}
-	}
-
-	// 16. Plugin Analysis
-	if sd.config.EnablePluginCheck {
-		pluginVec := sd.analyzePluginData(req)
-		if pluginVec != nil && pluginVec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *pluginVec)
-			totalScore += pluginVec.Score * pluginVec.Weight
-			totalWeight += pluginVec.Weight
-			vectorResults[VectorPlugin] = &VectorResult{Score: pluginVec.Score, Detected: pluginVec.Detected}
-		}
-	}
-
-	// 17. Audio Analysis
-	if sd.config.EnableAudioCheck {
-		audioVec := sd.analyzeAudioData(req)
-		if audioVec != nil && audioVec.Score > 0 {
-			detection.Vectors = append(detection.Vectors, *audioVec)
-			totalScore += audioVec.Score * audioVec.Weight
-			totalWeight += audioVec.Weight
-			vectorResults[VectorAudio] = &VectorResult{Score: audioVec.Score, Detected: audioVec.Detected}
-		}
-	}
-
-	// 18. Fingerprint Coverage Check (detects HTTP impersonation tools)
-	fpVec := sd.analyzeFingerprintCoverage(req)
-	if fpVec != nil && fpVec.Score > 0 {
-		detection.Vectors = append(detection.Vectors, *fpVec)
-		totalScore += fpVec.Score * fpVec.Weight
-		totalWeight += fpVec.Weight
-		vectorResults[VectorFingerprintCoverage] = &VectorResult{Score: fpVec.Score, Detected: fpVec.Detected}
-	}
-
-	// 19. Cross-Vector Temporal/Spatial Consistency
-	crossVec := sd.analyzeCrossVectorConsistency(req)
-	if crossVec != nil && crossVec.Score > 0 {
-		detection.Vectors = append(detection.Vectors, *crossVec)
-		totalScore += crossVec.Score * crossVec.Weight
-		totalWeight += crossVec.Weight
-		vectorResults[VectorCrossVector] = &VectorResult{Score: crossVec.Score, Detected: crossVec.Detected}
-	}
-
-	// Phase 57: Collect indicators from all vectors for the flat indicator list
 	for i := range detection.Vectors {
 		detection.Vectors[i].Confidence = calculateVectorConfidence(&detection.Vectors[i])
 	}
-
 	for _, v := range detection.Vectors {
 		for _, indName := range v.Indicators {
 			detection.Indicators = append(detection.Indicators, StealthIndicator{
 				Vector:   v.Name,
 				Name:     indName,
-				Severity: v.Score, // Use vector score as indicator severity proxy
+				Severity: v.Score,
 				Message:  fmt.Sprintf("%s indicator: %s", v.Name, indName),
 			})
 		}
 	}
 
-	// Calculate final score
 	if sd.config.EnableAdaptiveScoring && sd.adaptiveScorer != nil && len(vectorResults) > 0 {
 		ensemble := sd.adaptiveScorer.ScoreResults(vectorResults)
 		detection.Score = ensemble.FinalScore
@@ -370,8 +229,6 @@ func (sd *StealthDetector) AnalyzeRequest(req *http.Request, tlsConn *tls.Connec
 
 	detection.IsBot = detection.Score >= sd.config.ThresholdBot
 	detection.Confidence = calculateDetectionConfidence(&detection)
-
-	// Determine if it's specifically our stealth browser
 	detection.IsStealth = sd.detectStealthBrowser(&detection)
 
 	sd.mu.Lock()

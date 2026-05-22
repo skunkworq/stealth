@@ -1,6 +1,23 @@
 package detection
 
-import "time"
+import (
+	"net/http"
+	"time"
+)
+
+// analyserEntry describes a single pluggable analysis step in AnalyzeRequest.
+// enabled points into DetectorConfig; nil means always run.
+// guard is an optional per-request gate (e.g., protocol check); nil means no gate.
+// requireScore, when true, skips the vector when its score is zero.
+// category, when non-empty, records the result in the adaptive-scorer input map.
+type analyserEntry struct {
+	category     VectorCategory
+	enabled      *bool
+	guard        func(*http.Request) bool
+	analyze      func(*http.Request) *DetectionVector
+	onResult     func(*StealthDetection, *DetectionVector)
+	requireScore bool
+}
 
 // DetectorConfig holds configuration thresholds and feature toggles for the
 // stealth detection engine.
