@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/core/constants"
+	"github.com/skunkworq/stealth/brws/stealth/internal/netutil"
 )
 
 // RequestGeneratorConfig controls the full request generation.
@@ -369,7 +370,7 @@ func (rg *RequestGenerator) GenerateRequest(targetURL string) *http.Request {
 
 	// Dynamic IP Spoofing
 	if rg.config != nil && rg.config.SpoofLocalIPs {
-		ip := randomLocalIP()
+		ip := netutil.RandomLocalIP()
 		req.Header.Set("X-Forwarded-For", ip)
 		req.Header.Set("X-Real-IP", ip)
 		req.Header.Set("X-Client-IP", ip)
@@ -552,23 +553,6 @@ func (rg *RequestGenerator) GenerateHeaders() http.Header {
 	h.Set(constants.HeaderAudioData, rg.generateAudio())
 
 	return h
-}
-
-// randomLocalIP generates a random private IP address.
-func randomLocalIP() string {
-	// Pick one of the 3 private IP ranges
-	rangeType := rand.Intn(3)
-	switch rangeType {
-	case 0:
-		// 10.0.0.0/8
-		return fmt.Sprintf("10.%d.%d.%d", rand.Intn(256), rand.Intn(256), rand.Intn(256))
-	case 1:
-		// 172.16.0.0/12
-		return fmt.Sprintf("172.%d.%d.%d", 16+rand.Intn(16), rand.Intn(256), rand.Intn(256))
-	default:
-		// 192.168.0.0/16
-		return fmt.Sprintf("192.168.%d.%d", rand.Intn(256), rand.Intn(256))
-	}
 }
 
 func (rg *RequestGenerator) calculateSharedDimensions() sharedDimensions {

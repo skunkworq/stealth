@@ -9,6 +9,8 @@ import (
 	"math/rand"
 	"strings"
 	"time"
+
+	"github.com/skunkworq/stealth/brws/stealth/internal/netutil"
 )
 
 // StealthConfig contains configuration for stealth mode.
@@ -189,22 +191,8 @@ func DefaultStealthConfig() *StealthConfig {
 	}
 }
 
-// RandomLocalIP generates a random local LAN IP address.
-func RandomLocalIP() string {
-	// Pick one of the 3 private IP ranges
-	rangeType := rand.Intn(3)
-	switch rangeType {
-	case 0:
-		// 10.0.0.0/8
-		return fmt.Sprintf("10.%d.%d.%d", rand.Intn(256), rand.Intn(256), rand.Intn(256))
-	case 1:
-		// 172.16.0.0/12
-		return fmt.Sprintf("172.%d.%d.%d", 16+rand.Intn(16), rand.Intn(256), rand.Intn(256))
-	default:
-		// 192.168.0.0/16
-		return fmt.Sprintf("192.168.%d.%d", rand.Intn(256), rand.Intn(256))
-	}
-}
+// RandomLocalIP returns a random private IP from one of the three RFC-1918 ranges.
+func RandomLocalIP() string { return netutil.RandomLocalIP() }
 
 // ChromeVersions for client hints (updated to 2025-2026 era)
 var ChromeVersions = []string{
@@ -322,8 +310,6 @@ func GenerateStealthScript(config *StealthConfig) string {
 
     Object.defineProperty(window, 'innerWidth', { get: () => %d });
     Object.defineProperty(window, 'innerHeight', { get: () => %d });
-    Object.defineProperty(window, 'outerWidth', { get: () => %d, configurable: true });
-    Object.defineProperty(window, 'outerHeight', { get: () => %d, configurable: true });
     Object.defineProperty(window, 'devicePixelRatio', { get: () => %f });
     Object.defineProperty(window, 'screenX', { get: () => 0 });
     Object.defineProperty(window, 'screenY', { get: () => %d });
@@ -844,7 +830,6 @@ func GenerateStealthScript(config *StealthConfig) string {
 		screenWidth, screenHeight,
 		screenWidth, screenHeight-40, // minus taskbar
 		screenWidth-80, screenHeight-80, // inner window
-		screenWidth, screenHeight, // outer
 		devicePixelRatio, // devicePixelRatio
 		screenY, screenY, // screenY, screenTop (slight offset for realism)
 		timezone,
