@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 // ShieldSuiteConfig configures the shield evaluation benchmark.
@@ -75,7 +75,7 @@ func RunShieldEvaluation(cfg *ShieldSuiteConfig) *ShieldReport {
 		cfg = &ShieldSuiteConfig{IncludeBehavioral: true}
 	}
 
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 	profiles := buildAllProfiles(cfg.IncludeBehavioral)
 	results := make([]ShieldResult, 0, len(profiles))
 

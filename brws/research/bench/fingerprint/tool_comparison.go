@@ -14,9 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
-	"github.com/skunkworq/stealth/brws/stealth/captcha"
+	"github.com/skunkworq/stealth/brws/core/detection"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
+	"github.com/skunkworq/stealth/brws/stealth/captcha"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 // ToolCategory classifies the type of scraping/automation tool.
@@ -726,7 +727,7 @@ func RunToolComparison(cfg *ToolComparisonConfig) *ToolComparisonReport {
 		cfg.Iterations = 1
 	}
 
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 	toolProfiles := buildToolProfiles(cfg.IncludeBehavioral)
 
 	results := make([]ToolResult, 0, len(toolProfiles))

@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/core/constants"
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 // MutationFunc is a function that modifies the generator to fix a specific check.
@@ -35,7 +35,7 @@ type AdaptiveRequestGenerator struct {
 	base       *RequestGenerator
 	config     *RequestGeneratorConfig
 	mutations  map[string]MutationFunc
-	lastReport *challenge.DetectionReport
+	lastReport *detection.DetectionReport
 	history    []RoundResult
 	applied    map[string]bool
 	rng        *rand.Rand
@@ -83,7 +83,7 @@ func (ag *AdaptiveRequestGenerator) GenerateRequest(targetURL string) *http.Requ
 
 // ApplyFeedback iterates over fired checks in the report, applies matching
 // mutations, and records a history entry.
-func (ag *AdaptiveRequestGenerator) ApplyFeedback(report *challenge.DetectionReport) {
+func (ag *AdaptiveRequestGenerator) ApplyFeedback(report *detection.DetectionReport) {
 	ag.mu.Lock()
 	defer ag.mu.Unlock()
 
@@ -141,7 +141,7 @@ func (ag *AdaptiveRequestGenerator) History() []RoundResult {
 }
 
 // LastReport returns the most recent detection report.
-func (ag *AdaptiveRequestGenerator) LastReport() *challenge.DetectionReport {
+func (ag *AdaptiveRequestGenerator) LastReport() *detection.DetectionReport {
 	ag.mu.Lock()
 	defer ag.mu.Unlock()
 	return ag.lastReport

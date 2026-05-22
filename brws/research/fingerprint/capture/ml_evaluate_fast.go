@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
 	chromiumstealth "github.com/skunkworq/stealth/brws/stealth/chromium"
 	"github.com/skunkworq/stealth/brws/research/fingerprint/training"
@@ -35,29 +34,23 @@ func (s *EnhancedServer) handleMLEvaluateFast(cfg *training.StealthConfigSnapsho
 	syntheticReq := buildSyntheticRequest(cfg, engineName)
 
 	// Run through the stealth detector
-	detection := s.stealthServer.AnalyzeRequest(syntheticReq, nil)
+	det := s.stealthServer.AnalyzeRequest(syntheticReq, nil)
 
 	// Extract anomalies from detection vectors
 	anomalies := make([]string, 0)
-	for _, vec := range detection.Vectors {
+	for _, vec := range det.Vectors {
 		if vec.Detected {
 			anomalies = append(anomalies, vec.Indicators...)
 		}
 	}
 
 	resp := &MLEvaluationResponse{
-		Success:   true,
-		TraceID:   traceID,
-		BotScore:  detection.Score,
-		IsBot:     detection.IsBot,
-		Anomalies: anomalies,
-		RawPayload: &challenge.StealthDetection{
-			Timestamp: detection.Timestamp,
-			RequestID: detection.RequestID,
-			Score:     detection.Score,
-			IsBot:     detection.IsBot,
-			Vectors:   detection.Vectors,
-		},
+		Success:    true,
+		TraceID:    traceID,
+		BotScore:   det.Score,
+		IsBot:      det.IsBot,
+		Anomalies:  anomalies,
+		RawPayload: det,
 	}
 
 	// Check for captcha challenges

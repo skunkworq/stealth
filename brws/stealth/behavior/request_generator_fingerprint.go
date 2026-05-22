@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 // generateWebGL creates the X-WebGL-Data header JSON.
@@ -239,7 +239,7 @@ func (rg *RequestGenerator) generateScreen(dims sharedDimensions) string {
 
 	isMobile := rg.profile.Platform == "android" || rg.profile.Platform == "ios"
 
-	scr := &challenge.ScreenData{
+	scr := &detection.ScreenData{
 		Width:       w,
 		Height:      h,
 		AvailWidth:  aw,

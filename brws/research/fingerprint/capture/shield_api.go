@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/net/websocket"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/core/detection"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
 )
 
@@ -54,33 +54,33 @@ func (s *EnhancedServer) handleShieldEvaluate(w http.ResponseWriter, r *http.Req
 	totalScore := 0.0
 
 	for _, profile := range profiles {
-		detector := challenge.NewStealthDetector()
+		detector := detection.NewStealthDetector()
 		gen := behavior.NewRequestGenerator(&behavior.RequestGeneratorConfig{
 			Profile: profile,
 		})
 		req := gen.GenerateRequest("http://test/api/ml/trap")
-		detection := detector.AnalyzeRequest(req, nil)
+		result := detector.AnalyzeRequest(req, nil)
 
 		vectors := make(map[string]float64)
 		indicators := make([]string, 0)
 
-		for _, v := range detection.Vectors {
+		for _, v := range result.Vectors {
 			vectors[v.Category] = v.Score
 			if v.Score > 0 {
 				indicators = append(indicators, v.Indicators...)
 			}
 		}
 
-		if detection.IsBot {
+		if result.IsBot {
 			caughtCount++
 		}
-		totalScore += detection.Score
+		totalScore += result.Score
 
 		results = append(results, ProfileResult{
 			Name:       profile.Name,
 			Platform:   profile.Platform,
-			Score:      detection.Score,
-			IsBot:      detection.IsBot,
+			Score:      result.Score,
+			IsBot:      result.IsBot,
 			Vectors:    vectors,
 			Indicators: indicators,
 		})
@@ -109,7 +109,7 @@ func (s *EnhancedServer) handleShieldMetrics(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	scorer := challenge.NewAdaptiveScorer(nil)
+	scorer := detection.NewAdaptiveScorer(nil)
 	rawWeights := scorer.GetWeights()
 	rawBypassRates := scorer.GetBypassRates()
 

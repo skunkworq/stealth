@@ -43,7 +43,7 @@ var DefaultTrainerConfig = TrainerConfig{
 	LogInterval:     10,
 }
 
-// Optimizer implements SGD with weight decay.
+// Optimizer implements gradient descent optimization.
 type Optimizer struct {
 	learningRate float64
 	weightDecay  float64
@@ -57,7 +57,7 @@ func NewOptimizer(learningRate, _ /* momentum */, weightDecay float64) *Optimize
 	}
 }
 
-// Update updates weights and biases using SGD with weight decay.
+// Update updates weights and biases using computed gradients (SGD with weight decay).
 func (o *Optimizer) Update(weights, gradients [][]float64, biases, biasGradients []float64) {
 	for i := range weights {
 		for j := range weights[i] {

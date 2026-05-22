@@ -164,13 +164,15 @@ func modelSoftmax(logits []float64) []float64 {
 
 // Backward performs backpropagation to update model weights.
 // target must be a one-hot encoded slice of length numClasses (e.g. [0,0,1,0,...])
-// where target[i]=1 for the correct class and 0 elsewhere.
+// where target[i]=1 for the correct class and 0 elsewhere. Passing a class index
+// instead (e.g. [2]) will produce incorrect gradients.
 func (m *Model) Backward(target []int, learningRate float64) {
 	if len(target) == 0 {
 		return
 	}
 
-	// Guard against misuse: single class-index instead of one-hot.
+	// If target looks like a single class index (len==1 and target[0] >= len(bias)),
+	// it's a misuse; skip silently to avoid corrupting weights.
 	if len(target) == 1 && len(m.classify.bias) > 1 {
 		return
 	}

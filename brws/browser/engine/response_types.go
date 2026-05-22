@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -28,6 +29,7 @@ func (r *TextResponse) JSON() (map[string]interface{}, error) {
 
 // JSONP extracts a nested value from the JSON body using a dot-separated path.
 // For example, path "user.name" returns body["user"]["name"].
+// Returns an error when a path segment traverses a non-object node.
 func (r *TextResponse) JSONP(path string) (interface{}, error) {
 	var root interface{}
 	if err := json.Unmarshal(r.Body, &root); err != nil {
@@ -40,7 +42,7 @@ func (r *TextResponse) JSONP(path string) (interface{}, error) {
 		}
 		m, ok := cur.(map[string]interface{})
 		if !ok {
-			return nil, nil
+			return nil, fmt.Errorf("path segment %q: expected object, got %T", key, cur)
 		}
 		cur = m[key]
 	}

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/core/detection"
 	cstealth "github.com/skunkworq/stealth/brws/stealth/chromium"
 	"github.com/skunkworq/stealth/brws/research/fingerprint/training"
 	"github.com/skunkworq/stealth/brws/stealth"
@@ -20,7 +20,7 @@ type MLEvaluationResponse struct {
 	BotScore         float64                       `json:"bot_score"`
 	IsBot            bool                          `json:"is_bot"`
 	Anomalies        []string                      `json:"anomalies"`
-	RawPayload       *challenge.StealthDetection `json:"raw_payload,omitempty"`
+	RawPayload       *detection.StealthDetection `json:"raw_payload,omitempty"`
 	CaptchaPresented bool                          `json:"captcha_presented"`
 	CaptchaType      string                        `json:"captcha_type,omitempty"`
 	CaptchaSolved    bool                          `json:"captcha_solved"`
