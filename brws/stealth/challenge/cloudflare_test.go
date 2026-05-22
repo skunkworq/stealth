@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 func TestDetectChallenge_JSChallenge(t *testing.T) {
@@ -326,7 +328,7 @@ func TestCloudflareChallenge_String(t *testing.T) {
 }
 
 func TestCloudflareDetector_AnalyzeRequest(t *testing.T) {
-	detector := NewCloudflareDetector()
+	detector := detection.NewCloudflareDetector()
 
 	t.Run("clean request with CF cookies", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "https://example.com", nil)
@@ -427,7 +429,7 @@ func TestCloudflareDetector_AnalyzeRequest(t *testing.T) {
 }
 
 func TestCloudflareDetector_AnalyzeResponse(t *testing.T) {
-	detector := NewCloudflareDetector()
+	detector := detection.NewCloudflareDetector()
 
 	t.Run("rate limited response", func(t *testing.T) {
 		resp := &http.Response{
@@ -501,7 +503,7 @@ func TestCloudflareDetector_AnalyzeResponse(t *testing.T) {
 }
 
 func TestCloudflareDetector_ScoreRequest(t *testing.T) {
-	detector := NewCloudflareDetector()
+	detector := detection.NewCloudflareDetector()
 
 	t.Run("clean request scores low", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "https://example.com", nil)

@@ -863,3 +863,210 @@ func TestP12_MountRoutes_WithRateLimiting(t *testing.T) {
 
 	t.Logf("rate limiting working: first=%d second=%d", resp2.StatusCode, resp3.StatusCode)
 }
+
+// humanLikeEvents returns a minimal realistic event set for Turnstile tests:
+// 5+ events, 3+ mousemove with varying Y, span > 1100ms, mousedown+mouseup+click.
+func humanLikeEvents(baseTS int64) []CaptchaEvent {
+	return []CaptchaEvent{
+		{Type: "mousemove", Timestamp: baseTS, ElapsedMs: 0, X: 150, Y: 80},
+		{Type: "mousemove", Timestamp: baseTS + 300, ElapsedMs: 300, X: 152, Y: 95},
+		{Type: "mousemove", Timestamp: baseTS + 700, ElapsedMs: 700, X: 155, Y: 110},
+		{Type: "mousedown", Timestamp: baseTS + 1100, ElapsedMs: 1100, X: 155, Y: 110},
+		{Type: "mouseup", Timestamp: baseTS + 1180, ElapsedMs: 1180, X: 155, Y: 110},
+		{Type: "click", Timestamp: baseTS + 1200, ElapsedMs: 1200, X: 155, Y: 110},
+	}
+}
+
+// cleanFP returns a realistic-looking FingerprintPayload.
+func cleanFP() *FingerprintPayload {
+	return &FingerprintPayload{
+		CanvasHash:          "abc123def456",
+		WebGLVendor:         "Google Inc. (NVIDIA)",
+		WebGLRenderer:       "ANGLE (NVIDIA, GeForce GTX 1080)",
+		Platform:            "Win32",
+		Languages:           []string{"en-US", "en"},
+		HardwareConcurrency: 8,
+		DeviceMemory:        16,
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		TimezoneOffset:      -300,
+		Timezone:            "America/New_York",
+		ColorDepth:          24,
+		TouchPoints:         0,
+	}
+}
+
+func TestCompleteChallengeManaged_FastSolveRejected(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	session := cc.CreateManagedChallenge("managed-fast", 0.5)
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("PoW solve failed: %v", err)
+	}
+	// Immediately attempt solve — elapsed will be < 1500ms.
+	_, err = cc.CompleteChallengeManaged("managed-fast", solution, cleanFP(), humanLikeEvents(time.Now().UnixMilli()-1500))
+	if err == nil {
+		t.Fatal("expected fast-solve rejection, got nil error")
+	}
+	if !strings.Contains(err.Error(), "solve time too fast") {
+		t.Errorf("expected fast-solve error, got: %v", err)
+	}
+}
+
+func TestCompleteChallengeManaged_CleanPass(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	session := cc.CreateManagedChallenge("managed-pass", 0.5)
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("PoW solve failed: %v", err)
+	}
+	// Back-date session creation so timing check passes.
+	cc.mu.Lock()
+	cc.sessions["managed-pass"].CreatedAt = time.Now().Add(-2 * time.Second)
+	cc.mu.Unlock()
+
+	baseTS := time.Now().UnixMilli() - 2000
+	result, err := cc.CompleteChallengeManaged("managed-pass", solution, cleanFP(), humanLikeEvents(baseTS))
+	if err != nil {
+		t.Fatalf("managed pass failed: %v", err)
+	}
+	if result.ClearanceCookie == nil {
+		t.Fatal("expected clearance cookie")
+	}
+	if result.Method != "cloudflare_managed" {
+		t.Errorf("expected method 'cloudflare_managed', got '%s'", result.Method)
+	}
+}
+
+func TestCompleteChallengeManaged_BotFPHardReject(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	session := cc.CreateManagedChallenge("managed-bot", 0.5)
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("PoW solve failed: %v", err)
+	}
+	cc.mu.Lock()
+	cc.sessions["managed-bot"].CreatedAt = time.Now().Add(-2 * time.Second)
+	cc.mu.Unlock()
+
+	baseTS := time.Now().UnixMilli() - 2000
+	// Nil fingerprint scores > 0.90, triggering the hard-reject path.
+	_, err = cc.CompleteChallengeManaged("managed-bot", solution, nil, humanLikeEvents(baseTS))
+	if err == nil {
+		t.Fatal("expected bot fp hard-reject, got nil error")
+	}
+	if !strings.Contains(err.Error(), "managed challenge failed") {
+		t.Errorf("expected managed challenge failure, got: %v", err)
+	}
+}
+
+func TestCompleteTurnstile_TooFewEvents(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	session := cc.CreateTurnstileChallenge("ts-few", "0xSITEKEY")
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("PoW solve failed: %v", err)
+	}
+	// Only 3 events — below the minimum 5.
+	events := []CaptchaEvent{
+		{Type: "mousemove", Timestamp: 1000, ElapsedMs: 0, X: 100, Y: 100},
+		{Type: "mousemove", Timestamp: 2000, ElapsedMs: 1000, X: 110, Y: 115},
+		{Type: "click", Timestamp: 3000, ElapsedMs: 2000, X: 110, Y: 115},
+	}
+	_, err = cc.CompleteTurnstile("ts-few", solution, events)
+	if err == nil {
+		t.Fatal("expected turnstile failure for too few events, got nil error")
+	}
+}
+
+func TestCompleteTurnstile_TooFastEventSpan(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	session := cc.CreateTurnstileChallenge("ts-fast", "0xSITEKEY")
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("PoW solve failed: %v", err)
+	}
+	// 6 events but span only 500ms — too fast (< 1100ms threshold).
+	base := int64(1000)
+	events := []CaptchaEvent{
+		{Type: "mousemove", Timestamp: base, ElapsedMs: 0, X: 100, Y: 80},
+		{Type: "mousemove", Timestamp: base + 100, ElapsedMs: 100, X: 105, Y: 90},
+		{Type: "mousemove", Timestamp: base + 200, ElapsedMs: 200, X: 110, Y: 100},
+		{Type: "mousedown", Timestamp: base + 350, ElapsedMs: 350, X: 110, Y: 100},
+		{Type: "mouseup", Timestamp: base + 420, ElapsedMs: 420, X: 110, Y: 100},
+		{Type: "click", Timestamp: base + 500, ElapsedMs: 500, X: 110, Y: 100},
+	}
+	_, err = cc.CompleteTurnstile("ts-fast", solution, events)
+	if err == nil {
+		t.Fatal("expected turnstile failure for too-fast event span, got nil error")
+	}
+}
+
+func TestCompleteTurnstile_MissingMousedownUpClick(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	session := cc.CreateTurnstileChallenge("ts-nomouse", "0xSITEKEY")
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("PoW solve failed: %v", err)
+	}
+	// 6 events but no mousedown/mouseup/click — only moves.
+	base := int64(1000)
+	events := []CaptchaEvent{
+		{Type: "mousemove", Timestamp: base, ElapsedMs: 0, X: 100, Y: 80},
+		{Type: "mousemove", Timestamp: base + 400, ElapsedMs: 400, X: 105, Y: 90},
+		{Type: "mousemove", Timestamp: base + 800, ElapsedMs: 800, X: 110, Y: 105},
+		{Type: "scroll", Timestamp: base + 1000, ElapsedMs: 1000, Delta: 80},
+		{Type: "scroll", Timestamp: base + 1300, ElapsedMs: 1300, Delta: 60},
+		{Type: "scroll", Timestamp: base + 1700, ElapsedMs: 1700, Delta: 40},
+	}
+	_, err = cc.CompleteTurnstile("ts-nomouse", solution, events)
+	if err == nil {
+		t.Fatal("expected turnstile failure for missing mousedown/up/click, got nil error")
+	}
+}
+
+func TestCompleteTurnstile_CleanHumanPass(t *testing.T) {
+	cc := NewCloudflareChallenger(nil, nil)
+	session := cc.CreateTurnstileChallenge("ts-pass", "0xSITEKEY")
+	solution, err := SolvePoW(session.PoW.Prefix, session.PoW.Difficulty, session.PoW.MaxIterations)
+	if err != nil {
+		t.Fatalf("PoW solve failed: %v", err)
+	}
+	// Inject realistic JS-widget telemetry: lifecycle callbacks, browser snapshot, checkbox proof.
+	// Without these, evaluateTurnstileSnapshot(nil)=1.0 forces composite ≥ 0.85 (> 0.70 threshold).
+	cc.mu.Lock()
+	s := cc.sessions["ts-pass"]
+	s.TurnstilePresented = true
+	s.TurnstileTelemetry.CallbackState = TurnstileCallbackState{
+		BeforeInteractive: true, AfterInteractive: true, Success: true,
+	}
+	s.TurnstileTelemetry.CallbackOrder = []string{"before-interactive", "after-interactive"}
+	s.TurnstileSnapshot = &TurnstileClientSnapshot{
+		UserAgent:           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+		Language:            "en-US",
+		Languages:           []string{"en-US", "en"},
+		Platform:            "Win32",
+		HardwareConcurrency: 8,
+		ScreenWidth:         1920,
+		ScreenHeight:        1080,
+		ColorDepth:          24,
+		Timezone:            "America/New_York",
+		CookieEnabled:       true,
+	}
+	s.TurnstileTelemetry.InteractionProof = &TurnstileInteractionProof{
+		Type: "checkbox", Completed: true, CheckboxClicks: 1,
+	}
+	cc.mu.Unlock()
+
+	baseTS := time.Now().UnixMilli() - 2000
+	result, err := cc.CompleteTurnstile("ts-pass", solution, humanLikeEvents(baseTS))
+	if err != nil {
+		t.Fatalf("turnstile clean pass failed: %v", err)
+	}
+	if result.ClearanceCookie == nil {
+		t.Fatal("expected clearance cookie on pass")
+	}
+	if result.Method != "cloudflare_turnstile" {
+		t.Errorf("expected method 'cloudflare_turnstile', got '%s'", result.Method)
+	}
+}
