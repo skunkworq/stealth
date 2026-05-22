@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/core/constants"
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 func chromeWindowsNavProfile() NavigatorProfile {
@@ -303,7 +303,7 @@ func TestNavigatorData_PassesIsomorphicAnalyzer(t *testing.T) {
 	req.Header.Set(constants.HeaderBehavioralData, string(behavJSON))
 
 	// Build HTTPFingerprintInfo matching the headers
-	httpInfo := &challenge.HTTPFingerprintInfo{
+	httpInfo := &detection.HTTPFingerprintInfo{
 		UserAgent:              bp.UserAgent,
 		Platform:               bp.Platform,
 		Accept:                 bp.Accept,
@@ -329,7 +329,7 @@ func TestNavigatorData_PassesIsomorphicAnalyzer(t *testing.T) {
 	}
 
 	// Run the IsomorphicAnalyzer
-	ia := challenge.NewIsomorphicAnalyzer()
+	ia := detection.NewIsomorphicAnalyzer()
 	result := ia.Analyze(req, httpInfo)
 
 	if result == nil {

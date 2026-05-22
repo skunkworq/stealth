@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/core/constants"
+	"github.com/skunkworq/stealth/brws/core/detection"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 func TestRequestGenerator_AllHeadersPresent(t *testing.T) {
@@ -207,9 +208,9 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 
 			// WebGL
 			t.Run("WebGL", func(t *testing.T) {
-				var data challenge.WebGLData
+				var data detection.WebGLData
 				json.Unmarshal([]byte(h.Get(constants.HeaderWebGLData)), &data)
-				result := challenge.NewWebGLAnalyzer().Analyze(&data)
+				result := detection.NewWebGLAnalyzer().Analyze(&data)
 				if result.Score > 0 {
 					indicators := make([]string, 0)
 					for _, ind := range result.Indicators {
@@ -221,9 +222,9 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 
 			// Font
 			t.Run("Font", func(t *testing.T) {
-				var data challenge.FontData
+				var data detection.FontData
 				json.Unmarshal([]byte(h.Get(constants.HeaderFontData)), &data)
-				result := challenge.NewFontAnalyzer().Analyze(&data)
+				result := detection.NewFontAnalyzer().Analyze(&data)
 				if result.Score > 0 {
 					indicators := make([]string, 0)
 					for _, ind := range result.Indicators {
@@ -235,9 +236,9 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 
 			// Screen
 			t.Run("Screen", func(t *testing.T) {
-				var data challenge.ScreenData
+				var data detection.ScreenData
 				json.Unmarshal([]byte(h.Get(constants.HeaderScreenData)), &data)
-				result := challenge.NewScreenAnalyzer().Analyze(&data)
+				result := detection.NewScreenAnalyzer().Analyze(&data)
 				if result.Score > 0.15 {
 					indicators := make([]string, 0)
 					for _, ind := range result.Indicators {
@@ -250,10 +251,10 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 			// Plugin (Firefox legitimately has 0 plugins; the empty_plugins check
 			// fires but its low weight (0.08) doesn't affect overall detection)
 			t.Run("Plugin", func(t *testing.T) {
-				var data challenge.PluginData
+				var data detection.PluginData
 				json.Unmarshal([]byte(h.Get(constants.HeaderPluginData)), &data)
 				data.UserAgent = h.Get("User-Agent")
-				result := challenge.NewPluginAnalyzer().Analyze(&data)
+				result := detection.NewPluginAnalyzer().Analyze(&data)
 				if profile.Browser == "firefox" {
 					// Firefox has no plugins — the generic empty check fires but
 					// none of the Chrome-specific checks should fire
@@ -276,8 +277,8 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 				var timing map[string]interface{}
 				json.Unmarshal([]byte(h.Get(constants.HeaderTimingData)), &timing)
 
-				seq := challenge.NewRequestTimingSequenceFromMap(timing)
-				result := challenge.NewTimingAnalyzer(nil).Analyze(seq)
+				seq := detection.NewRequestTimingSequenceFromMap(timing)
+				result := detection.NewTimingAnalyzer(nil).Analyze(seq)
 				if result.Score > 0.05 {
 					indicators := make([]string, 0)
 					for _, ind := range result.Indicators {
@@ -362,7 +363,7 @@ func TestRequestGenerator_EachVectorPasses(t *testing.T) {
 }
 
 func TestRequestGenerator_EvadeShield(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	for _, profile := range DefaultProfiles() {
 		t.Run(profile.Name, func(t *testing.T) {

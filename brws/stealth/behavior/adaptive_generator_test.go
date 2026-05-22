@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 func deterministicAdaptiveConfig(profile *BrowserProfile, seed int64) *RequestGeneratorConfig {
@@ -21,7 +21,7 @@ func deterministicAdaptiveConfig(profile *BrowserProfile, seed int64) *RequestGe
 // TestAdversarialFeedbackLoop verifies the core feedback loop:
 // broken generator → shield detects → feedback → adaptation → score improvement
 func TestAdversarialFeedbackLoop(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	// Start with a deliberately broken generator
 	broken := NewBrokenRequestGenerator(ChromeWindowsProfile())
@@ -79,7 +79,7 @@ func TestAdversarialFeedbackLoop(t *testing.T) {
 // TestAdaptiveGenerator_EvasionRate runs 50 trials with the adapted generator
 // and verifies the shield still detects the vast majority of adapted traffic.
 func TestAdaptiveGenerator_EvasionRate(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 	totalTrials := 0
 	totalEvasions := 0
 
@@ -132,7 +132,7 @@ func TestAdaptiveGenerator_EvasionRate(t *testing.T) {
 // TestAdaptiveFromBroken_FeedbackConvergence starts with a deliberately broken
 // generator and shows the feedback loop converging to evasion.
 func TestAdaptiveFromBroken_FeedbackConvergence(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	// Use a broken profile that will fail multiple new checks
 	brokenProfile := ChromeWindowsProfile()
@@ -181,7 +181,7 @@ func TestAdaptiveFromBroken_FeedbackConvergence(t *testing.T) {
 
 // TestDetectionReport_Structure verifies the DetectionReport conversion.
 func TestDetectionReport_Structure(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 	broken := NewBrokenRequestGenerator(ChromeWindowsProfile())
 
 	req := broken.GenerateRequest("https://example.com/page")
