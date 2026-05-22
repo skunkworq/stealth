@@ -28,7 +28,7 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/script/spoof"
 	"github.com/skunkworq/stealth/brws/network/proxy"
 	"github.com/skunkworq/stealth/brws/network/sniff"
-	"github.com/skunkworq/stealth/brws/fingerprint/tls/parser"
+	"github.com/skunkworq/stealth/brws/core/tlsparser"
 	"github.com/skunkworq/stealth/brws/core/types"
 )
 

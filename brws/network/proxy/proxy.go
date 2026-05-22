@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/skunkworq/stealth/brws/core/constants"
-	"github.com/skunkworq/stealth/brws/fingerprint/tls/parser"
+	"github.com/skunkworq/stealth/brws/core/tlsparser"
 	"github.com/skunkworq/stealth/brws/core/types"
 )
 

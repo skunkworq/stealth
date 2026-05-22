@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/fingerprint/tls/parser"
+	"github.com/skunkworq/stealth/brws/core/tlsparser"
 )
 
 // RawCaptureListener wraps a net.Listener to capture raw TLS handshakes

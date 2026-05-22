@@ -2,7 +2,7 @@
 package capture
 
 import (
-	"github.com/skunkworq/stealth/brws/fingerprint/tls/parser"
+	"github.com/skunkworq/stealth/brws/core/tlsparser"
 )
 
 // Re-export types from tlsparser for backwards compatibility
