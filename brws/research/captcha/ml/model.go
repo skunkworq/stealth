@@ -195,31 +195,18 @@ func modelSoftmax(logits []float64) []float64 {
 	return probs
 }
 
-// Backward performs backpropagation to update model weights.
-// target must be a one-hot encoded slice of length numClasses (e.g. [0,0,1,0,...])
-// where target[i]=1 for the correct class and 0 elsewhere. Passing a class index
-// instead (e.g. [2]) will produce incorrect gradients.
-func (m *Model) Backward(target []int, learningRate float64) {
-	if len(target) == 0 {
-		return
-	}
-
-	// Validate: one-hot means exactly one element should be 1 and the rest 0.
-	// If target looks like a single class index (len==1 and target[0] >= len(bias)),
-	// it's a misuse; skip silently to avoid corrupting weights.
-	if len(target) == 1 && len(m.classify.bias) > 1 {
-		return
-	}
-
-	// Cross-entropy gradient: dL/dlogit_i = prob_i - target_i (one-hot)
+// Backward performs backpropagation for a single training sample.
+// label is the true class index (0-based). Call once per sample, not once per batch.
+func (m *Model) Backward(label int, learningRate float64) {
+	// Cross-entropy gradient: dL/dlogit_i = prob_i - onehot_i
 	probs := m.classify.forward(m.layers[len(m.layers)-1].Output)
 	gradOutput := make([]float64, len(m.classify.bias))
 	for i := range gradOutput {
-		label := 0.0
-		if i < len(target) {
-			label = float64(target[i])
+		target := 0.0
+		if i == label {
+			target = 1.0
 		}
-		gradOutput[i] = probs[i] - label
+		gradOutput[i] = probs[i] - target
 	}
 
 	for i := len(m.layers) - 1; i >= 0; i-- {

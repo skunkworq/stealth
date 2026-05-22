@@ -277,6 +277,7 @@ func (t *Trainer) trainEpoch(data *TrainingData) (float64, float64) {
 	for _, batch := range batches {
 		batchLoss := 0.0
 
+		learningRate := t.optimizer.learningRate
 		for i, img := range batch.Images {
 			label := batch.Labels[i]
 			output := t.model.Forward(img)
@@ -288,13 +289,12 @@ func (t *Trainer) trainEpoch(data *TrainingData) (float64, float64) {
 				correct++
 			}
 			total++
+
+			t.model.Backward(label, learningRate)
 		}
 
 		batchLoss /= float64(len(batch.Images))
 		totalLoss += batchLoss
-
-		learningRate := t.optimizer.learningRate
-		t.model.Backward(batch.Labels, learningRate)
 	}
 
 	avgLoss := totalLoss / float64(len(batches))
