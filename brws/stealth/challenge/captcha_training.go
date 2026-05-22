@@ -574,9 +574,15 @@ func (td *CaptchaTrainingData) RecordChallengeResult(challenge *CaptchaChallenge
 	td.RecordSample(sample)
 }
 
-var globalTracer = NewCaptchaTracer()
+var (
+	globalTracerOnce sync.Once
+	globalTracer     *CaptchaTracer
+)
 
-// GetGlobalTracer returns the global CAPTCHA tracer instance.
+// GetGlobalTracer returns the global CAPTCHA tracer instance, initializing it lazily on first call.
 func GetGlobalTracer() *CaptchaTracer {
+	globalTracerOnce.Do(func() {
+		globalTracer = NewCaptchaTracer()
+	})
 	return globalTracer
 }
