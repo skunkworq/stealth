@@ -236,16 +236,16 @@ func (t *Trainer) Train(data *TrainingData) error {
 		lr := t.scheduler.Step(epoch)
 		t.optimizer.learningRate = lr
 
-		trnLoss, trnAcc := t.trainEpoch(trn)
+		trainLoss, trainAcc := t.trainEpoch(trn)
 		valLoss, valAcc := t.validate(val)
 
 		epochTime := time.Since(startTime)
 
-		t.metrics.Record(epoch, trnLoss, trnAcc, valLoss, valAcc, epochTime, lr)
+		t.metrics.Record(epoch, trainLoss, trainAcc, valLoss, valAcc, epochTime, lr)
 
 		if epoch%t.config.LogInterval == 0 {
 			fmt.Printf("Epoch %d/%d - Time: %v - LR: %.6f - Train Loss: %.4f - Train Acc: %.4f - Val Loss: %.4f - Val Acc: %.4f\n",
-				epoch+1, t.config.Epochs, epochTime, lr, trnLoss, trnAcc, valLoss, valAcc)
+				epoch+1, t.config.Epochs, epochTime, lr, trainLoss, trainAcc, valLoss, valAcc)
 		}
 
 		if valLoss < bestValLoss {
