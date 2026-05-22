@@ -15,8 +15,9 @@ import (
 	"time"
 
 	httpclient "github.com/skunkworq/stealth/brws/network/client"
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/stealth/captcha"
+	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	challengefsm "github.com/skunkworq/stealth/brws/stealth/challenge/fsm"
 )
 
 // CaptchaSolver detects and auto-solves captcha challenges from shield responses.
@@ -474,6 +475,49 @@ type ReCaptchaV2Result struct {
 	SolveAttempts   int     `json:"solve_attempts"`
 	RefreshCount    int     `json:"refresh_count"`
 	TotalTimeMs     int64   `json:"total_time_ms"`
+}
+
+// ToFSMDetection converts a CaptchaResponse to the FSM-layer CaptchaDetection type.
+func (cr *CaptchaResponse) ToFSMDetection() *challengefsm.CaptchaDetection {
+	if cr == nil {
+		return nil
+	}
+	return &challengefsm.CaptchaDetection{
+		ChallengeID:   cr.ChallengeID,
+		Type:          cr.Type,
+		CaptchaID:     cr.CaptchaID,
+		ImageBase64:   cr.ImageBase64,
+		ChallengeData: cr.ChallengeData,
+	}
+}
+
+// ToFSMOutput converts a SolveResult to the FSM-layer CaptchaSolveOutput type.
+func (sr *SolveResult) ToFSMOutput() *challengefsm.CaptchaSolveOutput {
+	if sr == nil {
+		return nil
+	}
+	return &challengefsm.CaptchaSolveOutput{
+		Solution:    sr.Solution,
+		Confidence:  sr.Confidence,
+		SolveTimeMs: sr.SolveTimeMs,
+		Token:       sr.Token,
+	}
+}
+
+// ToFSMOutput converts a ReCaptchaV2Result to the FSM-layer ReCaptchaV2Output type.
+func (r *ReCaptchaV2Result) ToFSMOutput() *challengefsm.ReCaptchaV2Output {
+	if r == nil {
+		return nil
+	}
+	return &challengefsm.ReCaptchaV2Output{
+		Token:           r.Token,
+		BehavioralScore: r.BehavioralScore,
+		Passed:          r.Passed,
+		NeedChallenge:   r.NeedChallenge,
+		SolveAttempts:   r.SolveAttempts,
+		RefreshCount:    r.RefreshCount,
+		TotalTimeMs:     r.TotalTimeMs,
+	}
 }
 
 // SolveReCaptchaV2 performs the full reCAPTCHA v2 interaction flow:

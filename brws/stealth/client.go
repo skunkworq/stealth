@@ -391,58 +391,21 @@ func (c *Adaptive) registerSolvers(registry *challengefsm.SolverRegistry) {
 	if c.captchaSolver != nil {
 		captchaSolver := challengefsm.NewCaptchaFSMSolver(
 			func(body []byte, headers map[string][]string) *challengefsm.CaptchaDetection {
-				cr := c.captchaSolver.DetectCaptchaResponse(body, headers)
-				if cr == nil {
-					return nil
-				}
-				return &challengefsm.CaptchaDetection{
-					ChallengeID:   cr.ChallengeID,
-					Type:          cr.Type,
-					CaptchaID:     cr.CaptchaID,
-					ImageBase64:   cr.ImageBase64,
-					ChallengeData: cr.ChallengeData,
-				}
+				return c.captchaSolver.DetectCaptchaResponse(body, headers).ToFSMDetection()
 			},
 			func(body []byte, headers map[string][]string) (*challengefsm.CaptchaSolveOutput, *challengefsm.CaptchaDetection, error) {
 				result, cr, err := c.captchaSolver.SolveFromResponse(body, headers)
 				if err != nil {
 					return nil, nil, err
 				}
-				var out *challengefsm.CaptchaSolveOutput
-				if result != nil {
-					out = &challengefsm.CaptchaSolveOutput{
-						Solution:    result.Solution,
-						Confidence:  result.Confidence,
-						SolveTimeMs: result.SolveTimeMs,
-						Token:       result.Token,
-					}
-				}
-				var det *challengefsm.CaptchaDetection
-				if cr != nil {
-					det = &challengefsm.CaptchaDetection{
-						ChallengeID:   cr.ChallengeID,
-						Type:          cr.Type,
-						CaptchaID:     cr.CaptchaID,
-						ImageBase64:   cr.ImageBase64,
-						ChallengeData: cr.ChallengeData,
-					}
-				}
-				return out, det, nil
+				return result.ToFSMOutput(), cr.ToFSMDetection(), nil
 			},
 			func(baseURL string) (*challengefsm.ReCaptchaV2Output, error) {
 				result, err := c.captchaSolver.SolveReCaptchaV2(baseURL)
 				if err != nil {
 					return nil, err
 				}
-				return &challengefsm.ReCaptchaV2Output{
-					Token:           result.Token,
-					BehavioralScore: result.BehavioralScore,
-					Passed:          result.Passed,
-					NeedChallenge:   result.NeedChallenge,
-					SolveAttempts:   result.SolveAttempts,
-					RefreshCount:    result.RefreshCount,
-					TotalTimeMs:     result.TotalTimeMs,
-				}, nil
+				return result.ToFSMOutput(), nil
 			},
 			c.captchaSolver.SubmitSolution,
 			func(solveTimeMs int64, solution string) []challenge.CaptchaEvent {

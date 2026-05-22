@@ -558,83 +558,119 @@ func (s *PostLoadNoCORSBeaconStrategy) Apply(req *http.Request, rg *RequestGener
 	applyPostLoadFetch(req, targetURL, "no-cors", "same-site", false)
 }
 
-// applyPostLoadFetch is the shared helper for D-series strategies.
-// Uses exactly 4 post-load runtime headers (Timing, Behavioral, Audio, Canvas)
-// with zero jsFP headers → runtimeHeaderCount=4 < 5, hasJSFP=false.
-func applyPostLoadFetch(req *http.Request, targetURL, mode, site string, includeOrigin bool) {
-	// ── Phase 1: Keep ONLY post-load headers (no jsFP headers) ──
-	keepHeaders := map[string]bool{
-		constants.HeaderTimingData:        true,
-		constants.HeaderBehavioralData:    true,
-		constants.HeaderAudioData:         true,
-		constants.HeaderCanvasFingerprint: true,
-	}
+// fetchShapeOpts controls the shared applyFetchShape helper.
+type fetchShapeOpts struct {
+	keepHeaders   map[string]bool
+	method        string // http.MethodGet or http.MethodPost
+	body          string // non-empty → POST body; empty → GET (no body, delete Content-Type)
+	contentType   string // used only when body is non-empty
+	mode          string // Sec-Fetch-Mode value
+	site          string // Sec-Fetch-Site value
+	includeOrigin bool
+}
+
+// applyFetchShape is the single shared core for all D-, E-, and F-series strategies.
+// It applies Firefox identity, header filtering, fetch shape, and header-order cleanup.
+func applyFetchShape(req *http.Request, targetURL string, opts fetchShapeOpts) {
+	// Phase 1: filter runtime headers
 	for _, h := range allRuntimeHeaders {
-		if !keepHeaders[h] {
+		if !opts.keepHeaders[h] {
 			req.Header.Del(h)
 		}
 	}
 	fixBehavioralDataForFirefox(req)
 
-	// ── Phase 2: Firefox identity (no Sec-Ch-Ua → coverage nil for <8 headers) ──
+	// Phase 2: Firefox identity — no Sec-Ch-Ua
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
 	for _, h := range secChUaHeaders {
 		req.Header.Del(h)
 	}
 
-	// ── Phase 3: Fetch shape ──
-	req.Method = http.MethodGet
-	req.Body = nil
-	req.ContentLength = 0
-	req.Header.Del("Content-Type")
+	// Phase 3: method + body
+	req.Method = opts.method
+	if opts.body != "" {
+		req.Body = nopCloser([]byte(opts.body))
+		req.ContentLength = int64(len(opts.body))
+		req.Header.Set("Content-Type", opts.contentType)
+	} else {
+		req.Body = nil
+		req.ContentLength = 0
+		req.Header.Del("Content-Type")
+	}
 	req.Header.Set("Accept", "application/json, text/plain, */*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	req.Header.Set("Connection", "keep-alive")
 
-	// Referer
+	// Phase 4: Referer
 	if parsed, err := url.Parse(targetURL); err == nil {
-		if site == "cross-site" {
+		switch opts.site {
+		case "cross-site":
 			req.Header.Set("Referer", "https://app.example.com/dashboard")
-		} else if site == "same-site" {
+		case "same-site":
 			req.Header.Set("Referer", parsed.Scheme+"://www."+parsed.Hostname()+"/")
-		} else {
+		case "same-origin":
 			req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/")
 		}
 	}
 
-	if includeOrigin {
-		req.Header.Set("Origin", "https://app.example.com")
+	// Phase 5: Origin
+	if opts.includeOrigin {
+		if opts.site == "cross-site" {
+			req.Header.Set("Origin", "https://app.example.com")
+		} else if parsed, err := url.Parse(targetURL); err == nil {
+			req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
+		}
 	} else {
 		req.Header.Del("Origin")
 	}
 
-	// ── Phase 4: Sec-Fetch ──
+	// Phase 6: Sec-Fetch
 	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", mode)
-	req.Header.Set("Sec-Fetch-Site", site)
+	req.Header.Set("Sec-Fetch-Mode", opts.mode)
+	req.Header.Set("Sec-Fetch-Site", opts.site)
 	req.Header.Del("Sec-Fetch-User")
 	req.Header.Del("Upgrade-Insecure-Requests")
 
-	// ── Phase 5: Clean header order ──
+	// Phase 7: clean header order
 	removed := map[string]bool{
-		"Content-Type":              true,
 		"Upgrade-Insecure-Requests": true,
 		"Sec-Fetch-User":            true,
 		"Priority":                  true,
 	}
-	if !includeOrigin {
+	if opts.body == "" {
+		removed["Content-Type"] = true
+	}
+	if !opts.includeOrigin {
 		removed["Origin"] = true
 	}
 	for _, h := range secChUaHeaders {
 		removed[h] = true
 	}
 	for _, h := range allRuntimeHeaders {
-		if !keepHeaders[h] {
+		if !opts.keepHeaders[h] {
 			removed[h] = true
 		}
 	}
 	rebuildHeaderOrderClean(req, removed)
+}
+
+// applyPostLoadFetch is the shared helper for D-series strategies.
+// Uses exactly 4 post-load runtime headers (Timing, Behavioral, Audio, Canvas)
+// with zero jsFP headers → runtimeHeaderCount=4 < 5, hasJSFP=false.
+func applyPostLoadFetch(req *http.Request, targetURL, mode, site string, includeOrigin bool) {
+	applyFetchShape(req, targetURL, fetchShapeOpts{
+		keepHeaders: map[string]bool{
+			constants.HeaderTimingData:        true,
+			constants.HeaderBehavioralData:    true,
+			constants.HeaderAudioData:         true,
+			constants.HeaderCanvasFingerprint: true,
+		},
+		method:        http.MethodGet,
+		mode:          mode,
+		site:          site,
+		includeOrigin: includeOrigin,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -683,68 +719,13 @@ func (s *SingleHeaderNoCORSStrategy) Apply(req *http.Request, rg *RequestGenerat
 // Uses exactly 1 post-load runtime header with zero jsFP headers.
 // runtimeHeaderCount=1, postLoadHeaderCount=1, jsFingerprintCount=0.
 func applySingleHeaderFetch(req *http.Request, targetURL, keepHeader, mode, site string, includeOrigin bool) {
-	keepHeaders := map[string]bool{keepHeader: true}
-	for _, h := range allRuntimeHeaders {
-		if !keepHeaders[h] {
-			req.Header.Del(h)
-		}
-	}
-	fixBehavioralDataForFirefox(req)
-
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range secChUaHeaders {
-		req.Header.Del(h)
-	}
-
-	req.Method = http.MethodGet
-	req.Body = nil
-	req.ContentLength = 0
-	req.Header.Del("Content-Type")
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-	req.Header.Set("Connection", "keep-alive")
-
-	if parsed, err := url.Parse(targetURL); err == nil {
-		if site == "cross-site" {
-			req.Header.Set("Referer", "https://app.example.com/dashboard")
-		} else if site == "same-site" {
-			req.Header.Set("Referer", parsed.Scheme+"://www."+parsed.Hostname()+"/")
-		} else {
-			req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/")
-		}
-	}
-
-	if includeOrigin {
-		req.Header.Set("Origin", "https://app.example.com")
-	} else {
-		req.Header.Del("Origin")
-	}
-
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", mode)
-	req.Header.Set("Sec-Fetch-Site", site)
-	req.Header.Del("Sec-Fetch-User")
-	req.Header.Del("Upgrade-Insecure-Requests")
-
-	removed := map[string]bool{
-		"Content-Type":              true,
-		"Upgrade-Insecure-Requests": true,
-		"Sec-Fetch-User":            true,
-		"Priority":                  true,
-	}
-	if !includeOrigin {
-		removed["Origin"] = true
-	}
-	for _, h := range secChUaHeaders {
-		removed[h] = true
-	}
-	for _, h := range allRuntimeHeaders {
-		if !keepHeaders[h] {
-			removed[h] = true
-		}
-	}
-	rebuildHeaderOrderClean(req, removed)
+	applyFetchShape(req, targetURL, fetchShapeOpts{
+		keepHeaders:   map[string]bool{keepHeader: true},
+		method:        http.MethodGet,
+		mode:          mode,
+		site:          site,
+		includeOrigin: includeOrigin,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -768,78 +749,15 @@ func craftEvasionBody() string {
 // Shapes the request as a browser POST with selected runtime headers and
 // a body payload using compound JSON keys to evade exact-match body checks.
 func applyPostFetch(req *http.Request, targetURL string, keepHeaders map[string]bool, mode, site, contentType string, includeOrigin bool) {
-	// ── Phase 1: Keep ONLY selected runtime headers ──
-	for _, h := range allRuntimeHeaders {
-		if !keepHeaders[h] {
-			req.Header.Del(h)
-		}
-	}
-	fixBehavioralDataForFirefox(req)
-
-	// ── Phase 2: Firefox identity (no Sec-Ch-Ua) ──
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
-	for _, h := range secChUaHeaders {
-		req.Header.Del(h)
-	}
-
-	// ── Phase 3: POST shape with body ──
-	body := craftEvasionBody()
-	req.Method = http.MethodPost
-	req.Body = nopCloser([]byte(body))
-	req.ContentLength = int64(len(body))
-	req.Header.Set("Content-Type", contentType)
-	req.Header.Set("Accept", "application/json, text/plain, */*")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-	req.Header.Set("Connection", "keep-alive")
-
-	// ── Phase 4: Origin + Referer ──
-	if parsed, err := url.Parse(targetURL); err == nil {
-		if site == "cross-site" {
-			req.Header.Set("Referer", "https://app.example.com/dashboard")
-		} else if site == "same-site" {
-			req.Header.Set("Referer", parsed.Scheme+"://www."+parsed.Hostname()+"/")
-		} else if site == "same-origin" {
-			req.Header.Set("Referer", parsed.Scheme+"://"+parsed.Host+"/")
-		}
-		// No Referer for site=none (bookmarklet/extension context)
-	}
-
-	if includeOrigin {
-		if site == "cross-site" {
-			req.Header.Set("Origin", "https://app.example.com")
-		} else if parsed, err := url.Parse(targetURL); err == nil {
-			req.Header.Set("Origin", parsed.Scheme+"://"+parsed.Host)
-		}
-	} else {
-		req.Header.Del("Origin")
-	}
-
-	// ── Phase 5: Sec-Fetch ──
-	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("Sec-Fetch-Mode", mode)
-	req.Header.Set("Sec-Fetch-Site", site)
-	req.Header.Del("Sec-Fetch-User")
-	req.Header.Del("Upgrade-Insecure-Requests")
-
-	// ── Phase 6: Clean header order ──
-	removed := map[string]bool{
-		"Upgrade-Insecure-Requests": true,
-		"Sec-Fetch-User":            true,
-		"Priority":                  true,
-	}
-	if !includeOrigin {
-		removed["Origin"] = true
-	}
-	for _, h := range secChUaHeaders {
-		removed[h] = true
-	}
-	for _, h := range allRuntimeHeaders {
-		if !keepHeaders[h] {
-			removed[h] = true
-		}
-	}
-	rebuildHeaderOrderClean(req, removed)
+	applyFetchShape(req, targetURL, fetchShapeOpts{
+		keepHeaders:   keepHeaders,
+		method:        http.MethodPost,
+		body:          craftEvasionBody(),
+		contentType:   contentType,
+		mode:          mode,
+		site:          site,
+		includeOrigin: includeOrigin,
+	})
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
