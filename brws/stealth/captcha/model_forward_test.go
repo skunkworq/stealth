@@ -17,7 +17,7 @@ func TestConv2DLayerForward(t *testing.T) {
 	}
 
 	// 1 output channel, 1 input channel, kernel size 3 (flattened)
-	conv := &Conv2DLayer{
+	conv := &conv2DLayer{
 		Weights: [][][]float64{
 			{
 				{0, 1, 0, 1, 0, 1, 0, 1, 0}, // 3x3 kernel (identity-ish)
@@ -59,7 +59,7 @@ func TestConv2DLayerForwardNoPadding(t *testing.T) {
 		},
 	}
 
-	conv := &Conv2DLayer{
+	conv := &conv2DLayer{
 		Weights: [][][]float64{
 			{
 				{1, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -94,7 +94,7 @@ func TestBatchNormLayerForward(t *testing.T) {
 		},
 	}
 
-	bn := &BatchNormLayer{
+	bn := &batchNormLayer{
 		Gamma:    []float64{1},
 		Beta:     []float64{0},
 		Mean:     []float64{3.5},
