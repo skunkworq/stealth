@@ -13,7 +13,6 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 	"github.com/skunkworq/stealth/brws/stealth"
 )
 

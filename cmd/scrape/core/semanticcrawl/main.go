@@ -10,6 +10,7 @@ import (
 
 	semantic "github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/crawl/spider"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 )
 
 func main() {

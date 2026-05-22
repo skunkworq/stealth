@@ -16,6 +16,7 @@ import (
 
 	"github.com/skunkworq/stealth/brws/content/scrapegraph"
 	"github.com/skunkworq/stealth/brws/content/understand"
+	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 )
 
 func main() {
