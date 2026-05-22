@@ -7,7 +7,6 @@ import (
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	wf "github.com/skunkworq/stealth/brws/browser/engine/meta/waterfall"
-	"github.com/skunkworq/stealth/brws/content/understand"
 	"github.com/skunkworq/stealth/brws/core/config"
 	"github.com/skunkworq/stealth/brws/core/constants"
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
@@ -499,14 +498,6 @@ func (c *Adaptive) Config() *Config {
 // EvasionFSM returns the adaptive evasion FSM, or nil if not initialized.
 func (c *Adaptive) EvasionFSM() *behavior.AdaptiveEvasionFSM {
 	return c.evasionFSM
-}
-
-// NewSemanticExtractor creates a semantic extractor that uses this stealth
-// client's engine for fetching. This enables challenge-aware semantic
-// extraction — anti-bot pages are automatically solved before the semantic
-// tree is built.
-func (c *Adaptive) NewSemanticExtractor(config *understand.PipelineConfig) *understand.SemanticExtractor {
-	return understand.NewSemanticExtractorWithEngine(config, c.ActiveEngine())
 }
 
 // newAdaptiveFromEngines builds a minimal Adaptive wrapping the provided engine

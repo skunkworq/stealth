@@ -9,6 +9,19 @@ import (
 	"unicode"
 
 	"golang.org/x/net/html"
+
+	"github.com/skunkworq/stealth/brws/content/understand"
+)
+
+// Type aliases exposing the understand types through the stealth package surface.
+// Callers that need these types can also import content/understand directly.
+type (
+	PageMeta         = understand.PageMeta
+	SocialLinks      = understand.SocialLinks
+	Link             = understand.Link
+	ColorInfo        = understand.ColorInfo
+	FontInfo         = understand.FontInfo
+	ImageWithContext = understand.ImageWithContext
 )
 
 // --- Compiled regexes (package-level, compiled once) ---
@@ -214,9 +227,6 @@ func extractPrimaryFont(value string) string {
 
 // Title returns the page title, falling back to og:title.
 func (r *Response) Title() string {
-	if r.Tree != nil && r.Tree.Meta != nil && r.Tree.Meta.Title != "" {
-		return r.Tree.Meta.Title
-	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
 		return ""
@@ -251,9 +261,6 @@ func (r *Response) Title() string {
 
 // Meta returns structured page metadata including OG and Twitter Card tags.
 func (r *Response) Meta() PageMeta {
-	if r.Tree != nil && r.Tree.Meta != nil {
-		return *r.Tree.Meta
-	}
 	r.ensureParsed()
 	meta := PageMeta{
 		OG:          make(map[string]string),
@@ -367,9 +374,6 @@ func (r *Response) Meta() PageMeta {
 
 // Links extracts anchor links, resolves relative URLs, and categorizes internal/external.
 func (r *Response) Links() []Link {
-	if r.Tree != nil && r.Tree.Links != nil {
-		return r.Tree.Links
-	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
 		return nil
@@ -497,9 +501,6 @@ func (r *Response) Images() []string {
 
 // SocialLinks extracts social media profile URLs from anchor hrefs.
 func (r *Response) SocialLinks() SocialLinks {
-	if r.Tree != nil && r.Tree.Social != nil {
-		return *r.Tree.Social
-	}
 	r.ensureParsed()
 	var social SocialLinks
 	if r.bodyStr == "" {
@@ -552,9 +553,6 @@ func (r *Response) SocialLinks() SocialLinks {
 
 // Colors extracts colors from theme-color meta, CSS hex, and rgb/rgba values.
 func (r *Response) Colors() []ColorInfo {
-	if r.Tree != nil && r.Tree.Colors != nil {
-		return r.Tree.Colors
-	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
 		return nil
@@ -595,9 +593,6 @@ func (r *Response) Colors() []ColorInfo {
 
 // Fonts extracts font information from Google Fonts URLs and CSS font-family declarations.
 func (r *Response) Fonts() []FontInfo {
-	if r.Tree != nil && r.Tree.Fonts != nil {
-		return r.Tree.Fonts
-	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
 		return nil
