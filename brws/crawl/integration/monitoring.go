@@ -11,6 +11,22 @@ import (
 	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
+// Price detection regexes compiled once at package init.
+var (
+	rePriceSymbol  = regexp.MustCompile(`[\$€£]\s*\d+`)
+	reDecimalPrice = regexp.MustCompile(`\d+\.\d{2}`)
+	rePricePatterns = []*regexp.Regexp{
+		regexp.MustCompile(`\$[\s]*(\d+(?:,\d{3})*(?:\.\d{2})?)`),
+		regexp.MustCompile(`(\d+(?:,\d{3})*(?:\.\d{2})?)[\s]*(?:USD|dollars?)`),
+		regexp.MustCompile(`€[\s]*(\d+(?:,\d{3})*(?:\.\d{2})?)`),
+		regexp.MustCompile(`(\d+(?:,\d{3})*(?:\.\d{2})?)[\s]*(?:EUR|euros?)`),
+		regexp.MustCompile(`£[\s]*(\d+(?:,\d{3})*(?:\.\d{2})?)`),
+		regexp.MustCompile(`(\d+(?:,\d{3})*(?:\.\d{2})?)[\s]*(?:GBP|pounds?)`),
+	}
+	reVariantSize  = regexp.MustCompile(`(?i)Size[:\s]+(\w+)`)
+	reVariantColor = regexp.MustCompile(`(?i)Color[:\s]+(\w+)`)
+)
+
 type PriceMonitor struct {
 	navigator  *SemanticNavigator
 	priceCache sync.Map // map[string]*PriceHistory
@@ -134,11 +150,11 @@ func (m *PriceMonitor) findPriceNode(tree *understand.SemanticTree) *understand.
 			}
 		}
 
-		if hasPrice, _ := regexp.MatchString(`[\$€£]\s*\d+`, node.Summary); hasPrice {
+		if rePriceSymbol.MatchString(node.Summary) {
 			score += 20
 		}
 
-		if hasPrice, _ := regexp.MatchString(`\d+\.\d{2}`, node.Summary); hasPrice {
+		if reDecimalPrice.MatchString(node.Summary) {
 			score += 5
 		}
 
@@ -161,21 +177,8 @@ func (m *PriceMonitor) extractPrice(text string) float64 {
 
 func (m *PriceMonitor) extractAllPrices(text string) []float64 {
 	prices := make([]float64, 0)
-
-	patterns := []string{
-		`\$[\s]*(\d+(?:,\d{3})*(?:\.\d{2})?)`,
-		`(\d+(?:,\d{3})*(?:\.\d{2})?)[\s]*(?:USD|dollars?)`,
-		`€[\s]*(\d+(?:,\d{3})*(?:\.\d{2})?)`,
-		`(\d+(?:,\d{3})*(?:\.\d{2})?)[\s]*(?:EUR|euros?)`,
-		`£[\s]*(\d+(?:,\d{3})*(?:\.\d{2})?)`,
-		`(\d+(?:,\d{3})*(?:\.\d{2})?)[\s]*(?:GBP|pounds?)`,
-	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		matches := re.FindAllStringSubmatch(text, -1)
-
-		for _, match := range matches {
+	for _, re := range rePricePatterns {
+		for _, match := range re.FindAllStringSubmatch(text, -1) {
 			if len(match) > 1 {
 				priceStr := strings.ReplaceAll(match[1], ",", "")
 				if price, err := strconv.ParseFloat(priceStr, 64); err == nil {
@@ -184,7 +187,6 @@ func (m *PriceMonitor) extractAllPrices(text string) []float64 {
 			}
 		}
 	}
-
 	return prices
 }
 
@@ -244,15 +246,13 @@ func (m *PriceMonitor) extractVariantName(node *understand.SemanticNode) string 
 	summary := node.Summary
 
 	if strings.Contains(summary, "Size") || strings.Contains(summary, "size") {
-		re := regexp.MustCompile(`(?i)Size[:\s]+(\w+)`)
-		if match := re.FindStringSubmatch(summary); len(match) > 1 {
+		if match := reVariantSize.FindStringSubmatch(summary); len(match) > 1 {
 			return "Size: " + match[1]
 		}
 	}
 
 	if strings.Contains(summary, "Color") || strings.Contains(summary, "color") {
-		re := regexp.MustCompile(`(?i)Color[:\s]+(\w+)`)
-		if match := re.FindStringSubmatch(summary); len(match) > 1 {
+		if match := reVariantColor.FindStringSubmatch(summary); len(match) > 1 {
 			return "Color: " + match[1]
 		}
 	}
