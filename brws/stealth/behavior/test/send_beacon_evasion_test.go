@@ -1,15 +1,14 @@
 package behavior_test
 
 import (
-	"fmt"
 	"testing"
 
+	"github.com/skunkworq/stealth/brws/core/detection"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 func TestSendBeaconEvasion(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	for _, profile := range behavior.DefaultProfiles() {
 		t.Run(profile.Name, func(t *testing.T) {
@@ -19,9 +18,8 @@ func TestSendBeaconEvasion(t *testing.T) {
 
 			for i := 0; i < trials; i++ {
 				cfg := behavior.MaxEvasionConfig(profile)
-				cfg.EvasionStrategy = &behavior.FirefoxInitNavStrategy{}
 				gen := behavior.NewRequestGenerator(cfg)
-				req := gen.GenerateRequest("https://api.example.com/telemetry")
+				req := gen.GenerateRequest("https://example.com/product")
 				detection := detector.AnalyzeRequest(req, nil)
 
 				totalScore += detection.Score
@@ -30,7 +28,7 @@ func TestSendBeaconEvasion(t *testing.T) {
 					if i == 0 {
 						for _, vec := range detection.Vectors {
 							for _, ind := range vec.Indicators {
-								fmt.Println("  Indicator:", ind)
+								t.Logf("  Indicator: %s", ind)
 							}
 						}
 					}
@@ -40,6 +38,10 @@ func TestSendBeaconEvasion(t *testing.T) {
 			avgScore := totalScore / float64(trials)
 			detRate := float64(detections) / float64(trials)
 			t.Logf("%s: detection=%.0f%% avg_score=%.3f", profile.Name, detRate*100, avgScore)
+			if detRate > 0.5 {
+				t.Errorf("%s: detection rate %.0f%% exceeds 50%% threshold (%d/%d detected)",
+					profile.Name, detRate*100, detections, trials)
+			}
 		})
 	}
 }

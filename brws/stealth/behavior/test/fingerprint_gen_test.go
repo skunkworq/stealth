@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
-	"github.com/skunkworq/stealth/brws/stealth/behavior"
 	"github.com/skunkworq/stealth/brws/core/constants"
+	"github.com/skunkworq/stealth/brws/core/detection"
+	"github.com/skunkworq/stealth/brws/stealth/behavior"
 )
 
 func TestGeneratePlatformFingerprints_Windows(t *testing.T) {
@@ -131,7 +131,7 @@ func TestCanvasFingerprint_PassesIsomorphicCheck(t *testing.T) {
 	req.Header.Set("Sec-Ch-Ua", `"Chromium";v="134", "Google Chrome";v="134", "Not-A.Brand";v="99"`)
 	req.Header.Set("Sec-Ch-Ua-Platform", `"Windows"`)
 
-	httpInfo := &challenge.HTTPFingerprintInfo{
+	httpInfo := &detection.HTTPFingerprintInfo{
 		UserAgent:       req.Header.Get("User-Agent"),
 		Platform:        "Windows",
 		SecCHUA:         req.Header.Get("Sec-Ch-Ua"),
@@ -141,7 +141,7 @@ func TestCanvasFingerprint_PassesIsomorphicCheck(t *testing.T) {
 		HeaderCount:     5,
 	}
 
-	analyzer := challenge.NewIsomorphicAnalyzer()
+	analyzer := detection.NewIsomorphicAnalyzer()
 	vec := analyzer.Analyze(req, httpInfo)
 
 	if vec != nil && vec.Score > 0 {

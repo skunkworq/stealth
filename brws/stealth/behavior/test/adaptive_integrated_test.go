@@ -2,8 +2,9 @@ package behavior_test
 
 import (
 	"testing"
+
+	"github.com/skunkworq/stealth/brws/core/detection"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 )
 
 // From phase85_86_test.go
@@ -18,7 +19,7 @@ func TestPhases85_86Integration(t *testing.T) {
 	}
 
 	ag := behavior.NewAdaptiveRequestGenerator(config)
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	// Round 1: Check that detections fire when they should (simulating "broken" state)
 	req1 := ag.GenerateRequest("https://example.com")
@@ -71,7 +72,7 @@ func TestPhases85_86Integration(t *testing.T) {
 
 // From phase87_88_test.go
 func TestPhases87_88Integration(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	// Round 1: Force detections without evasion
 	// Use a profile that definitely has 8GB+ memory to trigger coherence check
@@ -143,7 +144,7 @@ func TestPhases87_88Integration(t *testing.T) {
 
 // From phase89_90_test.go
 func TestPhases89_90Integration(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	// Round 1: Force detections without evasion
 	config := &behavior.RequestGeneratorConfig{
@@ -219,7 +220,7 @@ func TestPhases89_90Integration(t *testing.T) {
 
 // From phase91_92_test.go
 func TestPhases91_92Integration(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	// Round 1: Force detections without evasion
 	config := &behavior.RequestGeneratorConfig{
@@ -304,7 +305,7 @@ func TestPhases91_92Integration(t *testing.T) {
 
 // From phase93_94_test.go
 func TestPhases93_94Integration(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	// Round 1: Force detections without evasion
 	config := &behavior.RequestGeneratorConfig{
@@ -410,7 +411,7 @@ func TestPhases95_96Integration(t *testing.T) {
 	// Round 1: Trigger detections
 	req1 := ag.GenerateRequest("https://example.com")
 
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 	det1 := detector.AnalyzeRequest(req1, nil)
 	report1 := det1.ToDetectionReport()
 

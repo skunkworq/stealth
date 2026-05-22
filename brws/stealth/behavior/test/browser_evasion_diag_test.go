@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/core/detection"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
 )
 
 func TestFullBrowserEvasion(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	for _, profile := range behavior.DefaultProfiles() {
 		t.Run(profile.Name, func(t *testing.T) {
