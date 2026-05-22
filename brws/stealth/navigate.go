@@ -52,149 +52,28 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 	c.fsm.ResetState(instrumentation.RequestStates.Idle)
 	_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.Start)
 
-	var resp *engine.Response
-	var err error
 	var challengeSolved bool
 
 	// Use waterfall engine when available, otherwise raw engine
 	activeEngine := c.ActiveEngine()
 
 	// Determine request function: DoOnTab when tabCtx provided, otherwise Do
-	var doRequest func(context.Context, *engine.Request) (*engine.Response, error)
+	var doRequest requestFunc
 	if tabCtx != nil {
-		if te, ok := activeEngine.(engine.TabEngine); ok {
-			doRequest = func(ctx context.Context, req *engine.Request) (*engine.Response, error) {
-				return te.DoOnTab(ctx, tabCtx, req)
-			}
-		} else {
+		te, ok := activeEngine.(engine.TabEngine)
+		if !ok {
 			return nil, fmt.Errorf("engine %q does not support DoOnTab", activeEngine.Name())
+		}
+		doRequest = func(ctx context.Context, req *engine.Request) (*engine.Response, error) {
+			return te.DoOnTab(ctx, tabCtx, req)
 		}
 	} else {
 		doRequest = activeEngine.Do
 	}
 
-	if retryErr := resilience.RetryContext(ctx, &resilience.Config{
-		MaxAttempts:       3,
-		InitialBackoff:    2 * time.Second,
-		MaxBackoff:        8 * time.Second,
-		BackoffMultiplier: 2.0,
-		Jitter:            0.2,
-	}, func(ctx context.Context) error {
-		resp, err = doRequest(ctx, &engine.Request{
-			URL:     url,
-			Timeout: c.options.Timeout,
-		})
-		if err != nil {
-			span.SetAttribute("error", err.Error())
-			c.logger.Error("navigation failed", "url", url, "error", err)
-			if ctx.Err() != nil {
-				return resilience.WithPermanentError(err)
-			}
-			return err
-		}
-
-		// Check for WAF/challenge markers in the response body/headers.
-		// The engine now returns raw responses; challenge detection lives here.
-		if isWAFResponse(resp) {
-			c.logger.Warn("WAF challenge detected in response. Adapting stealth config and retrying",
-				"status", resp.Status)
-
-			// FSM State Transition
-			_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.Retry)
-
-			// RL-driven stealth adaptation or hardcoded fallback
-			if c.policyLoader != nil && c.config.Stealth != nil {
-				var captchaState *CaptchaState
-				if c.isCaptchaResponse(resp) {
-					captchaState = &CaptchaState{Presented: true}
-				}
-				stateVec := BuildStateVector(extractAnomaliesFromResponse(resp), captchaState, nil)
-				actionIdx, qValue := c.policyLoader.SelectAction(stateVec)
-				applied, field := ApplyAction(c.config.Stealth, actionIdx)
-				c.logger.Info("RL policy action", "action", field, "q_value", qValue, "applied", applied)
-			} else if c.config.Stealth != nil {
-				c.config.Stealth.ToggleFeature("CanvasNoise")
-				c.config.Stealth.ToggleFeature("WebGLSpoof")
-				c.config.Stealth.ToggleFeature("ClientHints")
-			}
-
-			return fmt.Errorf("WAF challenge detected (status %d)", resp.Status)
-		}
-
-		return nil
-	}); retryErr != nil && err == nil {
-		err = retryErr
-	}
-
-	// EVASION FSM: on ban signal, rotate strategy and retry before escalating
-	if c.evasionFSM != nil && resp != nil {
-		detected := isBanSignal(c.escalation, resp.Status)
-		score := 0.0
-		if detected {
-			score = 1.0
-		}
-		c.evasionFSM.RecordResult(score, detected)
-		if detected {
-			c.evasionFSM.RecordBanSignal(resp.Status)
-
-			// Retry with rotated strategy before escalating to browser mode.
-			// Each iteration applies the FSM's current strategy to the engine request
-			// so header mutations (Sec-Fetch-*, Accept, method) actually take effect.
-			prevStrategy := c.evasionFSM.CurrentStrategy().Name()
-			for fsmRetry := 0; fsmRetry < len(c.evasionFSM.Strategies()) && !c.evasionFSM.ShouldEscalate(); fsmRetry++ {
-				nextStrategy := c.evasionFSM.CurrentStrategy().Name()
-				if fsmRetry > 0 && nextStrategy == prevStrategy {
-					break // FSM didn't advance — stop retrying
-				}
-				prevStrategy = nextStrategy
-				c.logger.Info("evasion FSM retry", "strategy", nextStrategy, "attempt", fsmRetry+1)
-
-				resp, err = doRequest(ctx, engineRequestWithStrategy(
-					c.evasionFSM.CurrentStrategy(), url, c.options.Timeout,
-				))
-				if err != nil {
-					break
-				}
-
-				retryDetected := isBanSignal(c.escalation, resp.Status)
-				retryScore := 0.0
-				if retryDetected {
-					retryScore = 1.0
-				}
-				c.evasionFSM.RecordResult(retryScore, retryDetected)
-				if retryDetected {
-					c.evasionFSM.RecordBanSignal(resp.Status)
-				} else {
-					break // Strategy evaded — stop retrying
-				}
-			}
-		}
-		if c.evasionFSM.ShouldEscalate() && c.waterfall != nil {
-			reason := c.evasionFSM.EscalationReason()
-			tierName := escalationTierFor(c.escalation, resp.Status)
-			c.waterfall.PromoteTier(tierName)
-			c.logger.Info("evasion FSM escalation", "reason", reason, "promoting", tierName)
-		}
-	}
-
-	// ANTI-BOT ESCALATION: on ban-signal status codes, escalate and retry
-	if resp != nil && c.escalation != nil && c.escalation.Enabled && isBanSignal(c.escalation, resp.Status) {
-		for escAttempt := 0; escAttempt < c.escalation.MaxEscalationRetries; escAttempt++ {
-			shouldRetry := c.escalate(ctx, resp, url, nil)
-			if !shouldRetry {
-				break
-			}
-			c.logger.Info("escalation retry", "attempt", escAttempt+1, "status", resp.Status)
-
-			resp, err = doRequest(ctx, &engine.Request{
-				URL:     url,
-				Timeout: c.options.Timeout,
-			})
-			if err != nil || !isBanSignal(c.escalation, resp.Status) {
-				break
-			}
-		}
-	}
+	resp, err := c.retryForWAF(ctx, url, doRequest)
+	resp, err = c.retryForEvasion(ctx, url, doRequest, resp, err)
+	resp, err = c.escalateAndRetry(ctx, url, doRequest, resp, err)
 
 	// CAPTCHA SOLVING: detect captcha in response, attempt solve with trace replay before escalating
 	if c.evasionFSM != nil && resp != nil && c.isCaptchaResponse(resp) {
@@ -262,6 +141,121 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 		Response:        *resp,
 		ChallengeSolved: challengeSolved,
 	}, nil
+}
+
+// requestFunc is the function signature for making an engine request.
+type requestFunc = func(context.Context, *engine.Request) (*engine.Response, error)
+
+// retryForWAF performs the initial WAF-aware fetch with up to 3 backoff retries.
+// On each WAF detection it adapts the stealth config before retrying.
+func (c *Adaptive) retryForWAF(ctx context.Context, url string, doRequest requestFunc) (*engine.Response, error) {
+	var resp *engine.Response
+	var err error
+	if retryErr := resilience.RetryContext(ctx, &resilience.Config{
+		MaxAttempts:       3,
+		InitialBackoff:    2 * time.Second,
+		MaxBackoff:        8 * time.Second,
+		BackoffMultiplier: 2.0,
+		Jitter:            0.2,
+	}, func(ctx context.Context) error {
+		resp, err = doRequest(ctx, &engine.Request{URL: url, Timeout: c.options.Timeout})
+		if err != nil {
+			c.logger.Error("navigation failed", "url", url, "error", err)
+			if ctx.Err() != nil {
+				return resilience.WithPermanentError(err)
+			}
+			return err
+		}
+		if isWAFResponse(resp) {
+			c.logger.Warn("WAF challenge detected, adapting and retrying", "status", resp.Status)
+			_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.Retry)
+			if c.policyLoader != nil && c.config.Stealth != nil {
+				var captchaState *CaptchaState
+				if c.isCaptchaResponse(resp) {
+					captchaState = &CaptchaState{Presented: true}
+				}
+				stateVec := BuildStateVector(extractAnomaliesFromResponse(resp), captchaState, nil)
+				actionIdx, qValue := c.policyLoader.SelectAction(stateVec)
+				applied, field := ApplyAction(c.config.Stealth, actionIdx)
+				c.logger.Info("RL policy action", "action", field, "q_value", qValue, "applied", applied)
+			} else if c.config.Stealth != nil {
+				c.config.Stealth.ToggleFeature("CanvasNoise")
+				c.config.Stealth.ToggleFeature("WebGLSpoof")
+				c.config.Stealth.ToggleFeature("ClientHints")
+			}
+			return fmt.Errorf("WAF challenge detected (status %d)", resp.Status)
+		}
+		return nil
+	}); retryErr != nil && err == nil {
+		err = retryErr
+	}
+	return resp, err
+}
+
+// retryForEvasion runs the evasion FSM rotation loop after an initial ban signal.
+// It rotates strategies and retries until the ban clears or escalation is warranted.
+func (c *Adaptive) retryForEvasion(ctx context.Context, url string, doRequest requestFunc, resp *engine.Response, err error) (*engine.Response, error) {
+	if c.evasionFSM == nil || resp == nil {
+		return resp, err
+	}
+	detected := isBanSignal(c.escalation, resp.Status)
+	score := 0.0
+	if detected {
+		score = 1.0
+	}
+	c.evasionFSM.RecordResult(score, detected)
+	if detected {
+		c.evasionFSM.RecordBanSignal(resp.Status)
+		prevStrategy := c.evasionFSM.CurrentStrategy().Name()
+		for fsmRetry := 0; fsmRetry < len(c.evasionFSM.Strategies()) && !c.evasionFSM.ShouldEscalate(); fsmRetry++ {
+			nextStrategy := c.evasionFSM.CurrentStrategy().Name()
+			if fsmRetry > 0 && nextStrategy == prevStrategy {
+				break
+			}
+			prevStrategy = nextStrategy
+			c.logger.Info("evasion FSM retry", "strategy", nextStrategy, "attempt", fsmRetry+1)
+			resp, err = doRequest(ctx, engineRequestWithStrategy(c.evasionFSM.CurrentStrategy(), url, c.options.Timeout))
+			if err != nil {
+				break
+			}
+			retryDetected := isBanSignal(c.escalation, resp.Status)
+			retryScore := 0.0
+			if retryDetected {
+				retryScore = 1.0
+			}
+			c.evasionFSM.RecordResult(retryScore, retryDetected)
+			if retryDetected {
+				c.evasionFSM.RecordBanSignal(resp.Status)
+			} else {
+				break
+			}
+		}
+	}
+	if c.evasionFSM.ShouldEscalate() && c.waterfall != nil {
+		reason := c.evasionFSM.EscalationReason()
+		tierName := escalationTierFor(c.escalation, resp.Status)
+		c.waterfall.PromoteTier(tierName)
+		c.logger.Info("evasion FSM escalation", "reason", reason, "promoting", tierName)
+	}
+	return resp, err
+}
+
+// escalateAndRetry promotes the proxy/engine tier and re-fetches on persistent ban signals.
+func (c *Adaptive) escalateAndRetry(ctx context.Context, url string, doRequest requestFunc, resp *engine.Response, err error) (*engine.Response, error) {
+	if resp == nil || c.escalation == nil || !c.escalation.Enabled || !isBanSignal(c.escalation, resp.Status) {
+		return resp, err
+	}
+	for escAttempt := 0; escAttempt < c.escalation.MaxEscalationRetries; escAttempt++ {
+		if !c.escalate(ctx, resp, url, nil) {
+			break
+		}
+		c.logger.Info("escalation retry", "attempt", escAttempt+1, "status", resp.Status)
+		resp, err = doRequest(ctx, &engine.Request{URL: url, Timeout: c.options.Timeout})
+		if err != nil || !isBanSignal(c.escalation, resp.Status) {
+			break
+		}
+	}
+	return resp, err
 }
 
 // NavigateWithReferrer performs a navigation with an explicit referrer.
