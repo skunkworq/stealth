@@ -171,12 +171,18 @@ func ConfigForDifficulty(d Difficulty) *CaptchaConfig {
 	}
 }
 
+// Solution is a sealed interface for all CAPTCHA solution types.
+// Only TextSolution, MathSolution, ImageSolution, and SliderSolution implement it.
+type Solution interface {
+	isSolution()
+}
+
 // Captcha represents a generated CAPTCHA challenge.
 type Captcha struct {
 	ID        string
 	Type      CaptchaType
 	Image     image.Image
-	Solution  interface{}
+	Solution  Solution
 	Metadata  CaptchaMetadata
 	CreatedAt time.Time
 }
@@ -201,6 +207,8 @@ type TextSolution struct {
 	Tokens []string
 }
 
+func (TextSolution) isSolution() {}
+
 // MathSolution represents a math-based CAPTCHA solution.
 type MathSolution struct {
 	Expression string
@@ -209,12 +217,16 @@ type MathSolution struct {
 	Operator   string
 }
 
+func (MathSolution) isSolution() {}
+
 // ImageSolution represents an image-based CAPTCHA solution.
 type ImageSolution struct {
 	SelectedIndices []int
 	TargetImage     string
 	Distractors     []string
 }
+
+func (ImageSolution) isSolution() {}
 
 // SliderSolution represents a slider-based CAPTCHA solution.
 type SliderSolution struct {
@@ -223,6 +235,8 @@ type SliderSolution struct {
 	Distance   int
 	TrackWidth int
 }
+
+func (SliderSolution) isSolution() {}
 
 // CaptchaGenerator defines the interface for CAPTCHA generators.
 
