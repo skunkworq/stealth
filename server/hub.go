@@ -67,13 +67,12 @@ func (h *Hub) Broadcast(ev Event) {
 }
 
 // BroadcastSession sends an event only to clients subscribed to a session.
-// Falls back to broadcasting to all clients if no subscriptions exist.
+// Events are dropped silently when no subscriptions exist.
 func (h *Hub) BroadcastSession(sessionID string, ev Event) {
 	h.mu.RLock()
 	subs := h.sessionSubs[sessionID]
 	if len(subs) == 0 {
 		h.mu.RUnlock()
-		h.Broadcast(ev)
 		return
 	}
 	clients := make([]*websocket.Conn, 0, len(subs))
