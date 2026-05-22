@@ -321,11 +321,14 @@ Shared primitives imported by all layers. Nothing in `core/` imports from `brows
 |---|---|
 | `core/config` | Config file loading, environment variable binding |
 | `core/constants` | Package-wide constants (timeouts, limits, version strings) |
+| `core/detection` | Bot-detection vector analysis (TLS, HTTP, navigator, behavioral signals) |
+| `core/events` | Shared event types (ban signals, challenge signals) flowing between layers |
 | `core/instrumentation` | **Active logging layer**: structured logger, distributed tracer, hook registry. All 10 packages that log or trace import this. |
 | `core/observability` | Metrics collection interface and adapters |
 | `core/resilience` | Retry with exponential backoff, circuit breaker |
-| `core/signals` | Shared signal types (ban signals, challenge signals) flowing between layers |
 | `core/telemetry` | Telemetry aggregation and export |
+| `core/tlsparser` | TLS record parser (JA3/JA4 fingerprint extraction) |
+| `core/trust` | Proxy and identity trust scoring |
 | `core/types` | Shared type definitions used across multiple packages |
 
 ---

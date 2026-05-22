@@ -30,9 +30,14 @@ func (e *SemanticError) Error() string {
 	return e.Type.Error() + ": " + e.Message
 }
 
-// Unwrap returns the sentinel error type, enabling errors.Is checks against ErrCacheError etc.
-func (e *SemanticError) Unwrap() error {
-	return e.Type
+// Unwrap returns both the sentinel error type and the underlying cause, enabling
+// errors.Is/As to traverse the full chain (e.g. errors.Is(err, ErrCacheError) and
+// errors.Is(err, sql.ErrNoRows) both work on the same wrapped error).
+func (e *SemanticError) Unwrap() []error {
+	if e.cause != nil {
+		return []error{e.Type, e.cause}
+	}
+	return []error{e.Type}
 }
 
 func NewParseError(msg string) error {
