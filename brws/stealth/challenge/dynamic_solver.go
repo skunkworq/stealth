@@ -188,7 +188,7 @@ func (ds *DynamicSolver) solveByInteraction(sig *ChallengeSignature) *DynamicSol
 			Fingerprint:  sig.Fingerprint,
 			Provider:     sig.Provider,
 			Interaction:  sig.Interaction,
-			TraceType:    rec.ChallengeType,
+			TraceType:    string(rec.ChallengeType),
 			TraceVariant: rec.ChallengeVariant,
 			Confidence:   sig.Confidence,
 			SolveCount:   1,

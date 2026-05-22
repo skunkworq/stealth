@@ -24,6 +24,14 @@ const (
 	ChallengeBlocked CloudflareChallengeType = "blocked"
 )
 
+// Solver-level challenge type identifiers used in solve results and the research
+// emulator API. These are more specific than the detector-level types above.
+const (
+	ChallengeTypeCloudflareJS       ChallengeType = "cloudflare_js"
+	ChallengeTypeCloudflareManaged  ChallengeType = "cloudflare_managed"
+	ChallengeTypeCloudflareTurnstile ChallengeType = "cloudflare_turnstile"
+)
+
 // CloudflareChallenge represents a detected Cloudflare challenge.
 type CloudflareChallenge struct {
 	Type       CloudflareChallengeType `json:"type"`

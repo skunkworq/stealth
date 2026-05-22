@@ -157,8 +157,8 @@ func (cc *CloudflareChallenger) HandleChallengePage(w http.ResponseWriter, r *ht
 
 // cfInitRequest is the request body for HandleInit.
 type cfInitRequest struct {
-	SessionID      string  `json:"session_id"`
-	ChallengeType  string  `json:"challenge_type"`
+	SessionID     string        `json:"session_id"`
+	ChallengeType ChallengeType `json:"challenge_type"`
 	DetectionScore float64 `json:"detection_score"`
 	SiteKey        string  `json:"site_key"`
 }

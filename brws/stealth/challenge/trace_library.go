@@ -80,8 +80,8 @@ func (tl *TraceLibrary) Add(rec *TraceRecording) {
 
 func (tl *TraceLibrary) index(rec *TraceRecording) {
 	tl.recordings = append(tl.recordings, rec)
-	tl.byType[rec.ChallengeType] = append(tl.byType[rec.ChallengeType], rec)
-	key := rec.ChallengeType + ":" + rec.ChallengeVariant
+	tl.byType[string(rec.ChallengeType)] = append(tl.byType[string(rec.ChallengeType)], rec)
+	key := string(rec.ChallengeType) + ":" + rec.ChallengeVariant
 	tl.byVariant[key] = append(tl.byVariant[key], rec)
 }
 
@@ -308,8 +308,8 @@ func (tl *TraceLibrary) Summary() TraceLibrarySummary {
 		if r.Solved {
 			s.SolvedCount++
 		}
-		s.ByType[r.ChallengeType]++
-		s.ByVariant[r.ChallengeType+":"+r.ChallengeVariant]++
+		s.ByType[string(r.ChallengeType)]++
+		s.ByVariant[string(r.ChallengeType)+":"+r.ChallengeVariant]++
 		totalDur += r.DurationMs
 		totalEvents += len(r.Events)
 	}

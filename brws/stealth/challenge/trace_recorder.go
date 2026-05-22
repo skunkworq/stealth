@@ -35,7 +35,7 @@ type TraceEnvironment struct {
 type TraceRecording struct {
 	ID               string                 `json:"id"`
 	SessionID        string                 `json:"session_id"`
-	ChallengeType    string                 `json:"challenge_type"`    // recaptcha_v2, recaptcha_v3, turnstile, cloudflare_managed, etc.
+	ChallengeType    ChallengeType          `json:"challenge_type"`    // e.g. ChallengeRecaptchaV2, ChallengeTurnstile, ChallengeTypeCloudflareManaged
 	ChallengeVariant string                 `json:"challenge_variant"` // image_grid, rotate, slide, checkbox, behavioral, etc.
 	SiteURL          string                 `json:"site_url,omitempty"`
 	SiteKey          string                 `json:"site_key,omitempty"`
@@ -117,7 +117,7 @@ func (tr *TraceRecorder) StartSession(operator string, env TraceEnvironment) *Tr
 }
 
 // StartRecording begins recording a single captcha solve within a session.
-func (tr *TraceRecorder) StartRecording(sessionID, challengeType, challengeVariant, siteURL string) (*TraceRecording, error) {
+func (tr *TraceRecorder) StartRecording(sessionID string, challengeType ChallengeType, challengeVariant, siteURL string) (*TraceRecording, error) {
 	tr.mu.Lock()
 	defer tr.mu.Unlock()
 

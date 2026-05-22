@@ -101,7 +101,7 @@ func (tls *TraceLabServer) HandleStartSession(w http.ResponseWriter, r *http.Req
 
 	rec, err := tls.recorder.StartRecording(
 		tls.session.ID,
-		req.ChallengeType,
+		ChallengeType(req.ChallengeType),
 		req.ChallengeVariant,
 		req.SiteURL,
 	)
@@ -170,7 +170,7 @@ func (tls *TraceLabServer) HandleComplete(w http.ResponseWriter, r *http.Request
 	// Add to library and metrics
 	tls.library.Add(rec)
 	tls.metrics.RecordFromValidation(
-		rec.ChallengeType, rec.ChallengeVariant, "human",
+		string(rec.ChallengeType), rec.ChallengeVariant, "human",
 		req.Solved, rec.DurationMs, rec.Metrics.TotalEvents, nil, 1.0,
 	)
 

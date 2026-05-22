@@ -14,7 +14,7 @@ import (
 // CloudflareSolveResult mirrors stealth.CloudflareSolveResult for the interface.
 type CloudflareSolveResult struct {
 	SessionID        string
-	ChallengeType    string
+	ChallengeType    challenge.ChallengeType
 	Passed           bool
 	ClearanceCookie  *http.Cookie
 	TurnstileToken   string

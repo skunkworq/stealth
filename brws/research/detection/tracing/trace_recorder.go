@@ -6,6 +6,7 @@ import "github.com/skunkworq/stealth/brws/stealth/challenge"
 
 type (
 	CaptchaEvent          = challenge.CaptchaEvent
+	ChallengeType         = challenge.ChallengeType
 	TraceSession          = challenge.TraceSession
 	TraceEnvironment      = challenge.TraceEnvironment
 	TraceRecording        = challenge.TraceRecording

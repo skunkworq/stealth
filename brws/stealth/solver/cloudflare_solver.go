@@ -37,7 +37,7 @@ type CloudflareSolverClient struct {
 // CloudflareSolveResult holds the outcome of a Cloudflare challenge solve attempt.
 type CloudflareSolveResult struct {
 	SessionID        string                          `json:"session_id"`
-	ChallengeType    string                          `json:"challenge_type"`
+	ChallengeType    challenge.ChallengeType          `json:"challenge_type"`
 	Passed           bool                            `json:"passed"`
 	ClearanceCookie  *http.Cookie                    `json:"clearance_cookie,omitempty"`
 	TurnstileToken   string                          `json:"turnstile_token,omitempty"`
@@ -123,7 +123,7 @@ func (cs *CloudflareSolverClient) SolveJSChallenge(baseURL string) (*CloudflareS
 	totalStart := time.Now()
 
 	// Step 1: Init
-	initResp, err := cs.initChallenge(baseURL, "cloudflare_js", 0.5, "")
+	initResp, err := cs.initChallenge(baseURL, challenge.ChallengeTypeCloudflareJS, 0.5, "")
 	if err != nil {
 		return nil, fmt.Errorf("init failed: %w", err)
 	}
@@ -153,7 +153,7 @@ func (cs *CloudflareSolverClient) SolveJSChallenge(baseURL string) (*CloudflareS
 
 	result := &CloudflareSolveResult{
 		SessionID:     initResp.SessionID,
-		ChallengeType: "cloudflare_js",
+		ChallengeType: challenge.ChallengeTypeCloudflareJS,
 		Passed:        solveResp.Success,
 		PoWTimeMs:     powSolution.TimeMs,
 		TotalTimeMs:   time.Since(totalStart).Milliseconds(),
@@ -177,7 +177,7 @@ func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*Cloudf
 	totalStart := time.Now()
 
 	// Step 1: Init
-	initResp, err := cs.initChallenge(baseURL, "cloudflare_managed", 0.5, "")
+	initResp, err := cs.initChallenge(baseURL, challenge.ChallengeTypeCloudflareManaged, 0.5, "")
 	if err != nil {
 		return nil, fmt.Errorf("init failed: %w", err)
 	}
@@ -222,7 +222,7 @@ func (cs *CloudflareSolverClient) SolveManagedChallenge(baseURL string) (*Cloudf
 
 	result := &CloudflareSolveResult{
 		SessionID:     initResp.SessionID,
-		ChallengeType: "cloudflare_managed",
+		ChallengeType: challenge.ChallengeTypeCloudflareManaged,
 		Passed:        solveResp.Success,
 		PoWTimeMs:     powSolution.TimeMs,
 		TotalTimeMs:   time.Since(totalStart).Milliseconds(),
@@ -259,7 +259,7 @@ func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *Tu
 	}
 
 	// Step 1: Init
-	initResp, err := cs.initChallenge(baseURL, "cloudflare_turnstile", detectionScore, siteKey)
+	initResp, err := cs.initChallenge(baseURL, challenge.ChallengeTypeCloudflareTurnstile, detectionScore, siteKey)
 	if err != nil {
 		return nil, fmt.Errorf("init failed: %w", err)
 	}
@@ -300,7 +300,7 @@ func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *Tu
 
 	result := &CloudflareSolveResult{
 		SessionID:       initResp.SessionID,
-		ChallengeType:   "cloudflare_turnstile",
+		ChallengeType:   challenge.ChallengeTypeCloudflareTurnstile,
 		Passed:          solveResp.Success,
 		TurnstileToken:  solveResp.TurnstileToken,
 		Turnstile:       solveResp.Turnstile,
@@ -509,11 +509,11 @@ func (cs *CloudflareSolverClient) EventGen() *CaptchaSolver {
 
 // InitChallenge sends a POST to /api/cloudflare/init and returns the session.
 func (cs *CloudflareSolverClient) InitChallenge(baseURL, challengeType string, score float64, siteKey string) (*CFInitResp, error) {
-	return cs.initChallenge(baseURL, challengeType, score, siteKey)
+	return cs.initChallenge(baseURL, challenge.ChallengeType(challengeType), score, siteKey)
 }
 
 // initChallenge sends a POST to /api/cloudflare/init and returns the session.
-func (cs *CloudflareSolverClient) initChallenge(baseURL, challengeType string, score float64, siteKey string) (*CFInitResp, error) {
+func (cs *CloudflareSolverClient) initChallenge(baseURL string, challengeType challenge.ChallengeType, score float64, siteKey string) (*CFInitResp, error) {
 	body, _ := json.Marshal(map[string]interface{}{
 		"challenge_type":  challengeType,
 		"detection_score": score,

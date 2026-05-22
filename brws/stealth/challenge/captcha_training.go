@@ -310,7 +310,7 @@ type CaptchaTrainingData struct {
 type TrainingSample struct {
 	ID            string            `json:"id"`
 	Timestamp     time.Time         `json:"timestamp"`
-	ChallengeType string            `json:"challenge_type"`
+	ChallengeType ChallengeType     `json:"challenge_type"`
 	SessionID     string            `json:"session_id"`
 	IsBot         bool              `json:"is_bot"`
 	BotScore      float64           `json:"bot_score"`
@@ -451,7 +451,7 @@ func (td *CaptchaTrainingData) GetSamplesFiltered(typeFilter, labelFilter string
 
 	var filtered []TrainingSample
 	for _, s := range td.samples {
-		if typeFilter != "" && s.ChallengeType != typeFilter {
+		if typeFilter != "" && string(s.ChallengeType) != typeFilter {
 			continue
 		}
 		if labelFilter != "" && s.Label != labelFilter {
@@ -518,7 +518,7 @@ func (td *CaptchaTrainingData) GetStats() TrainingDataStats {
 			stats.ByLabel[s.Label]++
 		}
 		if s.ChallengeType != "" {
-			stats.ByType[s.ChallengeType]++
+			stats.ByType[string(s.ChallengeType)]++
 		}
 	}
 
@@ -560,7 +560,7 @@ func (td *CaptchaTrainingData) RecordChallengeResult(challenge *CaptchaChallenge
 	sample := TrainingSample{
 		ID:            challenge.ID,
 		Timestamp:     time.Now(),
-		ChallengeType: challenge.Type,
+		ChallengeType: ChallengeType(challenge.Type),
 		SessionID:     challenge.SessionID,
 		IsBot:         isBot,
 		BotScore:      botScore,
