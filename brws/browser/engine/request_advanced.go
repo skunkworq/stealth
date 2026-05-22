@@ -119,3 +119,15 @@ func FlattenHeaders(h map[string][]string) map[string]string {
 	}
 	return result
 }
+
+// FlattenHeadersLower is like FlattenHeaders but lowercases all keys.
+// Use when the consumer expects lowercase canonical header names.
+func FlattenHeadersLower(h map[string][]string) map[string]string {
+	result := make(map[string]string, len(h))
+	for k, v := range h {
+		if len(v) > 0 {
+			result[strings.ToLower(k)] = v[0]
+		}
+	}
+	return result
+}

@@ -89,7 +89,7 @@ func (r *HTMLResponse) queryCSS(selector string) []HTMLElement {
 
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
-		if matchesSelector(n, sel) {
+		if MatchesHTMLSelector(n, sel) {
 			results = append(results, &htmlNode{n})
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -188,7 +188,8 @@ func normalizeCSS(sel string) string {
 	return sel
 }
 
-func matchesSelector(n *html.Node, sel string) bool {
+// MatchesHTMLSelector reports whether the HTML node matches the given simplified CSS selector.
+func MatchesHTMLSelector(n *html.Node, sel string) bool {
 	if n.Type != html.ElementNode {
 		return false
 	}

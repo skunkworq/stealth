@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"golang.org/x/net/html"
-	"golang.org/x/net/html/atom"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
 )
@@ -190,7 +189,7 @@ func (r *Response) queryCSS(selector string) []Element {
 
 	var walk func(n *html.Node)
 	walk = func(n *html.Node) {
-		if matchesSelector(n, sel) {
+		if engine.MatchesHTMLSelector(n, sel) {
 			results = append(results, &htmlElement{node: n})
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
@@ -224,64 +223,6 @@ func normalizeSelector(sel string) string {
 	sel = strings.TrimPrefix(sel, ".")
 	sel = strings.TrimPrefix(sel, "#")
 	return sel
-}
-
-func matchesSelector(n *html.Node, sel string) bool {
-	if n.Type != html.ElementNode {
-		return false
-	}
-	tagName := atom.Lookup([]byte(strings.ToLower(n.Data)))
-	switch sel {
-	case "a", "a[href]":
-		return tagName == atom.A
-	case "img":
-		return tagName == atom.Img
-	case "div":
-		return tagName == atom.Div
-	case "span":
-		return tagName == atom.Span
-	case "p":
-		return tagName == atom.P
-	case "form":
-		return tagName == atom.Form
-	case "input":
-		return tagName == atom.Input
-	case "button":
-		return tagName == atom.Button
-	case "script":
-		return tagName == atom.Script
-	case "style":
-		return tagName == atom.Style
-	case "link":
-		return tagName == atom.Link
-	case "meta":
-		return tagName == atom.Meta
-	case "title":
-		return tagName == atom.Title
-	case "body":
-		return tagName == atom.Body
-	case "head":
-		return tagName == atom.Head
-	case "h1":
-		return tagName == atom.H1
-	case "h2":
-		return tagName == atom.H2
-	case "h3":
-		return tagName == atom.H3
-	case "ul":
-		return tagName == atom.Ul
-	case "ol":
-		return tagName == atom.Ol
-	case "li":
-		return tagName == atom.Li
-	case "table":
-		return tagName == atom.Table
-	case "tr":
-		return tagName == atom.Tr
-	case "td", "th":
-		return tagName == atom.Td || tagName == atom.Th
-	}
-	return strings.EqualFold(n.Data, sel)
 }
 
 type Element = engine.HTMLElement

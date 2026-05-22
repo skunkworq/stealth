@@ -347,13 +347,7 @@ func isWAFResponse(resp *engine.Response) bool {
 	if resp == nil {
 		return false
 	}
-	flatHeaders := make(map[string]string, len(resp.Headers))
-	for k, v := range resp.Headers {
-		if len(v) > 0 {
-			flatHeaders[strings.ToLower(k)] = v[0]
-		}
-	}
-	waf := instrumentation.DetectChallenge(resp.Status, flatHeaders, resp.Body)
+	waf := instrumentation.DetectChallenge(resp.Status, engine.FlattenHeadersLower(resp.Headers), resp.Body)
 	return waf != instrumentation.WAFUnknown
 }
 
