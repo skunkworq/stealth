@@ -76,7 +76,8 @@ func (s *CacheStore) ensureSchema(ctx context.Context) error {
 }
 
 func (s *CacheStore) GetChunk(ctx context.Context, contentHash string) (*SemanticNode, error) {
-	s.mu.RLock()
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	var nodeJSON string
 	var createdAt int64
@@ -85,8 +86,6 @@ func (s *CacheStore) GetChunk(ctx context.Context, contentHash string) (*Semanti
 		"SELECT node_json, created_at FROM chunk_cache WHERE content_hash = ?",
 		contentHash,
 	).Scan(&nodeJSON, &createdAt)
-
-	s.mu.RUnlock()
 
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -100,14 +99,10 @@ func (s *CacheStore) GetChunk(ctx context.Context, contentHash string) (*Semanti
 		return nil, NewCacheError("failed to decode node", err)
 	}
 
-	go func() {
-		s.mu.Lock()
-		s.db.ExecContext(context.Background(),
-			"UPDATE chunk_cache SET accessed_at = ? WHERE content_hash = ?",
-			time.Now().Unix(), contentHash,
-		)
-		s.mu.Unlock()
-	}()
+	s.db.ExecContext(ctx,
+		"UPDATE chunk_cache SET accessed_at = ? WHERE content_hash = ?",
+		time.Now().Unix(), contentHash,
+	)
 
 	return &node, nil
 }
