@@ -93,6 +93,14 @@ type Server struct {
 	ResponseHeaders map[string]string
 }
 
+func registerRoutes(mux *http.ServeMux, s *Server) {
+	mux.HandleFunc("/", s.handleRequest)
+	mux.HandleFunc("/detect", s.handleDetect)
+	mux.HandleFunc("/fingerprint", s.handleFingerprint)
+	mux.HandleFunc("/headers", s.handleHeaders)
+	mux.HandleFunc("/tls", s.handleTLS)
+}
+
 // New creates a new test server
 func New() *Server {
 	return NewWithConfig(nil)
@@ -112,11 +120,7 @@ func NewWithTLS() *Server {
 			ResponseHeaders:       map[string]string{"Content-Type": "application/json"},
 		}
 		mux := http.NewServeMux()
-		mux.HandleFunc("/", s.handleRequest)
-		mux.HandleFunc("/detect", s.handleDetect)
-		mux.HandleFunc("/fingerprint", s.handleFingerprint)
-		mux.HandleFunc("/headers", s.handleHeaders)
-		mux.HandleFunc("/tls", s.handleTLS)
+		registerRoutes(mux, s)
 		tlsServer := httptest.NewTLSServer(mux)
 		s.Server = tlsServer
 		s.URL = tlsServer.URL
@@ -142,11 +146,7 @@ func NewWithTLSConfig(tlsConfig *tls.Config) *Server {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleRequest)
-	mux.HandleFunc("/detect", s.handleDetect)
-	mux.HandleFunc("/fingerprint", s.handleFingerprint)
-	mux.HandleFunc("/headers", s.handleHeaders)
-	mux.HandleFunc("/tls", s.handleTLS)
+	registerRoutes(mux, s)
 
 	// If TLS config provided, start TLS server
 	if tlsConfig != nil && len(tlsConfig.Certificates) > 0 {
@@ -191,11 +191,7 @@ func NewWithConfig(cfg *ServerConfig) *Server {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", server.handleRequest)
-	mux.HandleFunc("/detect", server.handleDetect)
-	mux.HandleFunc("/fingerprint", server.handleFingerprint)
-	mux.HandleFunc("/headers", server.handleHeaders)
-	mux.HandleFunc("/tls", server.handleTLS)
+	registerRoutes(mux, server)
 
 	if cfg.TLS {
 		cert, _ := generateTestCert()
