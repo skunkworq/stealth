@@ -7,6 +7,12 @@ import (
 	"sync"
 )
 
+// MultiHopResult represents a search result with hop distance metadata.
+type MultiHopResult struct {
+	Hop    int          `json:"hop"`
+	Result SearchResult `json:"result"`
+}
+
 type HNSWIndex struct {
 	mu             sync.RWMutex
 	nodes          []*hnswNode
