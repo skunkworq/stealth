@@ -16,6 +16,14 @@ import (
 	"github.com/skunkworq/stealth/brws/core/constants"
 )
 
+// ProxyCredentials holds authentication credentials for a proxy.
+// Treat values as secrets — do not log the output of WithAuth, which embeds
+// these credentials in the URL string.
+type ProxyCredentials struct {
+	Username string
+	Password string
+}
+
 // Proxy represents a single proxy
 type Proxy struct {
 	URL       string
@@ -234,13 +242,14 @@ func GetProxyURL(proxyURL string) func(*http.Request) (*url.URL, error) {
 	}())
 }
 
-// WithAuth adds authentication to a proxy URL
-func WithAuth(proxyURL, username, password string) string {
+// WithAuth adds authentication credentials to a proxy URL.
+// The returned string embeds the credentials — do not log it.
+func WithAuth(proxyURL string, creds ProxyCredentials) string {
 	u, err := url.Parse(proxyURL)
 	if err != nil {
 		return proxyURL
 	}
-	u.User = url.UserPassword(username, password)
+	u.User = url.UserPassword(creds.Username, creds.Password)
 	return u.String()
 }
 
