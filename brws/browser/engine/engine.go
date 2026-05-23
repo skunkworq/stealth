@@ -247,7 +247,7 @@ type Options struct {
 	// Stealth options
 	Stealth          bool        // Enable automatic header spoofing
 	StealthTLS       bool        // Enable TLS fingerprint spoofing
-	StealthConfigRaw interface{} // Pass-through for advanced dynamic RL Spoofer configs
+	StealthConfigRaw StealthConfig // Pass-through for advanced dynamic RL Spoofer configs
 
 	// Browser profile (for Stealth mode)
 	// Examples: "chrome-120-macos", "firefox-120-windows", "safari-16-macos", "edge-120-windows"
