@@ -32,6 +32,14 @@ linters:
   enable:
     - govet
     - ineffassign
+    - errorlint   # enforce %w when wrapping errors in fmt.Errorf
+
+  settings:
+    errorlint:
+      errorf: true
+      errorf-multi: true
+      asserts: false
+      comparison: false
 
 formatters:
   enable:
