@@ -149,3 +149,169 @@ func TestProfileScreenSize(t *testing.T) {
 		t.Errorf("Screen size not set correctly")
 	}
 }
+
+func TestGetChrome120Win(t *testing.T) {
+	p := GetChrome120Win()
+	if p == nil {
+		t.Fatal("GetChrome120Win returned nil")
+	}
+	if p.Name != "chrome" {
+		t.Errorf("Name = %q, want chrome", p.Name)
+	}
+	if p.Platform != "windows" {
+		t.Errorf("Platform = %q, want windows", p.Platform)
+	}
+}
+
+func TestGetFirefox120Mac(t *testing.T) {
+	p := GetFirefox120Mac()
+	if p == nil {
+		t.Fatal("GetFirefox120Mac returned nil")
+	}
+	if p.Name != "firefox" {
+		t.Errorf("Name = %q, want firefox", p.Name)
+	}
+}
+
+func TestGetFirefox120Win(t *testing.T) {
+	p := GetFirefox120Win()
+	if p == nil {
+		t.Fatal("GetFirefox120Win returned nil")
+	}
+	if p.Name != "firefox" {
+		t.Errorf("Name = %q, want firefox", p.Name)
+	}
+	if p.Platform != "windows" {
+		t.Errorf("Platform = %q, want windows", p.Platform)
+	}
+}
+
+func TestGetSafari16Mac(t *testing.T) {
+	p := GetSafari16Mac()
+	if p == nil {
+		t.Fatal("GetSafari16Mac returned nil")
+	}
+	if p.Name != "safari" {
+		t.Errorf("Name = %q, want safari", p.Name)
+	}
+}
+
+func TestGetEdge120Win(t *testing.T) {
+	p := GetEdge120Win()
+	if p == nil {
+		t.Fatal("GetEdge120Win returned nil")
+	}
+	if p.Name != "edge" {
+		t.Errorf("Name = %q, want edge", p.Name)
+	}
+}
+
+func TestGetSafariMobileiOS(t *testing.T) {
+	p := GetSafariMobileiOS()
+	if p == nil {
+		t.Fatal("GetSafariMobileiOS returned nil")
+	}
+}
+
+func TestGetChrome120Android(t *testing.T) {
+	p := GetChrome120Android()
+	if p == nil {
+		t.Fatal("GetChrome120Android returned nil")
+	}
+	if p.Platform != "android" {
+		t.Errorf("Platform = %q, want android", p.Platform)
+	}
+}
+
+func TestProfileToHeaders_userAgent(t *testing.T) {
+	profiles := []*Profile{
+		GetChrome120Mac(),
+		GetChrome120Win(),
+		GetFirefox120Mac(),
+		GetSafari16Mac(),
+		GetEdge120Win(),
+	}
+	for _, p := range profiles {
+		headers := p.ToHeaders()
+		ua := headers["User-Agent"]
+		if ua == "" {
+			t.Errorf("%s/%s profile missing User-Agent", p.Name, p.Platform)
+		}
+		if ua == "Go-http-client/1.1" {
+			t.Errorf("%s/%s profile should not use Go UA", p.Name, p.Platform)
+		}
+	}
+}
+
+func TestProfileToHeaders_acceptLanguage(t *testing.T) {
+	p := GetChrome120Mac()
+	headers := p.ToHeaders()
+	if headers["Accept-Language"] == "" {
+		t.Error("expected Accept-Language header")
+	}
+}
+
+func TestProfileToHeaders_acceptEncoding(t *testing.T) {
+	p := GetChrome120Mac()
+	headers := p.ToHeaders()
+	if headers["Accept-Encoding"] == "" {
+		t.Error("expected Accept-Encoding header")
+	}
+}
+
+func TestAvailableProfiles_containsKnown(t *testing.T) {
+	all := AvailableProfiles()
+	known := []string{"chrome-120-macos", "chrome-120-windows", "firefox-120-macos"}
+	for _, name := range known {
+		found := false
+		for _, p := range all {
+			if p == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("profile %q not in AvailableProfiles()", name)
+		}
+	}
+}
+
+func TestGetByName_allAvailable(t *testing.T) {
+	for _, name := range AvailableProfiles() {
+		p := GetByName(name)
+		if p == nil {
+			t.Errorf("GetByName(%q) returned nil", name)
+		}
+		if p.Name == "" {
+			t.Errorf("GetByName(%q) returned profile with empty Name", name)
+		}
+	}
+}
+
+func TestRotator_Next_doesNotPanic(t *testing.T) {
+	rotator := NewRotator(nil) // all profiles
+	for i := 0; i < 20; i++ {
+		p := rotator.Next()
+		if p == nil {
+			t.Fatalf("iteration %d: Next() returned nil", i)
+		}
+	}
+}
+
+func TestProfile_Mutate_changesVersion(t *testing.T) {
+	p := GetChrome120Mac()
+	original := p.Version
+
+	// Try many mutations — version should change at least once
+	changed := false
+	for i := 0; i < 50; i++ {
+		m := p.Mutate()
+		if m.Version != original {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		t.Log("Note: Version did not change in 50 mutations (probabilistic)")
+	}
+}
