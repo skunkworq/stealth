@@ -24,6 +24,20 @@ type (
 	ImageWithContext = understand.ImageWithContext
 )
 
+// NewSemanticExtractor creates a SemanticExtractor with the given pipeline config.
+// This is a convenience wrapper over understand.NewSemanticExtractor for callers
+// that already hold an *Adaptive and prefer a single import.
+func (c *Adaptive) NewSemanticExtractor(config *understand.PipelineConfig) *understand.SemanticExtractor {
+	return understand.NewSemanticExtractor(config)
+}
+
+// AttachSemanticTree attaches a pre-built semantic tree to the response.
+// When non-nil, extraction methods (Title, Meta, Links, etc.) delegate to
+// the tree instead of re-parsing the raw HTML body.
+func (r *Response) AttachSemanticTree(tree *understand.SemanticTree) {
+	r.semanticTree = tree
+}
+
 // --- Compiled regexes (package-level, compiled once) ---
 
 // Title & metadata
@@ -227,6 +241,9 @@ func extractPrimaryFont(value string) string {
 
 // Title returns the page title, falling back to og:title.
 func (r *Response) Title() string {
+	if r.semanticTree != nil && r.semanticTree.Meta != nil {
+		return r.semanticTree.Meta.Title
+	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
 		return ""
@@ -261,6 +278,9 @@ func (r *Response) Title() string {
 
 // Meta returns structured page metadata including OG and Twitter Card tags.
 func (r *Response) Meta() PageMeta {
+	if r.semanticTree != nil && r.semanticTree.Meta != nil {
+		return *r.semanticTree.Meta
+	}
 	r.ensureParsed()
 	meta := PageMeta{
 		OG:          make(map[string]string),
@@ -374,6 +394,9 @@ func (r *Response) Meta() PageMeta {
 
 // Links extracts anchor links, resolves relative URLs, and categorizes internal/external.
 func (r *Response) Links() []Link {
+	if r.semanticTree != nil {
+		return r.semanticTree.Links
+	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
 		return nil
@@ -501,6 +524,9 @@ func (r *Response) Images() []string {
 
 // SocialLinks extracts social media profile URLs from anchor hrefs.
 func (r *Response) SocialLinks() SocialLinks {
+	if r.semanticTree != nil && r.semanticTree.Social != nil {
+		return *r.semanticTree.Social
+	}
 	r.ensureParsed()
 	var social SocialLinks
 	if r.bodyStr == "" {
@@ -553,6 +579,9 @@ func (r *Response) SocialLinks() SocialLinks {
 
 // Colors extracts colors from theme-color meta, CSS hex, and rgb/rgba values.
 func (r *Response) Colors() []ColorInfo {
+	if r.semanticTree != nil {
+		return r.semanticTree.Colors
+	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
 		return nil
@@ -593,6 +622,9 @@ func (r *Response) Colors() []ColorInfo {
 
 // Fonts extracts font information from Google Fonts URLs and CSS font-family declarations.
 func (r *Response) Fonts() []FontInfo {
+	if r.semanticTree != nil {
+		return r.semanticTree.Fonts
+	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
 		return nil

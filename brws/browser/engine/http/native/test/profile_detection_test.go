@@ -11,10 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
-
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 func TestTLSSpoofingWithRealTLS(t *testing.T) {
@@ -53,7 +52,7 @@ func TestTLSSpoofingWithRealTLS(t *testing.T) {
 		fmt.Printf("Negotiated Proto: %s\n", tlsInfo.NegotiatedProto)
 
 		// Test detection
-		ad := challenge.NewAdvancedDetection()
+		ad := detection.NewAdvancedDetection()
 
 		var version uint16
 		_, _ = fmt.Sscanf(tlsInfo.Version, "%x", &version)
@@ -181,7 +180,7 @@ func TestProfilesAgainstDetection(t *testing.T) {
 				mockReq.Header.Set(k, v)
 			}
 
-			detector := challenge.NewAdvancedDetection()
+			detector := detection.NewAdvancedDetection()
 			checks := detector.AnalyzeHeaders(mockReq)
 
 			var totalScore float64

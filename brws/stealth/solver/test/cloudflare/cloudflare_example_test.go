@@ -9,6 +9,7 @@ import (
 
 	stealth "github.com/skunkworq/stealth/brws/stealth"
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 // TestCloudflareOnExampleCom fetches example.com, runs CF detection on the
@@ -47,7 +48,7 @@ func TestCloudflareOnExampleCom(t *testing.T) {
 		// ── Phase 2: Run CloudflareDetector analysis on example.com request ──
 		t.Log("\n=== Phase 2: CloudflareDetector signal analysis ===")
 
-		cfDetector := challenge.NewCloudflareDetector()
+		cfDetector := detection.NewCloudflareDetector()
 
 		probeReq, _ := http.NewRequest(http.MethodGet, "https://example.com", nil)
 		probeReq.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9")

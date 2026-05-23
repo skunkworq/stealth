@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
+	"github.com/skunkworq/stealth/brws/core/detection"
 
 )
 
@@ -39,7 +39,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 				mockReq.Header.Set(k, v)
 			}
 
-			detector := challenge.NewAdvancedDetection()
+			detector := detection.NewAdvancedDetection()
 			checks := detector.AnalyzeHeaders(mockReq)
 
 			fmt.Printf("\n=== Standard Go Client Detection ===\n")
@@ -88,7 +88,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 				mockReq.Header.Set(k, v)
 			}
 
-			detector := challenge.NewAdvancedDetection()
+			detector := detection.NewAdvancedDetection()
 			checks := detector.AnalyzeHeaders(mockReq)
 
 			fmt.Printf("\n=== Native Stealth Chrome Detection ===\n")
@@ -145,7 +145,7 @@ func TestAdvancedSpoofingDetection(t *testing.T) {
 				mockReq.Header.Set(k, v)
 			}
 
-			detector := challenge.NewAdvancedDetection()
+			detector := detection.NewAdvancedDetection()
 			checks := detector.AnalyzeHeaders(mockReq)
 
 			fmt.Printf("\n=== Native Stealth Firefox Detection ===\n")
@@ -214,7 +214,7 @@ func TestStealthDetection(t *testing.T) {
 	fmt.Printf("Headers: %v\n", lastReq.Headers)
 
 	// Now analyze with adversarial detector
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	// Create a mock http.Request to analyze
 	mockReq, _ := http.NewRequest("GET", server.URL, nil)
@@ -223,14 +223,14 @@ func TestStealthDetection(t *testing.T) {
 		mockReq.Header.Set(k, v)
 	}
 
-	detection := detector.AnalyzeRequest(mockReq, nil)
+	detectionResult := detector.AnalyzeRequest(mockReq, nil)
 
 	fmt.Printf("\n=== Detection Results ===\n")
-	fmt.Printf("Is Bot: %v\n", detection.IsBot)
-	fmt.Printf("Score: %.2f\n", detection.Score)
-	fmt.Printf("Confidence: %.2f\n", detection.Confidence)
+	fmt.Printf("Is Bot: %v\n", detectionResult.IsBot)
+	fmt.Printf("Score: %.2f\n", detectionResult.Score)
+	fmt.Printf("Confidence: %.2f\n", detectionResult.Confidence)
 
-	for _, vec := range detection.Vectors {
+	for _, vec := range detectionResult.Vectors {
 		fmt.Printf("\nVector: %s\n", vec.Name)
 		fmt.Printf("  Detected: %v\n", vec.Detected)
 		fmt.Printf("  Score: %.2f\n", vec.Score)
@@ -270,12 +270,12 @@ func TestStealthTLSDetection(t *testing.T) {
 	fmt.Printf("TLS request error (expected with self-signed cert): %v\n", err)
 
 	// Get detection info
-	detector := challenge.NewStealthDetector()
-	detection := detector.AnalyzeRequest(nil, nil)
+	detector := detection.NewStealthDetector()
+	detectionResult := detector.AnalyzeRequest(nil, nil)
 
 	fmt.Printf("\n=== TLS Detection ===\n")
-	fmt.Printf("Is Bot: %v\n", detection.IsBot)
-	fmt.Printf("Score: %.2f\n", detection.Score)
+	fmt.Printf("Is Bot: %v\n", detectionResult.IsBot)
+	fmt.Printf("Score: %.2f\n", detectionResult.Score)
 }
 
 func TestProfileFingerprintDetection(t *testing.T) {
@@ -328,16 +328,16 @@ func TestProfileFingerprintDetection(t *testing.T) {
 			fmt.Printf("Sec-Ch-Ua-Platform: %s\n", lastReq.Headers["Sec-Ch-Ua-Platform"])
 
 			// Analyze with detector
-			detector := challenge.NewStealthDetector()
+			detector := detection.NewStealthDetector()
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
 			_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
 
-			detection := detector.AnalyzeRequest(mockReq, nil)
-			fmt.Printf("Detection Score: %.2f\n", detection.Score)
-			fmt.Printf("Is Bot: %v\n", detection.IsBot)
+			detectionResult := detector.AnalyzeRequest(mockReq, nil)
+			fmt.Printf("Detection Score: %.2f\n", detectionResult.Score)
+			fmt.Printf("Is Bot: %v\n", detectionResult.IsBot)
 
 			server.ClearRequests()
 		})
@@ -407,15 +407,15 @@ func TestNativeVsRealBrowserDetection(t *testing.T) {
 			fmt.Printf("  Sec-Ch-Ua-Platform: %s\n", lastReq.Headers["Sec-Ch-Ua-Platform"])
 
 			// Analyze
-			detector := challenge.NewStealthDetector()
+			detector := detection.NewStealthDetector()
 			mockReq, _ := http.NewRequest("GET", server.URL, nil)
 			_ = mockReq
 			for k, v := range lastReq.Headers {
 				mockReq.Header.Set(k, v)
 			}
-			detection := detector.AnalyzeRequest(mockReq, nil)
-			fmt.Printf("  Detection Score: %.2f\n", detection.Score)
-			fmt.Printf("  Is Bot: %v\n", detection.IsBot)
+			detectionResult := detector.AnalyzeRequest(mockReq, nil)
+			fmt.Printf("  Detection Score: %.2f\n", detectionResult.Score)
+			fmt.Printf("  Is Bot: %v\n", detectionResult.IsBot)
 		}
 		server.ClearRequests()
 	})

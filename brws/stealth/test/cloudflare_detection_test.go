@@ -13,6 +13,7 @@ import (
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native" // register native engine
 	"github.com/skunkworq/stealth/brws/browser/engine/profile"
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 // cfTarget is a site to test against.
@@ -147,7 +148,7 @@ func TestCloudflareDetection_SelfAnalysis(t *testing.T) {
 	t.Log("=== Self-Analysis: CloudflareDetector scoring our own profiles ===")
 	t.Log("")
 
-	cfDetector := challenge.NewCloudflareDetector()
+	cfDetector := detection.NewCloudflareDetector()
 
 	for _, profileName := range profiles.AvailableProfiles() {
 		profile := profiles.GetByName(profileName)

@@ -19,6 +19,7 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/captcha"
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/core/constants"
+	"github.com/skunkworq/stealth/brws/core/detection"
 	cflab "github.com/skunkworq/stealth/brws/research/evasion/cloudflare"
 )
 
@@ -318,7 +319,7 @@ func TestSwordTimezonePresent(t *testing.T) {
 // After shield upgrade (checks 20-24), the sword should be detected >= 70% of
 // the time across multiple trials (stochastic behavioral generation).
 func TestSwordEvadesFully(t *testing.T) {
-	detector := challenge.NewStealthDetector()
+	detector := detection.NewStealthDetector()
 
 	const trials = 20
 	detections := 0

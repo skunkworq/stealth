@@ -11,10 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/browser/engine/testutil/testserver"
-
+	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 func TestRealTLSSpoofingDetection(t *testing.T) {
@@ -49,7 +48,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 		fmt.Printf("JA4: %s\n", tlsInfo.JA4)
 
 		// Now analyze with advanced detection
-		ad := challenge.NewAdvancedDetection()
+		ad := detection.NewAdvancedDetection()
 
 		// Create mock TLS connection state
 		var version uint16
@@ -154,7 +153,7 @@ func TestRealTLSSpoofingDetection(t *testing.T) {
 		fmt.Printf("JA4: %s\n", tlsInfo.JA4)
 
 		// Analyze with detection
-		ad := challenge.NewAdvancedDetection()
+		ad := detection.NewAdvancedDetection()
 
 		var version uint16
 		_, _ = fmt.Sscanf(tlsInfo.Version, "%x", &version)
@@ -222,7 +221,7 @@ func TestCombinedSpoofingDetection(t *testing.T) {
 	fmt.Printf("Server Name: %s\n", lastReq.TLS.ServerName)
 
 	// Now run the combined HTTP + TLS analysis
-	ad := challenge.NewAdvancedDetection()
+	ad := detection.NewAdvancedDetection()
 
 	var version uint16
 	_, _ = fmt.Sscanf(lastReq.TLS.Version, "%x", &version)

@@ -6,6 +6,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
+	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
 // Response represents the result of a navigation.
@@ -17,6 +18,10 @@ type Response struct {
 	// ChallengeSolved is true if an anti-bot challenge was detected and
 	// successfully solved during this request.
 	ChallengeSolved bool
+
+	// semanticTree, when non-nil, is used by extraction methods instead of
+	// re-parsing the raw HTML body.
+	semanticTree *understand.SemanticTree
 
 	// Lazy-parsing fields for extraction methods.
 	parseOnce sync.Once
