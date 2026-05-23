@@ -3,6 +3,8 @@ package detection
 import (
 	"crypto/tls"
 	"fmt"
+
+	"github.com/skunkworq/stealth/brws/core/constants"
 )
 
 func (sd *StealthDetector) analyzeTLSFingerprint(tlsConn *tls.ConnectionState) *TLSFingerprintInfo {
@@ -32,4 +34,21 @@ func (sd *StealthDetector) analyzeTLSFingerprint(tlsConn *tls.ConnectionState) *
 	// We will perform the cross-check in AnalyzeRequest.
 
 	return info
+}
+
+func (sd *StealthDetector) tlsInfoToVector(info *TLSFingerprintInfo) DetectionVector {
+	vec := DetectionVector{
+		Name:        "TLS Fingerprint",
+		Category:    "tls",
+		Weight:      constants.WeightTLS,
+		Description: "Analyzes TLS handshake for browser identification",
+		Indicators:  info.Anomalies,
+	}
+
+	if len(info.Anomalies) > 0 {
+		vec.Score = 0.3
+		vec.Detected = true
+	}
+
+	return vec
 }
