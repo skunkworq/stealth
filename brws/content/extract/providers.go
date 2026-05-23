@@ -26,6 +26,11 @@ var providerRegistry = struct {
 	byName: map[string]ProviderFactory{},
 }
 
+// init registers the built-in providers (Gemini, OpenAI, Ollama) into the
+// global registry. Global registration is used here for the same reason Go's
+// database/sql uses it: callers import the package for a side-effect, and
+// the registry selects the correct provider automatically based on model ID
+// patterns. Callers can add custom providers via RegisterProvider.
 func init() {
 	registerBuiltins()
 }
