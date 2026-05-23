@@ -186,7 +186,7 @@ func (e *Executor) execClick(ctx context.Context, action Action) error {
 		return chromedp.Run(ctx, chromedp.Click(s, chromedp.NodeVisible))
 	}
 	// Fallback: click by coordinates if selector is missing
-	if x, y := e.getCoords(action); x > 0 || y > 0 {
+	if x, y := e.coordsFromAction(action); x > 0 || y > 0 {
 		return chromedp.Run(ctx, chromedp.MouseClickXY(x, y))
 	}
 	return fmt.Errorf("click action missing selector or coordinates")
@@ -210,10 +210,10 @@ func (e *Executor) execClickSimulated(ctx context.Context, action Action) error 
 		var pos map[string]interface{}
 		_ = chromedp.Run(ctx, chromedp.Evaluate(script, &pos))
 		if pos != nil {
-			cx, cy = getFloat(pos, "x"), getFloat(pos, "y")
+			cx, cy = cdpFloat(pos, "x"), cdpFloat(pos, "y")
 		}
 	} else {
-		cx, cy = e.getCoords(action)
+		cx, cy = e.coordsFromAction(action)
 	}
 
 	// Dispatch JS mousemove events along a Bézier curve to the element centre.
@@ -511,7 +511,7 @@ func (e *Executor) execHover(ctx context.Context, action Action) error {
 		if pos == nil {
 			return fmt.Errorf("hover: element not found for selector %s", s)
 		}
-		x, y := getFloat(pos, "x"), getFloat(pos, "y")
+		x, y := cdpFloat(pos, "x"), cdpFloat(pos, "y")
 		return chromedp.Run(ctx, chromedp.MouseEvent(input.MouseMoved, x, y))
 	}
 	return fmt.Errorf("hover action missing selector")
@@ -911,7 +911,7 @@ func (e *Executor) currentURL(ctx context.Context) (string, error) {
 	return url, err
 }
 
-func (e *Executor) getCoords(action Action) (float64, float64) {
+func (e *Executor) coordsFromAction(action Action) (float64, float64) {
 	x, _ := action.Parameters["x"].(float64)
 	y, _ := action.Parameters["y"].(float64)
 	return x, y

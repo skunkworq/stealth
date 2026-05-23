@@ -262,22 +262,22 @@ func (o *Observer) queryInteractiveElements(ctx context.Context) ([]VisibleEleme
 		elem := VisibleElement{
 			ID:       fmt.Sprintf("E%d", i+1),
 			Selector: buildSelector(r),
-			Tag:      getString(r, "tag"),
-			Text:     truncate(getString(r, "text"), o.MaxTextLen),
+			Tag:      cdpString(r,"tag"),
+			Text:     truncate(cdpString(r,"text"), o.MaxTextLen),
 			Bounds: BoundingBox{
-				X:      getFloat(r, "x"),
-				Y:      getFloat(r, "y"),
-				Width:  getFloat(r, "width"),
-				Height: getFloat(r, "height"),
+				X:      cdpFloat(r, "x"),
+				Y:      cdpFloat(r, "y"),
+				Width:  cdpFloat(r, "width"),
+				Height: cdpFloat(r, "height"),
 			},
-			IsVisible:     getBool(r, "isVisible"),
+			IsVisible:     cdpBool(r, "isVisible"),
 			IsInteractive: true,
 			Attrs: map[string]string{
-				"href":        getString(r, "href"),
-				"type":        getString(r, "type"),
-				"name":        getString(r, "name"),
-				"placeholder": getString(r, "placeholder"),
-				"role":        getString(r, "role"),
+				"href":        cdpString(r,"href"),
+				"type":        cdpString(r,"type"),
+				"name":        cdpString(r,"name"),
+				"placeholder": cdpString(r,"placeholder"),
+				"role":        cdpString(r,"role"),
 			},
 		}
 		elem.ActionTypes = inferActionTypes(elem)
@@ -302,13 +302,13 @@ func (o *Observer) queryLinks(ctx context.Context) ([]Link, error) {
 	links := make([]Link, 0, len(raw))
 	seen := make(map[string]bool)
 	for _, r := range raw {
-		href := getString(r, "href")
+		href := cdpString(r,"href")
 		if href == "" || seen[href] || strings.HasPrefix(href, "javascript:") {
 			continue
 		}
 		seen[href] = true
 		links = append(links, Link{
-			Text: truncate(getString(r, "text"), 80),
+			Text: truncate(cdpString(r,"text"), 80),
 			Href: href,
 		})
 	}
@@ -321,8 +321,8 @@ func (o *Observer) queryLinks(ctx context.Context) ([]Link, error) {
 
 func parseScrollState(m map[string]interface{}, viewportHeight float64) ScrollState {
 	s := ScrollState{
-		Y:    getFloat(m, "y"),
-		MaxY: getFloat(m, "docHeight") - viewportHeight,
+		Y:    cdpFloat(m, "y"),
+		MaxY: cdpFloat(m, "docHeight") - viewportHeight,
 	}
 	if s.MaxY < 0 {
 		s.MaxY = 0
@@ -331,9 +331,9 @@ func parseScrollState(m map[string]interface{}, viewportHeight float64) ScrollSt
 }
 
 func buildSelector(r map[string]interface{}) string {
-	tag := getString(r, "tag")
-	id := getString(r, "id")
-	cls := getString(r, "class")
+	tag := cdpString(r,"tag")
+	id := cdpString(r,"id")
+	cls := cdpString(r,"class")
 	if id != "" {
 		return fmt.Sprintf("%s#%s", tag, id)
 	}
@@ -343,7 +343,7 @@ func buildSelector(r map[string]interface{}) string {
 			return fmt.Sprintf("%s.%s", tag, strings.Join(parts, "."))
 		}
 	}
-	idx := int(getFloat(r, "index"))
+	idx := int(cdpFloat(r, "index"))
 	return fmt.Sprintf("%s:nth-of-type(%d)", tag, idx+1)
 }
 
@@ -371,7 +371,7 @@ func inferActionTypes(elem VisibleElement) []ActionType {
 	return types
 }
 
-func getString(m map[string]interface{}, key string) string {
+func cdpString(m map[string]interface{}, key string) string {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case string:
@@ -385,7 +385,7 @@ func getString(m map[string]interface{}, key string) string {
 	return ""
 }
 
-func getFloat(m map[string]interface{}, key string) float64 {
+func cdpFloat(m map[string]interface{}, key string) float64 {
 	if v, ok := m[key]; ok {
 		switch val := v.(type) {
 		case float64:
@@ -402,7 +402,7 @@ func getFloat(m map[string]interface{}, key string) float64 {
 	return 0
 }
 
-func getBool(m map[string]interface{}, key string) bool {
+func cdpBool(m map[string]interface{}, key string) bool {
 	if v, ok := m[key]; ok {
 		if b, ok := v.(bool); ok {
 			return b
