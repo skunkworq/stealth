@@ -453,11 +453,6 @@ func (sd *StealthDetector) analyzeFontData(req *http.Request) *DetectionVector {
 	analyzer := NewFontAnalyzer()
 	result := analyzer.Analyze(&data)
 
-	indicators := make([]string, 0, len(result.Indicators))
-	for _, ind := range result.Indicators {
-		indicators = append(indicators, ind.Check)
-	}
-
 	return &DetectionVector{
 		Name:        "Font Analysis",
 		Category:    string(VectorFont),
@@ -465,7 +460,7 @@ func (sd *StealthDetector) analyzeFontData(req *http.Request) *DetectionVector {
 		Weight:      constants.WeightFont,
 		Detected:    result.Detected,
 		Description: "Font enumeration and platform consistency analysis",
-		Indicators:  indicators,
+		Indicators:  indicatorChecks(result.Indicators),
 	}
 }
 
@@ -484,11 +479,6 @@ func (sd *StealthDetector) analyzeScreenData(req *http.Request) *DetectionVector
 	analyzer := NewScreenAnalyzer()
 	result := analyzer.Analyze(&data)
 
-	indicators := make([]string, 0, len(result.Indicators))
-	for _, ind := range result.Indicators {
-		indicators = append(indicators, ind.Check)
-	}
-
 	return &DetectionVector{
 		Name:        "Screen Analysis",
 		Category:    string(VectorScreen),
@@ -496,7 +486,7 @@ func (sd *StealthDetector) analyzeScreenData(req *http.Request) *DetectionVector
 		Weight:      constants.WeightScreen,
 		Detected:    result.Detected,
 		Description: "Screen geometry and display configuration analysis",
-		Indicators:  indicators,
+		Indicators:  indicatorChecks(result.Indicators),
 	}
 }
 
@@ -547,11 +537,6 @@ func (sd *StealthDetector) analyzePluginData(req *http.Request) *DetectionVector
 	analyzer := NewPluginAnalyzer()
 	result := analyzer.Analyze(&data)
 
-	indicators := make([]string, 0, len(result.Indicators))
-	for _, ind := range result.Indicators {
-		indicators = append(indicators, ind.Check)
-	}
-
 	return &DetectionVector{
 		Name:        "Plugin Analysis",
 		Category:    string(VectorPlugin),
@@ -559,7 +544,7 @@ func (sd *StealthDetector) analyzePluginData(req *http.Request) *DetectionVector
 		Weight:      constants.WeightPlugin,
 		Detected:    result.Detected,
 		Description: "Browser plugin enumeration and consistency analysis",
-		Indicators:  indicators,
+		Indicators:  indicatorChecks(result.Indicators),
 	}
 }
 
@@ -572,15 +557,8 @@ func (sd *StealthDetector) analyzeAudioData(req *http.Request) *DetectionVector 
 		// Only penalize if other JS-sourced fingerprint headers are present,
 		// proving the client has a JS context but omitted audio data.
 		if hasJSFingerprintHeaders(req) {
-			return &DetectionVector{
-				Name:        "Audio Analysis",
-				Category:    string(VectorAudio),
-				Score:       0.45,
-				Weight:      constants.WeightAudio,
-				Detected:    true,
-				Description: "AudioContext fingerprint missing (client has JS context but no AudioContext)",
-				Indicators:  []string{"missing_audio_data"},
-			}
+			return missingHeaderVector("Audio Analysis", string(VectorAudio), "missing_audio_data",
+				0.45, constants.WeightAudio, "AudioContext fingerprint missing (client has JS context but no AudioContext)")
 		}
 		return nil
 	}
@@ -593,11 +571,6 @@ func (sd *StealthDetector) analyzeAudioData(req *http.Request) *DetectionVector 
 	analyzer := newAudioAnalyzer()
 	result := analyzer.Analyze(&data)
 
-	indicators := make([]string, 0, len(result.Indicators))
-	for _, ind := range result.Indicators {
-		indicators = append(indicators, ind.Check)
-	}
-
 	return &DetectionVector{
 		Name:        "Audio Analysis",
 		Category:    string(VectorAudio),
@@ -605,7 +578,7 @@ func (sd *StealthDetector) analyzeAudioData(req *http.Request) *DetectionVector 
 		Weight:      constants.WeightAudio,
 		Detected:    result.Detected,
 		Description: "AudioContext fingerprint analysis",
-		Indicators:  indicators,
+		Indicators:  indicatorChecks(result.Indicators),
 	}
 }
 
@@ -622,15 +595,8 @@ func (sd *StealthDetector) analyzeTimingData(req *http.Request) *DetectionVector
 	timingHeader := req.Header.Get(constants.HeaderTimingData)
 	if timingHeader == "" {
 		if hasJSFingerprintHeaders(req) {
-			return &DetectionVector{
-				Name:        "Timing Anomalies",
-				Category:    string(VectorTiming),
-				Score:       0.40,
-				Weight:      constants.WeightTiming,
-				Detected:    true,
-				Description: "Resource timing data missing (client has JS context but no Performance API entries)",
-				Indicators:  []string{"missing_timing_data"},
-			}
+			return missingHeaderVector("Timing Anomalies", string(VectorTiming), "missing_timing_data",
+				0.40, constants.WeightTiming, "Resource timing data missing (client has JS context but no Performance API entries)")
 		}
 		return nil
 	}
@@ -643,35 +609,23 @@ func (sd *StealthDetector) analyzeTimingData(req *http.Request) *DetectionVector
 	seq := NewRequestTimingSequenceFromMap(timingData)
 	result := sd.timingAnalyzer.Analyze(seq)
 
-	vec := &DetectionVector{
+	return &DetectionVector{
 		Name:        "Timing Anomalies",
 		Category:    "timing",
 		Weight:      constants.WeightTiming,
 		Description: "Analyzes timing patterns for automation detection",
 		Score:       result.Score,
 		Detected:    result.Detected,
+		Indicators:  indicatorChecks(result.Indicators),
 	}
-
-	for _, ind := range result.Indicators {
-		vec.Indicators = append(vec.Indicators, ind.Check)
-	}
-
-	return vec
 }
 
 func (sd *StealthDetector) analyzeBehavioralData(req *http.Request) *DetectionVector {
 	behavHeader := req.Header.Get(constants.HeaderBehavioralData)
 	if behavHeader == "" {
 		if hasJSFingerprintHeaders(req) {
-			return &DetectionVector{
-				Name:        "Behavioral Patterns",
-				Category:    string(VectorBehavioral),
-				Score:       0.50,
-				Weight:      constants.WeightBehavioral,
-				Detected:    true,
-				Description: "Behavioral data missing (client has JS context but no mouse/keyboard events)",
-				Indicators:  []string{"missing_behavioral_data"},
-			}
+			return missingHeaderVector("Behavioral Patterns", string(VectorBehavioral), "missing_behavioral_data",
+				0.50, constants.WeightBehavioral, "Behavioral data missing (client has JS context but no mouse/keyboard events)")
 		}
 		return nil
 	}
@@ -691,10 +645,7 @@ func (sd *StealthDetector) analyzeBehavioralData(req *http.Request) *DetectionVe
 		Description: "Analyzes user interaction patterns for automation",
 		Score:       result.Score,
 		Detected:    result.Detected,
-	}
-
-	for _, ind := range result.Indicators {
-		vec.Indicators = append(vec.Indicators, ind.Check)
+		Indicators:  indicatorChecks(result.Indicators),
 	}
 
 	return vec
@@ -1537,6 +1488,32 @@ func hasJSFingerprintHeaders(req *http.Request) bool {
 		}
 	}
 	return false
+}
+
+// indicatorChecks extracts the Check string from each VectorIndicator.
+// Used by all analyzer methods that delegate to a typed analyzer and need to
+// map result.Indicators → []string for DetectionVector.Indicators.
+func indicatorChecks(inds []VectorIndicator) []string {
+	out := make([]string, 0, len(inds))
+	for _, ind := range inds {
+		out = append(out, ind.Check)
+	}
+	return out
+}
+
+// missingHeaderVector returns a DetectionVector for a JS-context header that
+// is absent when other JS-sourced headers are present, proving the client
+// has a JS execution context but deliberately omitted this data.
+func missingHeaderVector(name, category, indicatorKey string, score, weight float64, description string) *DetectionVector {
+	return &DetectionVector{
+		Name:        name,
+		Category:    category,
+		Score:       score,
+		Weight:      weight,
+		Detected:    true,
+		Description: description,
+		Indicators:  []string{indicatorKey},
+	}
 }
 
 func getClientIP(req *http.Request) string {
