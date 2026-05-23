@@ -14,7 +14,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/skunkworq/stealth/brws/content/scrapegraph"
+	pipeline "github.com/skunkworq/stealth/brws/content/scrapegraph"
 	"github.com/skunkworq/stealth/brws/content/understand"
 	_ "github.com/skunkworq/stealth/brws/browser/engine/http/native"
 )
