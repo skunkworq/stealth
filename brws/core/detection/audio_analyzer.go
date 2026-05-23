@@ -5,8 +5,8 @@ import (
 	"math"
 )
 
-// AudioData holds AudioContext fingerprinting data for analysis.
-type AudioData struct {
+// audioData holds AudioContext fingerprinting data for analysis.
+type audioData struct {
 	SampleRate            int     `json:"sample_rate"`
 	ChannelCount          int     `json:"channel_count"`
 	MaxChannelCount       int     `json:"max_channel_count"`
@@ -19,16 +19,16 @@ type AudioData struct {
 	CompressorRelease     float64 `json:"compressor_release"`
 }
 
-// AudioAnalyzer validates AudioContext parameters for consistency and spoofing detection.
-type AudioAnalyzer struct{}
+// audioAnalyzer validates AudioContext parameters for consistency and spoofing detection.
+type audioAnalyzer struct{}
 
-// NewAudioAnalyzer creates a new AudioAnalyzer.
-func NewAudioAnalyzer() *AudioAnalyzer {
-	return &AudioAnalyzer{}
+// newAudioAnalyzer creates a new audioAnalyzer.
+func newAudioAnalyzer() *audioAnalyzer {
+	return &audioAnalyzer{}
 }
 
 // Analyze runs the full AudioContext analysis suite.
-func (aa *AudioAnalyzer) Analyze(data *AudioData) *VectorResult {
+func (aa *audioAnalyzer) Analyze(data *audioData) *VectorResult {
 	result := &VectorResult{
 		Vector:     "Audio Analysis",
 		Category:   VectorAudio,

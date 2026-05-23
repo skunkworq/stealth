@@ -27,11 +27,11 @@ type StealthDetector struct {
 	config           *DetectorConfig
 	adaptiveScorer   *AdaptiveScorer
 	advancedDet      *AdvancedDetection
-	navAnalyzer      *NavigatorAnalyzer
+	navAnalyzer      *navigatorAnalyzer
 	isoAnalyzer      *IsomorphicAnalyzer
 	behavAnalyzer    *BehavioralAnalyzer
 	timingAnalyzer   *TimingAnalyzer
-	graphicsAnalyzer *GraphicsAnalyzer
+	graphicsAnalyzer *graphicsAnalyzer
 }
 
 // NewStealthDetector creates and initializes a new StealthDetector with default
@@ -62,11 +62,11 @@ func NewStealthDetector() *StealthDetector {
 		},
 		adaptiveScorer:   NewAdaptiveScorer(nil),
 		advancedDet:      NewAdvancedDetection(),
-		navAnalyzer:      NewNavigatorAnalyzer(),
+		navAnalyzer:      newNavigatorAnalyzer(),
 		isoAnalyzer:      NewIsomorphicAnalyzer(),
 		behavAnalyzer:    NewBehavioralAnalyzer(nil),
 		timingAnalyzer:   NewTimingAnalyzer(nil),
-		graphicsAnalyzer: NewGraphicsAnalyzer(),
+		graphicsAnalyzer: newGraphicsAnalyzer(),
 	}
 }
 
@@ -565,7 +565,7 @@ func (sd *StealthDetector) analyzePluginData(req *http.Request) *DetectionVector
 
 // analyzeAudioData checks for AudioContext fingerprint data.
 // If the header is entirely missing, returns a high score since real browsers
-// always have AudioContext available. If present, delegates to AudioAnalyzer.
+// always have AudioContext available. If present, delegates to audioAnalyzer.
 func (sd *StealthDetector) analyzeAudioData(req *http.Request) *DetectionVector {
 	audioHeader := req.Header.Get(constants.HeaderAudioData)
 	if audioHeader == "" {
@@ -585,12 +585,12 @@ func (sd *StealthDetector) analyzeAudioData(req *http.Request) *DetectionVector 
 		return nil
 	}
 
-	var data AudioData
+	var data audioData
 	if err := json.Unmarshal([]byte(audioHeader), &data); err != nil {
 		return nil
 	}
 
-	analyzer := NewAudioAnalyzer()
+	analyzer := newAudioAnalyzer()
 	result := analyzer.Analyze(&data)
 
 	indicators := make([]string, 0, len(result.Indicators))

@@ -9,16 +9,16 @@ import (
 	"github.com/skunkworq/stealth/brws/core/constants"
 )
 
-// NavigatorAnalyzer handles detection of automation via navigator object properties.
-type NavigatorAnalyzer struct{}
+// navigatorAnalyzer handles detection of automation via navigator object properties.
+type navigatorAnalyzer struct{}
 
-// NewNavigatorAnalyzer creates a new instance of NavigatorAnalyzer.
-func NewNavigatorAnalyzer() *NavigatorAnalyzer {
-	return &NavigatorAnalyzer{}
+// newNavigatorAnalyzer creates a new instance of navigatorAnalyzer.
+func newNavigatorAnalyzer() *navigatorAnalyzer {
+	return &navigatorAnalyzer{}
 }
 
 // Analyze performs deep analysis of navigator properties sent via custom headers.
-func (na *NavigatorAnalyzer) Analyze(req *http.Request) *DetectionVector {
+func (na *navigatorAnalyzer) Analyze(req *http.Request) *DetectionVector {
 	navHeader := req.Header.Get(constants.HeaderNavigatorData)
 	if navHeader == "" {
 		return nil
@@ -104,7 +104,7 @@ func (na *NavigatorAnalyzer) Analyze(req *http.Request) *DetectionVector {
 	return vec
 }
 
-func (na *NavigatorAnalyzer) checkUserAgentData(navData map[string]interface{}, vec *DetectionVector, indicators []string, req *http.Request) []string {
+func (na *navigatorAnalyzer) checkUserAgentData(navData map[string]interface{}, vec *DetectionVector, indicators []string, req *http.Request) []string {
 	uaData, hasUAData := navData["userAgentData"].(map[string]interface{})
 	isChrome := strings.Contains(strings.ToLower(req.Header.Get("User-Agent")), "chrome")
 
@@ -183,7 +183,7 @@ func (na *NavigatorAnalyzer) checkUserAgentData(navData map[string]interface{}, 
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) addindicator(vec *DetectionVector, indicators []string, name string, score float64, field, actual, expected, severity, desc string) []string {
+func (na *navigatorAnalyzer) addindicator(vec *DetectionVector, indicators []string, name string, score float64, field, actual, expected, severity, desc string) []string {
 	indicators = append(indicators, name)
 	vec.Score += score
 	vec.CheckReports = append(vec.CheckReports, CheckReport{
@@ -205,7 +205,7 @@ func (na *NavigatorAnalyzer) addindicator(vec *DetectionVector, indicators []str
 // checkPluginAnachronism detects plugins that no longer exist in modern Chrome.
 // Native Client was removed from Chrome 87+ (2020). Claiming it with Chrome 120+
 // is a dead giveaway of a stealth script using outdated plugin lists.
-func (na *NavigatorAnalyzer) checkPluginAnachronism(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkPluginAnachronism(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	if !strings.Contains(strings.ToLower(reqUA), "chrome") {
 		return indicators
 	}
@@ -286,7 +286,7 @@ func (na *NavigatorAnalyzer) checkPluginAnachronism(navData map[string]interface
 // checkLoadTimesFirstPaintAfterLoad detects spoofed chrome.loadTimes() where
 // firstPaintAfterLoadTime is always 0. In real Chrome, this value is non-zero
 // when a paint occurs after the load event.
-func (na *NavigatorAnalyzer) checkLoadTimesFirstPaintAfterLoad(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkLoadTimesFirstPaintAfterLoad(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	lt, ok := navData["chrome_loadTimes"].(map[string]interface{})
 	if !ok {
 		return indicators
@@ -339,7 +339,7 @@ func (na *NavigatorAnalyzer) checkLoadTimesFirstPaintAfterLoad(navData map[strin
 
 // checkGeometryGapSignature detects stealth scripts that set outerHeight = innerHeight + constant.
 // Real browser chrome gaps vary by OS, extensions, bookmarks bar, zoom level, etc.
-func (na *NavigatorAnalyzer) checkGeometryGapSignature(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkGeometryGapSignature(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	var outerH, innerH float64
 	var hasOuter, hasInner bool
 
@@ -386,7 +386,7 @@ func (na *NavigatorAnalyzer) checkGeometryGapSignature(navData map[string]interf
 }
 
 // checkToStringOverride detects patched Function.prototype.toString.
-func (na *NavigatorAnalyzer) checkToStringOverride(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkToStringOverride(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if overridden, ok := navData["toString_overridden"].(bool); ok && overridden {
 		indicators = append(indicators, "function_tostring_override_detected")
 		vec.Score += 0.40

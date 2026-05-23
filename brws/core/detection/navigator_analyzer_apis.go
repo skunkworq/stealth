@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (na *NavigatorAnalyzer) checkKeyboardAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkKeyboardAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	if strings.Contains(strings.ToLower(reqUA), "chrome") {
 		if _, hasKeyboard := navData["keyboard"]; !hasKeyboard {
 			indicators = append(indicators, "missing_navigator_keyboard")
@@ -26,7 +26,7 @@ func (na *NavigatorAnalyzer) checkKeyboardAPI(navData map[string]interface{}, ve
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkVendor(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkVendor(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	if vendor, hasVendor := navData["vendor"].(string); hasVendor {
 		uaLower := strings.ToLower(reqUA)
 		if strings.Contains(uaLower, "chrome") && vendor != "Google Inc." {
@@ -62,7 +62,7 @@ func (na *NavigatorAnalyzer) checkVendor(navData map[string]interface{}, vec *De
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkNotificationPermission(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNotificationPermission(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if _, hasNotif := navData["Notification_permission"]; !hasNotif {
 		indicators = append(indicators, "missing_notification_permission")
 		vec.Score += 0.15
@@ -81,7 +81,7 @@ func (na *NavigatorAnalyzer) checkNotificationPermission(navData map[string]inte
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkTimezone(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkTimezone(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if _, hasTZ := navData["timezone"]; !hasTZ {
 		indicators = append(indicators, "missing_timezone")
 		vec.Score += 0.15
@@ -89,7 +89,7 @@ func (na *NavigatorAnalyzer) checkTimezone(navData map[string]interface{}, vec *
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkTimezoneParity(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkTimezoneParity(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if tz, ok := navData["timezone"].(string); ok {
 		if offset, ok := navData["timezone_offset"].(float64); ok {
 			if tz == "America/New_York" && offset != 300 {
@@ -101,7 +101,7 @@ func (na *NavigatorAnalyzer) checkTimezoneParity(navData map[string]interface{},
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkPermissionsAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkPermissionsAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if perm, ok := navData["notifications_prompt"].(string); ok {
 		if perm == "default" && navData["permissions_is_proxy"] == true {
 			indicators = append(indicators, "spoofed_permissions_api_detected")
@@ -111,7 +111,7 @@ func (na *NavigatorAnalyzer) checkPermissionsAPI(navData map[string]interface{},
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkPermissionsExtended(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkPermissionsExtended(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// 1. Notification vs Query state
 	notifPerm, hasNotifPerm := navData["Notification_permission"].(string)
 	permState, hasPermState := navData["permissions_notifications_state"].(string)
@@ -196,7 +196,7 @@ func (na *NavigatorAnalyzer) checkPermissionsExtended(navData map[string]interfa
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkMediaQueryHover(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkMediaQueryHover(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	// Desktop browsers (Chrome, Firefox, Safari) in real environments always support hover.
 	// Headless Chrome (even with --headless=new) sometimes defaults to (hover: none).
 	uaLower := strings.ToLower(reqUA)
@@ -229,7 +229,7 @@ func (na *NavigatorAnalyzer) checkMediaQueryHover(navData map[string]interface{}
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkWebGPUSupport(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkWebGPUSupport(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	isModernChrome := strings.Contains(strings.ToLower(reqUA), "chrome")
 	// WebGPU (navigator.gpu) was added in Chrome 113.
 	if isModernChrome {
@@ -256,7 +256,7 @@ func (na *NavigatorAnalyzer) checkWebGPUSupport(navData map[string]interface{}, 
 
 // checkUserAgentData is kept in navigator_analyzer.go (requires *http.Request import).
 
-func (na *NavigatorAnalyzer) checkUserActivation(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkUserActivation(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	isChrome := strings.Contains(strings.ToLower(reqUA), "chrome")
 	if isChrome {
 		if _, hasActivation := navData["userActivation"]; !hasActivation {
@@ -278,7 +278,7 @@ func (na *NavigatorAnalyzer) checkUserActivation(navData map[string]interface{},
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkSchedulingAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkSchedulingAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	isChrome := strings.Contains(strings.ToLower(reqUA), "chrome")
 	if isChrome {
 		if _, hasScheduling := navData["scheduling"]; !hasScheduling {
@@ -300,7 +300,7 @@ func (na *NavigatorAnalyzer) checkSchedulingAPI(navData map[string]interface{}, 
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkLocksAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkLocksAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	// Web Locks API is standard in modern browsers
 	if _, hasLocks := navData["locks"]; !hasLocks {
 		indicators = append(indicators, "missing_navigator_locks")
@@ -320,7 +320,7 @@ func (na *NavigatorAnalyzer) checkLocksAPI(navData map[string]interface{}, vec *
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkIntlConsistency(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkIntlConsistency(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if intlTZ, ok := navData["intl_timezone"].(string); ok {
 		if browserTZ, ok := navData["timezone"].(string); ok {
 			if intlTZ != browserTZ {
@@ -343,7 +343,7 @@ func (na *NavigatorAnalyzer) checkIntlConsistency(navData map[string]interface{}
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkNavigatorModernAPIs(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNavigatorModernAPIs(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// Clipboard and Credentials are standard modern browser APIs.
 	// Often missing in headless/restricted environments.
 	apis := []string{"clipboard", "credentials"}
@@ -368,7 +368,7 @@ func (na *NavigatorAnalyzer) checkNavigatorModernAPIs(navData map[string]interfa
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkNavigatorMediaAPIs(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNavigatorMediaAPIs(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// mediaCapabilities (Chrome 66+) and mediaSession (Chrome 73+) are standard modern browser APIs.
 	apis := []string{"mediaCapabilities", "mediaSession"}
 	for _, api := range apis {
@@ -392,7 +392,7 @@ func (na *NavigatorAnalyzer) checkNavigatorMediaAPIs(navData map[string]interfac
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkNavigatorWorkers(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNavigatorWorkers(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// serviceWorker and SharedWorker are standard modern browser APIs.
 	// serviceWorker is usually available on secure contexts (which we assume here).
 	apis := []string{"serviceWorker", "sharedWorker"}
@@ -417,7 +417,7 @@ func (na *NavigatorAnalyzer) checkNavigatorWorkers(navData map[string]interface{
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkNavigatorPrototype(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNavigatorPrototype(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// Phase 80: Navigator Prototype chain.
 	if stubbed, ok := navData["navigator_prototype_stubbed"].(bool); ok && stubbed {
 		name := "navigator_prototype_mismatch"
@@ -439,7 +439,7 @@ func (na *NavigatorAnalyzer) checkNavigatorPrototype(navData map[string]interfac
 }
 
 // checkWorkerContextCoherence (Phase 91)
-func (na *NavigatorAnalyzer) checkWorkerContextCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkWorkerContextCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	workerRaw, ok := navData["worker_navigator"]
 	if !ok {
 		return indicators
@@ -481,7 +481,7 @@ func (na *NavigatorAnalyzer) checkWorkerContextCoherence(navData map[string]inte
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkNavigatorVibrate(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNavigatorVibrate(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if _, ok := navData["vibrate"]; !ok {
 		name := "missing_navigator_vibrate"
 		indicators = append(indicators, name)
@@ -501,7 +501,7 @@ func (na *NavigatorAnalyzer) checkNavigatorVibrate(navData map[string]interface{
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkNavigatorHardwareAPIs(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNavigatorHardwareAPIs(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// Bluetooth and USB are part of the standard Chromium navigator object.
 	apis := []string{"bluetooth", "usb"}
 	for _, api := range apis {
@@ -566,7 +566,7 @@ func (na *NavigatorAnalyzer) checkNavigatorHardwareAPIs(navData map[string]inter
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkGamepadAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkGamepadAPI(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// Gamepad API (Phase 77)
 	if _, ok := navData["getGamepads"]; !ok {
 		if len(navData) > 10 {
@@ -606,7 +606,7 @@ func (na *NavigatorAnalyzer) checkGamepadAPI(navData map[string]interface{}, vec
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkCanvasMeasureText(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkCanvasMeasureText(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	metrics, ok := navData["canvas_measure_text"].(map[string]interface{})
 	if !ok {
 		return indicators
@@ -636,7 +636,7 @@ func (na *NavigatorAnalyzer) checkCanvasMeasureText(navData map[string]interface
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkMathPrecision(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkMathPrecision(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	mathProps, ok := navData["math_precision"].(map[string]interface{})
 	if !ok {
 		return indicators
@@ -694,6 +694,6 @@ func isExtendedValue(val interface{}) bool {
 // addNavigatorMediaQueries is a helper for media query checks (placeholder for future extension).
 //
 //nolint:unused
-func (na *NavigatorAnalyzer) addNavigatorMediaQueries(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) addNavigatorMediaQueries(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	return indicators
 }

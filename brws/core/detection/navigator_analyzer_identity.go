@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func (na *NavigatorAnalyzer) checkWebdriver(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkWebdriver(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// Check webdriver (naive boolean leak)
 	if webdriver, ok := navData["webdriver"].(bool); ok && webdriver {
 		indicators = append(indicators, "webdriver=true")
@@ -73,7 +73,7 @@ func (na *NavigatorAnalyzer) checkWebdriver(navData map[string]interface{}, vec 
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkChromeRuntime(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkChromeRuntime(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	isChromeNav := strings.Contains(strings.ToLower(reqUA), "chrome")
 	if !isChromeNav {
 		return indicators
@@ -232,7 +232,7 @@ func (na *NavigatorAnalyzer) checkChromeRuntime(navData map[string]interface{}, 
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkAutomationFlags(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkAutomationFlags(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	automationFlags := []string{"__webdriver_script_fn__", "__selenium_unwrapped", "callSelenium"}
 	for _, flag := range automationFlags {
 		if _, ok := navData[flag]; ok {
@@ -243,7 +243,7 @@ func (na *NavigatorAnalyzer) checkAutomationFlags(navData map[string]interface{}
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkMandatoryProperties(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkMandatoryProperties(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if _, hasLangs := navData["languages"]; !hasLangs {
 		indicators = append(indicators, "missing_navigator_languages")
 		vec.Score += 0.5
@@ -259,7 +259,7 @@ func (na *NavigatorAnalyzer) checkMandatoryProperties(navData map[string]interfa
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkAppVersion(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkAppVersion(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	ua, _ := navData["userAgent"].(string)
 	if appVer, hasAppVer := navData["appVersion"].(string); !hasAppVer {
 		indicators = append(indicators, "missing_navigator_appVersion")
@@ -296,7 +296,7 @@ func (na *NavigatorAnalyzer) checkAppVersion(navData map[string]interface{}, vec
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkAutomationLeaks(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkAutomationLeaks(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// Serialize back to string to search for leaks across all properties
 	dataStr, _ := json.Marshal(navData)
 	leaks := []string{
@@ -328,7 +328,7 @@ func (na *NavigatorAnalyzer) checkAutomationLeaks(navData map[string]interface{}
 }
 
 // checkRuntimeIntrospection (Phase 92)
-func (na *NavigatorAnalyzer) checkRuntimeIntrospection(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkRuntimeIntrospection(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	// Proxy detection
 	if proxied, ok := navData["navigator_proxied"].(bool); ok && proxied {
 		name := "navigator_proxy_detected"

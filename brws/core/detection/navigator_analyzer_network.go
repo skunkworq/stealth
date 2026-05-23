@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (na *NavigatorAnalyzer) checkNetworkCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNetworkCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if conn, ok := navData["connection"].(map[string]interface{}); ok {
 		effType, _ := conn["effectiveType"].(string)
 		rtt, hasRTT := conn["rtt"].(float64)
@@ -57,7 +57,7 @@ func (na *NavigatorAnalyzer) checkNetworkCoherence(navData map[string]interface{
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkNetworkInformation(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNetworkInformation(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	var rtt float64
 	var hasRTT bool
 
@@ -144,7 +144,7 @@ func (na *NavigatorAnalyzer) checkNetworkInformation(navData map[string]interfac
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkWebRTC(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkWebRTC(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	webrtc, ok := navData["webrtc_data"].(map[string]interface{})
 	if !ok {
 		// Chrome browsers (desktop) should always have WebRTC available.
@@ -200,7 +200,7 @@ func (na *NavigatorAnalyzer) checkWebRTC(navData map[string]interface{}, vec *De
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkNavigatorConnectivity(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkNavigatorConnectivity(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if _, ok := navData["onLine"]; !ok {
 		name := "missing_navigator_onLine"
 		indicators = append(indicators, name)

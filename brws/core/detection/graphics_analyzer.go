@@ -16,20 +16,20 @@ import (
 	"github.com/skunkworq/stealth/brws/core/constants"
 )
 
-// GraphicsAnalyzer handles analysis and validation of Canvas and WebGL fingerprints.
-type GraphicsAnalyzer struct {
+// graphicsAnalyzer handles analysis and validation of Canvas and WebGL fingerprints.
+type graphicsAnalyzer struct {
 	webglAnalyzer *WebGLAnalyzer
 }
 
-// NewGraphicsAnalyzer creates a new GraphicsAnalyzer.
-func NewGraphicsAnalyzer() *GraphicsAnalyzer {
-	return &GraphicsAnalyzer{
+// newGraphicsAnalyzer creates a new graphicsAnalyzer.
+func newGraphicsAnalyzer() *graphicsAnalyzer {
+	return &graphicsAnalyzer{
 		webglAnalyzer: NewWebGLAnalyzer(),
 	}
 }
 
 // AnalyzeCanvas performs analysis of canvas fingerprint data.
-func (ga *GraphicsAnalyzer) AnalyzeCanvas(req *http.Request) *DetectionVector {
+func (ga *graphicsAnalyzer) AnalyzeCanvas(req *http.Request) *DetectionVector {
 	canvasHeader := req.Header.Get(constants.HeaderCanvasFingerprint)
 	if canvasHeader == "" {
 		if hasJSFingerprintHeaders(req) {
@@ -223,7 +223,7 @@ func (ga *GraphicsAnalyzer) AnalyzeCanvas(req *http.Request) *DetectionVector {
 	return vec
 }
 
-func (ga *GraphicsAnalyzer) checkOffscreenCanvas(req *http.Request, vec *DetectionVector, indicators []string) []string {
+func (ga *graphicsAnalyzer) checkOffscreenCanvas(req *http.Request, vec *DetectionVector, indicators []string) []string {
 	navHeader := req.Header.Get(constants.HeaderNavigatorData)
 	if navHeader == "" {
 		return indicators
@@ -262,7 +262,7 @@ func (ga *GraphicsAnalyzer) checkOffscreenCanvas(req *http.Request, vec *Detecti
 	return indicators
 }
 
-func (ga *GraphicsAnalyzer) checkOffscreenCanvasMetrics(req *http.Request, vec *DetectionVector, indicators []string) []string {
+func (ga *graphicsAnalyzer) checkOffscreenCanvasMetrics(req *http.Request, vec *DetectionVector, indicators []string) []string {
 	navHeader := req.Header.Get(constants.HeaderNavigatorData)
 	if navHeader == "" {
 		return indicators
@@ -304,7 +304,7 @@ func (ga *GraphicsAnalyzer) checkOffscreenCanvasMetrics(req *http.Request, vec *
 }
 
 // AnalyzeWebGL performs deep WebGL analysis.
-func (ga *GraphicsAnalyzer) AnalyzeWebGL(req *http.Request) *DetectionVector {
+func (ga *graphicsAnalyzer) AnalyzeWebGL(req *http.Request) *DetectionVector {
 	webglHeader := req.Header.Get(constants.HeaderWebGLData)
 	if webglHeader == "" {
 		return nil

@@ -8,7 +8,7 @@ import (
 	"github.com/skunkworq/stealth/brws/core/constants"
 )
 
-func (na *NavigatorAnalyzer) checkMediaDevices(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkMediaDevices(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	devices, _ := navData["media_devices"].([]interface{})
 
 	if len(devices) == 0 {
@@ -61,7 +61,7 @@ func (na *NavigatorAnalyzer) checkMediaDevices(navData map[string]interface{}, v
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkAudioLatency(req *http.Request, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkAudioLatency(req *http.Request, vec *DetectionVector, indicators []string) []string {
 	if audioHeader := req.Header.Get(constants.HeaderAudioData); audioHeader != "" {
 		var audioData map[string]interface{}
 		if err := json.Unmarshal([]byte(audioHeader), &audioData); err == nil {
@@ -87,7 +87,7 @@ func (na *NavigatorAnalyzer) checkAudioLatency(req *http.Request, vec *Detection
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkAudioBaseLatency(req *http.Request, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkAudioBaseLatency(req *http.Request, vec *DetectionVector, indicators []string) []string {
 	if audioHeader := req.Header.Get(constants.HeaderAudioData); audioHeader != "" {
 		var audioData map[string]interface{}
 		if err := json.Unmarshal([]byte(audioHeader), &audioData); err == nil {
@@ -117,7 +117,7 @@ func (na *NavigatorAnalyzer) checkAudioBaseLatency(req *http.Request, vec *Detec
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkAudioWorklet(navData map[string]interface{}, vec *DetectionVector, indicators []string, ua string) []string {
+func (na *navigatorAnalyzer) checkAudioWorklet(navData map[string]interface{}, vec *DetectionVector, indicators []string, ua string) []string {
 	// Only for modern browsers
 	uaLower := strings.ToLower(ua)
 	isChrome := strings.Contains(uaLower, "chrome")
@@ -145,7 +145,7 @@ func (na *NavigatorAnalyzer) checkAudioWorklet(navData map[string]interface{}, v
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkPDFViewer(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkPDFViewer(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if pdfViewer, hasPdfViewer := navData["pdfViewerEnabled"]; hasPdfViewer {
 		pdfBool, isBool := pdfViewer.(bool)
 		if isBool && !pdfBool {
@@ -167,7 +167,7 @@ func (na *NavigatorAnalyzer) checkPDFViewer(navData map[string]interface{}, vec 
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkVideoElement(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkVideoElement(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if video, ok := navData["video_can_play_mp4"].(string); ok {
 		if video == "probably" {
 			indicators = append(indicators, "spoofed_video_element_detected")

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func (na *NavigatorAnalyzer) checkHardwareCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkHardwareCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if devMem, hasMem := navData["deviceMemory"].(float64); hasMem {
 		if conc, hasConc := navData["hardwareConcurrency"].(float64); hasConc {
 			memGB := int(devMem)
@@ -76,7 +76,7 @@ func (na *NavigatorAnalyzer) checkHardwareCoherence(navData map[string]interface
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkMemoryPlausibility(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkMemoryPlausibility(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	perfMem, hasPerf := navData["performance_memory"].(map[string]interface{})
 	deviceMem, _ := navData["deviceMemory"].(float64)
 
@@ -104,7 +104,7 @@ func (na *NavigatorAnalyzer) checkMemoryPlausibility(navData map[string]interfac
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkPluginsArray(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkPluginsArray(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if plugins, ok := navData["plugins"].([]interface{}); ok {
 		if len(plugins) == 5 {
 			isIntArray := true
@@ -128,7 +128,7 @@ func (na *NavigatorAnalyzer) checkPluginsArray(navData map[string]interface{}, v
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkScreenGeometry(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkScreenGeometry(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	var colorDepth, innerWidth, outerWidth float64
 	if screen, ok := navData["screen"].(map[string]interface{}); ok {
 		colorDepth, _ = screen["colorDepth"].(float64)
@@ -150,7 +150,7 @@ func (na *NavigatorAnalyzer) checkScreenGeometry(navData map[string]interface{},
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkBatteryStatus(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkBatteryStatus(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	battery, hasBattery := navData["battery_status"].(map[string]interface{})
 	if !hasBattery {
 		return indicators
@@ -182,7 +182,7 @@ func (na *NavigatorAnalyzer) checkBatteryStatus(navData map[string]interface{}, 
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkStorageQuota(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkStorageQuota(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	quota, hasQuota := navData["storage_quota"].(float64)
 	usage, hasUsage := navData["storage_usage"].(float64)
 
@@ -236,7 +236,7 @@ func (na *NavigatorAnalyzer) checkStorageQuota(navData map[string]interface{}, v
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkStoragePersistence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkStoragePersistence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	persisted, hasPersisted := navData["storage_persisted"].(bool)
 	if !hasPersisted {
 		indicators = append(indicators, "missing_storage_persistence")
@@ -257,7 +257,7 @@ func (na *NavigatorAnalyzer) checkStoragePersistence(navData map[string]interfac
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkStorageQuotaCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkStorageQuotaCoherence(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	quota, hasQuota := navData["storage_quota"].(float64)
 	deviceMem, hasMem := navData["deviceMemory"].(float64)
 
@@ -286,7 +286,7 @@ func (na *NavigatorAnalyzer) checkStorageQuotaCoherence(navData map[string]inter
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkMaxTouchPointsConsistency(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
+func (na *navigatorAnalyzer) checkMaxTouchPointsConsistency(navData map[string]interface{}, vec *DetectionVector, indicators []string, reqUA string) []string {
 	maxTouch, hasMaxTouch := navData["maxTouchPoints"].(float64)
 	if !hasMaxTouch {
 		return indicators
@@ -319,7 +319,7 @@ func (na *NavigatorAnalyzer) checkMaxTouchPointsConsistency(navData map[string]i
 	return indicators
 }
 
-func (na *NavigatorAnalyzer) checkScreenOrientation(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
+func (na *navigatorAnalyzer) checkScreenOrientation(navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	orientation, hasOrientation := navData["screen_orientation"].(string)
 	if !hasOrientation {
 		return indicators

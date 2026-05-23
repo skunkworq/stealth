@@ -1,11 +1,9 @@
-package detection_test
+package detection
 
 import (
 	"encoding/json"
 	"net/http"
 	"testing"
-
-	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
 func setNavigatorHeader(req *http.Request, data map[string]interface{}) {
@@ -14,14 +12,14 @@ func setNavigatorHeader(req *http.Request, data map[string]interface{}) {
 }
 
 func TestNewNavigatorAnalyzer(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	if na == nil {
 		t.Fatal("NewNavigatorAnalyzer returned nil")
 	}
 }
 
 func TestNavigatorAnalyzer_Analyze_noHeader(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	result := na.Analyze(req)
 	if result != nil {
@@ -30,7 +28,7 @@ func TestNavigatorAnalyzer_Analyze_noHeader(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_invalidJSON(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	req.Header.Set("X-Navigator-Data", "not-json")
 	result := na.Analyze(req)
@@ -40,7 +38,7 @@ func TestNavigatorAnalyzer_Analyze_invalidJSON(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_webdriverTrue(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	setNavigatorHeader(req, map[string]interface{}{
 		"webdriver": true,
@@ -55,7 +53,7 @@ func TestNavigatorAnalyzer_Analyze_webdriverTrue(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_webdriverFalse(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
 	setNavigatorHeader(req, map[string]interface{}{
@@ -76,7 +74,7 @@ func TestNavigatorAnalyzer_Analyze_webdriverFalse(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_vendorMismatch_chromeUA(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
 	setNavigatorHeader(req, map[string]interface{}{
@@ -93,7 +91,7 @@ func TestNavigatorAnalyzer_Analyze_vendorMismatch_chromeUA(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_correctChromeVendor(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 Chrome/120.0")
 	setNavigatorHeader(req, map[string]interface{}{
@@ -113,7 +111,7 @@ func TestNavigatorAnalyzer_Analyze_correctChromeVendor(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_returnsCategory(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	setNavigatorHeader(req, map[string]interface{}{})
 	result := na.Analyze(req)
@@ -126,7 +124,7 @@ func TestNavigatorAnalyzer_Analyze_returnsCategory(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_scoreNotExceedOne(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	// Worst case: webdriver=true plus many flags
 	setNavigatorHeader(req, map[string]interface{}{
@@ -144,7 +142,7 @@ func TestNavigatorAnalyzer_Analyze_scoreNotExceedOne(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_firefoxUA_emptyVendor(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:120.0) Gecko/20100101 Firefox/120.0")
 	setNavigatorHeader(req, map[string]interface{}{
@@ -164,7 +162,7 @@ func TestNavigatorAnalyzer_Analyze_firefoxUA_emptyVendor(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_checkReports(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	setNavigatorHeader(req, map[string]interface{}{
 		"webdriver": true,
@@ -184,7 +182,7 @@ func TestNavigatorAnalyzer_Analyze_checkReports(t *testing.T) {
 }
 
 func TestNavigatorAnalyzer_Analyze_emptyNavData(t *testing.T) {
-	na := detection.NewNavigatorAnalyzer()
+	na := newNavigatorAnalyzer()
 	req, _ := http.NewRequest("GET", "http://example.com", nil)
 	setNavigatorHeader(req, map[string]interface{}{})
 	result := na.Analyze(req)
