@@ -36,11 +36,10 @@ func main() {
 	graph, err := pipeline.NewSmartScraperGraph(
 		"Extract the page title and all heading texts as a JSON object with keys 'title' and 'headings'.",
 		"https://example.com",
-		map[string]interface{}{
-			// Optional flags:
-			// "reasoning": true,
-			// "reattempt": true,
-			// "html_mode": true,
+		&pipeline.GraphConfig{
+			// Reasoning: true,
+			// Reattempt: true,
+			// HTMLMode:  true,
 		},
 		nil, // optional Pydantic-like schema
 		llm,
@@ -65,9 +64,7 @@ func main() {
 	fmt.Println("\n=== SearchGraph ===")
 	searchGraph, err := pipeline.NewSearchGraph(
 		"What are the latest features in Go 1.24?",
-		map[string]interface{}{
-			"max_results": 3,
-		},
+		&pipeline.GraphConfig{MaxResults: 3},
 		nil,
 		llm,
 	)

@@ -11,6 +11,48 @@ import (
 )
 
 // ---------------------------------------------------------------------------
+// GraphConfig — typed public configuration
+// ---------------------------------------------------------------------------
+
+// GraphConfig holds user-facing options for graph construction. Pass nil to
+// accept all defaults.
+type GraphConfig struct {
+	// Model selects the LLM model (default "openai/gpt-4o").
+	Model string
+	// Reasoning enables a chain-of-thought reasoning node before extraction.
+	Reasoning bool
+	// Reattempt retries extraction when the answer is NA or empty.
+	Reattempt bool
+	// HTMLMode passes raw HTML directly to the LLM, skipping the parse step.
+	HTMLMode bool
+	// AdditionalInfo is appended as context to LLM extraction prompts.
+	AdditionalInfo string
+	// MaxResults caps how many URLs SearchGraph fetches (default 5).
+	MaxResults int
+	// SearchEngine selects the search backend (default "duckduckgo").
+	SearchEngine string
+}
+
+// toNodeConfig bridges GraphConfig to the map-based API expected by internal
+// node constructors. Only keys that internal nodes actually read are included.
+func (c *GraphConfig) toNodeConfig() map[string]interface{} {
+	m := map[string]interface{}{}
+	if c == nil {
+		return m
+	}
+	if c.AdditionalInfo != "" {
+		m["additional_info"] = c.AdditionalInfo
+	}
+	if c.MaxResults > 0 {
+		m["max_results"] = c.MaxResults
+	}
+	if c.SearchEngine != "" {
+		m["search_engine"] = c.SearchEngine
+	}
+	return m
+}
+
+// ---------------------------------------------------------------------------
 // Pipeline (AbstractGraph equivalent)
 // ---------------------------------------------------------------------------
 
@@ -18,7 +60,7 @@ import (
 type Pipeline struct {
 	Prompt     string
 	Source     string
-	Config     map[string]interface{}
+	Config     *GraphConfig
 	Schema     interface{}
 	LLM        LLM
 	Graph      *BaseGraph
@@ -36,7 +78,7 @@ type Pipeline struct {
 }
 
 // NewPipeline creates the common scaffolding.
-func NewPipeline(prompt, source string, config map[string]interface{}, schema interface{}, llm LLM) (*Pipeline, error) {
+func NewPipeline(prompt, source string, cfg *GraphConfig, schema interface{}, llm LLM) (*Pipeline, error) {
 	if llm == nil {
 		var err error
 		llm, err = NewLLMFromEnv()
@@ -44,18 +86,21 @@ func NewPipeline(prompt, source string, config map[string]interface{}, schema in
 			return nil, err
 		}
 	}
+	if cfg == nil {
+		cfg = &GraphConfig{}
+	}
 	inputKey := "url"
 	if source != "" && !(len(source) > 4 && (source[:4] == "http" || source[:5] == "https")) {
 		inputKey = "local_dir"
 	}
 	model := "openai/gpt-4o"
-	if m, ok := config["model"].(string); ok && m != "" {
-		model = m
+	if cfg.Model != "" {
+		model = cfg.Model
 	}
 	return &Pipeline{
 		Prompt:     prompt,
 		Source:     source,
-		Config:     config,
+		Config:     cfg,
 		Schema:     schema,
 		LLM:        llm,
 		InputKey:   inputKey,
@@ -86,8 +131,8 @@ type SmartScraperGraph struct {
 }
 
 // NewSmartScraperGraphWithEngine builds a SmartScraperGraph using the given engine for fetching.
-func NewSmartScraperGraphWithEngine(prompt, source string, config map[string]interface{}, schema interface{}, llm LLM, eng engine.Engine) (*SmartScraperGraph, error) {
-	ss, err := NewSmartScraperGraph(prompt, source, config, schema, llm)
+func NewSmartScraperGraphWithEngine(prompt, source string, cfg *GraphConfig, schema interface{}, llm LLM, eng engine.Engine) (*SmartScraperGraph, error) {
+	ss, err := NewSmartScraperGraph(prompt, source, cfg, schema, llm)
 	if err != nil {
 		return nil, err
 	}
@@ -101,8 +146,8 @@ func NewSmartScraperGraphWithEngine(prompt, source string, config map[string]int
 }
 
 // NewSmartScraperGraphWithStealth builds a SmartScraperGraph with a stealth client.
-func NewSmartScraperGraphWithStealth(prompt, source string, config map[string]interface{}, schema interface{}, llm LLM, client *stealth.Adaptive) (*SmartScraperGraph, error) {
-	ss, err := NewSmartScraperGraph(prompt, source, config, schema, llm)
+func NewSmartScraperGraphWithStealth(prompt, source string, cfg *GraphConfig, schema interface{}, llm LLM, client *stealth.Adaptive) (*SmartScraperGraph, error) {
+	ss, err := NewSmartScraperGraph(prompt, source, cfg, schema, llm)
 	if err != nil {
 		return nil, err
 	}
@@ -120,15 +165,16 @@ func NewSmartScraperGraphWithStealth(prompt, source string, config map[string]in
 // extract.Option values to configure the underlying extractor (model, schema,
 // prompt, etc.). This path is best when you need chunking, schema validation,
 // or multi-provider extraction without a separate LLM dependency.
-func NewSmartScraperGraphWithExtractor(prompt, source string, config map[string]interface{}, opts ...extract.Option) (*SmartScraperGraph, error) {
-	pipe, err := NewPipeline(prompt, source, config, nil, nil)
+func NewSmartScraperGraphWithExtractor(prompt, source string, cfg *GraphConfig, opts ...extract.Option) (*SmartScraperGraph, error) {
+	pipe, err := NewPipeline(prompt, source, cfg, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	ss := &SmartScraperGraph{Pipeline: *pipe}
 
-	fetch := NewFetchNode("url | local_dir", "doc", config)
-	extractor := NewExtractorNode("user_prompt & doc", "answer", config, opts...)
+	nodeConfig := pipe.Config.toNodeConfig()
+	fetch := NewFetchNode("url | local_dir", "doc", nodeConfig)
+	extractor := NewExtractorNode("user_prompt & doc", "answer", nodeConfig, opts...)
 	graph, err := NewBaseGraph([]Node{fetch, extractor}, [][2]string{{fetch.Name(), extractor.Name()}}, fetch, "SmartScraperGraph")
 	if err != nil {
 		return nil, err
@@ -138,8 +184,8 @@ func NewSmartScraperGraphWithExtractor(prompt, source string, config map[string]
 }
 
 // NewSmartScraperGraph builds a SmartScraperGraph pipeline.
-func NewSmartScraperGraph(prompt, source string, config map[string]interface{}, schema interface{}, llm LLM) (*SmartScraperGraph, error) {
-	pipe, err := NewPipeline(prompt, source, config, schema, llm)
+func NewSmartScraperGraph(prompt, source string, cfg *GraphConfig, schema interface{}, llm LLM) (*SmartScraperGraph, error) {
+	pipe, err := NewPipeline(prompt, source, cfg, schema, llm)
 	if err != nil {
 		return nil, err
 	}
@@ -157,27 +203,29 @@ func (ss *SmartScraperGraph) buildGraph() (*BaseGraph, error) {
 	llm := ss.LLM
 	schema := ss.Schema
 
+	nodeConfig := cfg.toNodeConfig()
+
 	// Core nodes
-	fetch := NewFetchNode("url | local_dir", "doc", cfg)
+	fetch := NewFetchNode("url | local_dir", "doc", nodeConfig)
 	if ss.StealthClient != nil {
 		fetch.StealthClient = ss.StealthClient
 	} else if ss.Engine != nil {
 		fetch.Engine = ss.Engine
 	}
-	parse := NewParseNode("doc", "parsed_doc", ss.ModelToken, cfg)
+	parse := NewParseNode("doc", "parsed_doc", ss.ModelToken, nodeConfig)
 	gen := NewGenerateAnswerNode(
 		"user_prompt & (relevant_chunks | parsed_doc | doc)",
 		"answer",
 		llm,
 		map[string]interface{}{
 			"schema":          schema,
-			"additional_info": cfg["additional_info"],
+			"additional_info": cfg.AdditionalInfo,
 		},
 	)
 
 	// Optional reasoning node
 	var reasoning *ReasoningNode
-	if cfg["reasoning"] == true {
+	if cfg.Reasoning {
 		reasoning = NewReasoningNode(
 			"user_prompt & (relevant_chunks | parsed_doc | doc)",
 			"reasoning",
@@ -189,7 +237,7 @@ func (ss *SmartScraperGraph) buildGraph() (*BaseGraph, error) {
 	// Optional re-attempt conditional
 	var cond *ConditionalNode
 	var regen *GenerateAnswerNode
-	if cfg["reattempt"] == true {
+	if cfg.Reattempt {
 		cond = NewConditionalNode(
 			"answer",
 			"answer",
@@ -212,9 +260,9 @@ func (ss *SmartScraperGraph) buildGraph() (*BaseGraph, error) {
 		regen.Base.nodeName = "RegenNode"
 	}
 
-	htmlMode := cfg["html_mode"] == true
-	reasoningEnabled := cfg["reasoning"] == true
-	reattemptEnabled := cfg["reattempt"] == true
+	htmlMode := cfg.HTMLMode
+	reasoningEnabled := cfg.Reasoning
+	reattemptEnabled := cfg.Reattempt
 
 	var nodes []Node
 	var edges [][2]string
@@ -298,8 +346,8 @@ type SearchGraph struct {
 }
 
 // NewSearchGraph builds a SearchGraph pipeline.
-func NewSearchGraph(prompt string, config map[string]interface{}, schema interface{}, llm LLM) (*SearchGraph, error) {
-	pipe, err := NewPipeline(prompt, "", config, schema, llm)
+func NewSearchGraph(prompt string, cfg *GraphConfig, schema interface{}, llm LLM) (*SearchGraph, error) {
+	pipe, err := NewPipeline(prompt, "", cfg, schema, llm)
 	if err != nil {
 		return nil, err
 	}
@@ -313,8 +361,8 @@ func NewSearchGraph(prompt string, config map[string]interface{}, schema interfa
 }
 
 // NewSearchGraphWithEngine builds a SearchGraph using the given engine for fetching.
-func NewSearchGraphWithEngine(prompt string, config map[string]interface{}, schema interface{}, llm LLM, eng engine.Engine) (*SearchGraph, error) {
-	sg, err := NewSearchGraph(prompt, config, schema, llm)
+func NewSearchGraphWithEngine(prompt string, cfg *GraphConfig, schema interface{}, llm LLM, eng engine.Engine) (*SearchGraph, error) {
+	sg, err := NewSearchGraph(prompt, cfg, schema, llm)
 	if err != nil {
 		return nil, err
 	}
@@ -328,8 +376,8 @@ func NewSearchGraphWithEngine(prompt string, config map[string]interface{}, sche
 }
 
 // NewSearchGraphWithStealth builds a SearchGraph with a stealth client.
-func NewSearchGraphWithStealth(prompt string, config map[string]interface{}, schema interface{}, llm LLM, client *stealth.Adaptive) (*SearchGraph, error) {
-	sg, err := NewSearchGraph(prompt, config, schema, llm)
+func NewSearchGraphWithStealth(prompt string, cfg *GraphConfig, schema interface{}, llm LLM, client *stealth.Adaptive) (*SearchGraph, error) {
+	sg, err := NewSearchGraph(prompt, cfg, schema, llm)
 	if err != nil {
 		return nil, err
 	}
@@ -348,19 +396,20 @@ func (sg *SearchGraph) buildGraph() (*BaseGraph, error) {
 	llm := sg.LLM
 	schema := sg.Schema
 
-	search := NewSearchInternetNode("user_prompt", "urls", llm, cfg)
+	nodeConfig := cfg.toNodeConfig()
+	search := NewSearchInternetNode("user_prompt", "urls", llm, nodeConfig)
 
 	// GraphIteratorNode equivalent: for each URL, run a SmartScraperGraph.
 	// In the Go implementation we model this as a single node that iterates.
 	iterate := &GraphIteratorNode{
 		Base: baseNode{
-			nodeName:   "GraphIteratorNode",
-			nodeType:   "node",
-			inputExpr:  "user_prompt & urls",
-			output:     []string{"results"},
-			minInputs:  2,
-			nodeConfig: cfg,
+			nodeName:  "GraphIteratorNode",
+			nodeType:  "node",
+			inputExpr: "user_prompt & urls",
+			output:    []string{"results"},
+			minInputs: 2,
 		},
+		GraphConfig:   cfg,
 		LLM:           llm,
 		Schema:        schema,
 		Engine:        sg.Engine,
@@ -388,6 +437,7 @@ func (sg *SearchGraph) buildGraph() (*BaseGraph, error) {
 // concurrency.
 type GraphIteratorNode struct {
 	Base          baseNode
+	GraphConfig   *GraphConfig
 	LLM           LLM
 	Schema        interface{}
 	BatchSize     int
@@ -428,11 +478,11 @@ func (n *GraphIteratorNode) Execute(ctx context.Context, state State) (State, st
 			var graph *SmartScraperGraph
 			var err error
 			if n.StealthClient != nil {
-				graph, err = NewSmartScraperGraphWithStealth(userPrompt, url, n.Base.nodeConfig, n.Schema, n.LLM, n.StealthClient)
+				graph, err = NewSmartScraperGraphWithStealth(userPrompt, url, n.GraphConfig, n.Schema, n.LLM, n.StealthClient)
 			} else if n.Engine != nil {
-				graph, err = NewSmartScraperGraphWithEngine(userPrompt, url, n.Base.nodeConfig, n.Schema, n.LLM, n.Engine)
+				graph, err = NewSmartScraperGraphWithEngine(userPrompt, url, n.GraphConfig, n.Schema, n.LLM, n.Engine)
 			} else {
-				graph, err = NewSmartScraperGraph(userPrompt, url, n.Base.nodeConfig, n.Schema, n.LLM)
+				graph, err = NewSmartScraperGraph(userPrompt, url, n.GraphConfig, n.Schema, n.LLM)
 			}
 			if err != nil {
 				return
