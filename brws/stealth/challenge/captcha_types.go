@@ -35,6 +35,16 @@ type DetectionTrace struct {
 	IsBot      bool      `json:"is_bot"`
 }
 
+// CaptchaResponse is a parsed CAPTCHA challenge detected in an HTTP response.
+// This is the canonical shared type used by both the solver and fsm layers.
+type CaptchaResponse struct {
+	ChallengeID   string
+	Type          string
+	CaptchaID     string
+	ImageBase64   string
+	ChallengeData map[string]interface{}
+}
+
 // CaptchaChallenge represents an active CAPTCHA challenge.
 type CaptchaChallenge struct {
 	ID             string

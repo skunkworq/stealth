@@ -11,14 +11,8 @@ import (
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
 )
 
-// CaptchaDetection mirrors stealth.CaptchaResponse for the interface.
-type CaptchaDetection struct {
-	ChallengeID   string
-	Type          string
-	CaptchaID     string
-	ImageBase64   string
-	ChallengeData map[string]interface{}
-}
+// CaptchaDetection is the canonical detected-captcha type from the challenge package.
+type CaptchaDetection = challenge.CaptchaResponse
 
 // CaptchaSolveOutput mirrors stealth.SolveResult for the interface.
 type CaptchaSolveOutput struct {

@@ -28,14 +28,8 @@ type CaptchaSolver struct {
 	lastToken  string // most recent session token from captcha solve
 }
 
-// CaptchaResponse is a parsed captcha challenge from a shield response.
-type CaptchaResponse struct {
-	ChallengeID   string
-	Type          string
-	CaptchaID     string
-	ImageBase64   string
-	ChallengeData map[string]interface{}
-}
+// CaptchaResponse is the canonical detected-captcha type from the challenge package.
+type CaptchaResponse = challenge.CaptchaResponse
 
 // SolveResult holds the output of a captcha solve attempt.
 type SolveResult struct {
@@ -477,19 +471,6 @@ type ReCaptchaV2Result struct {
 	TotalTimeMs     int64   `json:"total_time_ms"`
 }
 
-// ToFSMDetection converts a CaptchaResponse to the FSM-layer CaptchaDetection type.
-func (cr *CaptchaResponse) ToFSMDetection() *challengefsm.CaptchaDetection {
-	if cr == nil {
-		return nil
-	}
-	return &challengefsm.CaptchaDetection{
-		ChallengeID:   cr.ChallengeID,
-		Type:          cr.Type,
-		CaptchaID:     cr.CaptchaID,
-		ImageBase64:   cr.ImageBase64,
-		ChallengeData: cr.ChallengeData,
-	}
-}
 
 // ToFSMOutput converts a SolveResult to the FSM-layer CaptchaSolveOutput type.
 func (sr *SolveResult) ToFSMOutput() *challengefsm.CaptchaSolveOutput {

@@ -3,28 +3,12 @@ package fsm
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	"github.com/skunkworq/stealth/brws/browser/engine"
 	"github.com/skunkworq/stealth/brws/core/instrumentation"
 )
-
-// CloudflareSolveResult mirrors stealth.CloudflareSolveResult for the interface.
-type CloudflareSolveResult struct {
-	SessionID        string
-	ChallengeType    challenge.ChallengeType
-	Passed           bool
-	ClearanceCookie  *http.Cookie
-	TurnstileToken   string
-	PoWTimeMs        int64
-	TotalTimeMs      int64
-	PoWIterations    int64
-	PoWDifficulty    int
-	BehavioralScore  float64
-	FingerprintScore float64
-}
 
 // CFDetectFunc is a function that detects Cloudflare challenges from a response.
 type CFDetectFunc func(resp *engine.Response) *challenge.CloudflareChallenge

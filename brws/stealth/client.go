@@ -400,14 +400,14 @@ func (c *Adaptive) registerSolvers(registry *challengefsm.SolverRegistry) {
 	if c.captchaSolver != nil {
 		captchaSolver := challengefsm.NewCaptchaFSMSolver(
 			func(body []byte, headers map[string][]string) *challengefsm.CaptchaDetection {
-				return c.captchaSolver.DetectCaptchaResponse(body, headers).ToFSMDetection()
+				return c.captchaSolver.DetectCaptchaResponse(body, headers)
 			},
 			func(body []byte, headers map[string][]string) (*challengefsm.CaptchaSolveOutput, *challengefsm.CaptchaDetection, error) {
 				result, cr, err := c.captchaSolver.SolveFromResponse(body, headers)
 				if err != nil {
 					return nil, nil, err
 				}
-				return result.ToFSMOutput(), cr.ToFSMDetection(), nil
+				return result.ToFSMOutput(), cr, nil
 			},
 			func(baseURL string) (*challengefsm.ReCaptchaV2Output, error) {
 				result, err := c.captchaSolver.SolveReCaptchaV2(baseURL)
