@@ -253,7 +253,7 @@ func (n *ParseNode) Execute(ctx context.Context, state State) (State, string, er
 
 	out := state.Clone()
 	out[n.Base.output[0]] = chunks
-	out["parsed_doc"] = chunks
+	out[StateKeyParsedDoc] = chunks
 
 	if n.ParseURLs {
 		links, imgs := extractURLs(text)

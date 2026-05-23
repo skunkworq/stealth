@@ -11,7 +11,17 @@ import (
 )
 
 // State is the shared mutable dictionary that flows through the graph.
+// Use the StateKey* constants below for all key accesses to avoid magic strings.
 type State map[string]interface{}
+
+// State key constants shared across all nodes.
+const (
+	StateKeyUserPrompt = "user_prompt" // prompt string injected by the pipeline
+	StateKeyParsedDoc  = "parsed_doc"  // []string of chunked document text
+	StateKeyResults    = "results"     // search or intermediate results
+	StateKeyAnswer     = "answer"      // final answer produced by GenerateAnswer
+	StateKeyURLs       = "urls"        // []string of URLs for the iterator node
+)
 
 // Clone returns a shallow copy of the state.
 func (s State) Clone() State {

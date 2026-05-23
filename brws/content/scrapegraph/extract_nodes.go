@@ -45,7 +45,7 @@ func (n *ExtractorNode) Execute(ctx context.Context, state State) (State, string
 		return state, "", fmt.Errorf("parse input: %w", err)
 	}
 
-	userPrompt, _ := state["user_prompt"].(string)
+	userPrompt, _ := state[StateKeyUserPrompt].(string)
 
 	var content string
 	if len(keys) > 0 {

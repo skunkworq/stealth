@@ -114,8 +114,8 @@ func (p *Pipeline) Run(ctx context.Context) (State, []ExecutionInfo, error) {
 		return nil, nil, fmt.Errorf("graph not built")
 	}
 	state := State{
-		"user_prompt": p.Prompt,
-		p.InputKey:    p.Source,
+		StateKeyUserPrompt: p.Prompt,
+		p.InputKey:         p.Source,
 	}
 	return p.Graph.Execute(ctx, state)
 }
@@ -452,8 +452,8 @@ func (n *GraphIteratorNode) Outputs() []string { return n.Base.output }
 func (n *GraphIteratorNode) MinInputs() int    { return n.Base.minInputs }
 
 func (n *GraphIteratorNode) Execute(ctx context.Context, state State) (State, string, error) {
-	userPrompt, _ := state["user_prompt"].(string)
-	urls, ok := state["urls"].([]string)
+	userPrompt, _ := state[StateKeyUserPrompt].(string)
+	urls, ok := state[StateKeyURLs].([]string)
 	if !ok || len(urls) == 0 {
 		return state, "", fmt.Errorf("graph iterator requires urls")
 	}
@@ -491,7 +491,7 @@ func (n *GraphIteratorNode) Execute(ctx context.Context, state State) (State, st
 			if err != nil {
 				return
 			}
-			ans := out["answer"]
+			ans := out[StateKeyAnswer]
 			mu.Lock()
 			results[idx] = ans
 			mu.Unlock()

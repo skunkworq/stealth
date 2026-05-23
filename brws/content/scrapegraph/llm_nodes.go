@@ -118,7 +118,7 @@ func (n *GenerateAnswerNode) Execute(ctx context.Context, state State) (State, s
 		return state, "", fmt.Errorf("generate answer node requires %d inputs", n.Base.minInputs)
 	}
 
-	userPrompt, _ := state["user_prompt"].(string)
+	userPrompt, _ := state[StateKeyUserPrompt].(string)
 	var content string
 	if len(keys) > 0 {
 		switch v := state[keys[0]].(type) {
@@ -139,7 +139,7 @@ func (n *GenerateAnswerNode) Execute(ctx context.Context, state State) (State, s
 
 	// Prefer parsed_doc or chunks if available
 	var chunks []string
-	if cd, ok := state["parsed_doc"].([]string); ok && len(cd) > 0 {
+	if cd, ok := state[StateKeyParsedDoc].([]string); ok && len(cd) > 0 {
 		chunks = cd
 	} else if content != "" {
 		chunks = []string{content}
@@ -285,7 +285,7 @@ func (n *ReasoningNode) Outputs() []string { return n.Base.output }
 func (n *ReasoningNode) MinInputs() int    { return n.Base.minInputs }
 
 func (n *ReasoningNode) Execute(ctx context.Context, state State) (State, string, error) {
-	userPrompt, _ := state["user_prompt"].(string)
+	userPrompt, _ := state[StateKeyUserPrompt].(string)
 	schemaStr := ""
 	if n.Schema != nil {
 		schemaStr = fmt.Sprintf("%+v", n.Schema)
@@ -352,13 +352,13 @@ func (n *MergeAnswersNode) Execute(ctx context.Context, state State) (State, str
 		return state, "", fmt.Errorf("merge node needs user_prompt and results")
 	}
 
-	userPrompt, _ := state["user_prompt"].(string)
+	userPrompt, _ := state[StateKeyUserPrompt].(string)
 	var answers []string
-	if arr, ok := state["results"].([]interface{}); ok {
+	if arr, ok := state[StateKeyResults].([]interface{}); ok {
 		for _, a := range arr {
 			answers = append(answers, fmt.Sprintf("%v", a))
 		}
-	} else if arr2, ok := state["results"].([]string); ok {
+	} else if arr2, ok := state[StateKeyResults].([]string); ok {
 		answers = arr2
 	}
 
@@ -436,7 +436,7 @@ func (n *SearchInternetNode) Outputs() []string { return n.Base.output }
 func (n *SearchInternetNode) MinInputs() int    { return n.Base.minInputs }
 
 func (n *SearchInternetNode) Execute(ctx context.Context, state State) (State, string, error) {
-	userPrompt, _ := state["user_prompt"].(string)
+	userPrompt, _ := state[StateKeyUserPrompt].(string)
 
 	// 1. Generate search query via LLM
 	queryPrompt := strings.NewReplacer(
