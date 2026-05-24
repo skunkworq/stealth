@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/skunkworq/stealth/brws/stealth"
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	solverpkg "github.com/skunkworq/stealth/brws/stealth/solver"
 )
 
 // mountProtectedServer creates a test server with CF protection wrapping actual content.
@@ -88,7 +88,7 @@ func TestProtectedPage_WithValidCookie_ReturnsContent(t *testing.T) {
 	defer ts.Close()
 
 	// Solve a challenge to get a valid cookie
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 	result, err := solver.SolveJSChallenge(ts.URL)
 	if err != nil {
 		t.Fatalf("solve failed: %v", err)
@@ -219,7 +219,7 @@ func TestSolverSubmitSolution_JSChallenge(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	// Init via HTTP to get __cf_bm cookie in the solver's jar
 	initResp, err := solver.InitChallenge(ts.URL, "cloudflare_js", 0.3, "")
@@ -256,7 +256,7 @@ func TestSolverSubmitSolution_ManagedChallenge(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	// Try up to 3 times since managed challenges are stochastic
 	for attempt := 1; attempt <= 3; attempt++ {
@@ -424,7 +424,7 @@ func TestRealisticHeaders_SolveRejection(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	initResp, _ := solver.InitChallenge(ts.URL, "cloudflare_managed", 0.5, "")
 
@@ -474,7 +474,7 @@ func TestFullProtectedPageFlow(t *testing.T) {
 	ts, _ := mountProtectedServer(expectedContent)
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	// Step 1: Hit protected page, get challenge
 	resp, err := http.Get(ts.URL + "/protected")
@@ -521,7 +521,7 @@ func TestFullProtectedPageFlow(t *testing.T) {
 // --- Phase 7: Sword Fingerprint Pinning Tests ---
 
 func TestSolverFingerprint_PinnedAcrossCalls(t *testing.T) {
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	fp1 := solver.GenerateFingerprint()
 	fp2 := solver.GenerateFingerprint()
@@ -564,7 +564,7 @@ func TestSolverFingerprint_PinnedAcrossCalls(t *testing.T) {
 }
 
 func TestSolverFingerprint_ResetClearsPin(t *testing.T) {
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	fp1 := solver.GenerateFingerprint()
 	solver.ResetFingerprint()
@@ -578,7 +578,7 @@ func TestSolverFingerprint_ResetClearsPin(t *testing.T) {
 }
 
 func TestSolverFingerprint_CanvasIsValidPNG(t *testing.T) {
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 	fp := solver.GenerateFingerprint()
 
 	if !strings.HasPrefix(fp.CanvasHash, "data:image/png;base64,") {
@@ -602,13 +602,13 @@ func TestSolverFingerprint_CanvasIsValidPNG(t *testing.T) {
 }
 
 func TestSolverFingerprint_TimezoneMatchesProfile(t *testing.T) {
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 	fp := solver.GenerateFingerprint()
 
 	if fp.Timezone == "" {
 		t.Error("timezone should be set from profile")
 	}
-	expectedOffset := stealth.TimezoneToOffset(fp.Timezone)
+	expectedOffset := solverpkg.TimezoneToOffset(fp.Timezone)
 	if fp.TimezoneOffset != expectedOffset {
 		t.Errorf("timezone offset mismatch: tz=%s expected=%d got=%d",
 			fp.Timezone, expectedOffset, fp.TimezoneOffset)
@@ -622,7 +622,7 @@ func TestSolverFingerprint_PassesShieldDriftCheck(t *testing.T) {
 	cc := challenge.NewCloudflareChallenger(nil, nil)
 	cc.CreateManagedChallenge("pinned-test", 0.5)
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 	fp := solver.GenerateFingerprint()
 
 	// First submission — binds
@@ -655,7 +655,7 @@ func TestTimezoneToOffset_KnownTimezones(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := stealth.TimezoneToOffset(tt.tz)
+		got := solverpkg.TimezoneToOffset(tt.tz)
 		if got != tt.offset {
 			t.Errorf("TimezoneToOffset(%q) = %d, want %d", tt.tz, got, tt.offset)
 		}
@@ -663,7 +663,7 @@ func TestTimezoneToOffset_KnownTimezones(t *testing.T) {
 }
 
 func TestTimezoneToOffset_UnknownFallback(t *testing.T) {
-	got := stealth.TimezoneToOffset("Mars/Olympus_Mons")
+	got := solverpkg.TimezoneToOffset("Mars/Olympus_Mons")
 	if got != -300 {
 		t.Errorf("unknown timezone should default to -300, got %d", got)
 	}

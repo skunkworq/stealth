@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth"
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	solverpkg "github.com/skunkworq/stealth/brws/stealth/solver"
 )
 
 // mountCloudflareServer creates a test server with all Cloudflare challenge endpoints.
@@ -224,7 +224,7 @@ func TestSwordSolvesJSChallenge(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 	result, err := solver.SolveJSChallenge(ts.URL)
 	if err != nil {
 		t.Fatalf("SolveJSChallenge failed: %v", err)
@@ -254,10 +254,10 @@ func TestSwordSolvesManagedChallenge(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	// Behavioral analysis is stochastic; retry up to 5 times for CI stability
-	var result *stealth.CloudflareSolveResult
+	var result *solverpkg.CloudflareSolveResult
 	var err error
 	for attempt := 1; attempt <= 5; attempt++ {
 		result, err = solver.SolveManagedChallenge(ts.URL)
@@ -288,9 +288,9 @@ func TestSwordSolvesTurnstile(t *testing.T) {
 	ts, cc := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
-	result, err := solver.ExerciseTurnstileFlow(ts.URL, &stealth.TurnstileFlowOptions{
-		Verifier: &stealth.LabTurnstileVerifier{
+	solver := solverpkg.NewCloudflareSolverClient()
+	result, err := solver.ExerciseTurnstileFlow(ts.URL, &solverpkg.TurnstileFlowOptions{
+		Verifier: &solverpkg.LabTurnstileVerifier{
 			HTTPClient: solver.HTTPClient(),
 			BaseURL:    ts.URL,
 			Secret:     cc.TurnstileSecretKey(),
@@ -355,10 +355,10 @@ func TestSwordSolvesTurnstileVariants(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			solver := stealth.NewCloudflareSolverClient()
-			result, err := solver.ExerciseTurnstileFlow(ts.URL, &stealth.TurnstileFlowOptions{
+			solver := solverpkg.NewCloudflareSolverClient()
+			result, err := solver.ExerciseTurnstileFlow(ts.URL, &solverpkg.TurnstileFlowOptions{
 				DetectionScore: tc.score,
-				Verifier: &stealth.LabTurnstileVerifier{
+				Verifier: &solverpkg.LabTurnstileVerifier{
 					HTTPClient: solver.HTTPClient(),
 					BaseURL:    ts.URL,
 					Secret:     cc.TurnstileSecretKey(),
@@ -429,7 +429,7 @@ func TestSwordSolvesTurnstileVariants(t *testing.T) {
 }
 
 func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	testCases := []struct {
 		name            string
@@ -614,7 +614,7 @@ func TestTurnstileInteractionPlanLooksHuman(t *testing.T) {
 }
 
 func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 	cfg := &challenge.TurnstileWidgetConfig{
 		Interaction: challenge.TurnstileInteractionConfig{
 			Type:                   "drag",
@@ -653,7 +653,7 @@ func TestTurnstileInteractionPlanVariesAcrossRuns(t *testing.T) {
 }
 
 func TestSolveTurnstileLabRejectsUnallowlistedHost(t *testing.T) {
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 	if _, err := solver.SolveTurnstileLab("https://example.com"); err == nil {
 		t.Fatal("expected non-local host to be rejected")
 	}
@@ -663,9 +663,9 @@ func TestLabTurnstileVerifierRejectsDuplicateToken(t *testing.T) {
 	ts, cc := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
-	result, err := solver.ExerciseTurnstileFlow(ts.URL, &stealth.TurnstileFlowOptions{
-		Verifier: &stealth.LabTurnstileVerifier{
+	solver := solverpkg.NewCloudflareSolverClient()
+	result, err := solver.ExerciseTurnstileFlow(ts.URL, &solverpkg.TurnstileFlowOptions{
+		Verifier: &solverpkg.LabTurnstileVerifier{
 			HTTPClient: solver.HTTPClient(),
 			BaseURL:    ts.URL,
 			Secret:     cc.TurnstileSecretKey(),
@@ -676,7 +676,7 @@ func TestLabTurnstileVerifierRejectsDuplicateToken(t *testing.T) {
 		t.Fatalf("ExerciseTurnstileFlow failed: %v", err)
 	}
 
-	verifier := &stealth.LabTurnstileVerifier{
+	verifier := &solverpkg.LabTurnstileVerifier{
 		HTTPClient: solver.HTTPClient(),
 		BaseURL:    ts.URL,
 		Secret:     cc.TurnstileSecretKey(),
@@ -695,7 +695,7 @@ func TestSwordClearanceCookieReuse(t *testing.T) {
 	ts, cc := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 	result, err := solver.SolveJSChallenge(ts.URL)
 	if err != nil {
 		t.Fatalf("initial solve failed: %v", err)
@@ -734,7 +734,7 @@ func TestBotBehavioralRejection(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	// Init a managed challenge
 	initResp, err := solver.InitChallenge(ts.URL, "cloudflare_managed", 0.5, "")
@@ -786,7 +786,7 @@ func TestEmptyFingerprintRejection(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	initResp, err := solver.InitChallenge(ts.URL, "cloudflare_managed", 0.5, "")
 	if err != nil {
@@ -834,7 +834,7 @@ func TestDifficultyProgression(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	scores := []float64{0.1, 0.3, 0.5}
 	prevDifficulty := 0
@@ -859,11 +859,11 @@ func TestStatusEndpoint(t *testing.T) {
 	ts, _ := mountCloudflareServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	// Solve a few challenges
 	_, _ = solver.SolveJSChallenge(ts.URL)
-	_, _ = solver.SolveTurnstile(ts.URL)
+	_, _ = solver.SolveTurnstileLab(ts.URL)
 
 	resp, err := http.Get(ts.URL + "/api/cloudflare/status")
 	if err != nil {

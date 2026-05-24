@@ -1,6 +1,23 @@
 // Package engine defines the core interfaces for HTTP clients that can
 // execute requests through different underlying implementations (native Go,
 // Chromium, Firefox, WebKit).
+//
+// # Engine registration
+//
+// Engines are registered by name via init() functions in their respective
+// packages. To activate a backend, blank-import its package. The registered
+// name is the string passed to engine.New():
+//
+//	import _ "github.com/skunkworq/stealth/brws/browser/engine/http/native"        // "native"
+//	import _ "github.com/skunkworq/stealth/brws/browser/engine/http/http3"         // "http3"
+//	import _ "github.com/skunkworq/stealth/brws/browser/engine/browser/chromium"   // "chromium"
+//	import _ "github.com/skunkworq/stealth/brws/stealth/chromium"                  // "chromium-stealth" (anti-detection)
+//	import _ "github.com/skunkworq/stealth/brws/browser/engine/browser/firefox"    // "firefox"
+//	import _ "github.com/skunkworq/stealth/brws/browser/engine/browser/webkit"     // "webkit"
+//
+// The default engine used by stealth.NewAdaptive is "chromium-stealth". Most
+// callers do not need to register engines manually — stealth.NewAdaptive
+// imports all production backends via its own init chain.
 package engine
 
 import (

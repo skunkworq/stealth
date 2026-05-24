@@ -11,7 +11,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"time"
 
 	"github.com/chromedp/cdproto/input"
@@ -181,9 +180,8 @@ func (e *Executor) execClick(ctx context.Context, action Action) error {
 	if e.SimulateBehavior {
 		return e.execClickSimulated(ctx, action)
 	}
-	selector := action.Parameters["selector"]
-	if s, ok := selector.(string); ok && s != "" {
-		return chromedp.Run(ctx, chromedp.Click(s, chromedp.NodeVisible))
+	if p, ok := action.Parameters.(*ClickParams); ok && p.Selector != "" {
+		return chromedp.Run(ctx, chromedp.Click(p.Selector, chromedp.NodeVisible))
 	}
 	// Fallback: click by coordinates if selector is missing
 	if x, y := e.coordsFromAction(action); x > 0 || y > 0 {
@@ -195,7 +193,10 @@ func (e *Executor) execClick(ctx context.Context, action Action) error {
 // execClickSimulated moves the mouse along a Bézier path to the element centre
 // (JS events visible to page scripts), then performs a reliable CDP click.
 func (e *Executor) execClickSimulated(ctx context.Context, action Action) error {
-	s, _ := action.Parameters["selector"].(string)
+	var s string
+	if p, ok := action.Parameters.(*ClickParams); ok {
+		s = p.Selector
+	}
 
 	var cx, cy float64
 	if s != "" {
@@ -234,17 +235,14 @@ func (e *Executor) execType(ctx context.Context, action Action) error {
 	if e.SimulateBehavior {
 		return e.execTypeSimulated(ctx, action)
 	}
-	selector := action.Parameters["selector"]
-	text := action.Parameters["text"]
-	if s, ok := selector.(string); ok && s != "" {
-		if t, ok := text.(string); ok {
-			return chromedp.Run(ctx,
-				chromedp.SendKeys(s, t, chromedp.NodeVisible),
-			)
-		}
+	p, ok := action.Parameters.(*TypeParams)
+	if !ok || p.Selector == "" {
+		return fmt.Errorf("type action missing selector")
+	}
+	if p.Text == "" {
 		return fmt.Errorf("type action missing text parameter")
 	}
-	return fmt.Errorf("type action missing selector")
+	return chromedp.Run(ctx, chromedp.SendKeys(p.Selector, p.Text, chromedp.NodeVisible))
 }
 
 // execTypeSimulated focuses the element then types character-by-character via
@@ -255,12 +253,13 @@ func (e *Executor) execType(ctx context.Context, action Action) error {
 //
 //nolint:gosec // G404: math/rand intentional — non-cryptographic behavioral timing
 func (e *Executor) execTypeSimulated(ctx context.Context, action Action) error {
-	s, ok := action.Parameters["selector"].(string)
-	if !ok || s == "" {
+	p, ok := action.Parameters.(*TypeParams)
+	if !ok || p.Selector == "" {
 		return fmt.Errorf("type action missing selector")
 	}
-	t, ok := action.Parameters["text"].(string)
-	if !ok {
+	s := p.Selector
+	t := p.Text
+	if t == "" {
 		return fmt.Errorf("type action missing text parameter")
 	}
 
@@ -287,14 +286,12 @@ func (e *Executor) execTypeSimulated(ctx context.Context, action Action) error {
 }
 
 func (e *Executor) execSelect(ctx context.Context, action Action) error {
-	selector := action.Parameters["selector"]
-	value := action.Parameters["value"]
-	s, ok1 := selector.(string)
-	v, ok2 := value.(string)
-	if !ok1 || s == "" {
+	p, ok := action.Parameters.(*SelectParams)
+	if !ok || p.Selector == "" {
 		return fmt.Errorf("select action missing selector")
 	}
-	if !ok2 || v == "" {
+	s, v := p.Selector, p.Value
+	if v == "" {
 		return fmt.Errorf("select action missing value")
 	}
 	script := fmt.Sprintf(`
@@ -316,9 +313,8 @@ func (e *Executor) execSelect(ctx context.Context, action Action) error {
 }
 
 func (e *Executor) execToggle(ctx context.Context, action Action) error {
-	selector := action.Parameters["selector"]
-	if s, ok := selector.(string); ok && s != "" {
-		return chromedp.Run(ctx, chromedp.Click(s, chromedp.NodeVisible))
+	if p, ok := action.Parameters.(*SelectParams); ok && p.Selector != "" {
+		return chromedp.Run(ctx, chromedp.Click(p.Selector, chromedp.NodeVisible))
 	}
 	return fmt.Errorf("toggle action missing selector")
 }
@@ -349,14 +345,18 @@ func (e *Executor) execScroll(ctx context.Context, action Action) (float64, erro
 	case ActionScrollTop:
 		script = `window.scrollTo(0, 0)`
 	case ActionScrollTo:
-		if sel, ok := action.Parameters["selector"].(string); ok && sel != "" {
-			script = fmt.Sprintf(`
+		if p, ok := action.Parameters.(*ScrollToParams); ok {
+			if p.Selector != "" {
+				script = fmt.Sprintf(`
 			(function() {
 				var el = document.querySelector(%q);
 				if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'});
-			})();`, sel)
-		} else if y, ok := action.Parameters["y"].(float64); ok {
-			script = fmt.Sprintf(`window.scrollTo(0, %f)`, y)
+			})();`, p.Selector)
+			} else if p.Y > 0 {
+				script = fmt.Sprintf(`window.scrollTo(0, %f)`, p.Y)
+			} else {
+				return 0, fmt.Errorf("scroll_to missing target")
+			}
 		} else {
 			return 0, fmt.Errorf("scroll_to missing target")
 		}
@@ -366,10 +366,11 @@ func (e *Executor) execScroll(ctx context.Context, action Action) (float64, erro
 }
 
 func (e *Executor) execNavigate(ctx context.Context, action Action) (*ExecuteResult, error) {
-	urlStr, ok := action.Parameters["url"].(string)
-	if !ok || urlStr == "" {
+	p, ok := action.Parameters.(*NavigateParams)
+	if !ok || p.URL == "" {
 		return nil, fmt.Errorf("navigate action missing url parameter")
 	}
+	urlStr := p.URL
 
 	// If a stealth client is configured, navigate directly on the agent's tab
 	// with stealth setup applied in-place. This eliminates the wasteful
@@ -459,21 +460,11 @@ func (e *Executor) execForward(ctx context.Context) error {
 
 func (e *Executor) execWait(ctx context.Context, action Action) error {
 	ms := 1000
-	if v, ok := action.Parameters["ms"]; ok {
-		switch val := v.(type) {
-		case float64:
-			ms = int(val)
-		case int:
-			ms = val
-		case string:
-			if parsed, err := strconv.Atoi(val); err == nil {
-				ms = parsed
-			}
-		}
-	}
-	if v, ok := action.Parameters["duration"]; ok {
-		if s, ok := v.(string); ok {
-			if d, err := time.ParseDuration(s); err == nil {
+	if p, ok := action.Parameters.(*WaitParams); ok {
+		if p.Ms > 0 {
+			ms = p.Ms
+		} else if p.Duration != "" {
+			if d, err := time.ParseDuration(p.Duration); err == nil {
 				ms = int(d.Milliseconds())
 			}
 		}
@@ -487,16 +478,16 @@ func (e *Executor) execScreenshot(ctx context.Context, action Action) error {
 		return err
 	}
 	// Optionally save to file if path provided
-	if path, ok := action.Parameters["path"].(string); ok && path != "" {
+	if p, ok := action.Parameters.(*ScreenshotParams); ok && p.Path != "" {
 		// Screenshot is in buf; caller can save it
-		_ = path
+		_ = p.Path
 	}
 	return nil
 }
 
 func (e *Executor) execHover(ctx context.Context, action Action) error {
-	selector := action.Parameters["selector"]
-	if s, ok := selector.(string); ok && s != "" {
+	if p, ok := action.Parameters.(*ClickParams); ok && p.Selector != "" {
+		s := p.Selector
 		script := fmt.Sprintf(`
 		(function() {
 			var el = document.querySelector(%q);
@@ -518,9 +509,8 @@ func (e *Executor) execHover(ctx context.Context, action Action) error {
 }
 
 func (e *Executor) execFocus(ctx context.Context, action Action) error {
-	selector := action.Parameters["selector"]
-	if s, ok := selector.(string); ok && s != "" {
-		return chromedp.Run(ctx, chromedp.Focus(s, chromedp.NodeVisible))
+	if p, ok := action.Parameters.(*ClickParams); ok && p.Selector != "" {
+		return chromedp.Run(ctx, chromedp.Focus(p.Selector, chromedp.NodeVisible))
 	}
 	return fmt.Errorf("focus action missing selector")
 }
@@ -536,18 +526,19 @@ var keyMap = map[string]string{
 }
 
 func (e *Executor) execKeyPress(ctx context.Context, action Action) error {
-	key, ok := action.Parameters["key"].(string)
-	if !ok || key == "" {
+	p, ok := action.Parameters.(*KeyPressParams)
+	if !ok || p.Key == "" {
 		return fmt.Errorf("key_press action missing key parameter")
 	}
+	key := p.Key
 	if mapped, ok := keyMap[key]; ok {
 		key = mapped
 	}
-	if selector, ok := action.Parameters["selector"].(string); ok && selector != "" {
-		if err := chromedp.Run(ctx, chromedp.Focus(selector, chromedp.NodeVisible)); err != nil {
+	if p.Selector != "" {
+		if err := chromedp.Run(ctx, chromedp.Focus(p.Selector, chromedp.NodeVisible)); err != nil {
 			return fmt.Errorf("focus element for key_press: %w", err)
 		}
-		return chromedp.Run(ctx, chromedp.SendKeys(selector, key, chromedp.NodeVisible))
+		return chromedp.Run(ctx, chromedp.SendKeys(p.Selector, key, chromedp.NodeVisible))
 	}
 	return chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
 		return input.DispatchKeyEvent(input.KeyDown).WithText(key).Do(c)
@@ -555,11 +546,11 @@ func (e *Executor) execKeyPress(ctx context.Context, action Action) error {
 }
 
 func (e *Executor) execClearInput(ctx context.Context, action Action) error {
-	selector := action.Parameters["selector"]
-	s, ok := selector.(string)
-	if !ok || s == "" {
+	p, ok := action.Parameters.(*ClickParams)
+	if !ok || p.Selector == "" {
 		return fmt.Errorf("clear_input action missing selector")
 	}
+	s := p.Selector
 	script := fmt.Sprintf(`
 	(function() {
 		var el = document.querySelector(%q);
@@ -579,27 +570,16 @@ func (e *Executor) execClearInput(ctx context.Context, action Action) error {
 	return nil
 }
 
-func parseTimeoutMs(param interface{}, defaultMs int) int {
-	if v, ok := param.(float64); ok {
-		return int(v)
-	}
-	if v, ok := param.(int); ok {
-		return v
-	}
-	if v, ok := param.(string); ok && v != "" {
-		if parsed, err := strconv.Atoi(v); err == nil {
-			return parsed
-		}
-	}
-	return defaultMs
-}
-
 func (e *Executor) execWaitForSelector(ctx context.Context, action Action) error {
-	selector, ok := action.Parameters["selector"].(string)
-	if !ok || selector == "" {
+	p, ok := action.Parameters.(*WaitForSelectorParams)
+	if !ok || p.Selector == "" {
 		return fmt.Errorf("wait_for_selector action missing selector parameter")
 	}
-	timeoutMs := parseTimeoutMs(action.Parameters["timeout_ms"], 5000)
+	selector := p.Selector
+	timeoutMs := p.TimeoutMs
+	if timeoutMs <= 0 {
+		timeoutMs = 5000
+	}
 	waitCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 	if err := chromedp.Run(waitCtx, chromedp.WaitVisible(selector)); err != nil {
@@ -612,7 +592,10 @@ func (e *Executor) execWaitForSelector(ctx context.Context, action Action) error
 }
 
 func (e *Executor) execWaitForNavigation(ctx context.Context, action Action) (string, error) {
-	timeoutMs := parseTimeoutMs(action.Parameters["timeout_ms"], 5000)
+	timeoutMs := 5000
+	if p, ok := action.Parameters.(*WaitForNavParams); ok && p.TimeoutMs > 0 {
+		timeoutMs = p.TimeoutMs
+	}
 	waitCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
 	defer cancel()
 
@@ -635,8 +618,8 @@ func (e *Executor) execWaitForNavigation(ctx context.Context, action Action) (st
 
 func (e *Executor) execNewTab(ctx context.Context, action Action) error {
 	url := "about:blank"
-	if u, ok := action.Parameters["url"].(string); ok && u != "" {
-		url = u
+	if p, ok := action.Parameters.(*NavigateParams); ok && p.URL != "" {
+		url = p.URL
 	}
 	return chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
 		_, err := target.CreateTarget(url).Do(c)
@@ -645,19 +628,19 @@ func (e *Executor) execNewTab(ctx context.Context, action Action) error {
 }
 
 func (e *Executor) execSwitchTab(ctx context.Context, action Action) error {
-	tid, ok := action.Parameters["target_id"].(string)
-	if !ok || tid == "" {
+	p, ok := action.Parameters.(*TabParams)
+	if !ok || p.TargetID == "" {
 		return fmt.Errorf("switch_tab missing target_id")
 	}
-	return chromedp.Run(ctx, target.ActivateTarget(target.ID(tid)))
+	return chromedp.Run(ctx, target.ActivateTarget(target.ID(p.TargetID)))
 }
 
 func (e *Executor) execCloseTab(ctx context.Context, action Action) error {
-	tid, ok := action.Parameters["target_id"].(string)
-	if !ok || tid == "" {
+	p, ok := action.Parameters.(*TabParams)
+	if !ok || p.TargetID == "" {
 		return fmt.Errorf("close_tab missing target_id")
 	}
-	return chromedp.Run(ctx, target.CloseTarget(target.ID(tid)))
+	return chromedp.Run(ctx, target.CloseTarget(target.ID(p.TargetID)))
 }
 
 // execSolveChallenge attempts to solve the current CAPTCHA challenge.
@@ -672,7 +655,10 @@ func (e *Executor) execCloseTab(ctx context.Context, action Action) error {
 // when VisionSolver is not configured.
 func (e *Executor) execSolveChallenge(ctx context.Context, action Action) (bool, error) {
 	if e.VisionSolver != nil {
-		challengeType, _ := action.Parameters["challenge_type"].(string)
+		var challengeType string
+		if p, ok := action.Parameters.(*SolveChallengeParams); ok {
+			challengeType = p.ChallengeType
+		}
 		solved, err := e.solveWithVision(ctx, challengeType)
 		if err == nil && solved {
 			return true, nil
@@ -912,17 +898,15 @@ func (e *Executor) currentURL(ctx context.Context) (string, error) {
 }
 
 func (e *Executor) coordsFromAction(action Action) (float64, float64) {
-	x, _ := action.Parameters["x"].(float64)
-	y, _ := action.Parameters["y"].(float64)
-	return x, y
+	if p, ok := action.Parameters.(*ClickParams); ok {
+		return p.X, p.Y
+	}
+	return 0, 0
 }
 
 func (e *Executor) scrollAmount(action Action, defaultVPFrac float64) float64 {
-	if v, ok := action.Parameters["amount"].(float64); ok && v > 0 {
-		return v
-	}
-	if v, ok := action.Parameters["amount"].(int); ok && v > 0 {
-		return float64(v)
+	if p, ok := action.Parameters.(*ScrollParams); ok && p.Amount > 0 {
+		return p.Amount
 	}
 	return 800 * defaultVPFrac
 }

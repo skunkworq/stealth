@@ -24,7 +24,7 @@ func main() {
 	urlsFile := flag.String("urls", "", "file with URLs (one per line)")
 	urlList := flag.String("url", "", "single URL or comma-separated URLs")
 	output := flag.String("output", "json", "output format: json, text, summary")
-	promAddr := flag.String("prom", ":9090", "Prometheus metrics endpoint")
+	promAddr := flag.String("prom", "127.0.0.1:9090", "Prometheus metrics endpoint")
 	otelEndpoint := flag.String("otel", "", "OpenTelemetry OTLP endpoint (e.g., localhost:4317)")
 	concurrency := flag.Int("concurrency", 4, "number of concurrent workers")
 	timeout := flag.Duration("timeout", 5*time.Minute, "request timeout")

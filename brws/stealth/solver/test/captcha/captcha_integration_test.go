@@ -14,10 +14,10 @@ import (
 	"strings"
 	"testing"
 
-	stealth "github.com/skunkworq/stealth/brws/stealth"
 	"github.com/skunkworq/stealth/brws/stealth/behavior"
 	"github.com/skunkworq/stealth/brws/stealth/captcha"
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	solverpkg "github.com/skunkworq/stealth/brws/stealth/solver"
 	"github.com/skunkworq/stealth/brws/core/constants"
 	"github.com/skunkworq/stealth/brws/core/detection"
 	cflab "github.com/skunkworq/stealth/brws/research/evasion/cloudflare"
@@ -83,7 +83,7 @@ func TestCaptchaAutoSolveEndToEnd(t *testing.T) {
 	}
 
 	// Step 4: Use CaptchaSolver to detect the captcha
-	solver := stealth.NewCaptchaSolver()
+	solver := solverpkg.NewCaptchaSolver()
 	cr := solver.DetectCaptchaResponse(body, flattenHeaders(resp.Header))
 	if cr == nil {
 		t.Fatal("CaptchaSolver failed to detect captcha in response")
@@ -128,7 +128,7 @@ func testVerifySeparately(t *testing.T, as *cflab.AdvancedStealthServer, baseURL
 		t.Fatal("expected text in challenge")
 	}
 
-	solver := stealth.NewCaptchaSolver()
+	solver := solverpkg.NewCaptchaSolver()
 	events := solver.GenerateHumanEvents(3000)
 	solved, err := solver.SubmitSolution(baseURL+"/api/captcha/verify", chal.ID, expectedText, events)
 	if err != nil {
@@ -358,7 +358,7 @@ func TestSwordEvadesFully(t *testing.T) {
 // TestGenerateHumanEventsPassesBotScorer verifies that the upgraded
 // GenerateHumanEvents produces events scoring < 0.5 on enhanced CalculateBotScore.
 func TestGenerateHumanEventsPassesBotScorer(t *testing.T) {
-	solver := stealth.NewCaptchaSolver()
+	solver := solverpkg.NewCaptchaSolver()
 
 	// Run multiple trials to verify consistency
 	for trial := 0; trial < 10; trial++ {
@@ -388,7 +388,7 @@ func TestGenerateHumanEventsPassesBotScorer(t *testing.T) {
 // may fire because captcha events use local timestamps starting from 0, not epoch.
 // We use a higher threshold (0.5) to allow for those expected flags.
 func TestGenerateHumanEventsPassesBehavioralAnalyzer(t *testing.T) {
-	solver := stealth.NewCaptchaSolver()
+	solver := solverpkg.NewCaptchaSolver()
 
 	for trial := 0; trial < 10; trial++ {
 		events := solver.GenerateHumanEvents(5000)
@@ -500,7 +500,7 @@ func TestCaptchaSolveEndToEndWithRealSolver(t *testing.T) {
 	t.Logf("Expected answer: %q", expectedText)
 
 	// Generate human-like events
-	solver := stealth.NewCaptchaSolver()
+	solver := solverpkg.NewCaptchaSolver()
 	events := solver.GenerateHumanEvents(4500)
 
 	// Submit with correct answer (use expected for deterministic test)
@@ -536,7 +536,7 @@ func TestSessionTokenBypassesCaptcha(t *testing.T) {
 		t.Fatalf("create challenge: %v", err)
 	}
 	expectedText, _ := chal.Challenge["text"].(string)
-	solver := stealth.NewCaptchaSolver()
+	solver := solverpkg.NewCaptchaSolver()
 	events := solver.GenerateHumanEvents(4000)
 	solved, err := solver.SubmitSolution(ts.URL+"/api/captcha/verify", chal.ID, expectedText, events)
 	if err != nil {

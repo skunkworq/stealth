@@ -70,7 +70,7 @@ func generateDisableScript(preserveMedia bool) string {
     }
     // Block legacy getUserMedia
     if (navigator.getUserMedia) {
-        navigator.getUserMedia = function(_, _, errorCb) {
+        navigator.getUserMedia = function(_constraints, _successCb, errorCb) {
             if (errorCb) errorCb(new DOMException('Permission denied', 'NotAllowedError'));
         };
     }`

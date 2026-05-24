@@ -335,10 +335,6 @@ func (cs *CloudflareSolverClient) ExerciseTurnstileFlow(baseURL string, opts *Tu
 	return result, nil
 }
 
-// SolveTurnstile is kept as a compatibility wrapper around the lab-only handler.
-func (cs *CloudflareSolverClient) SolveTurnstile(baseURL string) (*CloudflareSolveResult, error) {
-	return cs.SolveTurnstileLab(baseURL)
-}
 
 func (cs *CloudflareSolverClient) exerciseTurnstileWidget(baseURL string, initResp *CFInitResp, plan *TurnstileInteractionPlan) error {
 	widgetURL := fmt.Sprintf(

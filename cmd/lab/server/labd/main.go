@@ -27,7 +27,7 @@ import (
 
 func main() {
 	var (
-		bindAddr     = flag.String("bind", "0.0.0.0", "Bind address")
+		bindAddr     = flag.String("bind", "127.0.0.1", "Bind address")
 		httpPort     = flag.Int("http-port", 8080, "HTTP port")
 		httpsPort    = flag.Int("https-port", 8443, "HTTPS port")
 		proxyPort    = flag.Int("proxy-port", 8081, "MITM proxy port (0 to disable)")

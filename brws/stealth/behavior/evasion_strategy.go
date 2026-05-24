@@ -411,6 +411,34 @@ func (fsm *AdaptiveEvasionFSM) ShouldAttemptCaptcha() bool {
 	return fsm.captchaFailures < fsm.captchaMaxRetries
 }
 
+// ProcessCaptcha encapsulates the captcha decision loop: record detection,
+// gate on retry budget, invoke solveFn, record result, and signal whether
+// escalation is now warranted. The callback is called without the internal
+// lock held so callers can safely call other FSM methods inside solveFn.
+func (fsm *AdaptiveEvasionFSM) ProcessCaptcha(solveFn func() bool) (solved bool, shouldEscalate bool) {
+	fsm.mu.Lock()
+	fsm.captchaDetections++
+	budget := fsm.captchaFailures < fsm.captchaMaxRetries
+	fsm.mu.Unlock()
+
+	if !budget {
+		return false, fsm.ShouldEscalate()
+	}
+
+	solved = solveFn()
+
+	fsm.mu.Lock()
+	if solved {
+		fsm.captchaSolves++
+	} else {
+		fsm.captchaFailures++
+		fsm.banSignals++
+	}
+	fsm.mu.Unlock()
+
+	return solved, !solved && fsm.ShouldEscalate()
+}
+
 // CaptchaStats returns captcha detection/solve/failure counts.
 func (fsm *AdaptiveEvasionFSM) CaptchaStats() (detections, solves, failures int) {
 	fsm.mu.Lock()

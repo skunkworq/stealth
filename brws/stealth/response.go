@@ -6,7 +6,7 @@ import (
 	"golang.org/x/net/html"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
-	"github.com/skunkworq/stealth/brws/content/understand"
+	coretypes "github.com/skunkworq/stealth/brws/core/types"
 )
 
 // Response represents the result of a navigation.
@@ -20,8 +20,9 @@ type Response struct {
 	ChallengeSolved bool
 
 	// semanticTree, when non-nil, is used by extraction methods instead of
-	// re-parsing the raw HTML body.
-	semanticTree *understand.SemanticTree
+	// re-parsing the raw HTML body. Typed as SemanticPage to avoid importing
+	// content/understand from this (L2) layer.
+	semanticTree coretypes.SemanticPage
 
 	// Lazy-parsing fields for extraction methods.
 	parseOnce sync.Once

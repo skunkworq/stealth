@@ -46,6 +46,21 @@ type SemanticTree struct {
 	Fonts  []FontInfo   `json:"fonts,omitempty"`
 }
 
+// GetMeta implements coretypes.SemanticPage.
+func (t *SemanticTree) GetMeta() *PageMeta { return t.Meta }
+
+// GetSocial implements coretypes.SemanticPage.
+func (t *SemanticTree) GetSocial() *SocialLinks { return t.Social }
+
+// GetLinks implements coretypes.SemanticPage.
+func (t *SemanticTree) GetLinks() []Link { return t.Links }
+
+// GetColors implements coretypes.SemanticPage.
+func (t *SemanticTree) GetColors() []ColorInfo { return t.Colors }
+
+// GetFonts implements coretypes.SemanticPage.
+func (t *SemanticTree) GetFonts() []FontInfo { return t.Fonts }
+
 func (n *SemanticNode) Find(id string) *SemanticNode {
 	if n.ID == id {
 		return n

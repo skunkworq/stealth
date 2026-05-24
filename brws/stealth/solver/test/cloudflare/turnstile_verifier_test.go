@@ -5,12 +5,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/skunkworq/stealth/brws/stealth"
+	solverpkg "github.com/skunkworq/stealth/brws/stealth/solver"
 )
 
 func TestCloudflareTestModeVerifierRequiresSecret(t *testing.T) {
-	verifier := &stealth.CloudflareTestModeVerifier{}
-	if _, err := verifier.Verify(context.Background(), stealth.CloudflareTurnstileDummyToken); err == nil {
+	verifier := &solverpkg.CloudflareTestModeVerifier{}
+	if _, err := verifier.Verify(context.Background(), solverpkg.CloudflareTurnstileDummyToken); err == nil {
 		t.Fatal("expected missing secret to fail")
 	}
 }
@@ -20,11 +20,11 @@ func TestCloudflareTestModeVerifierLiveDummyToken(t *testing.T) {
 		t.Skip("set STEALTH_RUN_CLOUDFLARE_TESTMODE=1 to exercise the official test-mode verifier")
 	}
 
-	verifier := &stealth.CloudflareTestModeVerifier{
-		Secret: stealth.CloudflareTurnstileTestSecret,
+	verifier := &solverpkg.CloudflareTestModeVerifier{
+		Secret: solverpkg.CloudflareTurnstileTestSecret,
 	}
 
-	result, err := verifier.Verify(context.Background(), stealth.CloudflareTurnstileDummyToken)
+	result, err := verifier.Verify(context.Background(), solverpkg.CloudflareTurnstileDummyToken)
 	if err != nil {
 		t.Fatalf("official test-mode verification failed: %v", err)
 	}

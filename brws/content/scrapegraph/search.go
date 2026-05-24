@@ -179,34 +179,28 @@ func (sc *SearchCoordinator) buildDecideFn(ctx context.Context) func(*agent.Cont
 }
 
 // resolveAction finds the action chosen by the LLM, injects its parameters
-// (selector from snapshot, text/url from the LLM response), and returns it.
+// (text/url from the LLM response), and returns it.
 func resolveAction(actions []agent.Action, pageCtx *agent.Context, resp decideResponse) agent.Action {
 	for _, a := range actions {
 		if a.ID != resp.ActionID {
 			continue
 		}
 
-		if a.Parameters == nil {
-			a.Parameters = make(map[string]interface{})
-		}
-
-		// The DOM action space builder does not populate "selector" in
-		// Parameters (only TargetID is set). Look it up from the snapshot
-		// so the executor can find the element.
-		if _, ok := a.Parameters["selector"]; !ok && a.TargetID != "" && pageCtx != nil && pageCtx.Snapshot != nil {
-			for _, elem := range pageCtx.Snapshot.Elements {
-				if elem.ID == a.TargetID {
-					a.Parameters["selector"] = elem.Selector
-					break
-				}
+		// Inject text into TypeText actions.
+		if resp.Text != "" {
+			if p, ok := a.Parameters.(*agent.TypeParams); ok {
+				p.Text = resp.Text
+			} else {
+				a.Parameters = &agent.TypeParams{Text: resp.Text}
 			}
 		}
-
-		if resp.Text != "" {
-			a.Parameters["text"] = resp.Text
-		}
+		// Inject URL into Navigate actions.
 		if resp.URL != "" {
-			a.Parameters["url"] = resp.URL
+			if p, ok := a.Parameters.(*agent.NavigateParams); ok {
+				p.URL = resp.URL
+			} else {
+				a.Parameters = &agent.NavigateParams{URL: resp.URL}
+			}
 		}
 
 		return a

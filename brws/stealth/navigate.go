@@ -19,6 +19,12 @@ import (
 )
 
 // Navigate performs a GET request to the specified URL.
+//
+// Concurrency: Navigate is not safe to call concurrently from multiple
+// goroutines on the same Adaptive instance without external synchronization.
+// The evasionFSM is lazily initialized on the first call and mutated by
+// subsequent calls; sharing an Adaptive across goroutines requires the caller
+// to serialize Navigate calls (e.g., via a mutex or a single-goroutine owner).
 func (c *Adaptive) Navigate(ctx context.Context, url string) (*Response, error) {
 	return c.navigate(ctx, url, nil)
 }
@@ -42,11 +48,14 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 
 	c.logger.Info("navigating", "url", url)
 
-	// Lazy FSM init — select URL-aware strategies on first request
+	// Lazy FSM init — select URL-aware strategies on first request.
+	// Guarded by fsmMu so concurrent Navigate calls don't race on the nil check.
+	c.fsmMu.Lock()
 	if c.evasionFSMEnabled && c.evasionFSM == nil {
 		c.evasionFSM = behavior.NewAdaptiveEvasionFSMForURL(url)
 		c.logger.Info("evasion FSM initialized with URL-aware strategies", "url", url)
 	}
+	c.fsmMu.Unlock()
 
 	_ = c.hooks.Execute(ctx, instrumentation.HookNames.OnRequestStart)
 	c.fsm.ResetState(instrumentation.RequestStates.Idle)
@@ -75,53 +84,7 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 	resp, err = c.retryForEvasion(ctx, url, doRequest, resp, err)
 	resp, err = c.escalateAndRetry(ctx, url, doRequest, resp, err)
 
-	// CAPTCHA SOLVING: detect captcha in response, attempt solve with trace replay before escalating
-	if c.evasionFSM != nil && resp != nil && c.isCaptchaResponse(resp) {
-		c.evasionFSM.RecordCaptchaDetected()
-		c.logger.Info("captcha detected in response", "url", url, "status", resp.Status)
-
-		if c.evasionFSM.ShouldAttemptCaptcha() {
-			solvedResp, solveErr := c.attemptCaptchaSolve(ctx, url, resp)
-			if solveErr == nil && solvedResp != nil {
-				c.evasionFSM.RecordCaptchaSolveResult(true)
-				resp = solvedResp
-				challengeSolved = true
-				span.AddEvent("captcha_solved_via_fsm", nil)
-				c.logger.Info("captcha solved via FSM", "url", url)
-			} else {
-				c.evasionFSM.RecordCaptchaSolveResult(false)
-				c.logger.Warn("captcha solve failed", "url", url, "error", solveErr)
-
-				// Check if we should escalate to browser after captcha failure
-				if c.evasionFSM.ShouldEscalate() && c.waterfall != nil {
-					reason := c.evasionFSM.EscalationReason()
-					tierName := escalationTierFor(c.escalation, resp.Status)
-					c.waterfall.PromoteTier(tierName)
-					c.logger.Info("captcha solve exhausted, escalating", "reason", reason, "promoting", tierName)
-				}
-			}
-		} else {
-			c.logger.Info("captcha solve exhausted, skipping to orchestrator")
-		}
-	}
-
-	// CHALLENGE HANDLING: delegate to orchestrator for anything the FSM didn't solve
-	if c.orchestrator != nil && c.config.Challenge.AutoSolve && !c.isCleanResponse(resp) {
-		_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected)
-		solvedResp, _ := c.orchestrator.HandleResponse(ctx, url, resp, c.engine, c.options.Timeout)
-		if solvedResp != nil {
-			resp = solvedResp
-			challengeSolved = true
-			span.AddEvent("challenge_solved", nil)
-		}
-	} else if c.config.Challenge.AutoDetect && resp != nil && !c.isCleanResponse(resp) {
-		// Fallback to generic challenge detection (no orchestrator)
-		detector := challenge.NewDetector()
-		if ch := detector.Detect(resp.Body, resp.Headers); ch != nil {
-			span.AddEvent("challenge_detected", map[string]interface{}{"type": string(ch.Type)})
-			c.logger.Info("challenge detected", "type", ch.Type)
-		}
-	}
+	resp, challengeSolved = c.handleChallenges(ctx, url, span, resp, challengeSolved)
 
 	if resp == nil {
 		if err != nil {
@@ -137,10 +100,22 @@ func (c *Adaptive) navigate(ctx context.Context, url string, tabCtx context.Cont
 
 	c.logger.Info("navigation complete", "url", url, "status", resp.Status, "size", len(resp.Body))
 
-	return &Response{
-		Response:        *resp,
-		ChallengeSolved: challengeSolved,
-	}, nil
+	stealthResp := &Response{Response: *resp, ChallengeSolved: challengeSolved}
+
+	// Wrap sentinel errors so callers can use errors.Is rather than status checks.
+	// Only fire when a solver/FSM was active (i.e., a solve was attempted); if no
+	// solver is configured the captcha response passes through unmodified.
+	if c.evasionFSM != nil && c.isCaptchaResponse(resp) && !challengeSolved {
+		return stealthResp, fmt.Errorf("%w (status %d)", ErrCaptchaRequired, resp.Status)
+	}
+	if c.escalation != nil && c.escalation.Enabled && isBanSignal(c.escalation, resp.Status) {
+		if c.evasionFSM != nil && c.evasionFSM.ShouldEscalate() {
+			return stealthResp, fmt.Errorf("%w (status %d)", ErrEscalationExhausted, resp.Status)
+		}
+		return stealthResp, fmt.Errorf("%w (status %d)", ErrWAFBlocked, resp.Status)
+	}
+
+	return stealthResp, nil
 }
 
 // requestFunc is the function signature for making an engine request.
@@ -256,6 +231,47 @@ func (c *Adaptive) escalateAndRetry(ctx context.Context, url string, doRequest r
 		}
 	}
 	return resp, err
+}
+
+// handleChallenges runs the CAPTCHA FSM and orchestrator challenge-handling
+// pipeline after the initial fetch+retry loop. It returns the (possibly
+// updated) response and whether a challenge was solved.
+func (c *Adaptive) handleChallenges(ctx context.Context, url string, span *instrumentation.Span, resp *engine.Response, challengeSolved bool) (*engine.Response, bool) {
+	if c.evasionFSM != nil && resp != nil && c.isCaptchaResponse(resp) {
+		c.logger.Info("captcha detected in response", "url", url, "status", resp.Status)
+		var solvedResp *engine.Response
+		solved, shouldEscalate := c.evasionFSM.ProcessCaptcha(func() bool {
+			var err error
+			solvedResp, err = c.attemptCaptchaSolve(ctx, url, resp)
+			if err != nil {
+				c.logger.Warn("captcha solve failed", "url", url, "error", err)
+			}
+			return err == nil && solvedResp != nil
+		})
+		if solved {
+			resp = solvedResp
+			challengeSolved = true
+			span.AddEvent("captcha_solved_via_fsm", nil)
+			c.logger.Info("captcha solved via FSM", "url", url)
+		} else if shouldEscalate && c.waterfall != nil {
+			reason := c.evasionFSM.EscalationReason()
+			tierName := escalationTierFor(c.escalation, resp.Status)
+			c.waterfall.PromoteTier(tierName)
+			c.logger.Info("captcha solve exhausted, escalating", "reason", reason, "promoting", tierName)
+		}
+	}
+
+	if c.orchestrator != nil && c.config.Challenge.AutoSolve && !c.isCleanResponse(resp) {
+		_ = c.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected)
+		solvedResp, _ := c.orchestrator.HandleResponse(ctx, url, resp, c.engine, c.options.Timeout)
+		if solvedResp != nil {
+			resp = solvedResp
+			challengeSolved = true
+			span.AddEvent("challenge_solved", nil)
+		}
+	}
+
+	return resp, challengeSolved
 }
 
 // NavigateWithReferrer performs a navigation with an explicit referrer.

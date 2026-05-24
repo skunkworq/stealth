@@ -1,3 +1,9 @@
+// Phase N comments throughout this file denote the server-side detection
+// algorithm iteration that each technique was developed to evade. Phase numbers
+// are assigned sequentially as new detection behaviors are observed in
+// production. "Phase 46" means the technique counters iteration 46 of the
+// shield's detection logic, not a code version. New contributors: increment
+// the phase number when adding a technique targeted at a newly observed gate.
 package behavior
 
 import (
@@ -209,6 +215,11 @@ func (g *EventGenerator) ToJSON(data *EventData) (string, error) {
 	return string(b), nil
 }
 
+// bezierSegment defines one quadratic Bezier curve segment.
+type bezierSegment struct {
+	sx, sy, cx, cy, ex, ey float64
+}
+
 // generateMousePath creates a human-like mouse movement path as a single
 // unified stream. Each event is either a "major" movement (advancing along a
 // Bezier curve) or a "micro-tremor" (small jitter from the previous position).
@@ -216,24 +227,50 @@ func (g *EventGenerator) ToJSON(data *EventData) (string, error) {
 // entropy in the intervals — the shield flags entropy < 1.5 as bot-like.
 func (g *EventGenerator) generateMousePath(data *EventData) {
 	numEvents := g.config.MouseEventsMin + g.rng.Intn(g.config.MouseEventsMax-g.config.MouseEventsMin+1)
+	if numEvents == 0 {
+		data.MouseTimestamps = []int64{}
+		data.MousePositions = []map[string]float64{}
+		data.MouseVelocities = []float64{}
+		return
+	}
 
-	// Multi-segment Bezier path setup: 2-3 segments with varying curvature
-	// ensures path_efficiency_consistency CV > 0.15 (defeats Check 11).
+	segments, numSegments := g.generateBezierWaypoints()
+	isMajor, majorCount, forcedModes := g.classifyMouseEvents(numEvents)
+	// Preferred tremor direction (simulates wrist anatomy bias).
+	// Real hand tremor clusters around a dominant angle due to arm mechanics.
+	// Using wrapped normal distribution gives Rayleigh R ≈ 0.49 (well above 0.15 threshold).
+	preferredAngle := g.rng.Float64() * 2 * math.Pi
+	positions, timestamps, velocities := g.interpolateBezierPositions(
+		numEvents, isMajor, majorCount, forcedModes, segments, numSegments, preferredAngle)
+	velocities = g.smoothMouseVelocities(velocities)
+	if g.config.EvadeMouseEaseIn && len(velocities) >= 4 {
+		velocities[0] = math.Min(velocities[0]*0.1, 9.5)
+		velocities[1] = math.Min(velocities[1]*0.4, 25.0)
+		velocities[2] *= 0.7
+		velocities[3] *= 0.9
+	}
+	positions = g.verifyMicroTremors(positions)
+
+	data.MousePositions = positions
+	data.MouseTimestamps = timestamps
+	data.MouseVelocities = velocities
+}
+
+// generateBezierWaypoints creates 2-3 Bezier path segments with contrasting
+// curvature scales to ensure path_efficiency_consistency CV > 0.15 (defeats Check 11).
+func (g *EventGenerator) generateBezierWaypoints() ([]bezierSegment, int) {
 	startX, startY := 100.0+g.rng.Float64()*400, 100.0+g.rng.Float64()*300
 	endX, endY := startX+g.rng.Float64()*300-150, startY+g.rng.Float64()*200-100
 
 	numSegments := 2 + g.rng.Intn(2) // 2 or 3 segments
 
-	// Create waypoints (start, intermediates, end)
 	waypoints := make([][2]float64, numSegments+1)
 	waypoints[0] = [2]float64{startX, startY}
 	waypoints[numSegments] = [2]float64{endX, endY}
-
 	for wi := 1; wi < numSegments; wi++ {
 		frac := float64(wi) / float64(numSegments)
 		wx := startX + (endX-startX)*frac + (g.rng.Float64()*160 - 80)
 		wy := startY + (endY-startY)*frac + (g.rng.Float64()*120 - 60)
-		// Clamp to screen bounds (assume 1920x1080)
 		wx = math.Max(0, math.Min(wx, 1920))
 		wy = math.Max(0, math.Min(wy, 1080))
 		waypoints[wi] = [2]float64{wx, wy}
@@ -241,9 +278,6 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 
 	// Per-segment control points with contrasting curvature scales.
 	// Force min/max ratio > 2.5 for high CV in path efficiency.
-	type bezierSegment struct {
-		sx, sy, cx, cy, ex, ey float64
-	}
 	curvatureScales := make([]float64, numSegments)
 	curvatureScales[0] = 0.2 + g.rng.Float64()*0.3 // Low: 0.2-0.5
 	if numSegments >= 2 {
@@ -260,36 +294,14 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 		cy := (sy+ey)/2 + (g.rng.Float64()*200-100)*curvatureScales[si]
 		segments[si] = bezierSegment{sx, sy, cx, cy, ex, ey}
 	}
+	return segments, numSegments
+}
 
-	positions := make([]map[string]float64, 0, numEvents)
-	timestamps := make([]int64, 0, numEvents)
-	velocities := make([]float64, 0, numEvents)
-
-	// Velocity history for temporal smoothing (lag-1/2/3 autocorrelation).
-	// Blending past velocities creates natural autocorrelation structure
-	// that matches human motor control patterns.
-	var velHistory [3]float64 // [lag-1, lag-2, lag-3]
-	velHistoryLen := 0
-
-	// Preferred tremor direction (simulates wrist anatomy bias).
-	// Real hand tremor clusters around a dominant angle due to arm mechanics.
-	// Using wrapped normal distribution gives Rayleigh R ≈ 0.49 (well above 0.15 threshold).
-	preferredAngle := g.rng.Float64() * 2 * math.Pi
-
-	var prevX, prevY float64
-	var ts int64
-
-	// Handle edge case: zero events
-	if numEvents == 0 {
-		data.MouseTimestamps = []int64{}
-		data.MousePositions = []map[string]float64{}
-		data.MouseVelocities = []float64{}
-		return
-	}
-
-	// Pre-decide which events are micro-tremors vs major moves.
-	majorCount := 0
-	isMajor := make([]bool, numEvents)
+// classifyMouseEvents pre-decides which events are major Bezier moves vs
+// micro-tremors, and assigns a timing interval mode to each inter-event gap.
+// Guaranteeing all 4 timing modes appear creates high Shannon entropy (> 1.5).
+func (g *EventGenerator) classifyMouseEvents(numEvents int) (isMajor []bool, majorCount int, forcedModes []int) {
+	isMajor = make([]bool, numEvents)
 	for i := 0; i < numEvents; i++ {
 		if i == 0 || g.rng.Float64() >= g.config.MicroTremorRatio {
 			isMajor[i] = true
@@ -304,12 +316,10 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 
 	// Pre-assign interval modes to guarantee diversity across all 4 modes.
 	// This ensures high Shannon entropy (>1.5) even with small event counts.
-	forcedModes := make([]int, numEvents-1) // one less than events (first event has no interval)
-	// Assign one of each mode first
+	forcedModes = make([]int, numEvents-1) // one less than events (first event has no interval)
 	for m := 0; m < 4 && m < len(forcedModes); m++ {
 		forcedModes[m] = m
 	}
-	// Fill remaining slots randomly with weighted distribution
 	for m := 4; m < len(forcedModes); m++ {
 		r := g.rng.Float64()
 		switch {
@@ -323,21 +333,38 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 			forcedModes[m] = 3
 		}
 	}
-	// Shuffle to avoid deterministic ordering of forced modes
 	g.rng.Shuffle(len(forcedModes), func(i, j int) {
 		forcedModes[i], forcedModes[j] = forcedModes[j], forcedModes[i]
 	})
-
 	if g.config.EvadeMouseClustering {
 		sort.Ints(forcedModes)
 	}
+	return
+}
 
+// interpolateBezierPositions walks the Bezier segments, injects micro-tremors,
+// and samples multi-modal timestamps to produce raw positions, timestamps, and velocities.
+// Velocity history for temporal smoothing (lag-1/2/3 autocorrelation).
+// Blending past velocities creates natural autocorrelation structure
+// that matches human motor control patterns.
+func (g *EventGenerator) interpolateBezierPositions(
+	numEvents int, isMajor []bool, majorCount int, forcedModes []int,
+	segments []bezierSegment, numSegments int, preferredAngle float64,
+) (positions []map[string]float64, timestamps []int64, velocities []float64) {
+	positions = make([]map[string]float64, 0, numEvents)
+	timestamps = make([]int64, 0, numEvents)
+	velocities = make([]float64, 0, numEvents)
+
+	var velHistory [3]float64 // [lag-1, lag-2, lag-3]
+	velHistoryLen := 0
+	var prevX, prevY float64
+	var ts int64
 	majorIdx := 0
+
 	for i := 0; i < numEvents; i++ {
 		var x, y float64
 
 		if isMajor[i] {
-			// Determine which segment this major move belongs to
 			globalT := float64(majorIdx) / float64(majorCount-1) // 0..1 across full path
 			segFloat := globalT * float64(numSegments)
 			segIdx := int(segFloat)
@@ -350,7 +377,6 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 			x = (1-localT)*(1-localT)*seg.sx + 2*(1-localT)*localT*seg.cx + localT*localT*seg.ex
 			y = (1-localT)*(1-localT)*seg.sy + 2*(1-localT)*localT*seg.cy + localT*localT*seg.ey
 
-			// Add general movement noise
 			jitter := math.Max(0.3, (1-globalT)*2)
 			x += (g.rng.Float64()*2 - 1) * jitter
 			y += (g.rng.Float64()*2 - 1) * jitter
@@ -375,17 +401,13 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 			var baseInterval float64
 			mode := forcedModes[i-1]
 			switch mode {
-			case 0:
-				// Fast movement (corrections, tracking) — 5-20ms
+			case 0: // Fast movement (corrections, tracking) — 5-20ms
 				baseInterval = 5 + g.rng.Float64()*15
-			case 1:
-				// Normal movement — 20-60ms
+			case 1: // Normal movement — 20-60ms
 				baseInterval = 20 + g.rng.Float64()*40
-			case 2:
-				// Deliberate/slow movement — 60-150ms
+			case 2: // Deliberate/slow movement — 60-150ms
 				baseInterval = 60 + g.rng.Float64()*90
-			default:
-				// Pause (hover, read, think) — 150-400ms
+			default: // Pause (hover, read, think) — 150-400ms
 				baseInterval = 150 + g.rng.Float64()*250
 			}
 			if g.config.EvadeMouseTypingDensity {
@@ -394,16 +416,15 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 					baseInterval *= 4.0
 				}
 			}
-			// Think-pause: occasional 200-800ms gaps representing moments
-			// when a human pauses to read or think. Creates bimodal timing
-			// (fast action + occasional pause) instead of uniform intervals.
+			// Think-pause: occasional 200-800ms gaps representing moments when a
+			// human pauses to read or think. Creates bimodal timing instead of
+			// uniform intervals.
 			if g.config.EvadeThinkPause && g.rng.Float64() < 0.08 {
 				baseInterval += 200 + g.rng.Float64()*600
 			}
 			ts += int64(baseInterval)
 		}
 
-		// Clamp to non-negative (screen bounds) to avoid mouse_outside_viewport
 		x = math.Max(0, x)
 		y = math.Max(0, y)
 		x = math.Round(x*100) / 100
@@ -412,7 +433,6 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 		positions = append(positions, map[string]float64{"x": x, "y": y})
 		timestamps = append(timestamps, ts)
 
-		// Calculate velocity
 		if i > 0 {
 			dx := x - prevX
 			dy := y - prevY
@@ -421,24 +441,18 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 			if dt > 0 {
 				dist := math.Sqrt(dx*dx + dy*dy)
 				v := dist / dt
-				// Soft clamp — floor uses exponential distribution to avoid
-				// density clustering in any narrow band.
-				// Floor: prevent impossible_velocity_low (shield threshold: 5.0)
+				// Soft clamp — floor uses exponential distribution to avoid density
+				// clustering. Floor prevents impossible_velocity_low (threshold: 5.0);
+				// ceiling prevents impossible_velocity_high (threshold: 3000).
 				if v < 5.0 {
 					v = 5.0 + g.rng.ExpFloat64()*80 // Exponential from 5.0, mean ~85
 				}
-				// Ceiling: prevent impossible_velocity_high (shield threshold: 3000)
 				if v > 2500 {
 					v = 2500 + g.rng.Float64()*400 // 2500-2900 px/s (fast flick band)
 				}
-
-				// Temporal smoothing: blend past velocities to create natural
-				// lag-1/2/3 autocorrelation structure (defeats Checks 27, 28).
-				// Human motor control produces correlated velocity sequences —
-				// the hand doesn't change speed independently each sample.
-				// Heavy smoothing (55% new + 45% history) creates the strong
-				// lag-2 (0.15-0.60) and lag-3 (0.05-0.40) autocorrelation
-				// expected by the shield's checks.
+				// Heavy smoothing (55% new + 45% history) creates the strong lag-2
+				// (0.15-0.60) and lag-3 (0.05-0.40) autocorrelation expected by
+				// the shield's checks (defeats Checks 27, 28).
 				if velHistoryLen >= 3 {
 					v = 0.55*v + 0.25*velHistory[0] + 0.13*velHistory[1] + 0.07*velHistory[2]
 				} else if velHistoryLen == 2 {
@@ -446,11 +460,8 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 				} else if velHistoryLen == 1 {
 					v = 0.70*v + 0.30*velHistory[0]
 				}
-
 				finalV := math.Round(v*10) / 10
 				velocities = append(velocities, finalV)
-
-				// Shift velocity history
 				velHistory[2] = velHistory[1]
 				velHistory[1] = velHistory[0]
 				velHistory[0] = finalV
@@ -462,145 +473,127 @@ func (g *EventGenerator) generateMousePath(data *EventData) {
 
 		prevX, prevY = x, y
 	}
+	return
+}
 
-	// Post-process velocities with exponential moving average (EMA) to create
-	// Optionally force raw velocities into a clean single-peak curve before smoothing.
-	// Random mouse movements can create a jagged sawtooth pattern (fast, slow, fast)
-	// which has negative lag-1/lag-2 autocorrelation. EMA can't always fix a bad baseline.
-	if g.config.EvadeMouseVelocityLag3 && len(velocities) > 5 {
-		// Force a clean acceleration -> deceleration curve (single peak)
-		peakIdx := len(velocities) / 2
-		peakV := 25.0 + g.rng.Float64()*15.0 // 25-40px/tick peak
-
-		for i := 0; i < len(velocities); i++ {
-			var progress float64
-			if i <= peakIdx {
-				progress = float64(i) / float64(peakIdx) // 0.0 to 1.0
-			} else {
-				progress = 1.0 - float64(i-peakIdx)/float64(len(velocities)-1-peakIdx) // 1.0 to 0.0
-			}
-			// Use sine curve easing for perfectly smooth acceleration/deceleration
-			factor := math.Sin(progress * math.Pi / 2)
-
-			// Add 10-20% random noise so it's not perfectly mathematical,
-			// but keeping the underlying macro-structure fully intact.
-			noise := 0.90 + g.rng.Float64()*0.20
-			velocities[i] = peakV * factor * noise
-
-			// Minimum velocity to ensure movement
-			if velocities[i] < 2.0 {
-				velocities[i] = 2.0 + g.rng.Float64()
-			}
-		}
-	}
-
-	// Post-process velocities with exponential moving average (EMA) to create
-	// strong positive autocorrelation at lags 1, 2, and 3. The EMA naturally
-	// produces temporal momentum because each output carries forward from
-	// prior values. Forward+backward passes avoid phase shift and reinforce structure.
-	if g.config.EvadeMouseVelocityLag3 && len(velocities) > 5 {
-		// Adaptive EMA: keep smoothing until autocorrelation structure passes the
-		// shield's check. Shield flags: lag3 in [-0.1, 0.1] AND lag1 < 0.7.
-		// We need either lag1 >= 0.7 OR lag3 outside [-0.15, 0.15] (with margin).
-		alpha := 0.15 // Lower alpha = stronger smoothing = higher autocorrelation
-		for pass := 0; pass < 40; pass++ {
-			smoothed := make([]float64, len(velocities))
-			smoothed[0] = velocities[0]
-			for i := 1; i < len(velocities); i++ {
-				smoothed[i] = alpha*velocities[i] + (1-alpha)*smoothed[i-1]
-			}
-			for i := len(smoothed) - 2; i >= 0; i-- {
-				smoothed[i] = alpha*smoothed[i] + (1-alpha)*smoothed[i+1]
-			}
-			velocities = smoothed
-
-			lag1 := lagNAuto(velocities, 1)
-			lag3 := lagNAuto(velocities, 3)
-			if lag1 >= 0.75 || lag3 > 0.20 || lag3 < -0.20 {
-				break
-			}
-		}
-		// Round gently to 2 decimal places (preserves sub-unit structure).
-		// Then re-check — rounding can collapse lag structure in short sequences.
-		// If the shield check would fire, apply one final heavy forward-only EMA
-		// (which guarantees lag-1 > 0.7) and re-round.
-		for fixPass := 0; fixPass < 3; fixPass++ {
-			for i := range velocities {
-				velocities[i] = math.Round(velocities[i]*100) / 100
-			}
-			lag1 := lagNAuto(velocities, 1)
-			lag3 := lagNAuto(velocities, 3)
-			if !(lag3 >= -0.1 && lag3 <= 0.1 && lag1 < 0.7) {
-				break // Shield check won't fire
-			}
-			// Heavy forward EMA to push lag-1 above 0.7
-			for i := 1; i < len(velocities); i++ {
-				velocities[i] = 0.25*velocities[i] + 0.75*velocities[i-1]
-			}
-		}
-	} else if len(velocities) > 5 {
-		// Non-evasion: basic Gaussian smoothing (still somewhat bot-detectable)
-		weights := [5]float64{0.06, 0.24, 0.40, 0.24, 0.06}
-		for pass := 0; pass < 2; pass++ {
-			smoothed := make([]float64, len(velocities))
-			for i := range velocities {
-				var wSum, vSum float64
-				for j := -2; j <= 2; j++ {
-					idx := i + j
-					if idx >= 0 && idx < len(velocities) {
-						w := weights[j+2]
-						vSum += velocities[idx] * w
-						wSum += w
+// smoothMouseVelocities applies optional velocity curve shaping followed by
+// EMA-based temporal smoothing to achieve human-like lag-1/2/3 autocorrelation.
+// Without evasion, falls back to basic Gaussian smoothing.
+func (g *EventGenerator) smoothMouseVelocities(velocities []float64) []float64 {
+	if !g.config.EvadeMouseVelocityLag3 || len(velocities) <= 5 {
+		if len(velocities) > 5 {
+			// Non-evasion: basic Gaussian smoothing (still somewhat bot-detectable)
+			weights := [5]float64{0.06, 0.24, 0.40, 0.24, 0.06}
+			for pass := 0; pass < 2; pass++ {
+				smoothed := make([]float64, len(velocities))
+				for i := range velocities {
+					var wSum, vSum float64
+					for j := -2; j <= 2; j++ {
+						idx := i + j
+						if idx >= 0 && idx < len(velocities) {
+							w := weights[j+2]
+							vSum += velocities[idx] * w
+							wSum += w
+						}
 					}
+					smoothed[i] = math.Round(vSum/wSum*10) / 10
 				}
-				smoothed[i] = math.Round(vSum/wSum*10) / 10
+				velocities = smoothed
 			}
-			velocities = smoothed
+		}
+		return velocities
+	}
+
+	// Force a clean acceleration → deceleration curve (single peak) before EMA.
+	// Random mouse movements produce a jagged sawtooth with negative lag
+	// autocorrelation that EMA can't always recover.
+	peakIdx := len(velocities) / 2
+	peakV := 25.0 + g.rng.Float64()*15.0 // 25-40px/tick peak
+	for i := 0; i < len(velocities); i++ {
+		var progress float64
+		if i <= peakIdx {
+			progress = float64(i) / float64(peakIdx)
+		} else {
+			progress = 1.0 - float64(i-peakIdx)/float64(len(velocities)-1-peakIdx)
+		}
+		factor := math.Sin(progress * math.Pi / 2) // sine easing for smooth accel/decel
+		noise := 0.90 + g.rng.Float64()*0.20       // ±10-20% noise preserves macro-structure
+		velocities[i] = peakV * factor * noise
+		if velocities[i] < 2.0 {
+			velocities[i] = 2.0 + g.rng.Float64()
 		}
 	}
 
-	if g.config.EvadeMouseEaseIn && len(velocities) >= 4 {
-		velocities[0] = math.Min(velocities[0]*0.1, 9.5)
-		velocities[1] = math.Min(velocities[1]*0.4, 25.0)
-		velocities[2] *= 0.7
-		velocities[3] *= 0.9
-	}
-
-	// Post-generation micro-tremor verification: ensure the ratio of 0.5-3px
-	// movements stays above the shield's MinMicroTremorRatio (0.10).
-	// If stochastic generation produced too few, inject additional micro-tremors
-	// by slightly perturbing existing positions to create small displacements.
-	if len(positions) >= 4 {
-		microCount := 0
-		for i := 1; i < len(positions); i++ {
-			dx := positions[i]["x"] - positions[i-1]["x"]
-			dy := positions[i]["y"] - positions[i-1]["y"]
-			dist := math.Sqrt(dx*dx + dy*dy)
-			if dist >= 0.5 && dist <= 3.0 {
-				microCount++
-			}
+	// Adaptive EMA: forward+backward passes until autocorrelation satisfies the shield.
+	// Shield flags: lag3 in [-0.1, 0.1] AND lag1 < 0.7.
+	// We need either lag1 >= 0.7 OR lag3 outside [-0.15, 0.15] (with margin).
+	alpha := 0.15 // lower alpha = stronger smoothing = higher autocorrelation
+	for pass := 0; pass < 40; pass++ {
+		smoothed := make([]float64, len(velocities))
+		smoothed[0] = velocities[0]
+		for i := 1; i < len(velocities); i++ {
+			smoothed[i] = alpha*velocities[i] + (1-alpha)*smoothed[i-1]
 		}
-		ratio := float64(microCount) / float64(len(positions)-1)
-		if ratio < 0.15 {
-			// Inject micro-tremors by nudging some positions slightly
-			for i := 2; i < len(positions)-1; i += 3 {
-				dx := positions[i]["x"] - positions[i-1]["x"]
-				dy := positions[i]["y"] - positions[i-1]["y"]
-				dist := math.Sqrt(dx*dx + dy*dy)
-				if dist > 3.0 {
-					// Move this position close to the previous one (1-2px away)
-					angle := math.Atan2(dy, dx)
-					radius := 1.0 + g.rng.Float64()*1.5
-					positions[i]["x"] = positions[i-1]["x"] + radius*math.Cos(angle)
-					positions[i]["y"] = positions[i-1]["y"] + radius*math.Sin(angle)
-				}
-			}
+		for i := len(smoothed) - 2; i >= 0; i-- {
+			smoothed[i] = alpha*smoothed[i] + (1-alpha)*smoothed[i+1]
+		}
+		velocities = smoothed
+
+		lag1 := lagNAuto(velocities, 1)
+		lag3 := lagNAuto(velocities, 3)
+		if lag1 >= 0.75 || lag3 > 0.20 || lag3 < -0.20 {
+			break
 		}
 	}
 
-	data.MousePositions = positions
-	data.MouseTimestamps = timestamps
-	data.MouseVelocities = velocities
+	// Round then re-verify — rounding can collapse lag structure in short sequences.
+	// If the shield check would still fire, apply a heavy forward-only EMA pass.
+	for fixPass := 0; fixPass < 3; fixPass++ {
+		for i := range velocities {
+			velocities[i] = math.Round(velocities[i]*100) / 100
+		}
+		lag1 := lagNAuto(velocities, 1)
+		lag3 := lagNAuto(velocities, 3)
+		if !(lag3 >= -0.1 && lag3 <= 0.1 && lag1 < 0.7) {
+			break
+		}
+		for i := 1; i < len(velocities); i++ {
+			velocities[i] = 0.25*velocities[i] + 0.75*velocities[i-1]
+		}
+	}
+	return velocities
+}
+
+// verifyMicroTremors ensures the ratio of 0.5-3px movements stays above the
+// shield's MinMicroTremorRatio (0.10). If stochastic generation produced too few,
+// it nudges spaced positions closer together to create small displacements.
+func (g *EventGenerator) verifyMicroTremors(positions []map[string]float64) []map[string]float64 {
+	if len(positions) < 4 {
+		return positions
+	}
+	microCount := 0
+	for i := 1; i < len(positions); i++ {
+		dx := positions[i]["x"] - positions[i-1]["x"]
+		dy := positions[i]["y"] - positions[i-1]["y"]
+		if dist := math.Sqrt(dx*dx + dy*dy); dist >= 0.5 && dist <= 3.0 {
+			microCount++
+		}
+	}
+	if float64(microCount)/float64(len(positions)-1) >= 0.15 {
+		return positions
+	}
+	for i := 2; i < len(positions)-1; i += 3 {
+		dx := positions[i]["x"] - positions[i-1]["x"]
+		dy := positions[i]["y"] - positions[i-1]["y"]
+		dist := math.Sqrt(dx*dx + dy*dy)
+		if dist > 3.0 {
+			angle := math.Atan2(dy, dx)
+			radius := 1.0 + g.rng.Float64()*1.5
+			positions[i]["x"] = positions[i-1]["x"] + radius*math.Cos(angle)
+			positions[i]["y"] = positions[i-1]["y"] + radius*math.Sin(angle)
+		}
+	}
+	return positions
 }
 
 // generateTypingTimestamps creates human-like keystroke timing patterns.

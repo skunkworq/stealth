@@ -2,6 +2,7 @@ package stealth_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -73,7 +74,9 @@ func TestClient_FSMWaterfallEscalation(t *testing.T) {
 	// the FSM retry loop, which cycles through strategies. Each retry records
 	// a ban signal, so the FSM crosses the threshold (3) within this call.
 	resp, err := client.Navigate(ctx, "http://example.com")
-	if err != nil {
+	// Sentinel errors (ErrWAFBlocked, ErrEscalationExhausted) are expected when
+	// all retries are blocked — the response is still returned alongside them.
+	if err != nil && !errors.Is(err, stealth.ErrWAFBlocked) && !errors.Is(err, stealth.ErrEscalationExhausted) {
 		t.Fatalf("navigate error: %v", err)
 	}
 
@@ -138,9 +141,9 @@ func TestClient_FSMExhaustion_PromotesChromium(t *testing.T) {
 	// Hit the FSM with enough ban signals to trigger escalation
 	// (ban threshold is 3, each Navigate with 403 records 1 ban signal from FSM)
 	for i := 0; i < 4; i++ {
-		_, err := client.Navigate(ctx, "http://example.com")
-		if err != nil {
-			t.Fatalf("navigate %d error: %v", i, err)
+		_, navErr := client.Navigate(ctx, "http://example.com")
+		if navErr != nil && !errors.Is(navErr, stealth.ErrWAFBlocked) && !errors.Is(navErr, stealth.ErrEscalationExhausted) {
+			t.Fatalf("navigate %d error: %v", i, navErr)
 		}
 	}
 

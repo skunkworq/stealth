@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	stealth "github.com/skunkworq/stealth/brws/stealth"
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
+	solverpkg "github.com/skunkworq/stealth/brws/stealth/solver"
 	"github.com/skunkworq/stealth/brws/core/detection"
 )
 
@@ -69,7 +69,7 @@ func TestCloudflareOnExampleCom(t *testing.T) {
 	ts, cc := mountCloudflareLabServer()
 	defer ts.Close()
 
-	solver := stealth.NewCloudflareSolverClient()
+	solver := solverpkg.NewCloudflareSolverClient()
 
 	// 3a. JS Challenge
 	t.Log("\n--- 3a: JS Challenge ---")
@@ -92,7 +92,7 @@ func TestCloudflareOnExampleCom(t *testing.T) {
 
 	// 3b. Managed Challenge (behavioral analysis is stochastic; retry up to 3 times)
 	t.Log("\n--- 3b: Managed Challenge ---")
-	var managedResult *stealth.CloudflareSolveResult
+	var managedResult *solverpkg.CloudflareSolveResult
 	for attempt := 1; attempt <= 3; attempt++ {
 		managedResult, err = solver.SolveManagedChallenge(ts.URL)
 		if err == nil && managedResult.Passed {
@@ -112,7 +112,7 @@ func TestCloudflareOnExampleCom(t *testing.T) {
 
 	// 3c. Turnstile Challenge
 	t.Log("\n--- 3c: Turnstile Challenge ---")
-	turnstileResult, err := solver.SolveTurnstile(ts.URL)
+	turnstileResult, err := solver.SolveTurnstileLab(ts.URL)
 	if err != nil {
 		t.Fatalf("Turnstile challenge failed: %v", err)
 	}

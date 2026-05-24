@@ -10,31 +10,27 @@ import (
 
 	"golang.org/x/net/html"
 
-	"github.com/skunkworq/stealth/brws/content/understand"
+	coretypes "github.com/skunkworq/stealth/brws/core/types"
 )
 
-// Type aliases exposing the understand types through the stealth package surface.
-// Callers that need these types can also import content/understand directly.
+// Type aliases exposing the core semantic types through the stealth package
+// surface. These are the same types used by content/understand; both packages
+// alias them from brws/core/types so no upward import is needed.
 type (
-	PageMeta         = understand.PageMeta
-	SocialLinks      = understand.SocialLinks
-	Link             = understand.Link
-	ColorInfo        = understand.ColorInfo
-	FontInfo         = understand.FontInfo
-	ImageWithContext = understand.ImageWithContext
+	PageMeta         = coretypes.PageMeta
+	SocialLinks      = coretypes.SocialLinks
+	Link             = coretypes.Link
+	ColorInfo        = coretypes.ColorInfo
+	FontInfo         = coretypes.FontInfo
+	ImageWithContext = coretypes.ImageWithContext
 )
-
-// NewSemanticExtractor creates a SemanticExtractor with the given pipeline config.
-// This is a convenience wrapper over understand.NewSemanticExtractor for callers
-// that already hold an *Adaptive and prefer a single import.
-func (c *Adaptive) NewSemanticExtractor(config *understand.PipelineConfig) *understand.SemanticExtractor {
-	return understand.NewSemanticExtractor(config)
-}
 
 // AttachSemanticTree attaches a pre-built semantic tree to the response.
 // When non-nil, extraction methods (Title, Meta, Links, etc.) delegate to
 // the tree instead of re-parsing the raw HTML body.
-func (r *Response) AttachSemanticTree(tree *understand.SemanticTree) {
+// The tree must implement coretypes.SemanticPage; *understand.SemanticTree
+// satisfies this interface.
+func (r *Response) AttachSemanticTree(tree coretypes.SemanticPage) {
 	r.semanticTree = tree
 }
 
@@ -241,8 +237,10 @@ func extractPrimaryFont(value string) string {
 
 // Title returns the page title, falling back to og:title.
 func (r *Response) Title() string {
-	if r.semanticTree != nil && r.semanticTree.Meta != nil {
-		return r.semanticTree.Meta.Title
+	if r.semanticTree != nil {
+		if m := r.semanticTree.GetMeta(); m != nil {
+			return m.Title
+		}
 	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
@@ -278,8 +276,10 @@ func (r *Response) Title() string {
 
 // Meta returns structured page metadata including OG and Twitter Card tags.
 func (r *Response) Meta() PageMeta {
-	if r.semanticTree != nil && r.semanticTree.Meta != nil {
-		return *r.semanticTree.Meta
+	if r.semanticTree != nil {
+		if m := r.semanticTree.GetMeta(); m != nil {
+			return *m
+		}
 	}
 	r.ensureParsed()
 	meta := PageMeta{
@@ -395,7 +395,7 @@ func (r *Response) Meta() PageMeta {
 // Links extracts anchor links, resolves relative URLs, and categorizes internal/external.
 func (r *Response) Links() []Link {
 	if r.semanticTree != nil {
-		return r.semanticTree.Links
+		return r.semanticTree.GetLinks()
 	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
@@ -524,8 +524,10 @@ func (r *Response) Images() []string {
 
 // SocialLinks extracts social media profile URLs from anchor hrefs.
 func (r *Response) SocialLinks() SocialLinks {
-	if r.semanticTree != nil && r.semanticTree.Social != nil {
-		return *r.semanticTree.Social
+	if r.semanticTree != nil {
+		if s := r.semanticTree.GetSocial(); s != nil {
+			return *s
+		}
 	}
 	r.ensureParsed()
 	var social SocialLinks
@@ -580,7 +582,7 @@ func (r *Response) SocialLinks() SocialLinks {
 // Colors extracts colors from theme-color meta, CSS hex, and rgb/rgba values.
 func (r *Response) Colors() []ColorInfo {
 	if r.semanticTree != nil {
-		return r.semanticTree.Colors
+		return r.semanticTree.GetColors()
 	}
 	r.ensureParsed()
 	if r.bodyStr == "" {
@@ -623,7 +625,7 @@ func (r *Response) Colors() []ColorInfo {
 // Fonts extracts font information from Google Fonts URLs and CSS font-family declarations.
 func (r *Response) Fonts() []FontInfo {
 	if r.semanticTree != nil {
-		return r.semanticTree.Fonts
+		return r.semanticTree.GetFonts()
 	}
 	r.ensureParsed()
 	if r.bodyStr == "" {

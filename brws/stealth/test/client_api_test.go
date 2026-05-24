@@ -160,15 +160,7 @@ func TestClientEngineReturnsActiveEngine(t *testing.T) {
 }
 
 func TestClientNewSemanticExtractor(t *testing.T) {
-	cfg := *stealth.DefaultConfig()
-	cfg.EngineName = "native"
-	client, err := stealth.NewAdaptiveWithConfig(&cfg)
-	if err != nil {
-		t.Fatalf("NewAdaptiveWithConfig failed: %v", err)
-	}
-	defer client.Close()
-
-	extractor := client.NewSemanticExtractor(&understand.PipelineConfig{})
+	extractor := understand.NewSemanticExtractor(&understand.PipelineConfig{})
 	if extractor == nil {
 		t.Fatal("expected non-nil semantic extractor")
 	}
@@ -178,4 +170,3 @@ func TestClientNewSemanticExtractor(t *testing.T) {
 var _ func() (context.Context, context.CancelFunc, bool) = (*stealth.Adaptive)(nil).NewTab
 var _ func() (context.Context, bool) = (*stealth.Adaptive)(nil).BrowserContext
 var _ func() engine.Engine = (*stealth.Adaptive)(nil).ActiveEngine
-var _ func(*understand.PipelineConfig) *understand.SemanticExtractor = (*stealth.Adaptive)(nil).NewSemanticExtractor

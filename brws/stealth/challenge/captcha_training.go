@@ -299,6 +299,11 @@ func (ct *CaptchaTracer) buildEnhancedEvents(trace *CaptchaTrace) *detection.Enh
 }
 
 // CaptchaTrainingData stores training data for CAPTCHA ML models.
+// Intended callers: research/captcha/training only. Production code should
+// not depend on this type directly; use the re-exports in that package.
+// TODO: migrate this type to research/captcha/training when CaptchaEvent and
+// TraceMetrics (which have production callers) can be split into a separate
+// shared package.
 type CaptchaTrainingData struct {
 	mu       sync.RWMutex
 	samples  []TrainingSample

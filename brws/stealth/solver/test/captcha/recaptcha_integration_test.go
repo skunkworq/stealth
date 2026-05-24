@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	stealth "github.com/skunkworq/stealth/brws/stealth"
+	solverpkg "github.com/skunkworq/stealth/brws/stealth/solver"
 	cflab "github.com/skunkworq/stealth/brws/research/evasion/cloudflare"
 )
 
@@ -105,7 +105,7 @@ func TestSwordSolvesReCaptchaV2EndToEnd(t *testing.T) {
 	// Step 1: Send suspicious request to detect the v2 redirect
 	body, _ := sendBareRequest(t, ts.URL+"/detect")
 
-	solver := stealth.NewCaptchaSolver()
+	solver := solverpkg.NewCaptchaSolver()
 	cr := solver.DetectCaptchaResponse(body, flattenHeaders(http.Header{
 		"X-Captcha-Required": {"1"},
 		"X-Captcha-Type":     {"recaptcha-v2"},
@@ -141,7 +141,7 @@ func TestReCaptchaV2TokenBypassesNextRequest(t *testing.T) {
 	_, ts := mountReCaptchaServer(t)
 
 	// Step 1: Solve reCAPTCHA v2 to get a token
-	solver := stealth.NewCaptchaSolver()
+	solver := solverpkg.NewCaptchaSolver()
 	result, err := solver.SolveReCaptchaV2(ts.URL)
 	if err != nil {
 		t.Fatalf("SolveReCaptchaV2 failed: %v", err)
@@ -200,7 +200,7 @@ func TestReCaptchaV2TokenBypassesNextRequest(t *testing.T) {
 func TestSwordScoresWellOnV3(t *testing.T) {
 	_, ts := mountReCaptchaServer(t)
 
-	solver := stealth.NewCaptchaSolver()
+	solver := solverpkg.NewCaptchaSolver()
 	const trials = 10
 	var totalScore float64
 	passCount := 0
@@ -268,7 +268,7 @@ func TestReCaptchaV2SolveRate(t *testing.T) {
 	totalPasses := 0
 
 	for i := 0; i < trials; i++ {
-		solver := stealth.NewCaptchaSolver() // fresh solver per trial for independent RNG
+		solver := solverpkg.NewCaptchaSolver() // fresh solver per trial for independent RNG
 		result, err := solver.SolveReCaptchaV2(ts.URL)
 		if err != nil {
 			t.Logf("trial %d: error: %v", i, err)

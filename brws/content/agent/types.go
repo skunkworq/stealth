@@ -163,15 +163,110 @@ const (
 	ActionNone         ActionType = "done"
 )
 
+// ---------------------------------------------------------------------------
+// Typed parameter structs — one per logical action group.
+// These replace the former map[string]interface{} Parameters bag.
+// ---------------------------------------------------------------------------
+
+// ClickParams holds parameters for click, hover, focus, toggle, and clear_input actions.
+type ClickParams struct {
+	Selector string  `json:"selector,omitempty"`
+	X        float64 `json:"x,omitempty"`
+	Y        float64 `json:"y,omitempty"`
+}
+
+// TypeParams holds parameters for type_text actions.
+type TypeParams struct {
+	Selector  string `json:"selector,omitempty"`
+	Text      string `json:"text,omitempty"`
+	FieldType string `json:"field_type,omitempty"`
+	Name      string `json:"name,omitempty"`
+}
+
+// SelectParams holds parameters for select actions.
+type SelectParams struct {
+	Selector string `json:"selector,omitempty"`
+	Value    string `json:"value,omitempty"`
+}
+
+// ScrollParams holds parameters for scroll_down and scroll_up actions.
+type ScrollParams struct {
+	Amount     float64 `json:"amount,omitempty"`
+	CurrentPct float64 `json:"current_pct,omitempty"`
+}
+
+// ScrollToParams holds parameters for scroll_to_<elem> actions.
+type ScrollToParams struct {
+	TargetID string  `json:"target_id,omitempty"`
+	Selector string  `json:"selector,omitempty"`
+	Y        float64 `json:"y,omitempty"`
+}
+
+// ScrollTargetParams holds parameters for scroll_bottom and scroll_top actions.
+type ScrollTargetParams struct {
+	Target     string  `json:"target,omitempty"`
+	CurrentPct float64 `json:"current_pct,omitempty"`
+}
+
+// NavigateParams holds parameters for navigate and new_tab actions.
+type NavigateParams struct {
+	URL string `json:"url,omitempty"`
+}
+
+// NavHistoryParams holds parameters for nav_back and nav_forward actions.
+type NavHistoryParams struct {
+	DestinationURL   string `json:"destination_url,omitempty"`
+	DestinationTitle string `json:"destination_title,omitempty"`
+}
+
+// WaitParams holds parameters for wait actions.
+type WaitParams struct {
+	Ms       int    `json:"ms,omitempty"`
+	Duration string `json:"duration,omitempty"`
+}
+
+// ScreenshotParams holds parameters for screenshot actions.
+type ScreenshotParams struct {
+	Path string `json:"path,omitempty"`
+}
+
+// KeyPressParams holds parameters for key_press actions.
+type KeyPressParams struct {
+	Key      string `json:"key,omitempty"`
+	Selector string `json:"selector,omitempty"`
+}
+
+// WaitForSelectorParams holds parameters for wait_for_selector actions.
+type WaitForSelectorParams struct {
+	Selector  string `json:"selector,omitempty"`
+	TimeoutMs int    `json:"timeout_ms,omitempty"`
+}
+
+// WaitForNavParams holds parameters for wait_for_navigation actions.
+type WaitForNavParams struct {
+	TimeoutMs int `json:"timeout_ms,omitempty"`
+}
+
+// SolveChallengeParams holds parameters for solve_challenge actions.
+type SolveChallengeParams struct {
+	ChallengeType string `json:"challenge_type,omitempty"`
+}
+
+// TabParams holds parameters for switch_tab and close_tab actions.
+type TabParams struct {
+	TargetID string `json:"target_id,omitempty"`
+	Index    int    `json:"index,omitempty"`
+}
+
 // Action describes one possible action the agent can take.
 type Action struct {
-	ID           string                 `json:"id"`
-	Type         ActionType             `json:"type"`
-	Description  string                 `json:"description"`
-	TargetID     string                 `json:"target_id,omitempty"` // references VisibleElement.ID
-	Parameters   map[string]interface{} `json:"parameters,omitempty"`
-	IsLink       bool                   `json:"is_link,omitempty"`        // true if this click navigates to a link
-	IsFormSubmit bool                   `json:"is_form_submit,omitempty"` // true if this click submits a form
+	ID           string      `json:"id"`
+	Type         ActionType  `json:"type"`
+	Description  string      `json:"description"`
+	TargetID     string      `json:"target_id,omitempty"` // references VisibleElement.ID
+	Parameters   interface{} `json:"parameters,omitempty"`
+	IsLink       bool        `json:"is_link,omitempty"`        // true if this click navigates to a link
+	IsFormSubmit bool        `json:"is_form_submit,omitempty"` // true if this click submits a form
 }
 
 // ActionSpace is the complete set of actions available on the current page.

@@ -94,6 +94,14 @@ func (d *HTMLDocument) QuerySelector(selector string) *HTMLElement {
 
 // AsHTML parses the response body as an HTML document, returning a
 // queryable DOM wrapper.
+//
+// When to use AsHTML vs. content/understand.SemanticTree:
+//   - AsHTML: lightweight DOM queries — link extraction, form detection,
+//     quick text checks, or any use-case that doesn't need token budgeting.
+//   - SemanticTree: passing the page to an LLM, semantic search, or
+//     any context where token count matters. SemanticTree compresses and
+//     annotates the page structure (30–60% token reduction) and builds
+//     a vector index for retrieval; AsHTML skips all of that overhead.
 func (r *Response) AsHTML() (*HTMLDocument, error) {
 	r.ensureParsed()
 	if r.doc == nil {

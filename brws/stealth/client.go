@@ -3,6 +3,7 @@ package stealth
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/skunkworq/stealth/brws/browser/engine"
@@ -18,6 +19,7 @@ import (
 	"github.com/skunkworq/stealth/brws/stealth/challenge"
 	challengefsm "github.com/skunkworq/stealth/brws/stealth/challenge/fsm"
 	"github.com/skunkworq/stealth/brws/stealth/profile/session"
+	"github.com/skunkworq/stealth/brws/stealth/solver"
 )
 
 // Adaptive is the main entry point for the stealth browser automation library.
@@ -28,13 +30,14 @@ type Adaptive struct {
 	sessionMgr    *session.Manager
 	policyLoader  *ml.PolicyLoader
 	behavTracker  *tracker.BehavioralTracker
-	captchaSolver *CaptchaSolver
-	cfSolver      *CloudflareSolverClient
+	captchaSolver *solver.CaptchaSolver
+	cfSolver      *solver.CloudflareSolverClient
 
 	// Anti-bot escalation
 	waterfall         *wf.Waterfall
 	tierTracker       *pool.TierTracker
 	escalation        *EscalationConfig
+	fsmMu             sync.Mutex
 	evasionFSM        *behavior.AdaptiveEvasionFSM
 	evasionFSMEnabled bool
 
@@ -203,16 +206,16 @@ func newAdaptiveWithEngine(eng engine.Engine, cfg *Config, logger *instrumentati
 	}
 
 	// Initialize captcha solver if auto-solve is enabled
-	var captchaSolver *CaptchaSolver
+	var captchaSolver *solver.CaptchaSolver
 	if cfg.Challenge.AutoSolve {
-		captchaSolver = NewCaptchaSolver()
+		captchaSolver = solver.NewCaptchaSolver()
 		logger.Info("captcha auto-solver initialized")
 	}
 
 	// Initialize Cloudflare solver if auto-solve is enabled
-	var cfSolver *CloudflareSolverClient
+	var cfSolver *solver.CloudflareSolverClient
 	if cfg.Challenge.AutoSolve {
-		cfSolver = NewCloudflareSolverClient()
+		cfSolver = solver.NewCloudflareSolverClient()
 		logger.Info("cloudflare auto-solver initialized")
 	}
 
@@ -383,6 +386,46 @@ func (c *Adaptive) Orchestrator() *challengefsm.ChallengeOrchestrator {
 	return c.orchestrator
 }
 
+// captchaFSMAdapter bridges a *solver.CaptchaSolver to the five typed callbacks
+// expected by challengefsm.NewCaptchaFSMSolver. Extracting named methods instead
+// of inline closures makes each translation independently readable and testable.
+type captchaFSMAdapter struct {
+	s   *solver.CaptchaSolver
+	eng engine.Engine
+}
+
+func (a *captchaFSMAdapter) detect(body []byte, headers map[string][]string) *challengefsm.CaptchaDetection {
+	return a.s.DetectCaptchaResponse(body, headers)
+}
+
+func (a *captchaFSMAdapter) solveInline(body []byte, headers map[string][]string) (*challengefsm.CaptchaSolveOutput, *challengefsm.CaptchaDetection, error) {
+	result, cr, err := a.s.SolveFromResponse(body, headers)
+	if err != nil {
+		return nil, nil, err
+	}
+	return result.ToFSMOutput(), cr, nil
+}
+
+func (a *captchaFSMAdapter) solveV2(baseURL string) (*challengefsm.ReCaptchaV2Output, error) {
+	result, err := a.s.SolveReCaptchaV2(baseURL)
+	if err != nil {
+		return nil, err
+	}
+	return result.ToFSMOutput(), nil
+}
+
+func (a *captchaFSMAdapter) generateEvents(solveTimeMs int64, solution string) []challenge.CaptchaEvent {
+	return a.s.GenerateHumanEvents(solveTimeMs, solver.HumanEventOpts{Solution: solution})
+}
+
+func (a *captchaFSMAdapter) asFSMSolver() *challengefsm.CaptchaFSMSolver {
+	return challengefsm.NewCaptchaFSMSolver(
+		a.detect, a.solveInline, a.solveV2,
+		a.s.SubmitSolution, a.generateEvents, a.s.LastToken,
+		a.eng,
+	)
+}
+
 // registerSolvers registers all available solvers with the orchestrator registry.
 // Solvers are registered in priority order: CF → CAPTCHA → DataDome.
 func (c *Adaptive) registerSolvers(registry *challengefsm.SolverRegistry) {
@@ -396,34 +439,9 @@ func (c *Adaptive) registerSolvers(registry *challengefsm.SolverRegistry) {
 		c.logger.Info("registered cloudflare FSM solver")
 	}
 
-	// 2. Captcha solver (wraps existing captchaSolver)
+	// 2. Captcha solver via named adapter (bridges CaptchaSolver → FSM callbacks)
 	if c.captchaSolver != nil {
-		captchaSolver := challengefsm.NewCaptchaFSMSolver(
-			func(body []byte, headers map[string][]string) *challengefsm.CaptchaDetection {
-				return c.captchaSolver.DetectCaptchaResponse(body, headers)
-			},
-			func(body []byte, headers map[string][]string) (*challengefsm.CaptchaSolveOutput, *challengefsm.CaptchaDetection, error) {
-				result, cr, err := c.captchaSolver.SolveFromResponse(body, headers)
-				if err != nil {
-					return nil, nil, err
-				}
-				return result.ToFSMOutput(), cr, nil
-			},
-			func(baseURL string) (*challengefsm.ReCaptchaV2Output, error) {
-				result, err := c.captchaSolver.SolveReCaptchaV2(baseURL)
-				if err != nil {
-					return nil, err
-				}
-				return result.ToFSMOutput(), nil
-			},
-			c.captchaSolver.SubmitSolution,
-			func(solveTimeMs int64, solution string) []challenge.CaptchaEvent {
-				return c.captchaSolver.GenerateHumanEvents(solveTimeMs, HumanEventOpts{Solution: solution})
-			},
-			c.captchaSolver.LastToken,
-			c.engine,
-		)
-		registry.Register(captchaSolver)
+		registry.Register((&captchaFSMAdapter{s: c.captchaSolver, eng: c.engine}).asFSMSolver())
 		c.logger.Info("registered captcha FSM solver")
 	}
 

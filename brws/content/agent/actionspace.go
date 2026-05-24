@@ -30,26 +30,33 @@ func BuildActionSpace(snap *PageSnapshot) *ActionSpace {
 				act.Description = fmt.Sprintf("Click '%s' (%s)", elem.Text, elem.Tag)
 				act.IsLink = elem.Attrs["href"] != ""
 				act.IsFormSubmit = elem.Attrs["type"] == "submit"
+				act.Parameters = &ClickParams{Selector: elem.Selector}
 			case ActionTypeText:
 				placeholder := elem.Attrs["placeholder"]
 				if placeholder == "" {
 					placeholder = elem.Text
 				}
 				act.Description = fmt.Sprintf("Type into '%s' (%s)", placeholder, elem.Tag)
-				act.Parameters = map[string]interface{}{
-					"field_type": elem.Attrs["type"],
-					"name":       elem.Attrs["name"],
+				act.Parameters = &TypeParams{
+					Selector:  elem.Selector,
+					FieldType: elem.Attrs["type"],
+					Name:      elem.Attrs["name"],
 				}
 			case ActionSelect:
 				act.Description = fmt.Sprintf("Select option in '%s' (%s)", elem.Text, elem.Tag)
+				act.Parameters = &SelectParams{Selector: elem.Selector}
 			case ActionToggle:
 				act.Description = fmt.Sprintf("Toggle '%s' (%s)", elem.Text, elem.Tag)
+				act.Parameters = &SelectParams{Selector: elem.Selector}
 			case ActionHover:
 				act.Description = fmt.Sprintf("Hover over '%s' (%s)", elem.Text, elem.Tag)
+				act.Parameters = &ClickParams{Selector: elem.Selector}
 			case ActionFocus:
 				act.Description = fmt.Sprintf("Focus '%s' (%s)", elem.Text, elem.Tag)
+				act.Parameters = &ClickParams{Selector: elem.Selector}
 			case ActionClearInput:
 				act.Description = fmt.Sprintf("Clear input '%s' (%s)", elem.Text, elem.Tag)
+				act.Parameters = &ClickParams{Selector: elem.Selector}
 			}
 			as.ElementActions = append(as.ElementActions, act)
 		}
@@ -73,9 +80,7 @@ func BuildActionSpace(snap *PageSnapshot) *ActionSpace {
 			ID:          "solve_challenge",
 			Type:        ActionSolveChallenge,
 			Description: fmt.Sprintf("Attempt to solve the %s anti-bot challenge", snap.ChallengeType),
-			Parameters: map[string]interface{}{
-				"challenge_type": snap.ChallengeType,
-			},
+			Parameters:  &SolveChallengeParams{ChallengeType: snap.ChallengeType},
 		})
 	}
 
@@ -86,9 +91,9 @@ func buildOtherActions() []Action {
 	return []Action{
 		{ID: "wait", Type: ActionWait, Description: "Wait for page to settle"},
 		{ID: "screenshot", Type: ActionScreenshot, Description: "Capture screenshot"},
-		{ID: "key_press", Type: ActionKeyPress, Description: "Press a key (Enter, Escape, Tab, etc.)", Parameters: map[string]interface{}{"key": "<key name>"}},
-		{ID: "wait_for_selector", Type: ActionWaitForSelector, Description: "Wait until an element appears on the page", Parameters: map[string]interface{}{"selector": "<CSS selector>", "timeout_ms": 5000}},
-		{ID: "wait_for_navigation", Type: ActionWaitForNavigation, Description: "Wait until the page navigates to a new URL", Parameters: map[string]interface{}{"timeout_ms": 5000}},
+		{ID: "key_press", Type: ActionKeyPress, Description: "Press a key (Enter, Escape, Tab, etc.)", Parameters: &KeyPressParams{Key: "<key name>"}},
+		{ID: "wait_for_selector", Type: ActionWaitForSelector, Description: "Wait until an element appears on the page", Parameters: &WaitForSelectorParams{Selector: "<CSS selector>", TimeoutMs: 5000}},
+		{ID: "wait_for_navigation", Type: ActionWaitForNavigation, Description: "Wait until the page navigates to a new URL", Parameters: &WaitForNavParams{TimeoutMs: 5000}},
 		{ID: "done", Type: ActionNone, Description: "Task complete — no further actions"},
 	}
 }
@@ -106,20 +111,14 @@ func buildScrollActions(snap *PageSnapshot) []Action {
 			ID:          "scroll_down",
 			Type:        ActionScrollDown,
 			Description: fmt.Sprintf("Scroll down (~%d%% of viewport)", 50),
-			Parameters: map[string]interface{}{
-				"amount":      snap.Viewport.Height * 0.5,
-				"current_pct": pagePct,
-			},
+			Parameters:  &ScrollParams{Amount: snap.Viewport.Height * 0.5, CurrentPct: float64(pagePct)},
 		})
 		// Large scroll down
 		actions = append(actions, Action{
 			ID:          "scroll_down_large",
 			Type:        ActionScrollDown,
 			Description: fmt.Sprintf("Scroll down one full viewport (~%d%%)", 100),
-			Parameters: map[string]interface{}{
-				"amount":      snap.Viewport.Height,
-				"current_pct": pagePct,
-			},
+			Parameters:  &ScrollParams{Amount: snap.Viewport.Height, CurrentPct: float64(pagePct)},
 		})
 	}
 
@@ -129,10 +128,7 @@ func buildScrollActions(snap *PageSnapshot) []Action {
 			ID:          "scroll_up",
 			Type:        ActionScrollUp,
 			Description: fmt.Sprintf("Scroll up (~%d%% of viewport)", 50),
-			Parameters: map[string]interface{}{
-				"amount":      snap.Viewport.Height * 0.5,
-				"current_pct": pagePct,
-			},
+			Parameters:  &ScrollParams{Amount: snap.Viewport.Height * 0.5, CurrentPct: float64(pagePct)},
 		})
 	}
 
@@ -142,7 +138,7 @@ func buildScrollActions(snap *PageSnapshot) []Action {
 			ID:          "scroll_bottom",
 			Type:        ActionScrollBottom,
 			Description: "Scroll to the bottom of the page",
-			Parameters:  map[string]interface{}{"target": "bottom", "current_pct": pagePct},
+			Parameters:  &ScrollTargetParams{Target: "bottom", CurrentPct: float64(pagePct)},
 		})
 	}
 
@@ -152,7 +148,7 @@ func buildScrollActions(snap *PageSnapshot) []Action {
 			ID:          "scroll_top",
 			Type:        ActionScrollTop,
 			Description: "Scroll to the top of the page",
-			Parameters:  map[string]interface{}{"target": "top", "current_pct": pagePct},
+			Parameters:  &ScrollTargetParams{Target: "top", CurrentPct: float64(pagePct)},
 		})
 	}
 
@@ -164,11 +160,7 @@ func buildScrollActions(snap *PageSnapshot) []Action {
 				Type:        ActionScrollTo,
 				TargetID:    elem.ID,
 				Description: fmt.Sprintf("Scroll until '%s' is in view", elem.Text),
-				Parameters: map[string]interface{}{
-					"target_id": elem.ID,
-					"selector":  elem.Selector,
-					"y":         elem.Bounds.Y,
-				},
+				Parameters:  &ScrollToParams{TargetID: elem.ID, Selector: elem.Selector, Y: elem.Bounds.Y},
 			})
 		}
 	}
@@ -187,7 +179,7 @@ func buildNavActions(snap *PageSnapshot) []Action {
 				ID:          "nav_back",
 				Type:        ActionBack,
 				Description: fmt.Sprintf("Go back to: %s", truncate(entry.URL, 80)),
-				Parameters:  map[string]interface{}{"destination_url": entry.URL, "destination_title": entry.Title},
+				Parameters:  &NavHistoryParams{DestinationURL: entry.URL, DestinationTitle: entry.Title},
 			})
 		}
 	}
@@ -199,7 +191,7 @@ func buildNavActions(snap *PageSnapshot) []Action {
 				ID:          "nav_forward",
 				Type:        ActionForward,
 				Description: fmt.Sprintf("Go forward to: %s", truncate(entry.URL, 80)),
-				Parameters:  map[string]interface{}{"destination_url": entry.URL, "destination_title": entry.Title},
+				Parameters:  &NavHistoryParams{DestinationURL: entry.URL, DestinationTitle: entry.Title},
 			})
 		}
 	}
@@ -212,7 +204,7 @@ func buildNavActions(snap *PageSnapshot) []Action {
 		ID:          "navigate",
 		Type:        ActionNavigate,
 		Description: "Navigate to a specific URL",
-		Parameters:  map[string]interface{}{"url": "<provide URL>"},
+		Parameters:  &NavigateParams{URL: "<provide URL>"},
 	})
 	return actions
 }
@@ -226,21 +218,21 @@ func buildTabActions(snap *PageSnapshot) []Action {
 				ID:          fmt.Sprintf("switch_tab_%d", tab.Index),
 				Type:        ActionSwitchTab,
 				Description: fmt.Sprintf("Switch to tab %d: %s", tab.Index, truncate(tab.Title, 60)),
-				Parameters:  map[string]interface{}{"target_id": tab.TargetID, "index": tab.Index},
+				Parameters:  &TabParams{TargetID: tab.TargetID, Index: tab.Index},
 			})
 		}
 		actions = append(actions, Action{
 			ID:          fmt.Sprintf("close_tab_%d", tab.Index),
 			Type:        ActionCloseTab,
 			Description: fmt.Sprintf("Close tab %d: %s", tab.Index, truncate(tab.Title, 60)),
-			Parameters:  map[string]interface{}{"target_id": tab.TargetID, "index": tab.Index},
+			Parameters:  &TabParams{TargetID: tab.TargetID, Index: tab.Index},
 		})
 	}
 	actions = append(actions, Action{
 		ID:          "new_tab",
 		Type:        ActionNewTab,
 		Description: "Open a new browser tab",
-		Parameters:  map[string]interface{}{"url": "about:blank"},
+		Parameters:  &NavigateParams{URL: "about:blank"},
 	})
 	return actions
 }
@@ -297,7 +289,7 @@ func BuildSemanticActionSpace(snap *PageSnapshot) *ActionSpace {
 					Type:        mapSemanticActionType(sa.Type),
 					Description: sa.Description,
 					TargetID:    node.ID,
-					Parameters:  map[string]interface{}{"selector": sa.Selector},
+					Parameters:  &ClickParams{Selector: sa.Selector},
 				}
 				as.ElementActions = append(as.ElementActions, act)
 			}

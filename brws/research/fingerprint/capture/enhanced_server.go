@@ -249,6 +249,24 @@ func (s *EnhancedServer) captureClientHello(hello *tls.ClientHelloInfo) (*tls.Co
 	return nil, nil // Use default config
 }
 
+// requireLocalhost rejects requests that do not originate from the loopback
+// interface. It is applied to all /api/* routes that can spawn Chrome
+// processes, start proxy listeners, or export captured training data.
+func requireLocalhost(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			host = r.RemoteAddr
+		}
+		ip := net.ParseIP(host)
+		if ip == nil || !ip.IsLoopback() {
+			http.Error(w, "forbidden: lab API is restricted to localhost", http.StatusForbidden)
+			return
+		}
+		next(w, r)
+	}
+}
+
 // setupRoutes configures all HTTP handlers
 func (s *EnhancedServer) setupRoutes(mux *http.ServeMux) {
 	// Static files from embedded filesystem
@@ -288,15 +306,15 @@ func (s *EnhancedServer) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/captures", s.handleCapturesList)
 	mux.HandleFunc("/captures/", s.handleCaptureDetail)
 
-	// Control API for proxy and browser management
-	mux.HandleFunc("/api/status", s.handleAPIStatus)
-	mux.HandleFunc("/api/proxy/start", s.handleAPIProxyStart)
-	mux.HandleFunc("/api/proxy/stop", s.handleAPIProxyStop)
-	mux.HandleFunc("/api/chrome/launch", s.handleAPIChromeLaunch)
-	mux.HandleFunc("/api/chrome/stop", s.handleAPIChromeStop)
+	// Control API for proxy and browser management — restricted to localhost
+	mux.HandleFunc("/api/status", requireLocalhost(s.handleAPIStatus))
+	mux.HandleFunc("/api/proxy/start", requireLocalhost(s.handleAPIProxyStart))
+	mux.HandleFunc("/api/proxy/stop", requireLocalhost(s.handleAPIProxyStop))
+	mux.HandleFunc("/api/chrome/launch", requireLocalhost(s.handleAPIChromeLaunch))
+	mux.HandleFunc("/api/chrome/stop", requireLocalhost(s.handleAPIChromeStop))
 	mux.HandleFunc("/api/test-signature", s.handleTestSignature)
 	mux.HandleFunc("/api/stealth-test", s.stealthServer.HandleRequest)
-	mux.HandleFunc("/api/ml/evaluate", s.handleMLEvaluate)
+	mux.HandleFunc("/api/ml/evaluate", requireLocalhost(s.handleMLEvaluate))
 
 	// Lightweight JS Trap for ML Agent Evaluation
 	mux.HandleFunc("/api/ml/trap", s.handleMLTrap)
@@ -341,11 +359,11 @@ func (s *EnhancedServer) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/captcha/train", s.handleCaptchaTrain)
 	mux.HandleFunc("/api/captcha/random", s.handleCaptchaRandom)
 
-	// Training data API endpoints
-	mux.HandleFunc("/api/captcha/manual-solve", s.handleManualSolve)
-	mux.HandleFunc("/api/training/samples", s.handleTrainingSamples)
-	mux.HandleFunc("/api/training/export", s.handleTrainingExport)
-	mux.HandleFunc("/api/training/stats", s.handleTrainingStats)
+	// Training data API endpoints — restricted to localhost (captures contain raw fingerprint data)
+	mux.HandleFunc("/api/captcha/manual-solve", requireLocalhost(s.handleManualSolve))
+	mux.HandleFunc("/api/training/samples", requireLocalhost(s.handleTrainingSamples))
+	mux.HandleFunc("/api/training/export", requireLocalhost(s.handleTrainingExport))
+	mux.HandleFunc("/api/training/stats", requireLocalhost(s.handleTrainingStats))
 
 	// Trace recording lab
 	s.traceLab.MountRoutes(mux)

@@ -116,7 +116,7 @@ func parseActionReply(raw string, actions []Action) (Action, error) {
 			ID:          "navigate",
 			Type:        ActionNavigate,
 			Description: "Navigate to URL",
-			Parameters:  map[string]interface{}{"url": value},
+			Parameters:  &NavigateParams{URL: value},
 		}, nil
 	}
 
@@ -125,14 +125,25 @@ func parseActionReply(raw string, actions []Action) (Action, error) {
 
 // setActionValue attaches a parameter value to a type/select/navigate action.
 func setActionValue(a Action, value string) Action {
-	if a.Parameters == nil {
-		a.Parameters = make(map[string]interface{})
-	}
 	switch a.Type {
-	case ActionTypeText, ActionSelect, ActionToggle:
-		a.Parameters["value"] = value
+	case ActionTypeText:
+		if p, ok := a.Parameters.(*TypeParams); ok {
+			p.Text = value
+		} else {
+			a.Parameters = &TypeParams{Text: value}
+		}
+	case ActionSelect, ActionToggle:
+		if p, ok := a.Parameters.(*SelectParams); ok {
+			p.Value = value
+		} else {
+			a.Parameters = &SelectParams{Value: value}
+		}
 	case ActionNavigate:
-		a.Parameters["url"] = value
+		if p, ok := a.Parameters.(*NavigateParams); ok {
+			p.URL = value
+		} else {
+			a.Parameters = &NavigateParams{URL: value}
+		}
 	}
 	return a
 }
