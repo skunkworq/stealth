@@ -80,7 +80,8 @@ func (s *DynamicFSMSolver) Solve(cctx *ChallengeContext) (*SolveResult, error) {
 	_ = fsm.Transition(cctx.Ctx, ChallengeEvents.Init)
 
 	// Use trace events if the caller provided them, otherwise use our generated ones.
-	// TODO: wire events into the submission payload when challenge APIs require them.
+	// Trace events are collected but not yet submitted to challenge APIs;
+	// this is intentional until challenge providers expose event-based verification.
 	events := cctx.TraceEvents
 	if len(events) == 0 {
 		events = result.Events

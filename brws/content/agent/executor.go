@@ -61,7 +61,6 @@ type Executor struct {
 type ExecuteResult struct {
 	ActionID        string
 	Success         bool
-	Error           string
 	NewURL          string
 	ScrollDelta     float64
 	ChallengeSolved bool // true if a captcha/anti-bot challenge was solved during this action
@@ -152,7 +151,6 @@ func (e *Executor) Execute(ctx context.Context, action Action) (*ExecuteResult, 
 
 	if err != nil {
 		res.Success = false
-		res.Error = err.Error()
 	}
 	return res, err
 }
