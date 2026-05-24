@@ -78,7 +78,7 @@ func TestConditionalNode(t *testing.T) {
 		return s
 	}}
 	cond := NewConditionalNode("answer", "answer",
-		map[string]interface{}{"key_name": "answer", "condition": `not answer or answer=="NA"`},
+		ConditionalNodeConfig{KeyName: "answer", Condition: `not answer or answer=="NA"`},
 		"Retry", "Done",
 	)
 	retry := &testNode{name: "Retry", inExpr: "answer", out: []string{"answer"}, fn: func(s State) State {
@@ -126,7 +126,7 @@ func TestSplitText(t *testing.T) {
 
 func TestFetchNodeStealthClientField(t *testing.T) {
 	// Verify FetchNode can hold a StealthClient reference (compile-time check).
-	node := NewFetchNode("url", "doc", nil)
+	node := NewFetchNode("url", "doc")
 	if node.StealthClient != nil {
 		t.Fatal("expected nil StealthClient by default")
 	}

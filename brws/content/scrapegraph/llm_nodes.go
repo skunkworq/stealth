@@ -82,24 +82,18 @@ type GenerateAnswerNode struct {
 }
 
 // NewGenerateAnswerNode creates the core extraction node.
-func NewGenerateAnswerNode(input, output string, llm LLM, nodeConfig map[string]interface{}) *GenerateAnswerNode {
-	var schema interface{}
-	if v, ok := nodeConfig["schema"]; ok {
-		schema = v
-	}
-	addInfo, _ := nodeConfig["additional_info"].(string)
+func NewGenerateAnswerNode(input, output string, llm LLM, cfg LLMNodeConfig) *GenerateAnswerNode {
 	return &GenerateAnswerNode{
 		Base: baseNode{
-			nodeName:   "GenerateAnswerNode",
-			nodeType:   "node",
-			inputExpr:  input,
-			output:     []string{output},
-			minInputs:  2,
-			nodeConfig: nodeConfig,
+			nodeName:  "GenerateAnswerNode",
+			nodeType:  "node",
+			inputExpr: input,
+			output:    []string{output},
+			minInputs: 2,
 		},
 		LLM:        llm,
-		Schema:     schema,
-		Additional: addInfo,
+		Schema:     cfg.Schema,
+		Additional: cfg.AdditionalInfo,
 	}
 }
 
@@ -259,22 +253,17 @@ type ReasoningNode struct {
 }
 
 // NewReasoningNode creates a reasoning node.
-func NewReasoningNode(input, output string, llm LLM, nodeConfig map[string]interface{}) *ReasoningNode {
-	var schema interface{}
-	if v, ok := nodeConfig["schema"]; ok {
-		schema = v
-	}
+func NewReasoningNode(input, output string, llm LLM, cfg LLMNodeConfig) *ReasoningNode {
 	return &ReasoningNode{
 		Base: baseNode{
-			nodeName:   "ReasoningNode",
-			nodeType:   "node",
-			inputExpr:  input,
-			output:     []string{output},
-			minInputs:  2,
-			nodeConfig: nodeConfig,
+			nodeName:  "ReasoningNode",
+			nodeType:  "node",
+			inputExpr: input,
+			output:    []string{output},
+			minInputs: 2,
 		},
 		LLM:    llm,
-		Schema: schema,
+		Schema: cfg.Schema,
 	}
 }
 
@@ -318,22 +307,17 @@ type MergeAnswersNode struct {
 }
 
 // NewMergeAnswersNode creates a merge node.
-func NewMergeAnswersNode(input, output string, llm LLM, nodeConfig map[string]interface{}) *MergeAnswersNode {
-	var schema interface{}
-	if v, ok := nodeConfig["schema"]; ok {
-		schema = v
-	}
+func NewMergeAnswersNode(input, output string, llm LLM, cfg LLMNodeConfig) *MergeAnswersNode {
 	return &MergeAnswersNode{
 		Base: baseNode{
-			nodeName:   "MergeAnswersNode",
-			nodeType:   "node",
-			inputExpr:  input,
-			output:     []string{output},
-			minInputs:  2,
-			nodeConfig: nodeConfig,
+			nodeName:  "MergeAnswersNode",
+			nodeType:  "node",
+			inputExpr: input,
+			output:    []string{output},
+			minInputs: 2,
 		},
 		LLM:    llm,
-		Schema: schema,
+		Schema: cfg.Schema,
 	}
 }
 
@@ -405,27 +389,26 @@ type SearchInternetNode struct {
 }
 
 // NewSearchInternetNode creates a search node.
-func NewSearchInternetNode(input, output string, llm LLM, nodeConfig map[string]interface{}) *SearchInternetNode {
-	maxRes := 5
-	if v, ok := nodeConfig["max_results"].(int); ok {
-		maxRes = v
+func NewSearchInternetNode(input, output string, llm LLM, cfg SearchNodeConfig) *SearchInternetNode {
+	maxRes := cfg.MaxResults
+	if maxRes <= 0 {
+		maxRes = 5
 	}
-	engine := "duckduckgo"
-	if v, ok := nodeConfig["search_engine"].(string); ok {
-		engine = v
+	eng := cfg.SearchEngine
+	if eng == "" {
+		eng = "duckduckgo"
 	}
 	return &SearchInternetNode{
 		Base: baseNode{
-			nodeName:   "SearchInternetNode",
-			nodeType:   "node",
-			inputExpr:  input,
-			output:     []string{output},
-			minInputs:  1,
-			nodeConfig: nodeConfig,
+			nodeName:  "SearchInternetNode",
+			nodeType:  "node",
+			inputExpr: input,
+			output:    []string{output},
+			minInputs: 1,
 		},
 		LLM:          llm,
 		MaxResults:   maxRes,
-		SearchEngine: engine,
+		SearchEngine: eng,
 	}
 }
 

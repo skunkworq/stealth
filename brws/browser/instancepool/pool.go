@@ -24,6 +24,7 @@ type BrowserInstance struct {
 type Pool struct {
 	config    *Config
 	instances chan *BrowserInstance
+	done      chan struct{} // closed by Close() to stop cleanupLoop
 	mu        sync.RWMutex
 	factory   EngineFactory
 	stats     PoolStats
@@ -91,6 +92,7 @@ func New(factory EngineFactory, cfg *Config) (*Pool, error) {
 	p := &Pool{
 		config:    cfg,
 		instances: make(chan *BrowserInstance, cfg.MaxSize),
+		done:      make(chan struct{}),
 		factory:   factory,
 		stats:     PoolStats{},
 	}
@@ -244,26 +246,41 @@ func (p *Pool) recycle(inst *BrowserInstance) error {
 	return nil
 }
 
-// cleanupLoop periodically cleans up idle instances
+// cleanupLoop periodically cleans up idle instances.
+// Exits when p.done is closed (triggered by Close).
 func (p *Pool) cleanupLoop() {
 	ticker := time.NewTicker(1 * time.Minute)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		p.mu.Lock()
-		currentActive := p.stats.Active
-		p.mu.Unlock()
+	for {
+		select {
+		case <-p.done:
+			return
+		case <-ticker.C:
+			p.mu.Lock()
+			currentActive := p.stats.Active
+			p.mu.Unlock()
 
-		// If we have too many active instances, release some
-		if currentActive > int64(p.config.MinSize) {
-			select {
-			case inst := <-p.instances:
-				if time.Since(inst.LastUsed) >= p.config.IdleTimeout {
-					_ = p.recycle(inst)
-				} else {
-					p.Release(inst)
+			if currentActive > int64(p.config.MinSize) {
+				select {
+				case inst := <-p.instances:
+					if inst == nil {
+						// Received from a closed channel — pool is shutting down.
+						return
+					}
+					if time.Since(inst.LastUsed) >= p.config.IdleTimeout {
+						_ = p.recycle(inst)
+					} else {
+						// Put back without touching Active — this instance was never
+						// Acquired (Active not incremented), so Release must not be used.
+						select {
+						case p.instances <- inst:
+						default:
+							_ = p.recycle(inst)
+						}
+					}
+				default:
 				}
-			default:
 			}
 		}
 	}
@@ -277,8 +294,9 @@ func (p *Pool) Stats() PoolStats {
 	return p.stats
 }
 
-// Close closes all instances in the pool
+// Close stops cleanupLoop and closes all instances in the pool.
 func (p *Pool) Close() error {
+	close(p.done)
 	close(p.instances)
 
 	for inst := range p.instances {

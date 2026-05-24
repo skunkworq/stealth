@@ -26,20 +26,17 @@ type ConditionalNode struct {
 // NewConditionalNode creates a conditional branching node.
 // The edges slice in the graph must supply exactly two outgoing edges:
 // index 0 = true branch, index 1 = false branch.
-func NewConditionalNode(input, output string, nodeConfig map[string]interface{}, trueNode, falseNode string) *ConditionalNode {
-	key, _ := nodeConfig["key_name"].(string)
-	cond, _ := nodeConfig["condition"].(string)
+func NewConditionalNode(input, output string, cfg ConditionalNodeConfig, trueNode, falseNode string) *ConditionalNode {
 	return &ConditionalNode{
 		Base: baseNode{
-			nodeName:   "ConditionalNode",
-			nodeType:   "conditional_node",
-			inputExpr:  input,
-			output:     []string{output},
-			minInputs:  1,
-			nodeConfig: nodeConfig,
+			nodeName:  "ConditionalNode",
+			nodeType:  "conditional_node",
+			inputExpr: input,
+			output:    []string{output},
+			minInputs: 1,
 		},
-		KeyName:       key,
-		Condition:     cond,
+		KeyName:       cfg.KeyName,
+		Condition:     cfg.Condition,
 		TrueNodeName:  trueNode,
 		FalseNodeName: falseNode,
 	}

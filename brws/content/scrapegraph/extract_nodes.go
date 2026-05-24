@@ -19,15 +19,14 @@ type ExtractorNode struct {
 
 // NewExtractorNode creates an ExtractorNode. Pass any extract.Option values to
 // control the model, prompt description, format, etc.
-func NewExtractorNode(input, output string, nodeConfig map[string]interface{}, opts ...extract.Option) *ExtractorNode {
+func NewExtractorNode(input, output string, opts ...extract.Option) *ExtractorNode {
 	return &ExtractorNode{
 		Base: baseNode{
-			nodeName:   "ExtractorNode",
-			nodeType:   "node",
-			inputExpr:  input,
-			output:     []string{output},
-			minInputs:  1,
-			nodeConfig: nodeConfig,
+			nodeName:  "ExtractorNode",
+			nodeType:  "node",
+			inputExpr: input,
+			output:    []string{output},
+			minInputs: 1,
 		},
 		Options: opts,
 	}

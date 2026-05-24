@@ -115,37 +115,11 @@ func (s *Storage) LoadProfiles(domain string) ([]ElementProfile, error) {
 	return profiles, nil
 }
 
+// FindSimilar returns profiles whose tag/text/attrs match the query.
+// Delegates to the in-memory tracker (O(1) per-domain lookup, kept in sync
+// by SaveProfile) rather than re-querying the DB on every call.
 func (s *Storage) FindSimilar(domain, tag, text string, attrs map[string]string, path string) []ElementProfile {
-	loaded, err := s.LoadProfiles(domain)
-	if err != nil || len(loaded) == 0 {
-		return nil
-	}
-
-	var candidates []ElementProfile
-	for _, p := range loaded {
-		if p.Tag == tag {
-			candidates = append(candidates, p)
-		}
-	}
-
-	if len(candidates) == 0 {
-		return nil
-	}
-
-	var best []ElementProfile
-	bestScore := 0.0
-
-	for _, c := range candidates {
-		score := calculateSimilarity(c, tag, text, attrs, path)
-		if score > bestScore {
-			bestScore = score
-			best = []ElementProfile{c}
-		} else if score == bestScore && score > 0.5 {
-			best = append(best, c)
-		}
-	}
-
-	return best
+	return s.tracker.FindSimilar(domain, tag, text, attrs, path)
 }
 
 func (s *Storage) Close() error {

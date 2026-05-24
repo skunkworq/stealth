@@ -33,23 +33,20 @@ type GraphConfig struct {
 	SearchEngine string
 }
 
-// toNodeConfig bridges GraphConfig to the map-based API expected by internal
-// node constructors. Only keys that internal nodes actually read are included.
-func (c *GraphConfig) toNodeConfig() map[string]interface{} {
-	m := map[string]interface{}{}
+// toLLMNodeConfig returns a typed LLMNodeConfig from this GraphConfig and schema.
+func (c *GraphConfig) toLLMNodeConfig(schema interface{}) LLMNodeConfig {
 	if c == nil {
-		return m
+		return LLMNodeConfig{Schema: schema}
 	}
-	if c.AdditionalInfo != "" {
-		m["additional_info"] = c.AdditionalInfo
+	return LLMNodeConfig{Schema: schema, AdditionalInfo: c.AdditionalInfo}
+}
+
+// toSearchNodeConfig returns a typed SearchNodeConfig from this GraphConfig.
+func (c *GraphConfig) toSearchNodeConfig() SearchNodeConfig {
+	if c == nil {
+		return SearchNodeConfig{}
 	}
-	if c.MaxResults > 0 {
-		m["max_results"] = c.MaxResults
-	}
-	if c.SearchEngine != "" {
-		m["search_engine"] = c.SearchEngine
-	}
-	return m
+	return SearchNodeConfig{MaxResults: c.MaxResults, SearchEngine: c.SearchEngine}
 }
 
 // ---------------------------------------------------------------------------
@@ -172,9 +169,8 @@ func NewSmartScraperGraphWithExtractor(prompt, source string, cfg *GraphConfig, 
 	}
 	ss := &SmartScraperGraph{Pipeline: *pipe}
 
-	nodeConfig := pipe.Config.toNodeConfig()
-	fetch := NewFetchNode("url | local_dir", "doc", nodeConfig)
-	extractor := NewExtractorNode("user_prompt & doc", "answer", nodeConfig, opts...)
+	fetch := NewFetchNode("url | local_dir", "doc")
+	extractor := NewExtractorNode("user_prompt & doc", "answer", opts...)
 	graph, err := NewBaseGraph([]Node{fetch, extractor}, [][2]string{{fetch.Name(), extractor.Name()}}, fetch, "SmartScraperGraph")
 	if err != nil {
 		return nil, err
@@ -203,24 +199,19 @@ func (ss *SmartScraperGraph) buildGraph() (*BaseGraph, error) {
 	llm := ss.LLM
 	schema := ss.Schema
 
-	nodeConfig := cfg.toNodeConfig()
-
 	// Core nodes
-	fetch := NewFetchNode("url | local_dir", "doc", nodeConfig)
+	fetch := NewFetchNode("url | local_dir", "doc")
 	if ss.StealthClient != nil {
 		fetch.StealthClient = ss.StealthClient
 	} else if ss.Engine != nil {
 		fetch.Engine = ss.Engine
 	}
-	parse := NewParseNode("doc", "parsed_doc", ss.ModelToken, nodeConfig)
+	parse := NewParseNode("doc", "parsed_doc", ss.ModelToken, ParseNodeConfig{ParseHTML: true})
 	gen := NewGenerateAnswerNode(
 		"user_prompt & (relevant_chunks | parsed_doc | doc)",
 		"answer",
 		llm,
-		map[string]interface{}{
-			"schema":          schema,
-			"additional_info": cfg.AdditionalInfo,
-		},
+		cfg.toLLMNodeConfig(schema),
 	)
 
 	// Optional reasoning node
@@ -230,7 +221,7 @@ func (ss *SmartScraperGraph) buildGraph() (*BaseGraph, error) {
 			"user_prompt & (relevant_chunks | parsed_doc | doc)",
 			"reasoning",
 			llm,
-			map[string]interface{}{"schema": schema},
+			LLMNodeConfig{Schema: schema},
 		)
 	}
 
@@ -241,9 +232,9 @@ func (ss *SmartScraperGraph) buildGraph() (*BaseGraph, error) {
 		cond = NewConditionalNode(
 			"answer",
 			"answer",
-			map[string]interface{}{
-				"key_name":  "answer",
-				"condition": `not answer or answer=="NA"`,
+			ConditionalNodeConfig{
+				KeyName:   "answer",
+				Condition: `not answer or answer=="NA"`,
 			},
 			"RegenNode",
 			"", // false branch -> terminate
@@ -252,9 +243,9 @@ func (ss *SmartScraperGraph) buildGraph() (*BaseGraph, error) {
 			"user_prompt & answer",
 			"answer",
 			llm,
-			map[string]interface{}{
-				"schema":          schema,
-				"additional_info": "The previous extraction failed or returned NA. Try a different strategy.",
+			LLMNodeConfig{
+				Schema:         schema,
+				AdditionalInfo: "The previous extraction failed or returned NA. Try a different strategy.",
 			},
 		)
 		regen.Base.nodeName = "RegenNode"
@@ -396,8 +387,7 @@ func (sg *SearchGraph) buildGraph() (*BaseGraph, error) {
 	llm := sg.LLM
 	schema := sg.Schema
 
-	nodeConfig := cfg.toNodeConfig()
-	search := NewSearchInternetNode("user_prompt", "urls", llm, nodeConfig)
+	search := NewSearchInternetNode("user_prompt", "urls", llm, cfg.toSearchNodeConfig())
 
 	// GraphIteratorNode equivalent: for each URL, run a SmartScraperGraph.
 	// In the Go implementation we model this as a single node that iterates.
@@ -417,7 +407,7 @@ func (sg *SearchGraph) buildGraph() (*BaseGraph, error) {
 	}
 
 	merge := NewMergeAnswersNode("user_prompt & results", "answer", llm,
-		map[string]interface{}{"schema": schema},
+		LLMNodeConfig{Schema: schema},
 	)
 
 	nodes := []Node{search, iterate, merge}

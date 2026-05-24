@@ -40,15 +40,14 @@ type FetchNode struct {
 }
 
 // NewFetchNode creates a FetchNode.
-func NewFetchNode(input, output string, nodeConfig map[string]interface{}) *FetchNode {
+func NewFetchNode(input, output string) *FetchNode {
 	return &FetchNode{
 		Base: baseNode{
-			nodeName:   "FetchNode",
-			nodeType:   "node",
-			inputExpr:  input,
-			output:     []string{output},
-			minInputs:  1,
-			nodeConfig: nodeConfig,
+			nodeName:  "FetchNode",
+			nodeType:  "node",
+			inputExpr: input,
+			output:    []string{output},
+			minInputs: 1,
 		},
 		Timeout: 30,
 	}
@@ -194,28 +193,23 @@ type ParseNode struct {
 	ParseURLs bool
 }
 
-// NewParseNode creates a ParseNode.
-func NewParseNode(input, output string, chunkSize int, nodeConfig map[string]interface{}) *ParseNode {
+// NewParseNode creates a ParseNode. ParseHTML defaults to true when cfg is zero value.
+func NewParseNode(input, output string, chunkSize int, cfg ParseNodeConfig) *ParseNode {
 	parseHTML := true
-	if v, ok := nodeConfig["parse_html"].(bool); ok {
-		parseHTML = v
-	}
-	parseURLs := false
-	if v, ok := nodeConfig["parse_urls"].(bool); ok {
-		parseURLs = v
+	if cfg != (ParseNodeConfig{}) {
+		parseHTML = cfg.ParseHTML
 	}
 	return &ParseNode{
 		Base: baseNode{
-			nodeName:   "ParseNode",
-			nodeType:   "node",
-			inputExpr:  input,
-			output:     []string{output},
-			minInputs:  1,
-			nodeConfig: nodeConfig,
+			nodeName:  "ParseNode",
+			nodeType:  "node",
+			inputExpr: input,
+			output:    []string{output},
+			minInputs: 1,
 		},
 		ChunkSize: chunkSize,
 		ParseHTML: parseHTML,
-		ParseURLs: parseURLs,
+		ParseURLs: cfg.ParseURLs,
 	}
 }
 
@@ -376,12 +370,11 @@ func splitText(text string, maxChars int) []string {
 
 // baseNode holds the common fields for every node to avoid repetition.
 type baseNode struct {
-	nodeName   string
-	nodeType   string
-	inputExpr  string
-	output     []string
-	minInputs  int
-	nodeConfig map[string]interface{}
+	nodeName  string
+	nodeType  string
+	inputExpr string
+	output    []string
+	minInputs int
 }
 
 // safeURLJoin resolves a possibly relative href against a base URL.

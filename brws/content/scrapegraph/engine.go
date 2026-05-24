@@ -14,6 +14,35 @@ import (
 // Use the StateKey* constants below for all key accesses to avoid magic strings.
 type State map[string]interface{}
 
+// ---------------------------------------------------------------------------
+// Typed node config structs — replace map[string]interface{} in constructors
+// ---------------------------------------------------------------------------
+
+// LLMNodeConfig holds options for LLM extraction nodes.
+// Used by GenerateAnswerNode, ReasoningNode, and MergeAnswersNode.
+type LLMNodeConfig struct {
+	Schema         interface{} // optional JSON schema for output structure
+	AdditionalInfo string      // extra context appended to extraction prompts
+}
+
+// ParseNodeConfig holds options for ParseNode.
+type ParseNodeConfig struct {
+	ParseHTML bool // pass raw HTML as a document chunk instead of stripping tags
+	ParseURLs bool // include anchor hrefs as extra text chunks
+}
+
+// ConditionalNodeConfig holds options for ConditionalNode.
+type ConditionalNodeConfig struct {
+	KeyName   string // state key to evaluate when Condition is empty
+	Condition string // boolean expression (supports not/and/or/==/!=)
+}
+
+// SearchNodeConfig holds options for SearchInternetNode.
+type SearchNodeConfig struct {
+	MaxResults   int    // max URLs to fetch (0 → default 5)
+	SearchEngine string // backend name, e.g. "duckduckgo" (default)
+}
+
 // State key constants shared across all nodes.
 const (
 	StateKeyUserPrompt = "user_prompt" // prompt string injected by the pipeline
