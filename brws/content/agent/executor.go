@@ -477,11 +477,7 @@ func (e *Executor) execScreenshot(ctx context.Context, action Action) error {
 	if err := chromedp.Run(ctx, chromedp.CaptureScreenshot(&buf)); err != nil {
 		return err
 	}
-	// Optionally save to file if path provided
-	if p, ok := action.Parameters.(*ScreenshotParams); ok && p.Path != "" {
-		// Screenshot is in buf; caller can save it
-		_ = p.Path
-	}
+	// Screenshot is in buf; caller handles saving via Path if needed
 	return nil
 }
 

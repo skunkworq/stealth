@@ -273,11 +273,11 @@ func (sr *SuiteRunner) testEndpoint(
 
 	start := time.Now()
 	resp, err := eng.Do(ctx, &engine.Request{
-		Method:            "GET",
-		URL:               endpoint.URL,
-		FollowRedirects:   true,
-		Timeout:           timeout,
-		LoadStrategy: engine.LoadLoad,
+		Method:          "GET",
+		URL:             endpoint.URL,
+		FollowRedirects: true,
+		Timeout:         timeout,
+		LoadStrategy:    engine.LoadLoad,
 	})
 	result.Duration = time.Since(start)
 

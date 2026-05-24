@@ -9,6 +9,16 @@ import (
 	"github.com/skunkworq/stealth/brws/core/constants"
 )
 
+// Cross-vector indicator IDs use snake_case to match downstream logging and
+// analytics conventions. They are opaque string constants consumed by external
+// dashboards, not Go identifiers, so snake_case is intentional.
+
+// isKnownBrowser reports whether ua contains a recognized browser substring.
+func isKnownBrowser(ua string) bool {
+	ua = strings.ToLower(ua)
+	return strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+}
+
 // crossVecCtx holds request-level values pre-computed once and shared across
 // all sub-checks in analyzeCrossVectorConsistency.
 type crossVecCtx struct {
@@ -227,7 +237,7 @@ func (sd *StealthDetector) cvCheckNoneContextProvenance(req *http.Request, ctx c
 	// to slip between the >=4 and ==0 gates.
 	if req.Method == http.MethodPost && ctx.runtimeHeaderCount >= 1 && ctx.runtimeHeaderCount <= 3 {
 		ua := strings.ToLower(req.Header.Get("User-Agent"))
-		isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+		isBrowserUA := isKnownBrowser(ua)
 		hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
 		if isBrowserUA && !hasSecChUa {
 			score += 0.62
@@ -239,7 +249,7 @@ func (sd *StealthDetector) cvCheckNoneContextProvenance(req *http.Request, ctx c
 
 	if req.Method == http.MethodPost && ctx.runtimeHeaderCount == 0 {
 		ua := strings.ToLower(req.Header.Get("User-Agent"))
-		isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+		isBrowserUA := isKnownBrowser(ua)
 		if isBrowserUA {
 			score += 0.38
 			indicators = append(indicators, "none_context_zero_header_synthetic_beacon")
@@ -363,7 +373,7 @@ func (sd *StealthDetector) cvCheckSameSiteProvenance(req *http.Request, ctx cros
 	// data in the body, not in selective headers.
 	if req.Method == http.MethodPost && ctx.runtimeHeaderCount <= 3 {
 		ua := strings.ToLower(req.Header.Get("User-Agent"))
-		isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+		isBrowserUA := isKnownBrowser(ua)
 		if isBrowserUA {
 			largeTelemetryBody := len(ctx.bodySnapshot) >= 1024
 			siblingOriginClaim := req.Header.Get("Origin") != "" && !isOriginSameAsRequestURL(req)
@@ -563,7 +573,7 @@ func (sd *StealthDetector) cvCheckNoCORSProvenance(req *http.Request, ctx crossV
 		// 1-4 runtime headers on a no-cors POST is structurally impossible: browsers
 		// cannot add X-* headers on no-cors requests.
 		ua := strings.ToLower(req.Header.Get("User-Agent"))
-		isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+		isBrowserUA := isKnownBrowser(ua)
 		hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
 		if isBrowserUA && !hasSecChUa {
 			score += 0.68
@@ -573,7 +583,7 @@ func (sd *StealthDetector) cvCheckNoCORSProvenance(req *http.Request, ctx crossV
 		}
 	} else if req.Method == http.MethodPost && ctx.runtimeHeaderCount == 0 {
 		ua := strings.ToLower(req.Header.Get("User-Agent"))
-		isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+		isBrowserUA := isKnownBrowser(ua)
 		hasAccept := req.Header.Get("Accept") != ""
 		hasAcceptEncoding := req.Header.Get("Accept-Encoding") != ""
 		fetchSite := strings.ToLower(req.Header.Get("Sec-Fetch-Site"))
@@ -624,7 +634,7 @@ func (sd *StealthDetector) cvCheckDocumentNavigation(req *http.Request, ctx cros
 	var indicators []string
 
 	uaLower := strings.ToLower(req.Header.Get("User-Agent"))
-	isBrowserUA := strings.Contains(uaLower, "chrome") || strings.Contains(uaLower, "firefox") || strings.Contains(uaLower, "safari")
+	isBrowserUA := isKnownBrowser(uaLower)
 	telemetryTarget := looksLikeTelemetryEndpointPath(req.URL)
 	apiLikeHost := looksLikeAPIHostname(req.URL)
 
@@ -828,7 +838,7 @@ func (sd *StealthDetector) cvCheckSameOriginTelemetry(req *http.Request, ctx cro
 	// the shape of adaptive evasion that truncates headers to stay under byte gates.
 	if req.Method == http.MethodPost && ctx.postLoadHeaderCount >= 1 && ctx.postLoadHeaderCount <= 4 && ctx.jsFingerprintCount == 0 && (telemetryTarget || apiLikeHost) {
 		ua := strings.ToLower(req.Header.Get("User-Agent"))
-		isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+		isBrowserUA := isKnownBrowser(ua)
 		hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
 		if isBrowserUA && !hasSecChUa {
 			score += 0.58
@@ -956,7 +966,7 @@ func (sd *StealthDetector) cvCheckCrossSiteBrowserPost(req *http.Request, ctx cr
 	}
 
 	ua := strings.ToLower(req.Header.Get("User-Agent"))
-	isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+	isBrowserUA := isKnownBrowser(ua)
 	if !isBrowserUA {
 		return crossVecResult{}
 	}
@@ -1051,7 +1061,7 @@ func (sd *StealthDetector) cvCheckZeroHeaderCatchAll(req *http.Request, ctx cros
 	}
 
 	ua := strings.ToLower(req.Header.Get("User-Agent"))
-	isBrowserUA := strings.Contains(ua, "chrome") || strings.Contains(ua, "firefox") || strings.Contains(ua, "safari")
+	isBrowserUA := isKnownBrowser(ua)
 	hasSecChUa := req.Header.Get("Sec-Ch-Ua") != ""
 	if !isBrowserUA || hasSecChUa {
 		return crossVecResult{}

@@ -3,11 +3,17 @@ package detection
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
 	"strings"
 
 	"github.com/skunkworq/stealth/brws/core/constants"
+)
+
+var (
+	secChUaVersionRe = regexp.MustCompile(`"Google Chrome";v="(\d+)"`)
+	uaVersionRe      = regexp.MustCompile(`Chrome/(\d+)`)
 )
 
 // IsomorphicAnalyzer handles cross-validation between different detection layers
@@ -34,22 +40,30 @@ func (ia *IsomorphicAnalyzer) Analyze(req *http.Request, httpInfo *HTTPFingerpri
 
 	var navData map[string]interface{}
 	if navHeader := req.Header.Get(constants.HeaderNavigatorData); navHeader != "" {
-		_ = json.Unmarshal([]byte(navHeader), &navData)
+		if err := json.Unmarshal([]byte(navHeader), &navData); err != nil {
+			navData = nil
+		}
 	}
 
 	var canvasData map[string]interface{}
 	if canvasHeader := req.Header.Get(constants.HeaderCanvasFingerprint); canvasHeader != "" {
-		_ = json.Unmarshal([]byte(canvasHeader), &canvasData)
+		if err := json.Unmarshal([]byte(canvasHeader), &canvasData); err != nil {
+			canvasData = nil
+		}
 	}
 
 	var behavData map[string]interface{}
 	if behavHeader := req.Header.Get(constants.HeaderBehavioralData); behavHeader != "" {
-		_ = json.Unmarshal([]byte(behavHeader), &behavData)
+		if err := json.Unmarshal([]byte(behavHeader), &behavData); err != nil {
+			behavData = nil
+		}
 	}
 
 	var webglData map[string]interface{}
 	if webglHeader := req.Header.Get(constants.HeaderWebGLData); webglHeader != "" {
-		_ = json.Unmarshal([]byte(webglHeader), &webglData)
+		if err := json.Unmarshal([]byte(webglHeader), &webglData); err != nil {
+			webglData = nil
+		}
 	}
 
 	indicators := make([]string, 0)
@@ -294,9 +308,6 @@ func (ia *IsomorphicAnalyzer) checkUserAgent(navData map[string]interface{}, htt
 
 func (ia *IsomorphicAnalyzer) checkUAVersion(httpInfo *HTTPFingerprintInfo, vec *DetectionVector, indicators []string) []string {
 	if httpInfo.SecCHUA != "" {
-		secChUaVersionRe := regexp.MustCompile(`"Google Chrome";v="(\d+)"`)
-		uaVersionRe := regexp.MustCompile(`Chrome/(\d+)`)
-
 		secChMatch := secChUaVersionRe.FindStringSubmatch(httpInfo.SecCHUA)
 		uaMatch := uaVersionRe.FindStringSubmatch(httpInfo.UserAgent)
 
@@ -313,13 +324,10 @@ func (ia *IsomorphicAnalyzer) checkUAVersion(httpInfo *HTTPFingerprintInfo, vec 
 func (ia *IsomorphicAnalyzer) checkScreenDimensions(req *http.Request, navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if screenHeader := req.Header.Get(constants.HeaderScreenData); screenHeader != "" {
 		var screenData map[string]interface{}
-		if json.Unmarshal([]byte(screenHeader), &screenData) == nil {
+		if err := json.Unmarshal([]byte(screenHeader), &screenData); err == nil {
 			if screenOuter, ok := screenData["outer_width"].(float64); ok {
 				if navOuter, ok := navData["screen_outer_width"].(float64); ok {
-					diff := screenOuter - navOuter
-					if diff < 0 {
-						diff = -diff
-					}
+					diff := math.Abs(screenOuter - navOuter)
 					if diff > 5 {
 						indicators = append(indicators, fmt.Sprintf("screen_nav_outer_width_mismatch: screen=%d nav=%d", int(screenOuter), int(navOuter)))
 						vec.Score += 0.7
@@ -328,10 +336,7 @@ func (ia *IsomorphicAnalyzer) checkScreenDimensions(req *http.Request, navData m
 			}
 			if screenInner, ok := screenData["inner_width"].(float64); ok {
 				if navInner, ok := navData["screen_inner_width"].(float64); ok {
-					diff := screenInner - navInner
-					if diff < 0 {
-						diff = -diff
-					}
+					diff := math.Abs(screenInner - navInner)
 					if diff > 5 {
 						indicators = append(indicators, fmt.Sprintf("screen_nav_inner_width_mismatch: screen=%d nav=%d", int(screenInner), int(navInner)))
 						vec.Score += 0.5
@@ -358,10 +363,7 @@ func (ia *IsomorphicAnalyzer) checkCSITiming(navData map[string]interface{}, vec
 			requestTime, okReqTime := lt["requestTime"].(float64)
 			if okStartE && okReqTime && startE > 0 && requestTime > 0 {
 				expectedStartE := requestTime * 1000
-				diff := startE - expectedStartE
-				if diff < 0 {
-					diff = -diff
-				}
+				diff := math.Abs(startE - expectedStartE)
 				if diff > 100 {
 					indicators = append(indicators, fmt.Sprintf("csi_loadtimes_timing_mismatch: startE=%.0f expected=%.0f diff=%.0fms", startE, expectedStartE, diff))
 					vec.Score += 0.40
@@ -386,7 +388,7 @@ func (ia *IsomorphicAnalyzer) checkCSITiming(navData map[string]interface{}, vec
 func (ia *IsomorphicAnalyzer) checkPerformanceTiming(req *http.Request, vec *DetectionVector, indicators []string) []string {
 	if timingHeader := req.Header.Get(constants.HeaderTimingData); timingHeader != "" {
 		var timingData map[string]interface{}
-		if json.Unmarshal([]byte(timingHeader), &timingData) == nil {
+		if err := json.Unmarshal([]byte(timingHeader), &timingData); err == nil {
 			if entries, ok := timingData["entries"].([]interface{}); ok && len(entries) >= 5 {
 				emptyURLCount := 0
 				for _, e := range entries {
@@ -410,7 +412,7 @@ func (ia *IsomorphicAnalyzer) checkPerformanceTiming(req *http.Request, vec *Det
 func (ia *IsomorphicAnalyzer) checkScreenDPR(req *http.Request, vec *DetectionVector, indicators []string) []string {
 	if screenHeader := req.Header.Get(constants.HeaderScreenData); screenHeader != "" {
 		var screenData map[string]interface{}
-		if json.Unmarshal([]byte(screenHeader), &screenData) == nil {
+		if err := json.Unmarshal([]byte(screenHeader), &screenData); err == nil {
 			dpr, hasDPR := screenData["pixel_ratio"].(float64)
 			scrWidth, hasW := screenData["width"].(float64)
 			isMobile := strings.Contains(strings.ToLower(req.UserAgent()), "mobile") ||
@@ -440,7 +442,7 @@ func (ia *IsomorphicAnalyzer) checkScreenDPR(req *http.Request, vec *DetectionVe
 func (ia *IsomorphicAnalyzer) checkFontPlatform(req *http.Request, navData map[string]interface{}, vec *DetectionVector, indicators []string) []string {
 	if fontHeader := req.Header.Get(constants.HeaderFontData); fontHeader != "" {
 		var fontData map[string]interface{}
-		if json.Unmarshal([]byte(fontHeader), &fontData) == nil {
+		if err := json.Unmarshal([]byte(fontHeader), &fontData); err == nil {
 			if fontPlatform, ok := fontData["platform"].(string); ok && navData != nil {
 				if navPlatform, ok2 := navData["platform"].(string); ok2 {
 					fontLow := strings.ToLower(fontPlatform)
@@ -929,7 +931,7 @@ func (ia *IsomorphicAnalyzer) checkConnectionTimingCoherence(req *http.Request, 
 	}
 
 	var timingData map[string]interface{}
-	if json.Unmarshal([]byte(timingHeader), &timingData) != nil {
+	if err := json.Unmarshal([]byte(timingHeader), &timingData); err != nil {
 		return indicators
 	}
 

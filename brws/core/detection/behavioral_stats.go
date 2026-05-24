@@ -6,12 +6,13 @@ import (
 	"sort"
 )
 
-// formatFloat formats a float64 to 6 decimal places.
-func formatFloat(f float64) string {
+// formatIndicatorValue rounds a float to 6 decimal places for consistent
+// precision across all behavioral detection indicators.
+func formatIndicatorValue(f float64) string {
 	return fmt.Sprintf("%.6f", f)
 }
 
-// meanStddev computes mean and standard deviation.
+// meanStddev returns the mean and population standard deviation of values.
 func meanStddev(values []float64) (float64, float64) {
 	if len(values) == 0 {
 		return 0, 0
@@ -33,7 +34,7 @@ func meanStddev(values []float64) (float64, float64) {
 	return mean, math.Sqrt(variance)
 }
 
-// meanVariance computes mean and variance.
+// meanVariance returns the mean and population variance of values.
 func meanVariance(values []float64) (float64, float64) {
 	if len(values) == 0 {
 		return 0, 0

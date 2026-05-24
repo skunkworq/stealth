@@ -1,6 +1,8 @@
 package extract
 
 import (
+	"fmt"
+
 	"github.com/skunkworq/stealth/brws/content/understand"
 )
 
@@ -46,12 +48,12 @@ func ToSemantic(raw *RawExtractionResult) SemanticResult {
 	return out
 }
 
-// MustToSemantic converts raw extraction results and panics on nil input.
-func MustToSemantic(raw *RawExtractionResult) SemanticResult {
+// ToSemanticSafe converts raw extraction results and returns an error on nil input.
+func ToSemanticSafe(raw *RawExtractionResult) (SemanticResult, error) {
 	if raw == nil {
-		panic("raw extraction result is nil")
+		return SemanticResult{}, fmt.Errorf("raw extraction result is nil")
 	}
-	return ToSemantic(raw)
+	return ToSemantic(raw), nil
 }
 
 func cloneMap(in map[string]any) map[string]any {

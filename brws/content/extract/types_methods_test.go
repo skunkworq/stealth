@@ -28,11 +28,14 @@ func TestExtractionSpanMethodBranches(t *testing.T) {
 	}
 }
 
-func TestMustToSemanticNonNil(t *testing.T) {
+func TestToSemanticSafeNonNil(t *testing.T) {
 	t.Parallel()
 
 	raw := &RawExtractionResult{DocumentID: "doc-1", Text: "hello"}
-	out := MustToSemantic(raw)
+	out, err := ToSemanticSafe(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if out.DocumentID != "doc-1" {
 		t.Fatalf("expected semantic conversion output, got %+v", out)
 	}

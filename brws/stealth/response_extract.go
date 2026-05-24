@@ -87,7 +87,11 @@ var (
 func (r *Response) ensureParsed() {
 	r.parseOnce.Do(func() {
 		r.bodyStr = string(r.Body)
-		r.doc, _ = html.Parse(strings.NewReader(r.bodyStr))
+		doc, err := html.Parse(strings.NewReader(r.bodyStr))
+		if err != nil {
+			return
+		}
+		r.doc = doc
 	})
 }
 

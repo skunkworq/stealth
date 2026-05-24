@@ -4,6 +4,61 @@ import (
 	"time"
 )
 
+// Settings keys provide type-safe access to spider configuration.
+const (
+	AUTOTHROTTLEDEBUGKey = "AUTOTHROTTLE_DEBUG"
+	AUTOTHROTTLEENABLEDKey = "AUTOTHROTTLE_ENABLED"
+	AUTOTHROTTLEMAXDELAYKey = "AUTOTHROTTLE_MAX_DELAY"
+	AUTOTHROTTLESTARTDELAYKey = "AUTOTHROTTLE_START_DELAY"
+	AUTOTHROTTLETARGETCONCURRENCYKey = "AUTOTHROTTLE_TARGET_CONCURRENCY"
+	CLOSESPIDERERRORCOUNTKey = "CLOSESPIDER_ERRORCOUNT"
+	CLOSESPIDERITEMCOUNTKey = "CLOSESPIDER_ITEMCOUNT"
+	CLOSESPIDERPAGECOUNTKey = "CLOSESPIDER_PAGECOUNT"
+	CLOSESPIDERTIMEOUTKey = "CLOSESPIDER_TIMEOUT"
+	CONCURRENTREQUESTSKey = "CONCURRENT_REQUESTS"
+	CONCURRENTREQUESTSPERDOMAINKey = "CONCURRENT_REQUESTS_PER_DOMAIN"
+	CONCURRENTREQUESTSPERIPKey = "CONCURRENT_REQUESTS_PER_IP"
+	COOKIESDEBUGKey = "COOKIES_DEBUG"
+	COOKIESENABLEDKey = "COOKIES_ENABLED"
+	DEFAULTHEADERSKey = "DEFAULT_HEADERS"
+	DEFAULTINPUTENCODINGKey = "DEFAULT_INPUT_ENCODING"
+	DOWNLOADDELAYKey = "DOWNLOAD_DELAY"
+	DOWNLOADFAILUREWAITKey = "DOWNLOAD_FAILURE_WAIT"
+	DOWNLOADMAXFAILURESKey = "DOWNLOAD_MAX_FAILURES"
+	DOWNLOADTIMEOUTKey = "DOWNLOAD_TIMEOUT"
+	ENGINEKey = "ENGINE"
+	FEEDEXPORTBATCHITEMCOUNTKey = "FEED_EXPORT_BATCH_ITEM_COUNT"
+	FEEDEXPORTENCODINGKey = "FEED_EXPORT_ENCODING"
+	FEEDFORMATKey = "FEED_FORMAT"
+	FEEDURIKey = "FEED_URI"
+	HTTPCACHEENABLEDKey = "HTTPCACHE_ENABLED"
+	LOGDATEFORMATKey = "LOG_DATEFORMAT"
+	LOGENCODINGKey = "LOG_ENCODING"
+	LOGFORMATKey = "LOG_FORMAT"
+	LOGLEVELKey = "LOG_LEVEL"
+	MAXDEPTHKey = "MAX_DEPTH"
+	MAXDEPTHPRECEDENCEKey = "MAX_DEPTH_PRECEDENCE"
+	MAXREQUESTSIZEKey = "MAX_REQUEST_SIZE"
+	MEMUSAGECHECKINTERVALKey = "MEMUSAGE_CHECK_INTERVAL"
+	MEMUSAGEENABLEDKey = "MEMUSAGE_ENABLED"
+	MEMUSAGELIMITMBKey = "MEMUSAGE_LIMIT_MB"
+	REDIRECTENABLEDKey = "REDIRECT_ENABLED"
+	REDIRECTMAXMETAREFRESHDELAYKey = "REDIRECT_MAX_METAREFRESH_DELAY"
+	REDIRECTMAXTIMESKey = "REDIRECT_MAX_TIMES"
+	REQUESTFINGERPRINTERIMPLEMENTATIONKey = "REQUEST_FINGERPRINTER_IMPLEMENTATION"
+	RETRYENABLEDKey = "RETRY_ENABLED"
+	RETRYHTTPCODESKey = "RETRY_HTTP_CODES"
+	RETRYTIMESKey = "RETRY_TIMES"
+	ROBOTSTXTOBEYKey = "ROBOTSTXT_OBEY"
+	SCHEDULERDISKQUEUEKey = "SCHEDULER_DISK_QUEUE"
+	SCHEDULERMEMORYQUEUEKey = "SCHEDULER_MEMORY_QUEUE"
+	SCHEDULERPRIORITIESREVERSEKey = "SCHEDULER_PRIORITIES_REVERSE"
+	SCHEDULERPRIORITYQUEUEKey = "SCHEDULER_PRIORITY_QUEUE"
+	TELNETCONSOLEENABLEDKey = "TELNET_CONSOLE_ENABLED"
+	TWISTEDREACTORKey = "TWISTED_REACTOR"
+	USERAGENTKey = "USER_AGENT"
+)
+
 type Settings struct {
 	data map[string]interface{}
 }
@@ -17,21 +72,21 @@ func NewSettings() *Settings {
 }
 
 func (s *Settings) setDefaults() {
-	s.data["ENGINE"] = "native"
-	s.data["CONCURRENT_REQUESTS"] = 16
-	s.data["CONCURRENT_REQUESTS_PER_DOMAIN"] = 8
-	s.data["CONCURRENT_REQUESTS_PER_IP"] = 0
-	s.data["DOWNLOAD_DELAY"] = 0
-	s.data["DOWNLOAD_TIMEOUT"] = 180 * time.Second
-	s.data["MAX_DEPTH"] = 0
-	s.data["MAX_DEPTH_PRECEDENCE"] = true
-	s.data["MAX_REQUEST_SIZE"] = 0
-	s.data["RETRY_ENABLED"] = true
-	s.data["RETRY_TIMES"] = 2
-	s.data["RETRY_HTTP_CODES"] = []int{500, 502, 503, 504, 408, 429}
-	s.data["ROBOTSTXT_OBEY"] = true
-	s.data["USER_AGENT"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-	s.data["DEFAULT_HEADERS"] = map[string]string{
+	s.data[ENGINEKey] = "native"
+	s.data[CONCURRENTREQUESTSKey] = 16
+	s.data[CONCURRENTREQUESTSPERDOMAINKey] = 8
+	s.data[CONCURRENTREQUESTSPERIPKey] = 0
+	s.data[DOWNLOADDELAYKey] = 0
+	s.data[DOWNLOADTIMEOUTKey] = 180 * time.Second
+	s.data[MAXDEPTHKey] = 0
+	s.data[MAXDEPTHPRECEDENCEKey] = true
+	s.data[MAXREQUESTSIZEKey] = 0
+	s.data[RETRYENABLEDKey] = true
+	s.data[RETRYTIMESKey] = 2
+	s.data[RETRYHTTPCODESKey] = []int{500, 502, 503, 504, 408, 429}
+	s.data[ROBOTSTXTOBEYKey] = true
+	s.data[USERAGENTKey] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+	s.data[DEFAULTHEADERSKey] = map[string]string{
 		"Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 		"Accept-Language":           "en-US,en;q=0.5",
 		"Accept-Encoding":           "gzip, deflate",
@@ -39,42 +94,42 @@ func (s *Settings) setDefaults() {
 		"Connection":                "keep-alive",
 		"Upgrade-Insecure-Requests": "1",
 	}
-	s.data["COOKIES_ENABLED"] = true
-	s.data["TELNET_CONSOLE_ENABLED"] = false
-	s.data["DEFAULT_INPUT_ENCODING"] = "utf-8"
-	s.data["FEED_EXPORT_ENCODING"] = "utf-8"
-	s.data["LOG_LEVEL"] = "INFO"
-	s.data["LOG_ENCODING"] = "utf-8"
-	s.data["LOG_FORMAT"] = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
-	s.data["LOG_DATEFORMAT"] = "%Y-%m-%d %H:%M:%S"
-	s.data["REDIRECT_ENABLED"] = true
-	s.data["REDIRECT_MAX_TIMES"] = 20
-	s.data["REDIRECT_MAX_METAREFRESH_DELAY"] = 10 * time.Second
-	s.data["COOKIES_DEBUG"] = false
-	s.data["DOWNLOAD_MAX_FAILURES"] = 5
-	s.data["DOWNLOAD_FAILURE_WAIT"] = 10 * time.Second
-	s.data["AUTOTHROTTLE_ENABLED"] = false
-	s.data["AUTOTHROTTLE_START_DELAY"] = 1 * time.Second
-	s.data["AUTOTHROTTLE_MAX_DELAY"] = 60 * time.Second
-	s.data["AUTOTHROTTLE_TARGET_CONCURRENCY"] = 1.0
-	s.data["AUTOTHROTTLE_DEBUG"] = false
-	s.data["HTTPCACHE_ENABLED"] = false
-	s.data["MEMUSAGE_ENABLED"] = true
-	s.data["MEMUSAGE_LIMIT_MB"] = 0
-	s.data["MEMUSAGE_CHECK_INTERVAL"] = 1 * time.Minute
-	s.data["CLOSESPIDER_TIMEOUT"] = 0
-	s.data["CLOSESPIDER_ITEMCOUNT"] = 0
-	s.data["CLOSESPIDER_PAGECOUNT"] = 0
-	s.data["CLOSESPIDER_ERRORCOUNT"] = 0
-	s.data["SCHEDULER_PRIORITY_QUEUE"] = "scrapy.pqueues.ScrapyPriorityQueue"
-	s.data["SCHEDULER_DISK_QUEUE"] = "scrapy.pqueues.ScrapyDiskQueue"
-	s.data["SCHEDULER_MEMORY_QUEUE"] = "scrapy.pqueues.ScrapyMemoryQueue"
-	s.data["SCHEDULER_PRIORITIES_REVERSE"] = true
-	s.data["REQUEST_FINGERPRINTER_IMPLEMENTATION"] = "2.7"
-	s.data["TWISTED_REACTOR"] = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
-	s.data["FEED_FORMAT"] = "jsonlines"
-	s.data["FEED_URI"] = ""
-	s.data["FEED_EXPORT_BATCH_ITEM_COUNT"] = 100
+	s.data[COOKIESENABLEDKey] = true
+	s.data[TELNETCONSOLEENABLEDKey] = false
+	s.data[DEFAULTINPUTENCODINGKey] = "utf-8"
+	s.data[FEEDEXPORTENCODINGKey] = "utf-8"
+	s.data[LOGLEVELKey] = "INFO"
+	s.data[LOGENCODINGKey] = "utf-8"
+	s.data[LOGFORMATKey] = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+	s.data[LOGDATEFORMATKey] = "%Y-%m-%d %H:%M:%S"
+	s.data[REDIRECTENABLEDKey] = true
+	s.data[REDIRECTMAXTIMESKey] = 20
+	s.data[REDIRECTMAXMETAREFRESHDELAYKey] = 10 * time.Second
+	s.data[COOKIESDEBUGKey] = false
+	s.data[DOWNLOADMAXFAILURESKey] = 5
+	s.data[DOWNLOADFAILUREWAITKey] = 10 * time.Second
+	s.data[AUTOTHROTTLEENABLEDKey] = false
+	s.data[AUTOTHROTTLESTARTDELAYKey] = 1 * time.Second
+	s.data[AUTOTHROTTLEMAXDELAYKey] = 60 * time.Second
+	s.data[AUTOTHROTTLETARGETCONCURRENCYKey] = 1.0
+	s.data[AUTOTHROTTLEDEBUGKey] = false
+	s.data[HTTPCACHEENABLEDKey] = false
+	s.data[MEMUSAGEENABLEDKey] = true
+	s.data[MEMUSAGELIMITMBKey] = 0
+	s.data[MEMUSAGECHECKINTERVALKey] = 1 * time.Minute
+	s.data[CLOSESPIDERTIMEOUTKey] = 0
+	s.data[CLOSESPIDERITEMCOUNTKey] = 0
+	s.data[CLOSESPIDERPAGECOUNTKey] = 0
+	s.data[CLOSESPIDERERRORCOUNTKey] = 0
+	s.data[SCHEDULERPRIORITYQUEUEKey] = "scrapy.pqueues.ScrapyPriorityQueue"
+	s.data[SCHEDULERDISKQUEUEKey] = "scrapy.pqueues.ScrapyDiskQueue"
+	s.data[SCHEDULERMEMORYQUEUEKey] = "scrapy.pqueues.ScrapyMemoryQueue"
+	s.data[SCHEDULERPRIORITIESREVERSEKey] = true
+	s.data[REQUESTFINGERPRINTERIMPLEMENTATIONKey] = "2.7"
+	s.data[TWISTEDREACTORKey] = "twisted.internet.asyncioreactor.AsyncioSelectorReactor"
+	s.data[FEEDFORMATKey] = "jsonlines"
+	s.data[FEEDURIKey] = ""
+	s.data[FEEDEXPORTBATCHITEMCOUNTKey] = 100
 }
 
 func (s *Settings) Get(key string) interface{} {

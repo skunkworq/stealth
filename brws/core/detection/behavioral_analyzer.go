@@ -2,7 +2,8 @@ package detection
 
 import "math"
 
-// BehavioralAnalyzer performs statistical analysis on user interaction events.
+// BehavioralAnalyzer scores mouse, keyboard, scroll, and click patterns
+// against statistical baselines to detect non-human input characteristics.
 type BehavioralAnalyzer struct {
 	config *BehavioralAnalyzerConfig
 }
@@ -79,7 +80,7 @@ func (ba *BehavioralAnalyzer) checkMouseEvents(events *EnhancedBehavioralEvents,
 				Message: "Mouse event intervals are too uniform (bot-like)",
 				Weight:  weight,
 				Field:   "mouse_interval_entropy",
-				Value:   formatFloat(entropy),
+				Value:   formatIndicatorValue(entropy),
 			})
 			result.Score += weight
 		}
@@ -95,7 +96,7 @@ func (ba *BehavioralAnalyzer) checkMouseEvents(events *EnhancedBehavioralEvents,
 				Message: "Mouse path is suspiciously straight (low curvature variance)",
 				Weight:  weight,
 				Field:   "path_curvature_variance",
-				Value:   formatFloat(variance),
+				Value:   formatIndicatorValue(variance),
 			})
 			result.Score += weight
 		}
@@ -116,7 +117,7 @@ func (ba *BehavioralAnalyzer) checkMouseEvents(events *EnhancedBehavioralEvents,
 				Message: "Mouse velocity exceeds human capability",
 				Weight:  weight,
 				Field:   "max_velocity",
-				Value:   formatFloat(maxVel),
+				Value:   formatIndicatorValue(maxVel),
 			})
 			result.Score += weight
 		}
@@ -132,7 +133,7 @@ func (ba *BehavioralAnalyzer) checkMouseEvents(events *EnhancedBehavioralEvents,
 				Message: "No micro-tremors detected (human hands always have small jitter)",
 				Weight:  weight,
 				Field:   "micro_tremor_ratio",
-				Value:   formatFloat(tremorRatio),
+				Value:   formatIndicatorValue(tremorRatio),
 			})
 			result.Score += weight
 		}
@@ -164,7 +165,7 @@ func (ba *BehavioralAnalyzer) checkTypingEvents(events *EnhancedBehavioralEvents
 				Message: "Typing intervals too uniform (mechanical/bot-like)",
 				Weight:  weight,
 				Field:   "typing_interval_cv",
-				Value:   formatFloat(cv),
+				Value:   formatIndicatorValue(cv),
 			})
 			result.Score += weight
 		}
@@ -211,7 +212,7 @@ func (ba *BehavioralAnalyzer) checkDigraphTiming(timestamps []int64, result *Vec
 			Message: "Digraph timing too uniform (no variation between keystroke pairs)",
 			Weight:  weight,
 			Field:   "digraph_cv",
-			Value:   formatFloat(cv),
+			Value:   formatIndicatorValue(cv),
 		})
 		result.Score += weight
 	}
@@ -237,7 +238,7 @@ func (ba *BehavioralAnalyzer) checkKeystrokeHoldTimes(holdTimes []float64, resul
 			Message: "Keystroke hold times too uniform (mechanical/bot-like)",
 			Weight:  weight,
 			Field:   "hold_time_cv",
-			Value:   formatFloat(cv),
+			Value:   formatIndicatorValue(cv),
 		})
 		result.Score += weight
 	}
@@ -262,7 +263,7 @@ func (ba *BehavioralAnalyzer) checkScrollEvents(events *EnhancedBehavioralEvents
 				Message: "Scroll intervals are too uniform",
 				Weight:  weight,
 				Field:   "scroll_interval_entropy",
-				Value:   formatFloat(entropy),
+				Value:   formatIndicatorValue(entropy),
 			})
 			result.Score += weight
 		}
@@ -303,7 +304,7 @@ func (ba *BehavioralAnalyzer) checkScrollDirectionPatterns(directions, deltas []
 			Message: "Scroll direction is monotonic (all same direction)",
 			Weight:  weight,
 			Field:   "scroll_direction_ratio",
-			Value:   formatFloat(max(upRatio, downRatio)),
+			Value:   formatIndicatorValue(max(upRatio, downRatio)),
 		})
 		result.Score += weight
 		return
@@ -325,7 +326,7 @@ func (ba *BehavioralAnalyzer) checkScrollDirectionPatterns(directions, deltas []
 				Message: "Scroll direction alternates too perfectly (bot-like)",
 				Weight:  weight,
 				Field:   "scroll_alternation_ratio",
-				Value:   formatFloat(alternationRatio),
+				Value:   formatIndicatorValue(alternationRatio),
 			})
 			result.Score += weight
 		}
@@ -343,7 +344,7 @@ func (ba *BehavioralAnalyzer) checkScrollDirectionPatterns(directions, deltas []
 						Message: "Scroll direction changed abruptly at high velocity",
 						Weight:  weight,
 						Field:   "scroll_velocity_at_change",
-						Value:   formatFloat(math.Abs(deltas[i])),
+						Value:   formatIndicatorValue(math.Abs(deltas[i])),
 					})
 					result.Score += weight
 					break // Only count once
@@ -383,7 +384,7 @@ func (ba *BehavioralAnalyzer) checkTimingPatterns(events *EnhancedBehavioralEven
 				Message: "Event timestamps appear synthetically generated",
 				Weight:  weight,
 				Field:   "exact_interval_ratio",
-				Value:   formatFloat(float64(exactIntervals) / float64(len(allTimestamps))),
+				Value:   formatIndicatorValue(float64(exactIntervals) / float64(len(allTimestamps))),
 			})
 			result.Score += weight
 		}
@@ -418,7 +419,7 @@ func (ba *BehavioralAnalyzer) checkClickPatterns(events *EnhancedBehavioralEvent
 				Message: "Click timestamps too closely synchronized with mouse events",
 				Weight:  weight,
 				Field:   "click_sync_ratio",
-				Value:   formatFloat(float64(matches) / float64(len(events.ClickTimestamps))),
+				Value:   formatIndicatorValue(float64(matches) / float64(len(events.ClickTimestamps))),
 			})
 			result.Score += weight
 		}
@@ -433,32 +434,33 @@ func (ba *BehavioralAnalyzer) checkClickPatterns(events *EnhancedBehavioralEvent
 
 // analyzeFallback performs analysis based on summary statistics when raw data is unavailable.
 func (ba *BehavioralAnalyzer) analyzeFallback(events *EnhancedBehavioralEvents, result *VectorResult) *VectorResult {
+	out := *result
 	if events.MouseStdDev == 0 && len(events.MouseTimestamps) > 0 {
-		result.Indicators = append(result.Indicators, VectorIndicator{Check: "zero_mouse_variance"})
-		result.Score += 0.4
+		out.Indicators = append(out.Indicators, VectorIndicator{Check: "zero_mouse_variance"})
+		out.Score += 0.4
 	}
 	if events.TypingStdDev == 0 && len(events.TypingTimestamps) > 0 {
-		result.Indicators = append(result.Indicators, VectorIndicator{Check: "zero_typing_variance"})
-		result.Score += 0.3
+		out.Indicators = append(out.Indicators, VectorIndicator{Check: "zero_typing_variance"})
+		out.Score += 0.3
 	}
 	if events.EventTimingStdDev == 0 && (len(events.MouseTimestamps) > 0 || len(events.TypingTimestamps) > 0) {
-		result.Indicators = append(result.Indicators, VectorIndicator{Check: "perfect_event_pacing"})
-		result.Score += 0.4
+		out.Indicators = append(out.Indicators, VectorIndicator{Check: "perfect_event_pacing"})
+		out.Score += 0.4
 	}
 	if events.MouseEvents < 5 && len(events.MouseTimestamps) > 0 {
-		result.Indicators = append(result.Indicators, VectorIndicator{Check: "too_few_mouse_events"})
-		result.Score += 0.2
+		out.Indicators = append(out.Indicators, VectorIndicator{Check: "too_few_mouse_events"})
+		out.Score += 0.2
 	}
 	if events.MouseStraightness > 0.95 {
-		result.Indicators = append(result.Indicators, VectorIndicator{Check: "linear_mouse_movement"})
-		result.Score += 0.3
+		out.Indicators = append(out.Indicators, VectorIndicator{Check: "linear_mouse_movement"})
+		out.Score += 0.3
 	}
 
-	if result.Score > 1.0 {
-		result.Score = 1.0
+	if out.Score > 1.0 {
+		out.Score = 1.0
 	}
-	result.Detected = result.Score > 0.3
-	return result
+	out.Detected = out.Score > 0.3
+	return &out
 }
 
 // analyzeMouseMicroMovements detects the presence of involuntary micro-tremors.
@@ -582,7 +584,7 @@ func (ba *BehavioralAnalyzer) checkVelocityLagAnomalies(velocities []float64, re
 			Message: "Mouse velocities lack natural temporal structure",
 			Weight:  weight,
 			Field:   "velocity_lag2_correlation",
-			Value:   formatFloat(lag2Corr),
+			Value:   formatIndicatorValue(lag2Corr),
 		})
 		result.Score += weight
 	}
@@ -602,7 +604,7 @@ func (ba *BehavioralAnalyzer) checkVelocityLagAnomalies(velocities []float64, re
 				Message: "Mouse velocities lack temporal structure (lag-3 correlation near zero)",
 				Weight:  weight,
 				Field:   "velocity_lag3_correlation",
-				Value:   formatFloat(lag3Corr),
+				Value:   formatIndicatorValue(lag3Corr),
 			})
 			result.Score += weight
 		}
@@ -678,7 +680,7 @@ func (ba *BehavioralAnalyzer) checkFittsLaw(timestamps []int64, positions []Posi
 			Message: "Click timing does not correlate with distance (violates Fitts's Law)",
 			Weight:  weight,
 			Field:   "fitts_correlation",
-			Value:   formatFloat(corr),
+			Value:   formatIndicatorValue(corr),
 		})
 		result.Score += weight
 	}

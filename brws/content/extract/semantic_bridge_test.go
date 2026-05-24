@@ -52,13 +52,11 @@ func TestToSemanticNilInput(t *testing.T) {
 	}
 }
 
-func TestMustToSemanticPanicsOnNil(t *testing.T) {
+func TestToSemanticSafeErrorsOnNil(t *testing.T) {
 	t.Parallel()
 
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatalf("expected panic for nil raw result")
-		}
-	}()
-	_ = MustToSemantic(nil)
+	_, err := ToSemanticSafe(nil)
+	if err == nil {
+		t.Fatalf("expected error for nil raw result")
+	}
 }
