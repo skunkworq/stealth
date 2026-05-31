@@ -44,6 +44,12 @@ func (l LLMExtractor) Extract(ctx context.Context, doc *SourceDocument) ([]Candi
 	if doc == nil || doc.Text == "" {
 		return nil, nil
 	}
+	// Raw-HTML documents are for structured extractors; running the LLM on
+	// markup wastes tokens and adds JSON noise. The clean text/plain view
+	// carries the same content.
+	if doc.ContentType == "text/html" {
+		return nil, nil
+	}
 	// Disable URL fetching: we extract from the supplied text only.
 	opts := append([]langextract.Option{langextract.WithFetchURLs(false)}, l.Opts...)
 	raw, err := langextract.ExtractRaw(ctx, doc.Text, opts...)
