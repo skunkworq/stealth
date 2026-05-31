@@ -34,6 +34,9 @@ func (v *Validator) Validate(doc *SourceDocument, cand Candidate) (Field, bool) 
 		return Field{}, false
 	}
 	class := ClassOf(cand.Key)
+	if class == ClassIdentifier && len(digitsOnly(val)) < minIdentifierDigits(cand.Key) {
+		return Field{}, false
+	}
 	start, end, ok := locate(doc.Text, val, class)
 	if !ok {
 		return Field{}, false
@@ -47,6 +50,17 @@ func (v *Validator) Validate(doc *SourceDocument, cand Candidate) (Field, bool) 
 		Method:     cand.Method,
 		Confidence: cand.Conf,
 	}, true
+}
+
+// minIdentifierDigits is the minimum digit count an identifier must carry to
+// be considered. Phones get a higher floor (8) so a short numeric token like a
+// 4-digit postcode can't be accepted as a phone number; other identifiers keep
+// a permissive floor (licence numbers can be short).
+func minIdentifierDigits(k FieldKey) int {
+	if k == KeyPhone {
+		return 8
+	}
+	return 4
 }
 
 // locate finds val in text under the class normalisation and returns the raw
@@ -135,22 +149,61 @@ func locateCollapsed(text, needle string) (int, int, bool) {
 	return start, end, true
 }
 
-// locateDigits: find needle (digits) within the digit-stripped projection of
-// text and map back to the original [start,end) covering those digits.
+// locateDigits matches needle (digits only) against a whole NUMERIC TOKEN in
+// text — not a substring of the global digit projection. A numeric token is a
+// maximal run of digits plus internal number separators (space . - ( ) +). The
+// candidate's digit content must EQUAL a token's digit content.
+//
+// Equality (not substring) is load-bearing for the zero-hallucination
+// guarantee: it stops a candidate from matching a sub-sequence of a larger
+// identifier (e.g. the middle 9 digits of an ABN), or digits that only become
+// contiguous because two adjacent record fields were concatenated. Identifiers
+// (ABN/ACN/licence/phone) are always whole tokens, so equality is correct.
+// All bytes of interest (ASCII digits and separators) are single-byte, so we
+// scan bytes directly; any other byte ends the current token.
 func locateDigits(text, needle string) (int, int, bool) {
-	var digits strings.Builder
-	pos := make([]int, 0, len(text))
-	for i, r := range text {
-		if r >= '0' && r <= '9' {
-			digits.WriteRune(r)
-			pos = append(pos, i)
+	isDigit := func(b byte) bool { return b >= '0' && b <= '9' }
+	isSep := func(b byte) bool {
+		return b == ' ' || b == '.' || b == '-' || b == '(' || b == ')' || b == '+'
+	}
+	n := len(text)
+	for i := 0; i < n; {
+		if !isDigit(text[i]) {
+			i++
+			continue
+		}
+		var digits strings.Builder
+		first, last := i, i
+		j := i
+		for j < n {
+			if isDigit(text[j]) {
+				last = j
+				digits.WriteByte(text[j])
+				j++
+				continue
+			}
+			if isSep(text[j]) {
+				// A separator is INTERNAL only if a digit follows the
+				// separator run; otherwise the token ends here.
+				k := j
+				for k < n && isSep(text[k]) {
+					k++
+				}
+				if k < n && isDigit(text[k]) {
+					j = k
+					continue
+				}
+			}
+			break
+		}
+		if digits.String() == needle {
+			return first, last + 1, true
+		}
+		if j > i {
+			i = j
+		} else {
+			i++
 		}
 	}
-	j := strings.Index(digits.String(), needle)
-	if j < 0 {
-		return 0, 0, false
-	}
-	start := pos[j]
-	end := pos[j+len(needle)-1] + 1
-	return start, end, true
+	return 0, 0, false
 }
