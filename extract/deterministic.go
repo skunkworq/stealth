@@ -18,6 +18,42 @@ var (
 	phoneRE = regexp.MustCompile(`(?:\+?61|1[38]00|13|\(?0)[\d ()\-]{4,13}`)
 )
 
+var abnWeights = [11]int{10, 1, 3, 5, 7, 9, 11, 13, 15, 17, 19}
+
+// validABN verifies the ATO ABN checksum, rejecting 11-digit runs that aren't
+// real ABNs (random numbers, concatenated digits, IDs that merely have 11 digits).
+func validABN(raw string) bool {
+	d := digitsOnly(raw)
+	if len(d) != 11 || d[0] == '0' {
+		return false
+	}
+	sum := 0
+	for i := 0; i < 11; i++ {
+		n := int(d[i] - '0')
+		if i == 0 {
+			n-- // subtract 1 from the leading digit per the ABN algorithm
+		}
+		sum += n * abnWeights[i]
+	}
+	return sum%89 == 0
+}
+
+var acnWeights = [8]int{8, 7, 6, 5, 4, 3, 2, 1}
+
+// validACN verifies the ASIC ACN checksum (complement of the weighted sum of
+// the first 8 digits, mod 10, equals the 9th).
+func validACN(raw string) bool {
+	d := digitsOnly(raw)
+	if len(d) != 9 {
+		return false
+	}
+	sum := 0
+	for i := 0; i < 8; i++ {
+		sum += int(d[i]-'0') * acnWeights[i]
+	}
+	return (10-sum%10)%10 == int(d[8]-'0')
+}
+
 // validAUPhone reports whether raw is a plausible Australian phone number. It
 // filters the greedy phone regex's false positives — random digit runs that
 // merely start with 0 (e.g. "01010184966", "0 0 1584 308"). Accepts: 10-digit
@@ -45,7 +81,7 @@ func (RegexExtractor) Extract(_ context.Context, doc *SourceDocument) ([]Candida
 	t := doc.Text
 	var out []Candidate
 	for _, m := range abnRE.FindAllString(t, -1) {
-		if len(digitsOnly(m)) == 11 {
+		if validABN(m) {
 			out = append(out, Candidate{Key: KeyABN, Value: m, Method: MethodRegex, Conf: 0.9})
 		}
 	}
@@ -58,7 +94,7 @@ func (RegexExtractor) Extract(_ context.Context, doc *SourceDocument) ([]Candida
 		}
 	}
 	for _, m := range acnRE.FindAllString(t, -1) {
-		if len(digitsOnly(m)) == 9 {
+		if validACN(m) {
 			out = append(out, Candidate{Key: KeyACN, Value: m, Method: MethodRegex, Conf: 0.6})
 		}
 	}

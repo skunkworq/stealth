@@ -65,3 +65,21 @@ func TestRegexExtractorPhonePrecision(t *testing.T) {
 		t.Errorf("junk phone should be rejected; got %v", got)
 	}
 }
+
+func TestValidABN(t *testing.T) {
+	if !validABN("38 606 105 926") { // real registered ABN
+		t.Error("valid ABN rejected")
+	}
+	if validABN("12 345 678 901") { // fails checksum
+		t.Error("invalid ABN accepted")
+	}
+}
+
+func TestValidACN(t *testing.T) {
+	if validACN("520341242") { // fails ACN checksum (seen as false positive on real site)
+		t.Error("invalid ACN accepted")
+	}
+	if !validACN("004085616") { // a real ACN (checksum-valid)
+		t.Error("valid ACN rejected")
+	}
+}
