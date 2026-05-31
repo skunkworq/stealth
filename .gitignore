@@ -59,6 +59,7 @@ docs/nodrive/
 /benchmark
 /train
 /extract
+!/extract/
 /pipeline
 /crawl
 /test_semantic
