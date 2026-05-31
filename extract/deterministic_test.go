@@ -44,3 +44,24 @@ func TestTelMailtoExtractor(t *testing.T) {
 		t.Fatalf("tel/mailto: phone=%v email=%v", sawPhone, sawEmail)
 	}
 }
+
+func TestRegexExtractorPhonePrecision(t *testing.T) {
+	doc := &SourceDocument{Ref: "r", ContentType: "text/html",
+		Text: `Call 02 6672 1226 or mobile 0412 345 678 or 1300 555 111. ` +
+			`Junk: 01010184966 and 0 0 1584 308.`}
+	cands, _ := RegexExtractor{}.Extract(context.Background(), doc)
+	got := map[string]bool{}
+	for _, c := range cands {
+		if c.Key == KeyPhone {
+			got[digitsOnly(c.Value)] = true
+		}
+	}
+	for _, want := range []string{"0266721226", "0412345678", "1300555111"} {
+		if !got[want] {
+			t.Errorf("valid phone %s not extracted; got %v", want, got)
+		}
+	}
+	if got["01010184966"] || got["001584308"] {
+		t.Errorf("junk phone should be rejected; got %v", got)
+	}
+}

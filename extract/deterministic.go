@@ -15,8 +15,28 @@ var (
 	abnRE   = regexp.MustCompile(`\b\d{2}[ ]?\d{3}[ ]?\d{3}[ ]?\d{3}\b`)
 	acnRE   = regexp.MustCompile(`\b\d{3}[ ]?\d{3}[ ]?\d{3}\b`)
 	emailRE = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}`)
-	phoneRE = regexp.MustCompile(`(?:\+?61|0)[ ]?\d(?:[ ()\-]?\d){7,9}`)
+	phoneRE = regexp.MustCompile(`(?:\+?61|1[38]00|13|\(?0)[\d ()\-]{4,13}`)
 )
+
+// validAUPhone reports whether raw is a plausible Australian phone number. It
+// filters the greedy phone regex's false positives — random digit runs that
+// merely start with 0 (e.g. "01010184966", "0 0 1584 308"). Accepts: 10-digit
+// landline/mobile (0 + area/mobile digit 2-8), 1300/1800, and 13xxxx.
+func validAUPhone(raw string) bool {
+	d := digitsOnly(raw)
+	if strings.HasPrefix(d, "61") && len(d) == 11 {
+		d = "0" + d[2:]
+	}
+	switch {
+	case len(d) == 10 && d[0] == '0' && strings.IndexByte("234578", d[1]) >= 0:
+		return true
+	case len(d) == 10 && (strings.HasPrefix(d, "1300") || strings.HasPrefix(d, "1800")):
+		return true
+	case len(d) == 6 && strings.HasPrefix(d, "13"):
+		return true
+	}
+	return false
+}
 
 func (RegexExtractor) Extract(_ context.Context, doc *SourceDocument) ([]Candidate, error) {
 	if doc == nil {
@@ -33,8 +53,8 @@ func (RegexExtractor) Extract(_ context.Context, doc *SourceDocument) ([]Candida
 		out = append(out, Candidate{Key: KeyEmail, Value: m, Method: MethodRegex, Conf: 0.9})
 	}
 	for _, m := range phoneRE.FindAllString(t, -1) {
-		if d := digitsOnly(m); len(d) >= 8 && len(d) <= 12 {
-			out = append(out, Candidate{Key: KeyPhone, Value: m, Method: MethodRegex, Conf: 0.7})
+		if validAUPhone(m) {
+			out = append(out, Candidate{Key: KeyPhone, Value: strings.TrimSpace(m), Method: MethodRegex, Conf: 0.7})
 		}
 	}
 	for _, m := range acnRE.FindAllString(t, -1) {
