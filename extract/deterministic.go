@@ -1,0 +1,73 @@
+package extract
+
+import (
+	"context"
+	"regexp"
+	"strings"
+)
+
+// RegexExtractor harvests identifiers/contacts from free text via patterns.
+type RegexExtractor struct{}
+
+func (RegexExtractor) Name() string { return "regex" }
+
+var (
+	abnRE   = regexp.MustCompile(`\b\d{2}[ ]?\d{3}[ ]?\d{3}[ ]?\d{3}\b`)
+	acnRE   = regexp.MustCompile(`\b\d{3}[ ]?\d{3}[ ]?\d{3}\b`)
+	emailRE = regexp.MustCompile(`(?i)[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}`)
+	phoneRE = regexp.MustCompile(`(?:\+?61|0)[ ]?\d(?:[ ()\-]?\d){7,9}`)
+)
+
+func (RegexExtractor) Extract(_ context.Context, doc *SourceDocument) ([]Candidate, error) {
+	if doc == nil {
+		return nil, nil
+	}
+	t := doc.Text
+	var out []Candidate
+	for _, m := range abnRE.FindAllString(t, -1) {
+		if len(digitsOnly(m)) == 11 {
+			out = append(out, Candidate{Key: KeyABN, Value: m, Method: MethodRegex, Conf: 0.9})
+		}
+	}
+	for _, m := range emailRE.FindAllString(t, -1) {
+		out = append(out, Candidate{Key: KeyEmail, Value: m, Method: MethodRegex, Conf: 0.9})
+	}
+	for _, m := range phoneRE.FindAllString(t, -1) {
+		if d := digitsOnly(m); len(d) >= 8 && len(d) <= 12 {
+			out = append(out, Candidate{Key: KeyPhone, Value: m, Method: MethodRegex, Conf: 0.7})
+		}
+	}
+	for _, m := range acnRE.FindAllString(t, -1) {
+		if len(digitsOnly(m)) == 9 {
+			out = append(out, Candidate{Key: KeyACN, Value: m, Method: MethodRegex, Conf: 0.6})
+		}
+	}
+	return out, nil
+}
+
+// TelMailtoExtractor harvests tel:/mailto: hrefs (high precision).
+type TelMailtoExtractor struct{}
+
+func (TelMailtoExtractor) Name() string { return "tel_mailto" }
+
+var (
+	telRE    = regexp.MustCompile(`(?i)tel:([+0-9 ()\-]{6,})`)
+	mailtoRE = regexp.MustCompile(`(?i)mailto:([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})`)
+)
+
+func (TelMailtoExtractor) Extract(_ context.Context, doc *SourceDocument) ([]Candidate, error) {
+	if doc == nil {
+		return nil, nil
+	}
+	var out []Candidate
+	for _, m := range telRE.FindAllStringSubmatch(doc.Text, -1) {
+		v := strings.TrimSpace(m[1])
+		if len(digitsOnly(v)) >= 8 {
+			out = append(out, Candidate{Key: KeyPhone, Value: v, Method: MethodTelMailto, Conf: 0.95})
+		}
+	}
+	for _, m := range mailtoRE.FindAllStringSubmatch(doc.Text, -1) {
+		out = append(out, Candidate{Key: KeyEmail, Value: strings.TrimSpace(m[1]), Method: MethodTelMailto, Conf: 0.95})
+	}
+	return out, nil
+}
