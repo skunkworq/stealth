@@ -7,6 +7,7 @@ import (
 
 	"golang.org/x/net/html"
 
+	"github.com/skunkworq/stealth/brws/semantic"
 	"github.com/skunkworq/stealth/extract"
 )
 
@@ -102,4 +103,37 @@ func candidatesFromLdJSON(raw string) []extract.Candidate {
 	}
 	walk(v)
 	return out
+}
+
+// MetaExtractor harvests social profile links and og metadata, reusing
+// stealth's semantic head extractors. Social/og URLs are verbatim in the page
+// markup so the Validator (URL class) confirms them. Runs only on raw HTML.
+type MetaExtractor struct{}
+
+func (MetaExtractor) Name() string { return "og_meta" }
+
+func (MetaExtractor) Extract(_ context.Context, doc *extract.SourceDocument) ([]extract.Candidate, error) {
+	if doc == nil || doc.ContentType != "text/html" {
+		return nil, nil
+	}
+	node, err := html.Parse(strings.NewReader(doc.Text))
+	if err != nil {
+		return nil, nil
+	}
+	social := semantic.ExtractSocialLinks(node)
+	meta := semantic.ExtractPageMeta(node, doc.Ref)
+
+	var out []extract.Candidate
+	add := func(val string, fk extract.FieldKey, conf float64) {
+		if v := strings.TrimSpace(val); v != "" {
+			out = append(out, extract.Candidate{Key: fk, Value: v, Method: extract.MethodOgMeta, Conf: conf})
+		}
+	}
+	add(social.Facebook, extract.KeySocialFB, 0.9)
+	add(social.Instagram, extract.KeySocialIG, 0.9)
+	add(social.LinkedIn, extract.KeySocialLI, 0.9)
+	if meta.OG != nil {
+		add(meta.OG["image"], extract.KeyLogoURL, 0.6)
+	}
+	return out, nil
 }
