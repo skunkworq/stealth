@@ -13,6 +13,10 @@ var skipTags = map[string]bool{
 
 var blockTags = map[string]bool{
 	"p": true, "div": true, "br": true, "li": true, "tr": true,
+	// td/th are separated too: contact pages often lay out phone/address
+	// across adjacent table cells, and without a boundary "0412" + "345 678"
+	// would concatenate and fail the verbatim match.
+	"td": true, "th": true,
 	"section": true, "article": true, "h1": true, "h2": true,
 	"h3": true, "h4": true, "h5": true, "h6": true,
 }

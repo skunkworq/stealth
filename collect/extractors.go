@@ -56,12 +56,18 @@ func candidatesFromLdJSON(raw string) []extract.Candidate {
 		return nil
 	}
 	var out []extract.Candidate
-	var walk func(any)
-	walk = func(x any) {
+	// depth bound: ld+json is scraped from arbitrary sites; a deeply-nested
+	// (adversarial) @graph must not blow the stack — a panic would not be
+	// caught by the engine's error guard.
+	var walk func(any, int)
+	walk = func(x any, depth int) {
+		if depth > 64 {
+			return
+		}
 		switch t := x.(type) {
 		case []any:
 			for _, e := range t {
-				walk(e)
+				walk(e, depth+1)
 			}
 		case map[string]any:
 			str := func(k string) string {
@@ -97,11 +103,11 @@ func candidatesFromLdJSON(raw string) []extract.Candidate {
 				emit(strings.TrimSpace(s), extract.KeyAddress, 0.85)
 			}
 			for _, val := range t {
-				walk(val) // recurse into @graph / nested objects
+				walk(val, depth+1) // recurse into @graph / nested objects
 			}
 		}
 	}
-	walk(v)
+	walk(v, 0)
 	return out
 }
 
