@@ -67,3 +67,35 @@ func mustExtract(t *testing.T, doc *extract.SourceDocument) []extract.Candidate 
 }
 
 func contextTODO() context.Context { return context.Background() }
+
+func TestIsPlatformSocialAnchoring(t *testing.T) {
+	drop := []string{
+		"https://www.facebook.com/wix",
+		"https://facebook.com/WixStudio",
+		"https://www.facebook.com/WordPresscom",
+		"https://instagram.com/squarespace",
+		"https://www.facebook.com/sharer/sharer.php?u=x",
+		"https://www.facebook.com/plugins/like.php",
+		"https://www.facebook.com/2008/fbml",
+		"https://www.linkedin.com/company/wix-com",
+	}
+	for _, u := range drop {
+		if !isPlatformSocial(u) {
+			t.Errorf("should be dropped (platform): %s", u)
+		}
+	}
+	// real business handles that merely START with a builder token must be KEPT
+	keep := []string{
+		"https://www.facebook.com/wixsonplumbing",
+		"https://www.facebook.com/wordpressexperts",
+		"https://www.facebook.com/shopifystorefitouts",
+		"https://www.instagram.com/godaddysmith",
+		"https://www.linkedin.com/company/squarespacely-electrical",
+		"https://www.facebook.com/acmeplumbing",
+	}
+	for _, u := range keep {
+		if isPlatformSocial(u) {
+			t.Errorf("real handle wrongly dropped: %s", u)
+		}
+	}
+}

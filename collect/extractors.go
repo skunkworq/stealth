@@ -154,9 +154,15 @@ func (MetaExtractor) Extract(_ context.Context, doc *extract.SourceDocument) ([]
 // share/intent button, or an FB plugin — not the business. These leak from
 // site footers/meta (e.g. a Wix-built site links facebook.com/wix) and would
 // otherwise be persisted as the tradie's own social.
+// The builder-handle tokens are anchored to a path-segment boundary ([/?#] or
+// end) so a real business handle that merely starts with one (e.g.
+// facebook.com/wixsonplumbing, /wordpressexperts) is NOT dropped — only the
+// exact builder handle (facebook.com/wix) is. Path-component patterns
+// (/sharer, /plugins/, company/<builder>) are distinctive enough to match
+// directly, with the company/<builder> form also boundary-anchored.
 var platformSocialRE = regexp.MustCompile(`(?i)` +
-	`(facebook|instagram|linkedin)\.com/(wix|squarespace|shopify|godaddy|weebly|wordpress|sharer|plugins|dialog|2008|hashtag|explore|tr\b)` +
-	`|company/(wix|squarespace)` +
-	`|/sharer|/plugins/|/2008/fbml|/intent/|/share\?`)
+	`(facebook|instagram|linkedin)\.com/(wix|wixstudio|squarespace|shopify|godaddy|weebly|wordpress|wordpresscom|explore)([/?#]|$)` +
+	`|company/(wix-com|squarespace)([/?#]|$)` +
+	`|/sharer|/plugins/|/2008/fbml|/intent/|/hashtag/|/dialog/|/share\?`)
 
 func isPlatformSocial(u string) bool { return platformSocialRE.MatchString(u) }
