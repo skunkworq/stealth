@@ -33,3 +33,37 @@ func TestMetaExtractorSocialAndLogo(t *testing.T) {
 		t.Errorf("logo %q", got[extract.KeyLogoURL])
 	}
 }
+
+func TestMetaExtractorFiltersPlatformSocials(t *testing.T) {
+	junk := &extract.SourceDocument{Ref: "r", ContentType: "text/html",
+		Text: `<html><body><a href="https://www.facebook.com/wix">x</a>
+		<a href="https://www.instagram.com/squarespace">y</a>
+		<a href="https://www.facebook.com/sharer/sharer.php?u=x">z</a></body></html>`}
+	for _, c := range mustExtract(t, junk) {
+		if c.Key == extract.KeySocialFB || c.Key == extract.KeySocialIG {
+			t.Errorf("platform/share social should be filtered: %s", c.Value)
+		}
+	}
+	real := &extract.SourceDocument{Ref: "r", ContentType: "text/html",
+		Text: `<html><body><a href="https://www.facebook.com/acmeplumbing">fb</a></body></html>`}
+	var got bool
+	for _, c := range mustExtract(t, real) {
+		if c.Key == extract.KeySocialFB {
+			got = true
+		}
+	}
+	if !got {
+		t.Error("a real facebook profile must still be extracted")
+	}
+}
+
+func mustExtract(t *testing.T, doc *extract.SourceDocument) []extract.Candidate {
+	t.Helper()
+	cs, err := MetaExtractor{}.Extract(contextTODO(), doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cs
+}
+
+func contextTODO() context.Context { return context.Background() }

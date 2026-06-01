@@ -3,6 +3,7 @@ package collect
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -135,11 +136,27 @@ func (MetaExtractor) Extract(_ context.Context, doc *extract.SourceDocument) ([]
 			out = append(out, extract.Candidate{Key: fk, Value: v, Method: extract.MethodOgMeta, Conf: conf})
 		}
 	}
-	add(social.Facebook, extract.KeySocialFB, 0.9)
-	add(social.Instagram, extract.KeySocialIG, 0.9)
-	add(social.LinkedIn, extract.KeySocialLI, 0.9)
+	addSocial := func(val string, fk extract.FieldKey) {
+		if v := strings.TrimSpace(val); v != "" && !isPlatformSocial(v) {
+			out = append(out, extract.Candidate{Key: fk, Value: v, Method: extract.MethodOgMeta, Conf: 0.9})
+		}
+	}
+	addSocial(social.Facebook, extract.KeySocialFB)
+	addSocial(social.Instagram, extract.KeySocialIG)
+	addSocial(social.LinkedIn, extract.KeySocialLI)
 	if meta.OG != nil {
 		add(meta.OG["image"], extract.KeyLogoURL, 0.6)
 	}
 	return out, nil
 }
+
+// platformSocialRE matches social URLs that belong to the website builder, a
+// share/intent button, or an FB plugin — not the business. These leak from
+// site footers/meta (e.g. a Wix-built site links facebook.com/wix) and would
+// otherwise be persisted as the tradie's own social.
+var platformSocialRE = regexp.MustCompile(`(?i)` +
+	`(facebook|instagram|linkedin)\.com/(wix|squarespace|shopify|godaddy|weebly|wordpress|sharer|plugins|dialog|2008|hashtag|explore|tr\b)` +
+	`|company/(wix|squarespace)` +
+	`|/sharer|/plugins/|/2008/fbml|/intent/|/share\?`)
+
+func isPlatformSocial(u string) bool { return platformSocialRE.MatchString(u) }
