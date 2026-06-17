@@ -74,3 +74,10 @@ cmd/ml_datagen/ml_datagen
 # Node
 node_modules/
 .lab-ui/
+
+# Build artifacts + tooling/test traces (excluded from VCS)
+/crawl-job-runner
+/dropshippr-server
+.claude/
+.playwright-cli/
+training-data/traces/sess_test_*

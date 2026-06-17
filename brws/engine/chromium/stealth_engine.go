@@ -117,43 +117,52 @@ func NewStealth(opts engine.Options) (engine.Engine, error) {
 	return NewStealthWithFingerprint(opts, nil)
 }
 
-// NewStealthWithFingerprint creates an engine tightly bound to a specific captured fingerprint
+// NewStealthWithFingerprint creates an engine tightly bound to a specific captured fingerprint.
+// If opts.DebuggerURL is set, connects to an already-running Chrome instance via
+// CDP — the most reliable bypass against aggressive anti-bot (Amazon, AliExpress, Temu),
+// since the host browser carries the user's residential IP, real cookies, and any
+// past challenge solutions. In that mode the heavy stealth allocator flags are
+// skipped (they only apply at launch time).
 func NewStealthWithFingerprint(opts engine.Options, fp *types.CompleteFingerprint) (engine.Engine, error) {
 	log := instrumentation.Named("chromium-stealth")
 	log.Info("initializing stealth engine")
 
-	// Build allocator options with stealth flags
-	allocOpts := buildStealthAllocatorOptions(opts)
-
-	if opts.ProfileDir != "" {
-		allocOpts = append(allocOpts, chromedp.UserDataDir(opts.ProfileDir))
-	}
-
-	if opts.ExecutablePath != "" {
-		allocOpts = append(allocOpts, chromedp.ExecPath(opts.ExecutablePath))
-	}
-
-	if opts.Proxy != "" {
-		allocOpts = append(allocOpts, chromedp.ProxyServer(opts.Proxy))
-	}
-
 	var stealthCfg *StealthConfig
 	if fp != nil {
 		stealthCfg = StealthConfigFromFingerprint(fp)
-		allocOpts = append(allocOpts, chromedp.UserAgent(fp.HTTP.UserAgent))
 	} else {
 		stealthCfg = DefaultStealthConfig()
-		allocOpts = append(allocOpts, chromedp.UserAgent(RandomUserAgent()))
 	}
 
-	// Dynamically map advanced AI Spoofer properties if injected from Proxy Client (train_shield_sword)
 	if opts.StealthConfigRaw != nil {
 		if rawBytes, err := json.Marshal(opts.StealthConfigRaw); err == nil {
 			_ = json.Unmarshal(rawBytes, &stealthCfg)
 		}
 	}
 
-	allocCtx, allocCancel := chromedp.NewExecAllocator(context.Background(), allocOpts...)
+	var allocCtx context.Context
+	var allocCancel context.CancelFunc
+	if opts.DebuggerURL != "" {
+		log.Info("attaching to remote Chrome via CDP", "url", opts.DebuggerURL)
+		allocCtx, allocCancel = chromedp.NewRemoteAllocator(context.Background(), opts.DebuggerURL)
+	} else {
+		allocOpts := buildStealthAllocatorOptions(opts)
+		if opts.ProfileDir != "" {
+			allocOpts = append(allocOpts, chromedp.UserDataDir(opts.ProfileDir))
+		}
+		if opts.ExecutablePath != "" {
+			allocOpts = append(allocOpts, chromedp.ExecPath(opts.ExecutablePath))
+		}
+		if opts.Proxy != "" {
+			allocOpts = append(allocOpts, chromedp.ProxyServer(opts.Proxy))
+		}
+		if fp != nil {
+			allocOpts = append(allocOpts, chromedp.UserAgent(fp.HTTP.UserAgent))
+		} else {
+			allocOpts = append(allocOpts, chromedp.UserAgent(RandomUserAgent()))
+		}
+		allocCtx, allocCancel = chromedp.NewExecAllocator(context.Background(), allocOpts...)
+	}
 
 	// Initialize instrumentation
 	tracer := instrumentation.NewTracer()

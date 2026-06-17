@@ -55,10 +55,31 @@ type Request struct {
 	// Browser-specific options
 	WaitForNavigation bool              // Wait for page load complete (browser engines)
 	WaitForSelector   string            // Wait for specific element (browser engines)
+	AdditionalSleep   time.Duration     // Sleep after wait, before capturing HTML (browser engines)
 	ScriptToExecute   string            // Execute JS after load (browser engines)
 	Viewport          *Viewport         // Browser viewport settings
 	UserAgent         string            // Override User-Agent
 	ExtraHeaders      map[string]string // Additional headers to inject
+
+	// Cookies are installed into the browser's cookie jar before the
+	// navigation request fires. Honoured only by JS-capable engines that
+	// expose a cookie jar (chromium). HTTP-only engines ignore this field.
+	Cookies []HTTPCookie
+}
+
+// HTTPCookie is a neutral cookie representation used by Request.Cookies. It
+// mirrors the subset of fields supported by CDP's Network.CookieParam without
+// forcing engine callers to import cdproto.
+type HTTPCookie struct {
+	Name     string
+	Value    string
+	Domain   string
+	Path     string
+	Expires  int64  // unix seconds; 0 means session cookie
+	Secure   bool
+	HTTPOnly bool
+	SameSite string // "Lax" | "Strict" | "None" | ""
+	URL      string // optional; CDP uses this when Domain is empty
 }
 
 // Viewport defines browser viewport dimensions.

@@ -272,6 +272,11 @@ func (ba *BehavioralAnalyzer) checkScrollEvents(events *EnhancedBehavioralEvents
 	if hasDirections {
 		ba.checkScrollDirectionPatterns(events.ScrollDirections, events.ScrollDeltas, result)
 	}
+
+	// Check scroll momentum (requires deltas)
+	if len(events.ScrollDeltas) >= 4 {
+		ba.checkScrollMomentum(events.ScrollDeltas, result)
+	}
 }
 
 // checkScrollDirectionPatterns checks for suspicious scroll direction patterns.
@@ -350,6 +355,35 @@ func (ba *BehavioralAnalyzer) checkScrollDirectionPatterns(directions, deltas []
 				}
 			}
 		}
+	}
+}
+
+// checkScrollMomentum checks if scroll deltas exhibit natural exponential decay (momentum).
+func (ba *BehavioralAnalyzer) checkScrollMomentum(deltas []float64, result *VectorResult) {
+	if len(deltas) < 4 {
+		return
+	}
+
+	// Calculate lag-1 autocorrelation for absolute deltas
+	// Human scrolls decrease exponentially (positive correlation)
+	absDeltas := make([]float64, len(deltas))
+	for i, d := range deltas {
+		absDeltas[i] = math.Abs(d)
+	}
+
+	lag1Corr := lagNAutocorrelation(absDeltas, 1)
+
+	// If no positive correlation is found, there is no momentum (bot-like)
+	if lag1Corr < 0.20 {
+		weight := 0.15
+		result.Indicators = append(result.Indicators, VectorIndicator{
+			Check:   "scroll_delta_no_momentum",
+			Message: "Scroll deltas lack natural momentum (exponential decay)",
+			Weight:  weight,
+			Field:   "scroll_delta_lag1_corr",
+			Value:   formatFloat(lag1Corr),
+		})
+		result.Score += weight
 	}
 }
 

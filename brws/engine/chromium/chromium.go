@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/chromedp/cdproto/cdp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
+
 	"github.com/google/uuid"
 
 	"github.com/skunkworq/stealth/brws/constants"
@@ -30,8 +32,21 @@ type Chromium struct {
 	options     engine.Options
 }
 
-// New creates a new Chromium engine.
+// New creates a new Chromium engine. If opts.DebuggerURL is set the engine
+// connects to an already-running browser via CDP (chromedp.NewRemoteAllocator)
+// instead of spawning a fresh headless instance. This lets callers reuse the
+// user's real Chrome — same residential IP, same cookies, same warm session —
+// which is the most reliable way to evade aggressive anti-bot.
 func New(opts engine.Options) (engine.Engine, error) {
+	if opts.DebuggerURL != "" {
+		allocCtx, allocCancel := chromedp.NewRemoteAllocator(context.Background(), opts.DebuggerURL)
+		return &Chromium{
+			allocCtx:    allocCtx,
+			allocCancel: allocCancel,
+			options:     opts,
+		}, nil
+	}
+
 	allocOpts := []chromedp.ExecAllocatorOption{
 		chromedp.NoFirstRun,
 		chromedp.NoDefaultBrowserCheck,
@@ -168,6 +183,15 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 		actions = append(actions, network.SetExtraHTTPHeaders(network.Headers(headers)))
 	}
 
+	// Install pre-navigation cookies into the browser's cookie jar so the
+	// upcoming Navigate request sends them. Honoured only for chromium.
+	if len(req.Cookies) > 0 {
+		cookies := toCookieParams(req.Cookies)
+		actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
+			return network.SetCookies(cookies).Do(ctx)
+		}))
+	}
+
 	// Navigate
 	actions = append(actions, chromedp.Navigate(req.URL))
 
@@ -178,6 +202,11 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 		actions = append(actions, chromedp.WaitReady("body"))
 	} else {
 		actions = append(actions, chromedp.WaitReady("body"))
+	}
+
+	// Additional sleep lets late-binding JS hydrate the DOM before capture.
+	if req.AdditionalSleep > 0 {
+		actions = append(actions, chromedp.Sleep(req.AdditionalSleep))
 	}
 
 	// Execute JS if requested
@@ -256,6 +285,41 @@ func flattenHeaders(headers map[string]interface{}) map[string]string {
 		}
 	}
 	return result
+}
+
+// toCookieParams converts neutral engine.HTTPCookie values into CDP
+// Network.CookieParam, which the chromium engine installs via Network.SetCookies
+// before navigation.
+func toCookieParams(in []engine.HTTPCookie) []*network.CookieParam {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]*network.CookieParam, 0, len(in))
+	for _, c := range in {
+		cp := &network.CookieParam{
+			Name:     c.Name,
+			Value:    c.Value,
+			URL:      c.URL,
+			Domain:   c.Domain,
+			Path:     c.Path,
+			Secure:   c.Secure,
+			HTTPOnly: c.HTTPOnly,
+		}
+		switch c.SameSite {
+		case "Lax":
+			cp.SameSite = network.CookieSameSiteLax
+		case "Strict":
+			cp.SameSite = network.CookieSameSiteStrict
+		case "None":
+			cp.SameSite = network.CookieSameSiteNone
+		}
+		if c.Expires > 0 {
+			t := cdp.TimeSinceEpoch(time.Unix(c.Expires, 0))
+			cp.Expires = &t
+		}
+		out = append(out, cp)
+	}
+	return out
 }
 
 func unflattenHeaders(headers map[string]string) map[string][]string {

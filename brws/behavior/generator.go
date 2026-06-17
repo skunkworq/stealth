@@ -841,14 +841,17 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 		// Add noise ±20%
 		if g.config.EvadeScrollMomentum {
 			if i == 0 {
-				delta = 200 + g.rng.Float64()*100
+				delta = 200 + g.rng.Float64()*150
 			} else {
-				delta = deltas[i-1] * (0.90 + g.rng.Float64()*0.20)
+				// 15% chance to flick again (new momentum spike)
 				if g.rng.Float64() < 0.15 {
-					delta *= 1.3 + g.rng.Float64()*0.6
+					delta = 200 + g.rng.Float64()*150
+				} else {
+					// Exponential decay (friction curve: 0.6 to 0.9 retention)
+					delta = deltas[i-1] * (0.60 + g.rng.Float64()*0.30)
 				}
-				if delta < 10 {
-					delta = 10
+				if delta < 5 {
+					delta = 5
 				}
 			}
 		} else {

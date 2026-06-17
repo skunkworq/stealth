@@ -281,6 +281,8 @@ func NewSolver(config SolverConfig) (Solver, error) {
 	switch config.Provider {
 	case "capsolver":
 		return NewCapSolver(config.APIKey), nil
+	case "twocaptcha", "2captcha":
+		return NewTwoCaptcha(config.APIKey), nil
 	default:
 		return nil, fmt.Errorf("unknown solver provider: %s", config.Provider)
 	}

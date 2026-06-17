@@ -118,6 +118,7 @@ func runFetch(args []string) error {
 	// Simple flags
 	engName := "native"
 	jsonOutput := false
+	rawOutput := false
 
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -128,6 +129,8 @@ func runFetch(args []string) error {
 			}
 		case "-j":
 			jsonOutput = true
+		case "-r":
+			rawOutput = true
 		default:
 			if !strings.HasPrefix(args[i], "-") {
 				break
@@ -181,6 +184,14 @@ func runFetch(args []string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("request failed after %d retries: %w", retries, err)
+	}
+
+	// Raw mode: write the response body straight to stdout (HTML or binary like
+	// PDF) and skip semantic processing. Used by downstream scrapers that need
+	// the bytes behind a TLS-fingerprint / bot wall (e.g. Fair Work pay guides).
+	if rawOutput {
+		_, werr := os.Stdout.Write(resp.Body)
+		return werr
 	}
 
 	// Extract semantic tree
