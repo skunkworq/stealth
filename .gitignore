@@ -1,3 +1,6 @@
+# Worktrees (managed by git worktree; must not be committed)
+.worktrees/
+
 # Binaries
 build/
 dist/
