@@ -273,12 +273,22 @@ func NewRequestFSM() *FSM {
 	})
 
 	// Detecting state
+	//
+	// The engine enters Detecting after a navigation settles so it can inspect
+	// the page for an anti-bot challenge. There are three outcomes:
+	//   - a challenge is present and solved   -> ChallengeSolved -> Waiting
+	//   - no challenge is present (clean page) -> Extract/Complete straight through
+	//   - the challenge can't be cleared       -> Retry / Fail
+	// The Extract and Complete edges exist so the happy path (no challenge) does
+	// not have to fake a ChallengeSolved event just to leave Detecting.
 	fsm.AddState(&StateConfig{
 		State:       RequestStates.Detecting,
 		Name:        "Detecting",
 		Description: "Detecting challenge type",
 		TransitionMap: map[Event]State{
 			RequestEvents.ChallengeSolved: RequestStates.Waiting,
+			RequestEvents.Extract:         RequestStates.Extracting,
+			RequestEvents.Complete:        RequestStates.Complete,
 			RequestEvents.Retry:           RequestStates.Navigating,
 			RequestEvents.Fail:            RequestStates.Failed,
 		},

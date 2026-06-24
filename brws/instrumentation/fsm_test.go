@@ -249,3 +249,59 @@ func TestRequestFSM_RetryFlow(t *testing.T) {
 		t.Errorf("expected state 'initializing' after retry, got %q", fsm.GetState())
 	}
 }
+
+// TestRequestFSM_StealthEngineHappyPath guards the exact transition sequence the
+// chromium-stealth engine drives on a clean (or successfully-cleared) page. It
+// previously fired Complete directly from Detecting, which had no such edge and
+// produced "no transition from detecting on event complete" — leaving the engine
+// returning the pre-challenge stub. The engine now walks
+// Detecting -> Extract -> Complete, and Detecting also accepts Complete directly
+// as a safety net. Both must succeed without error.
+func TestRequestFSM_StealthEngineHappyPath(t *testing.T) {
+	ctx := context.Background()
+
+	// The sequence the engine emits: Start, Prepared, Navigate, PageLoaded,
+	// ChallengeDetected, Extract, Complete.
+	t.Run("via_extract", func(t *testing.T) {
+		fsm := NewRequestFSM()
+		seq := []Event{
+			RequestEvents.Start,
+			RequestEvents.Prepared,
+			RequestEvents.Navigate,
+			RequestEvents.PageLoaded,
+			RequestEvents.ChallengeDetected,
+			RequestEvents.Extract,
+			RequestEvents.Complete,
+		}
+		for _, ev := range seq {
+			if err := fsm.Transition(ctx, ev); err != nil {
+				t.Fatalf("transition %q failed: %v", ev, err)
+			}
+		}
+		if fsm.GetState() != RequestStates.Complete {
+			t.Errorf("expected final state 'complete', got %q", fsm.GetState())
+		}
+	})
+
+	// Safety-net edge: Detecting -> Complete directly must not error (regression
+	// guard for the original bug).
+	t.Run("detecting_direct_to_complete", func(t *testing.T) {
+		fsm := NewRequestFSM()
+		_ = fsm.Transition(ctx, RequestEvents.Start)
+		_ = fsm.Transition(ctx, RequestEvents.Prepared)
+		_ = fsm.Transition(ctx, RequestEvents.Navigate)
+		_ = fsm.Transition(ctx, RequestEvents.PageLoaded)
+		if err := fsm.Transition(ctx, RequestEvents.ChallengeDetected); err != nil {
+			t.Fatalf("challenge_detected transition failed: %v", err)
+		}
+		if fsm.GetState() != RequestStates.Detecting {
+			t.Fatalf("expected detecting, got %q", fsm.GetState())
+		}
+		if err := fsm.Transition(ctx, RequestEvents.Complete); err != nil {
+			t.Fatalf("detecting -> complete must not error (regression): %v", err)
+		}
+		if fsm.GetState() != RequestStates.Complete {
+			t.Errorf("expected complete, got %q", fsm.GetState())
+		}
+	})
+}
