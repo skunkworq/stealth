@@ -88,20 +88,31 @@ type StealthOptions struct {
 
 	// Network idle timeout
 	NetworkIdleTimeout time.Duration
+
+	// ChallengeSettleBudget bounds how long Do() will wait, after the initial
+	// navigation, for an anti-bot JS challenge (Kasada, Akamai, Cloudflare,
+	// DataDome) to run and redirect/reload into the real page before the DOM is
+	// captured. These shields serve a tiny pre-challenge stub, execute JS, then
+	// navigate to the genuine document several seconds later; capturing before
+	// that point yields only the stub. The wait ends early once the network goes
+	// idle on a non-challenge document, so this is an upper bound, not a fixed
+	// sleep.
+	ChallengeSettleBudget time.Duration
 }
 
 // DefaultStealthOptions returns default stealth options
 func DefaultStealthOptions() StealthOptions {
 	return StealthOptions{
-		EnableStealth:      true,
-		HumanizeMouse:      true,
-		RandomDelays:       true,
-		HandleAgeGate:      false,
-		SessionWarming:     false,
-		ViewportWidth:      1920,
-		ViewportHeight:     1080,
-		WaitNetworkIdle:    true,
-		NetworkIdleTimeout: 3 * time.Second,
+		EnableStealth:         true,
+		HumanizeMouse:         true,
+		RandomDelays:          true,
+		HandleAgeGate:         false,
+		SessionWarming:        false,
+		ViewportWidth:         1920,
+		ViewportHeight:        1080,
+		WaitNetworkIdle:       true,
+		NetworkIdleTimeout:    3 * time.Second,
+		ChallengeSettleBudget: 10 * time.Second,
 	}
 }
 
@@ -380,13 +391,25 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		s.logger.Error("FSM transition failed", "error", err)
 	}
 
-	// Set up network event listener to capture all sub-resource requests.
+	// Set up network event listener to capture all sub-resource requests and to
+	// track in-flight requests + frame navigations. The in-flight counter and the
+	// last-navigation timestamp drive the challenge-settle wait below: anti-bot
+	// shields (Kasada/Akamai/Cloudflare/DataDome) serve a tiny stub that runs JS
+	// and then reloads/redirects to the real document a few seconds later, so we
+	// must wait for the network to go quiet *after* that second navigation before
+	// capturing the DOM.
 	var netMu sync.Mutex
 	netRequests := make(map[network.RequestID]*engine.TraceEntry)
+	var inFlight int
+	var lastActivity time.Time
+	var navCount int
+	markActivity := func() { lastActivity = time.Now() }
 	chromedp.ListenTarget(tabCtx, func(ev interface{}) {
 		switch e := ev.(type) {
 		case *network.EventRequestWillBeSent:
 			netMu.Lock()
+			inFlight++
+			markActivity()
 			netRequests[e.RequestID] = &engine.TraceEntry{
 				RequestID:   string(e.RequestID),
 				URL:         e.Request.URL,
@@ -410,6 +433,30 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 				}
 			}
 			netMu.Unlock()
+		case *network.EventLoadingFinished:
+			netMu.Lock()
+			if inFlight > 0 {
+				inFlight--
+			}
+			markActivity()
+			netMu.Unlock()
+		case *network.EventLoadingFailed:
+			netMu.Lock()
+			if inFlight > 0 {
+				inFlight--
+			}
+			markActivity()
+			netMu.Unlock()
+		case *page.EventFrameNavigated:
+			// A new top-level document committed — this is the challenge
+			// redirecting/reloading into the real page. Reset the idle clock so
+			// the settle loop waits for the *new* document's resources.
+			if e.Frame != nil && e.Frame.ParentID == "" {
+				netMu.Lock()
+				navCount++
+				markActivity()
+				netMu.Unlock()
+			}
 		}
 	})
 
@@ -424,15 +471,40 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		actions = append(actions, chromedp.Sleep(RandomDelay(1*time.Second, 3*time.Second)))
 	}
 
+	// Wait for the anti-bot challenge (if any) to run and settle into the real
+	// page before capturing. See challengeSettle for the network-idle / redirect
+	// detection logic. Bounded by ChallengeSettleBudget so a hung challenge can't
+	// stall the request indefinitely.
+	settleBudget := s.stealthOpts.ChallengeSettleBudget
+	if settleBudget <= 0 {
+		settleBudget = 10 * time.Second
+	}
+	idleWindow := s.stealthOpts.NetworkIdleTimeout
+	if idleWindow <= 0 {
+		idleWindow = 500 * time.Millisecond
+	}
+	actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
+		s.challengeSettle(ctx, &netMu, &inFlight, &lastActivity, &navCount, settleBudget, idleWindow)
+		return nil
+	}))
+
 	// Execute script if requested
 	var scriptResult interface{}
 	if req.ScriptToExecute != "" {
 		actions = append(actions, chromedp.Evaluate(req.ScriptToExecute, &scriptResult))
 	}
 
-	// Get page content
+	// Get page content. Captured AFTER the challenge-settle wait so Body is the
+	// real post-challenge document, not the pre-challenge stub. document.
+	// documentElement.outerHTML returns the full live DOM including any nodes the
+	// challenge JS injected/replaced.
 	var body string
-	actions = append(actions, chromedp.OuterHTML("html", &body))
+	actions = append(actions, chromedp.OuterHTML(":root", &body, chromedp.ByQuery))
+
+	// Capture the final (post-redirect) URL so callers see where the challenge
+	// landed them, not the URL they originally requested.
+	var finalURL string
+	actions = append(actions, chromedp.Location(&finalURL))
 
 	start := time.Now()
 
@@ -464,12 +536,20 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	span.SetAttribute("duration_ms", total.Milliseconds())
 	span.AddEvent("request_complete", map[string]interface{}{"status": 200, "body_size": len(body)})
 
-	// Transition FSM to detecting for shield validations
+	// FSM: the navigation has loaded and we're done waiting for it to settle, so
+	// move out of Navigating into Waiting (PageLoaded), then into Detecting to
+	// inspect the page for a residual anti-bot challenge.
+	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.PageLoaded); err != nil {
+		s.logger.Error("FSM transition failed", "error", err)
+	}
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected); err != nil {
 		s.logger.Error("FSM transition failed", "error", err)
 	}
 
-	// Scan the page for WAF Fingerprints
+	// Scan the *post-settle* page for WAF fingerprints. If the challenge JS
+	// successfully redirected into the real document this is now clean; if the
+	// shield is still blocking us, the stub markers persist and we surface a
+	// retryable error so the adaptive loop upstream can escalate.
 	waf := instrumentation.DetectChallenge(200, map[string]string{}, []byte(body))
 	if waf != instrumentation.WAFUnknown {
 		s.logger.Warn("WAF challenge detected during stealth navigation", "waf", waf, "url", req.URL)
@@ -481,7 +561,11 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		return nil, fmt.Errorf("WAF Challenge Detected: %s", waf)
 	}
 
-	// Transition FSM to complete
+	// No (or cleared) challenge: walk the happy path Detecting -> Extracting ->
+	// Complete. Extracting models pulling content out of the settled DOM.
+	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Extract); err != nil {
+		s.logger.Error("FSM transition failed", "error", err)
+	}
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Complete); err != nil {
 		s.logger.Error("FSM transition failed", "error", err)
 	}
@@ -489,7 +573,7 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	// Execute hooks
 	_ = s.hooks.Execute(ctx, instrumentation.HookNames.OnRequestEnd)
 
-	s.logger.Info("request completed", "url", req.URL, "duration_ms", total.Milliseconds(), "body_size", len(body))
+	s.logger.Info("request completed", "url", req.URL, "duration_ms", total.Milliseconds(), "body_size", len(body), "navigations", navCount)
 
 	raw := map[string]interface{}{}
 	if scriptResult != nil {
@@ -497,16 +581,82 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	}
 	trace.Raw = raw
 
+	// Prefer the post-redirect URL the page actually settled on; fall back to the
+	// requested URL if Location couldn't be read.
+	resolvedURL := finalURL
+	if resolvedURL == "" {
+		resolvedURL = req.URL
+	}
+
 	return &engine.Response{
 		Status:   200,
 		Body:     []byte(body),
-		FinalURL: req.URL,
+		FinalURL: resolvedURL,
 		Protocol: "h2",
 		Trace:    *trace,
 		Timing: engine.TimingInfo{
 			Total: total,
 		},
 	}, nil
+}
+
+// challengeSettle blocks until the page has gone quiet after navigation or the
+// budget expires. Anti-bot shields (Kasada/Akamai/Cloudflare/DataDome) return a
+// small stub document, run JS, then reload or redirect into the real page; that
+// second navigation arrives several seconds after the first response, so a fixed
+// short sleep captures only the stub.
+//
+// The wait is satisfied when the network has been idle (no in-flight requests)
+// for idleWindow AND at least one extra top-level navigation has been observed
+// since entry OR the idleWindow has elapsed with no navigation at all (a clean
+// page that never challenged). It is hard-bounded by budget so a challenge that
+// never resolves can't hang the request. All shared counters are read under mu
+// because they are mutated from the CDP event goroutine.
+func (s *StealthEngine) challengeSettle(
+	ctx context.Context,
+	mu *sync.Mutex,
+	inFlight *int,
+	lastActivity *time.Time,
+	navCount *int,
+	budget time.Duration,
+	idleWindow time.Duration,
+) {
+	deadline := time.Now().Add(budget)
+	mu.Lock()
+	navAtEntry := *navCount
+	mu.Unlock()
+
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+
+		if time.Now().After(deadline) {
+			s.logger.Debug("challenge settle budget exhausted", "budget_ms", budget.Milliseconds())
+			return
+		}
+
+		mu.Lock()
+		idleFor := time.Since(*lastActivity)
+		quiet := *inFlight <= 0 && idleFor >= idleWindow
+		redirected := *navCount > navAtEntry
+		mu.Unlock()
+
+		// Settled: network is quiet. If a post-load navigation (challenge
+		// redirect) has fired we know we're on the real page; if none ever
+		// fired this was a clean page that simply finished loading.
+		if quiet {
+			if redirected {
+				s.logger.Debug("challenge settled after redirect", "navigations", *navCount)
+			}
+			return
+		}
+	}
 }
 
 // Close cleans up resources
