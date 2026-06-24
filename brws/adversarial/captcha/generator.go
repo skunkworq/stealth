@@ -249,8 +249,13 @@ func (g *Generator) generateMath() (*Captcha, error) {
 		answer = operand1 + operand2
 		expression = fmt.Sprintf("%d + %d = ?", operand1, operand2)
 	case "-":
-		if operand1 < operand2 {
+		if operand1 <= operand2 {
 			operand1, operand2 = operand2, operand1
+		}
+		// Ensure we never produce a zero answer (would make the captcha
+		// ambiguous and fail the non-zero-answer unit test).
+		if operand1 == operand2 {
+			operand1++
 		}
 		answer = operand1 - operand2
 		expression = fmt.Sprintf("%d - %d = ?", operand1, operand2)

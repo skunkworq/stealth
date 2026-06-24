@@ -36,7 +36,7 @@ func TestPhase99ScrollMomentumDecay(t *testing.T) {
 		detection = detector.AnalyzeRequest(req, nil)
 		report = detection.ToDetectionReport()
 		fired = report.FiredCheckNames()
-		
+
 		for _, name := range fired {
 			if name == "scroll_delta_no_momentum" {
 				foundMomentumDeficit = true
@@ -59,6 +59,10 @@ func TestPhase99ScrollMomentumDecay(t *testing.T) {
 	// 2. Apply Feedback (Mutation)
 	t.Logf("Applying feedback")
 	ag.ApplyFeedback(report)
+
+	// Disable forced detections so Round 2 is evaluated against the actual
+	// mutated generator rather than the deliberately broken test profile.
+	ag.GetConfig().ForceDetections = false
 
 	// Second round: Should be clean
 	t.Logf("Round 2: Generating fixed request")

@@ -1238,6 +1238,16 @@ func newBrokenBaseGenerator(config *RequestGeneratorConfig, rng *rand.Rand) *Req
 	}
 	canvasHash := fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(canvasBytes))
 
+	// Start with a deliberately broken event config so that feedback mutations
+	// (e.g. enabling scroll momentum) actually change behavior. Without this,
+	// NewEventGenerator(nil) would pick DefaultGeneratorConfig() where all
+	// evasions are already enabled, making mutations no-ops.
+	if config.EventConfig == nil {
+		brokenEventConfig := *DefaultGeneratorConfig()
+		brokenEventConfig.EvadeScrollMomentum = false
+		config.EventConfig = &brokenEventConfig
+	}
+
 	return &RequestGenerator{
 		config:     config,
 		eventGen:   NewEventGenerator(config.EventConfig),

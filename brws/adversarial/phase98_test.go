@@ -20,12 +20,12 @@ func TestPhase98_AcceptDestConsistency(t *testing.T) {
 		config.EvadeRequestProvenance = false
 		// Simulate XHR/Fetch
 		config.Profile.SecFetchDest = "empty"
-		
+
 		generator := behavior.NewRequestGenerator(config)
 		req := generator.GenerateRequest("https://example.com/api/data")
-		
+
 		result := detector.AnalyzeRequest(req, nil)
-		
+
 		fired := false
 		for _, vec := range result.Vectors {
 			for _, ind := range vec.Indicators {
@@ -47,12 +47,12 @@ func TestPhase98_AcceptDestConsistency(t *testing.T) {
 		config.EvasionStrategy = nil
 		config.EvadeRequestProvenance = false
 		config.Profile.SecFetchDest = "empty"
-		
+
 		generator := behavior.NewRequestGenerator(config)
 		req := generator.GenerateRequest("https://example.com/api/data")
-		
+
 		result := detector.AnalyzeRequest(req, nil)
-		
+
 		fired := false
 		for _, vec := range result.Vectors {
 			for _, ind := range vec.Indicators {
@@ -76,12 +76,12 @@ func TestPhase98_AcceptDestConsistency(t *testing.T) {
 		config.Profile.SecFetchDest = "document"
 		// Deliberately break the profile's accept
 		config.Profile.Accept = "application/json"
-		
+
 		generator := behavior.NewRequestGenerator(config)
 		req := generator.GenerateRequest("https://example.com/page")
-		
+
 		result := detector.AnalyzeRequest(req, nil)
-		
+
 		fired := false
 		for _, vec := range result.Vectors {
 			for _, ind := range vec.Indicators {

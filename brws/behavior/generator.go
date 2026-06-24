@@ -821,85 +821,114 @@ func (g *EventGenerator) generateScrollEvents(data *EventData) {
 		ts = time.Now().UnixMilli() + 500 + int64(g.rng.Intn(1000))
 	}
 
-	for i := 0; i < numScrolls; i++ {
-		// Irregular scroll deltas: alternate between fast flicks (200-400px),
-		// gentle scrolls (40-120px), and moderate scrolls (120-250px).
-		// This produces ratio stddev > 0.15 (defeats Check 19).
-		var delta float64
-		r := g.rng.Float64()
-		switch {
-		case r < 0.30:
-			// Fast flick — large delta
-			delta = 200 + g.rng.Float64()*200
-		case r < 0.55:
-			// Gentle scroll — small delta
-			delta = 40 + g.rng.Float64()*80
-		default:
-			// Moderate scroll
-			delta = 120 + g.rng.Float64()*130
-		}
-		// Add noise ±20%
-		if g.config.EvadeScrollMomentum {
-			if i == 0 {
-				delta = 200 + g.rng.Float64()*150
-			} else {
-				// 15% chance to flick again (new momentum spike)
-				if g.rng.Float64() < 0.15 {
-					delta = 200 + g.rng.Float64()*150
-				} else {
-					// Exponential decay (friction curve: 0.6 to 0.9 retention)
-					delta = deltas[i-1] * (0.60 + g.rng.Float64()*0.30)
-				}
-				if delta < 5 {
-					delta = 5
-				}
-			}
-		} else {
-			delta *= (0.80 + g.rng.Float64()*0.40)
-		}
-		delta = math.Round(delta*10) / 10
-		deltas = append(deltas, delta)
-	}
-
-	// Generate scroll directions: mostly down (positive), occasionally up (negative).
-	// Real users scroll down 70-85% of the time, with up-scrolls for re-reading.
-	// Direction changes are clustered (once you scroll up, you tend to continue up
-	// for 1-3 events before switching back), creating positive autocorrelation.
-	// With >5 events, guarantee at least one up-scroll to avoid monotonic detection.
+	// Generate scroll deltas and directions. When momentum evasion is enabled
+	// we verify the lag-1 autocorrelation of absolute deltas after direction
+	// changes have been applied (the shield's momentum check) and retry a few
+	// times if it is too low.
+	const minScrollMomentumCorr = 0.25
 	directions := make([]float64, 0, numScrolls)
-	currentDir := 1.0 // Start scrolling down
-	dirRun := 0       // How many events in current direction
-
-	// If >5 events, force an up-scroll at a random position
-	forceUpAt := -1
-	if numScrolls > 5 {
-		forceUpAt = 2 + g.rng.Intn(numScrolls-3) // Not first or last
-	}
-
-	for i := 0; i < numScrolls; i++ {
-		if i == forceUpAt && currentDir > 0 {
-			currentDir = -1.0
-			dirRun = 0
-		} else if dirRun > 0 && currentDir < 0 && dirRun >= 1+g.rng.Intn(3) {
-			// After 1-3 up-scrolls, switch back to down
-			currentDir = 1.0
-			dirRun = 0
-		} else if currentDir > 0 && g.rng.Float64() < 0.20 {
-			// 20% chance to start scrolling up
-			currentDir = -1.0
-			dirRun = 0
-		} else {
-			dirRun++
+	for attempt := 0; attempt < 5; attempt++ {
+		deltas = deltas[:0]
+		directions = directions[:0]
+		for i := 0; i < numScrolls; i++ {
+			var delta float64
+			if g.config.EvadeScrollMomentum {
+				if i == 0 {
+					// Strong initial flick so the sequence has a clear decay.
+					delta = 250 + g.rng.Float64()*150
+				} else {
+					// Occasional small re-acceleration spike, but mostly a
+					// tight exponential decay (0.82-0.95 retention) which
+					// produces the positive lag-1 autocorrelation the shield
+					// expects for real scroll momentum.
+					if g.rng.Float64() < 0.10 {
+						delta = deltas[i-1] * (1.10 + g.rng.Float64()*0.30)
+					} else {
+						delta = deltas[i-1] * (0.82 + g.rng.Float64()*0.13)
+					}
+					if delta < 20 {
+						delta = 20 + g.rng.Float64()*30
+					}
+					if delta > 600 {
+						delta = 600
+					}
+				}
+			} else {
+				// Irregular scroll deltas: alternate between fast flicks (200-400px),
+				// gentle scrolls (40-120px), and moderate scrolls (120-250px).
+				// This produces ratio stddev > 0.15 (defeats Check 19).
+				r := g.rng.Float64()
+				switch {
+				case r < 0.30:
+					// Fast flick — large delta
+					delta = 200 + g.rng.Float64()*200
+				case r < 0.55:
+					// Gentle scroll — small delta
+					delta = 40 + g.rng.Float64()*80
+				default:
+					// Moderate scroll
+					delta = 120 + g.rng.Float64()*130
+				}
+				// Add noise ±20%
+				delta *= (0.80 + g.rng.Float64()*0.40)
+			}
+			delta = math.Round(delta*10) / 10
+			deltas = append(deltas, delta)
 		}
 
-		// When changing direction, reduce the raw scroll delta to simulate
-		// deceleration before reversal (defeats Check 31). The shield checks
-		// ScrollDeltas[i] at direction-change points, so we must reduce
-		// the actual delta value, not just the directional product.
-		if dirRun == 0 && math.Abs(deltas[i]) > 100.0 {
-			deltas[i] = 20.0 + g.rng.Float64()*80.0
+		// Generate scroll directions: mostly down (positive), occasionally up (negative).
+		// Real users scroll down 70-85% of the time, with up-scrolls for re-reading.
+		// Direction changes are clustered (once you scroll up, you tend to continue up
+		// for 1-3 events before switching back), creating positive autocorrelation.
+		// With >5 events, guarantee at least one up-scroll to avoid monotonic detection.
+		currentDir := 1.0 // Start scrolling down
+		dirRun := 0       // How many events in current direction
+
+		// If >5 events, force an up-scroll at a random position
+		forceUpAt := -1
+		if numScrolls > 5 {
+			forceUpAt = 2 + g.rng.Intn(numScrolls-3) // Not first or last
 		}
-		directions = append(directions, currentDir)
+
+		for i := 0; i < numScrolls; i++ {
+			if i == forceUpAt && currentDir > 0 {
+				currentDir = -1.0
+				dirRun = 0
+			} else if dirRun > 0 && currentDir < 0 && dirRun >= 1+g.rng.Intn(3) {
+				// After 1-3 up-scrolls, switch back to down
+				currentDir = 1.0
+				dirRun = 0
+			} else if currentDir > 0 && g.rng.Float64() < 0.20 {
+				// 20% chance to start scrolling up
+				currentDir = -1.0
+				dirRun = 0
+			} else {
+				dirRun++
+			}
+
+			// When changing direction, reduce the raw scroll delta to simulate
+			// deceleration before reversal (defeats Check 31). The shield checks
+			// ScrollDeltas[i] at direction-change points, so we must reduce
+			// the actual delta value, not just the directional product.
+			// Keep the reduced value correlated with the previous delta so
+			// lag-1 autocorrelation (momentum) stays positive.
+			if dirRun == 0 && math.Abs(deltas[i]) > 200.0 && i > 0 {
+				prev := math.Abs(deltas[i-1])
+				reduced := prev * (0.55 + g.rng.Float64()*0.25) // 55-80% of previous
+				if reduced > 195 {
+					reduced = 195
+				}
+				if reduced < 60 {
+					reduced = 60
+				}
+				deltas[i] = reduced
+			}
+			directions = append(directions, currentDir)
+		}
+
+		if !g.config.EvadeScrollMomentum || scrollDeltaLag1Autocorrelation(deltas) >= minScrollMomentumCorr {
+			break
+		}
 	}
 
 	scrollTimestamps = append(scrollTimestamps, ts)
@@ -1162,6 +1191,39 @@ func sign(x float64) float64 {
 		return 1
 	}
 	return -1
+}
+
+// scrollDeltaLag1Autocorrelation computes the lag-1 autocorrelation of
+// absolute scroll deltas using the same formula as the shield's
+// checkScrollMomentum. Positive values indicate momentum (consecutive scrolls
+// have similar magnitude).
+func scrollDeltaLag1Autocorrelation(deltas []float64) float64 {
+	if len(deltas) < 4 {
+		return 0
+	}
+	values := make([]float64, len(deltas))
+	for i, d := range deltas {
+		values[i] = math.Abs(d)
+	}
+	n := len(values)
+	var mean float64
+	for _, v := range values {
+		mean += v
+	}
+	mean /= float64(n)
+
+	const lag = 1
+	var num, den float64
+	for i := 0; i < n-lag; i++ {
+		num += (values[i] - mean) * (values[i+lag] - mean)
+	}
+	for i := 0; i < n; i++ {
+		den += (values[i] - mean) * (values[i] - mean)
+	}
+	if den == 0 {
+		return 0
+	}
+	return num / den
 }
 
 // scrollIntervalEntropy computes Shannon entropy of scroll intervals binned
