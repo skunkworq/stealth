@@ -7,10 +7,9 @@ import (
 )
 
 func TestExtractRawWithConfigAlias(t *testing.T) {
-	clearProviderRegistryForTests()
+	resetProviderRegistryForTests()
 	t.Cleanup(func() {
-		clearProviderRegistryForTests()
-		registerBuiltins()
+		resetProviderRegistryForTests()
 	})
 
 	if err := RegisterProvider("cfg-provider", func(_ context.Context, _ ModelConfig) (Extractor, error) {

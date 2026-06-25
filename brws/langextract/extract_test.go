@@ -65,11 +65,9 @@ func TestExtractModelOverridesConfig(t *testing.T) {
 }
 
 func TestExtractConfigOverridesModelID(t *testing.T) {
-	clearProviderRegistryForTests()
-	registerBuiltins()
+	resetProviderRegistryForTests()
 	t.Cleanup(func() {
-		clearProviderRegistryForTests()
-		registerBuiltins()
+		resetProviderRegistryForTests()
 	})
 
 	if err := RegisterProvider("test-provider", func(_ context.Context, cfg ModelConfig) (Extractor, error) {

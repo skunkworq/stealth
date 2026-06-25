@@ -34,10 +34,43 @@ func init() {
 }
 
 func registerBuiltins() {
-	_ = registerProviderWithPatterns("gemini", Gemini, 10, []string{
+	providerRegistry.mu.Lock()
+	defer providerRegistry.mu.Unlock()
+	providerRegistry.byName = map[string]ProviderFactory{}
+	providerRegistry.entries = nil
+	registerBuiltinsLocked()
+}
+
+// registerBuiltinsLocked registers the built-in providers while assuming the
+// caller already holds providerRegistry.mu. This keeps the registry in a valid
+// state at all times, avoiding the empty-registry window that previously raced
+// with parallel tests.
+func registerBuiltinsLocked() {
+	addBuiltin := func(name string, factory ProviderFactory, priority int, patterns []string) {
+		name = strings.ToLower(strings.TrimSpace(name))
+		compiled := make([]*regexp.Regexp, 0, len(patterns))
+		for _, pattern := range patterns {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				continue
+			}
+			compiled = append(compiled, re)
+		}
+		if _, exists := providerRegistry.byName[name]; !exists {
+			providerRegistry.byName[name] = factory
+		}
+		providerRegistry.entries = append(providerRegistry.entries, providerEntry{
+			name:     name,
+			patterns: compiled,
+			priority: priority,
+			factory:  factory,
+		})
+	}
+
+	addBuiltin("gemini", Gemini, 10, []string{
 		`^gemini`,
 	})
-	_ = registerProviderWithPatterns("openai", OpenAI, 10, []string{
+	addBuiltin("openai", OpenAI, 10, []string{
 		`^gpt-4`,
 		`^gpt4\.`,
 		`^gpt-5`,
@@ -48,12 +81,12 @@ func registerBuiltins() {
 	// "deepseek-chat" / "deepseek-reasoner" route to api.deepseek.com.
 	// To run a DeepSeek model LOCALLY via Ollama, use a name Ollama
 	// recognizes (e.g. "deepseek-r1:7b") which won't match these patterns.
-	_ = registerProviderWithPatterns("deepseek", DeepSeek, 20, []string{
+	addBuiltin("deepseek", DeepSeek, 20, []string{
 		`^deepseek-chat$`,
 		`^deepseek-reasoner$`,
 		`^deepseek-coder$`,
 	})
-	_ = registerProviderWithPatterns("ollama", Ollama, 10, []string{
+	addBuiltin("ollama", Ollama, 10, []string{
 		`^gemma`,
 		`^llama`,
 		`^mistral`,
@@ -138,6 +171,17 @@ func registerProviderWithPatterns(name string, factory ProviderFactory, priority
 	return nil
 }
 
+// resetProviderRegistryForTests clears the registry and re-registers built-in
+// providers atomically while holding the registry lock. This prevents parallel
+// tests from observing an empty registry during clear+register sequences.
+func resetProviderRegistryForTests() {
+	providerRegistry.mu.Lock()
+	defer providerRegistry.mu.Unlock()
+	providerRegistry.byName = map[string]ProviderFactory{}
+	providerRegistry.entries = nil
+	registerBuiltinsLocked()
+}
+
 func resolveProviderFactory(modelID, providerHint string) (ProviderFactory, string, error) {
 	hint := strings.ToLower(strings.TrimSpace(providerHint))
 
@@ -165,13 +209,6 @@ func resolveProviderFactory(modelID, providerHint string) (ProviderFactory, stri
 	}
 
 	return nil, "", fmt.Errorf("no provider registered for model_id=%q", modelID)
-}
-
-func clearProviderRegistryForTests() {
-	providerRegistry.mu.Lock()
-	defer providerRegistry.mu.Unlock()
-	providerRegistry.byName = map[string]ProviderFactory{}
-	providerRegistry.entries = nil
 }
 
 // ListProviders returns all explicitly registered provider names.

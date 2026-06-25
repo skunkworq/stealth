@@ -91,11 +91,9 @@ func TestExtractRawAllowsShortProviderBatchOutput(t *testing.T) {
 func TestExtractRawUnknownModelProviderResolutionError(t *testing.T) {
 	t.Parallel()
 
-	clearProviderRegistryForTests()
-	registerBuiltins()
+	resetProviderRegistryForTests()
 	t.Cleanup(func() {
-		clearProviderRegistryForTests()
-		registerBuiltins()
+		resetProviderRegistryForTests()
 	})
 
 	_, err := ExtractRaw(

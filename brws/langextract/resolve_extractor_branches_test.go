@@ -24,10 +24,9 @@ func TestResolveExtractorModelBranchWithConfigModelID(t *testing.T) {
 }
 
 func TestResolveExtractorConfigAndTemperatureOverride(t *testing.T) {
-	clearProviderRegistryForTests()
+	resetProviderRegistryForTests()
 	t.Cleanup(func() {
-		clearProviderRegistryForTests()
-		registerBuiltins()
+		resetProviderRegistryForTests()
 	})
 
 	var capturedCfg ModelConfig
@@ -68,10 +67,9 @@ func TestResolveExtractorConfigAndTemperatureOverride(t *testing.T) {
 }
 
 func TestResolveExtractorDefaultModelIDAndHintPrecedence(t *testing.T) {
-	clearProviderRegistryForTests()
+	resetProviderRegistryForTests()
 	t.Cleanup(func() {
-		clearProviderRegistryForTests()
-		registerBuiltins()
+		resetProviderRegistryForTests()
 	})
 
 	if err := RegisterProvider("hinted", func(_ context.Context, _ ModelConfig) (Extractor, error) {

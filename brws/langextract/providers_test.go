@@ -6,10 +6,9 @@ import (
 )
 
 func TestProviderRegistryPriorityAndHint(t *testing.T) {
-	clearProviderRegistryForTests()
+	resetProviderRegistryForTests()
 	t.Cleanup(func() {
-		clearProviderRegistryForTests()
-		registerBuiltins()
+		resetProviderRegistryForTests()
 	})
 
 	factoryLow := func(_ context.Context, _ ModelConfig) (Extractor, error) {
@@ -47,10 +46,9 @@ func TestProviderRegistryPriorityAndHint(t *testing.T) {
 }
 
 func TestRegisterProviderDuplicate(t *testing.T) {
-	clearProviderRegistryForTests()
+	resetProviderRegistryForTests()
 	t.Cleanup(func() {
-		clearProviderRegistryForTests()
-		registerBuiltins()
+		resetProviderRegistryForTests()
 	})
 
 	factory := func(_ context.Context, _ ModelConfig) (Extractor, error) {

@@ -8,11 +8,9 @@ import (
 )
 
 func TestListProvidersContainsBuiltinsAndSorted(t *testing.T) {
-	clearProviderRegistryForTests()
-	registerBuiltins()
+	resetProviderRegistryForTests()
 	t.Cleanup(func() {
-		clearProviderRegistryForTests()
-		registerBuiltins()
+		resetProviderRegistryForTests()
 	})
 
 	got := ListProviders()
@@ -43,11 +41,9 @@ func TestListProvidersContainsBuiltinsAndSorted(t *testing.T) {
 }
 
 func TestResolveProviderFactoryErrors(t *testing.T) {
-	clearProviderRegistryForTests()
-	registerBuiltins()
+	resetProviderRegistryForTests()
 	t.Cleanup(func() {
-		clearProviderRegistryForTests()
-		registerBuiltins()
+		resetProviderRegistryForTests()
 	})
 
 	if _, _, err := resolveProviderFactory("unknown-model", ""); err == nil {
