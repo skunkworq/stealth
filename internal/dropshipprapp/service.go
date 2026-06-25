@@ -489,7 +489,7 @@ func sortedKeys(values map[string]bool) []string {
 	return out
 }
 
-func envOrDefault(key string, fallback string) string {
+func envOrDefault(key, fallback string) string {
 	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 		return value
 	}

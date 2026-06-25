@@ -75,7 +75,7 @@ type HTTPCookie struct {
 	Value    string
 	Domain   string
 	Path     string
-	Expires  int64  // unix seconds; 0 means session cookie
+	Expires  int64 // unix seconds; 0 means session cookie
 	Secure   bool
 	HTTPOnly bool
 	SameSite string // "Lax" | "Strict" | "None" | ""

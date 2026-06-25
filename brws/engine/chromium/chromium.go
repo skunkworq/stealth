@@ -12,7 +12,6 @@ import (
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
-
 	"github.com/google/uuid"
 
 	"github.com/skunkworq/stealth/brws/constants"

@@ -146,9 +146,9 @@ func TestRankLinks(t *testing.T) {
 	}
 	want := []string{
 		"https://acme.com.au/contact-us", // 40
-		"https://acme.com.au/contact",     // 30
-		"https://acme.com.au/about-us",    // 20
-		"https://acme.com.au/services",    // 10
+		"https://acme.com.au/contact",    // 30
+		"https://acme.com.au/about-us",   // 20
+		"https://acme.com.au/services",   // 10
 	}
 	if len(order) != len(want) {
 		t.Fatalf("ranked = %v, want %v (blog score-0 + external dropped)", order, want)

@@ -108,13 +108,13 @@ func aliexpressSearch(ctx context.Context, job *crawlv1.CrawlJob, emit Emitter) 
 // detection is its own bug source) or vendoring an HTML+JS parser. A windowed
 // regex pass keeps the spider lean and survives minor schema drift.
 var (
-	aeProductIDRe = regexp.MustCompile(`"productId":"(\d{8,})"`)
-	aeTitleRe     = regexp.MustCompile(`"displayTitle":"((?:[^"\\]|\\.)*)"`)
-	aeImageRe     = regexp.MustCompile(`"imgUrl":"((?:[^"\\]|\\.)*)"`)
-	aeSalePriceRe = regexp.MustCompile(`"salePrice":\{[^}]*?"cent":(-?\d+)[^}]*?"currencyCode":"([A-Z]{3})"[^}]*?\}`)
+	aeProductIDRe    = regexp.MustCompile(`"productId":"(\d{8,})"`)
+	aeTitleRe        = regexp.MustCompile(`"displayTitle":"((?:[^"\\]|\\.)*)"`)
+	aeImageRe        = regexp.MustCompile(`"imgUrl":"((?:[^"\\]|\\.)*)"`)
+	aeSalePriceRe    = regexp.MustCompile(`"salePrice":\{[^}]*?"cent":(-?\d+)[^}]*?"currencyCode":"([A-Z]{3})"[^}]*?\}`)
 	aeAltSalePriceRe = regexp.MustCompile(`"salePrice":\{[^}]*?"currencyCode":"([A-Z]{3})"[^}]*?"cent":(-?\d+)[^}]*?\}`)
-	aeOrigPriceRe = regexp.MustCompile(`"originalPrice":\{[^}]*?"cent":(-?\d+)[^}]*?"currencyCode":"([A-Z]{3})"[^}]*?\}`)
-	aeDetailURLRe = regexp.MustCompile(`"productDetailUrl":"((?:[^"\\]|\\.)*)"`)
+	aeOrigPriceRe    = regexp.MustCompile(`"originalPrice":\{[^}]*?"cent":(-?\d+)[^}]*?"currencyCode":"([A-Z]{3})"[^}]*?\}`)
+	aeDetailURLRe    = regexp.MustCompile(`"productDetailUrl":"((?:[^"\\]|\\.)*)"`)
 )
 
 const aeBlockSize = 4096

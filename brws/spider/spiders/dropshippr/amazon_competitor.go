@@ -190,12 +190,12 @@ var (
 	// Locate `<span class="a-price ...>` price blocks, then within each block
 	// grab the displayed value out of aria-hidden / a-offscreen. We skip blocks
 	// flagged data-a-strike (the "was" price).
-	pricePackRe   = regexp.MustCompile(`<span class="a-price[^"]*"[^>]*>`)
-	priceInnerRe  = regexp.MustCompile(`<span aria-hidden="true">([^<]+)</span>|<span class="a-offscreen">([^<]+)</span>`)
-	priceValueRe  = regexp.MustCompile(`^\s*(?:[A-Z]{2,4}\s*)?[$£€¥₹]?\s*\d{1,9}(?:[.,]\d{1,2})?\s*(?:[A-Z]{2,4}\s*)?$`)
-	sellerRe      = regexp.MustCompile(`(?s)id="sellerProfileTriggerId"[^>]*>([^<]+)<`)
-	merchantRe    = regexp.MustCompile(`(?s)id="merchant-info"[^>]*>(.*?)</`)
-	primeRe       = regexp.MustCompile(`(?i)class="[^"]*a-icon-prime`)
+	pricePackRe    = regexp.MustCompile(`<span class="a-price[^"]*"[^>]*>`)
+	priceInnerRe   = regexp.MustCompile(`<span aria-hidden="true">([^<]+)</span>|<span class="a-offscreen">([^<]+)</span>`)
+	priceValueRe   = regexp.MustCompile(`^\s*(?:[A-Z]{2,4}\s*)?[$£€¥₹]?\s*\d{1,9}(?:[.,]\d{1,2})?\s*(?:[A-Z]{2,4}\s*)?$`)
+	sellerRe       = regexp.MustCompile(`(?s)id="sellerProfileTriggerId"[^>]*>([^<]+)<`)
+	merchantRe     = regexp.MustCompile(`(?s)id="merchant-info"[^>]*>(.*?)</`)
+	primeRe        = regexp.MustCompile(`(?i)class="[^"]*a-icon-prime`)
 	availabilityRe = regexp.MustCompile(`(?s)class="[^"]*primary-availability-message[^"]*"[^>]*>([^<]+)<|id="availability"[^>]*>\s*<span[^>]*>([^<]+)<`)
 )
 
@@ -236,7 +236,7 @@ func extractAmazonOffer(html []byte) (priceMinor int64, currency, seller string,
 	} else if priceMinor > 0 {
 		inStock = true
 	}
-	return
+	return priceMinor, currency, seller, prime, inStock
 }
 
 // buyBoxContainers are the DOM regions Amazon uses for the live buy-box. We

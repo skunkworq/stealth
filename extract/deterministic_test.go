@@ -6,8 +6,10 @@ import (
 )
 
 func TestRegexExtractorABNPhoneEmail(t *testing.T) {
-	doc := &SourceDocument{Ref: "r", ContentType: "text/html",
-		Text: `Acme Plumbing. ABN 50 629 080 842. Call 0412 345 678 or email bob@acme.com.au`}
+	doc := &SourceDocument{
+		Ref: "r", ContentType: "text/html",
+		Text: `Acme Plumbing. ABN 50 629 080 842. Call 0412 345 678 or email bob@acme.com.au`,
+	}
 	cands, err := RegexExtractor{}.Extract(context.Background(), doc)
 	if err != nil {
 		t.Fatal(err)
@@ -28,8 +30,10 @@ func TestRegexExtractorABNPhoneEmail(t *testing.T) {
 }
 
 func TestTelMailtoExtractor(t *testing.T) {
-	doc := &SourceDocument{Ref: "r", ContentType: "text/html",
-		Text: `<a href="tel:+61412345678">call</a> <a href="mailto:hi@acme.com.au">mail</a>`}
+	doc := &SourceDocument{
+		Ref: "r", ContentType: "text/html",
+		Text: `<a href="tel:+61412345678">call</a> <a href="mailto:hi@acme.com.au">mail</a>`,
+	}
 	cands, _ := TelMailtoExtractor{}.Extract(context.Background(), doc)
 	var sawPhone, sawEmail bool
 	for _, c := range cands {
@@ -46,9 +50,11 @@ func TestTelMailtoExtractor(t *testing.T) {
 }
 
 func TestRegexExtractorPhonePrecision(t *testing.T) {
-	doc := &SourceDocument{Ref: "r", ContentType: "text/html",
+	doc := &SourceDocument{
+		Ref: "r", ContentType: "text/html",
 		Text: `Call 02 6672 1226 or mobile 0412 345 678 or 1300 555 111. ` +
-			`Junk: 01010184966 and 0 0 1584 308.`}
+			`Junk: 01010184966 and 0 0 1584 308.`,
+	}
 	cands, _ := RegexExtractor{}.Extract(context.Background(), doc)
 	got := map[string]bool{}
 	for _, c := range cands {

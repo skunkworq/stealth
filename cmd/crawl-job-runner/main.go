@@ -19,8 +19,8 @@ import (
 
 	"google.golang.org/protobuf/encoding/protojson"
 
-	crawlv1 "github.com/skunkworq/stealth/internal/gen/dropshippr/crawl/v1"
 	"github.com/skunkworq/stealth/brws/spider/spiders/dropshippr"
+	crawlv1 "github.com/skunkworq/stealth/internal/gen/dropshippr/crawl/v1"
 )
 
 func main() {

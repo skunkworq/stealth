@@ -107,10 +107,10 @@ func temuSearch(ctx context.Context, job *crawlv1.CrawlJob, emit Emitter) error 
 }
 
 var (
-	temuGoodsIDRe = regexp.MustCompile(`"goods_id":\s*"?(\d{8,})"?`)
-	temuTitleRe   = regexp.MustCompile(`"goods_name":"((?:[^"\\]|\\.)*)"`)
-	temuPriceRe   = regexp.MustCompile(`"price_str":"([^"]+)"|"price":\{[^}]*"price":(\d+)`)
-	temuImageRe   = regexp.MustCompile(`"hd_thumb_url":"((?:[^"\\]|\\.)*)"|"thumb_url":"((?:[^"\\]|\\.)*)"`)
+	temuGoodsIDRe  = regexp.MustCompile(`"goods_id":\s*"?(\d{8,})"?`)
+	temuTitleRe    = regexp.MustCompile(`"goods_name":"((?:[^"\\]|\\.)*)"`)
+	temuPriceRe    = regexp.MustCompile(`"price_str":"([^"]+)"|"price":\{[^}]*"price":(\d+)`)
+	temuImageRe    = regexp.MustCompile(`"hd_thumb_url":"((?:[^"\\]|\\.)*)"|"thumb_url":"((?:[^"\\]|\\.)*)"`)
 	temuCurrencyRe = regexp.MustCompile(`"currency":"([A-Z]{3})"`)
 )
 
