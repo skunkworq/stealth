@@ -33,7 +33,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          # Cache disabled on self-hosted: the post-job cache save uploads
+          # the entire Go module/build cache and hangs for hours on the
+          # cuttlefish runners (or exhausts disk writing cache.tzst).
+          cache: false
 
       - uses: actions/setup-node@v4
         with:
@@ -80,7 +83,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          # Cache disabled on self-hosted: the post-job cache save uploads
+          # the entire Go module/build cache and hangs for hours on the
+          # cuttlefish runners (or exhausts disk writing cache.tzst).
+          cache: false
 
       - uses: actions/setup-node@v4
         with:
@@ -129,7 +135,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          # Cache disabled on self-hosted: the post-job cache save uploads
+          # the entire Go module/build cache and hangs for hours on the
+          # cuttlefish runners (or exhausts disk writing cache.tzst).
+          cache: false
 
       - uses: actions/setup-node@v4
         with:
@@ -167,7 +176,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache: true
+          # Cache disabled on self-hosted: the post-job cache save uploads
+          # the entire Go module/build cache and hangs for hours on the
+          # cuttlefish runners (or exhausts disk writing cache.tzst).
+          cache: false
 
       - uses: actions/setup-node@v4
         with:
