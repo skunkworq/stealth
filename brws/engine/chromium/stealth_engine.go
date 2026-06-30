@@ -303,7 +303,12 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 
 	// Transition FSM
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Start); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
+		// Best-effort instrumentation FSM — the error is intentionally ignored
+		// and the request proceeds. When challenge-detection puts the FSM in the
+		// "detecting" state, the normal lifecycle events have no transition and
+		// this fires on every successful request. Debug, not Error, so it stops
+		// flooding the error log (HTTP 200s were emitting 4-6 ERROR lines each).
+		s.logger.Debug("FSM transition skipped (no transition for event)", "error", err)
 	}
 
 	requestID := string(span.SpanID)
@@ -333,7 +338,12 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 
 	// Transition FSM to preparing
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Prepared); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
+		// Best-effort instrumentation FSM — the error is intentionally ignored
+		// and the request proceeds. When challenge-detection puts the FSM in the
+		// "detecting" state, the normal lifecycle events have no transition and
+		// this fires on every successful request. Debug, not Error, so it stops
+		// flooding the error log (HTTP 200s were emitting 4-6 ERROR lines each).
+		s.logger.Debug("FSM transition skipped (no transition for event)", "error", err)
 	}
 
 	// Build stealth script
@@ -388,7 +398,12 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 
 	// Transition FSM to navigating
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Navigate); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
+		// Best-effort instrumentation FSM — the error is intentionally ignored
+		// and the request proceeds. When challenge-detection puts the FSM in the
+		// "detecting" state, the normal lifecycle events have no transition and
+		// this fires on every successful request. Debug, not Error, so it stops
+		// flooding the error log (HTTP 200s were emitting 4-6 ERROR lines each).
+		s.logger.Debug("FSM transition skipped (no transition for event)", "error", err)
 	}
 
 	// Set up network event listener to capture all sub-resource requests and to
@@ -540,10 +555,20 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	// move out of Navigating into Waiting (PageLoaded), then into Detecting to
 	// inspect the page for a residual anti-bot challenge.
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.PageLoaded); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
+		// Best-effort instrumentation FSM — the error is intentionally ignored
+		// and the request proceeds. When challenge-detection puts the FSM in the
+		// "detecting" state, the normal lifecycle events have no transition and
+		// this fires on every successful request. Debug, not Error, so it stops
+		// flooding the error log (HTTP 200s were emitting 4-6 ERROR lines each).
+		s.logger.Debug("FSM transition skipped (no transition for event)", "error", err)
 	}
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.ChallengeDetected); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
+		// Best-effort instrumentation FSM — the error is intentionally ignored
+		// and the request proceeds. When challenge-detection puts the FSM in the
+		// "detecting" state, the normal lifecycle events have no transition and
+		// this fires on every successful request. Debug, not Error, so it stops
+		// flooding the error log (HTTP 200s were emitting 4-6 ERROR lines each).
+		s.logger.Debug("FSM transition skipped (no transition for event)", "error", err)
 	}
 
 	// Scan the *post-settle* page for WAF fingerprints. If the challenge JS
@@ -564,10 +589,20 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	// No (or cleared) challenge: walk the happy path Detecting -> Extracting ->
 	// Complete. Extracting models pulling content out of the settled DOM.
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Extract); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
+		// Best-effort instrumentation FSM — the error is intentionally ignored
+		// and the request proceeds. When challenge-detection puts the FSM in the
+		// "detecting" state, the normal lifecycle events have no transition and
+		// this fires on every successful request. Debug, not Error, so it stops
+		// flooding the error log (HTTP 200s were emitting 4-6 ERROR lines each).
+		s.logger.Debug("FSM transition skipped (no transition for event)", "error", err)
 	}
 	if err := s.fsm.Transition(ctx, instrumentation.RequestEvents.Complete); err != nil {
-		s.logger.Error("FSM transition failed", "error", err)
+		// Best-effort instrumentation FSM — the error is intentionally ignored
+		// and the request proceeds. When challenge-detection puts the FSM in the
+		// "detecting" state, the normal lifecycle events have no transition and
+		// this fires on every successful request. Debug, not Error, so it stops
+		// flooding the error log (HTTP 200s were emitting 4-6 ERROR lines each).
+		s.logger.Debug("FSM transition skipped (no transition for event)", "error", err)
 	}
 
 	// Execute hooks
