@@ -124,6 +124,11 @@ type SessionConfig struct {
 	Enabled     bool
 	ProfileDir  string
 	SessionName string
+	// DebuggerURL, when set, attaches the browser engine to an ALREADY-RUNNING
+	// Chrome over the DevTools protocol (chromedp NewRemoteAllocator) instead of
+	// launching a fresh browser — e.g. a warm, human-cleared host Chrome that
+	// survives Kasada/Akamai from a residential IP. Empty = launch normally.
+	DebuggerURL string
 }
 
 // InstrumentationConfig configures logging and tracing.
@@ -168,6 +173,7 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 		Headless:         cfg.Headless,
 		Proxy:            cfg.Proxy,
 		ProfileDir:       cfg.Session.ProfileDir,
+		DebuggerURL:      cfg.Session.DebuggerURL,
 		Stealth:          stealthEnabled,
 		StealthTLS:       stealthEnabled,
 		ProfileName:      "chrome-120-macos",
