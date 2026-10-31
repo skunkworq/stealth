@@ -326,7 +326,11 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	if timeout == 0 {
 		timeout = 60 * time.Second
 	}
-	tabCtx, cancel := context.WithTimeout(tabCtx, timeout)
+	// The solve budget is additive: a challenged page legitimately needs the
+	// request time PLUS up to challengeSolveBudget for the in-page wait+click
+	// loop (FlareSolverr's cold solves run ~40s+ inside a 90s window). Clean
+	// pages never touch the extra headroom.
+	tabCtx, cancel := context.WithTimeout(tabCtx, timeout+challengeSolveBudget)
 	defer cancel()
 
 	// Random delay before navigation
@@ -500,6 +504,29 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 	}
 	actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
 		s.challengeSettle(ctx, &netMu, &inFlight, &lastActivity, &navCount, settleBudget, idleWindow)
+		return nil
+	}))
+
+	// FlareSolverr-style in-page solve: if the settled document is still an
+	// anti-bot interstitial (CF "Just a moment…", Turnstile widget, DDoS-Guard),
+	// keep the browser on it — poll for the markers to clear while periodically
+	// driving the checkbox via TAB+SPACE — then wait for the auto-reload so the
+	// capture below reads the real document, not the challenge stub.
+	actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
+		if !s.challengeActive(ctx) {
+			return nil
+		}
+		s.logger.Info("challenge interstitial detected, entering solve loop", "url", req.URL)
+		budget := challengeSolveBudget
+		var cf bool
+		if err := chromedp.Evaluate(cfMarkersExpr, &cf).Do(ctx); err == nil && !cf {
+			// Non-CF interstitial (Imperva & co.): self-clears in seconds when
+			// the fingerprint passes — a long wait never rescues a bad score.
+			budget = 15 * time.Second
+		}
+		if s.challengeSolve(ctx, budget) {
+			s.waitPostSolveNav(ctx, &netMu, &inFlight, &lastActivity, &navCount, settleBudget, idleWindow)
+		}
 		return nil
 	}))
 

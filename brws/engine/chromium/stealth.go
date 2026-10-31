@@ -740,7 +740,6 @@ func GenerateStealthScript(config *StealthConfig) string {
         Intl.DateTimeFormat.supportedLocalesOf = origDateTimeFormat.supportedLocalesOf;
     } catch(e) {}
 
-    console.log('[Stealth] Anti-detection scripts injected successfully');
 })();
 `,
 		deviceMemory,

@@ -158,6 +158,12 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 	if cfg.Instrumentation != nil {
 		logLevel = cfg.Instrumentation.LogLevel
 	}
+	// Propagate the configured level to the package default FIRST — engine code
+	// resolves loggers via instrumentation.Named()/GetDefault(), whose level is
+	// fixed at first use; without this, engine-side Debug calls are silently
+	// dropped regardless of cfg.Instrumentation.LogLevel.
+	instrumentation.InitDefault(&instrumentation.Config{LogLevel: logLevel})
+
 	logger, err := instrumentation.NewLogger(&instrumentation.Config{
 		LogLevel:          logLevel,
 		EnableJSONLogging: cfg.Instrumentation != nil && cfg.Instrumentation.EnableJSONLog,
