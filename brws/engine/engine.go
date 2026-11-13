@@ -189,6 +189,11 @@ type Options struct {
 	// CDP/WebDriver options
 	DebuggerURL string
 	WSURL       string
+
+	// Endpoint is the base URL of an external service an engine talks to —
+	// a solver sidecar (Scrapling, browser-use) or a FlareSolverr instance.
+	// Engines that never talk to a service ignore it.
+	Endpoint string
 }
 
 // BrowserProfile defines what browser to emulate for fingerprinting.
