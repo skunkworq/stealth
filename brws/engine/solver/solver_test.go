@@ -121,7 +121,8 @@ func TestFlareSolverrReusesOneSession(t *testing.T) {
 		switch cmd {
 		case "sessions.create":
 			creates++
-			if err := json.NewEncoder(w).Encode(map[string]any{"session_id": "sess-1"}); err != nil {
+			// FlareSolverr names the id "session", not "session_id".
+			if err := json.NewEncoder(w).Encode(map[string]any{"status": "ok", "session": "sess-1"}); err != nil {
 				t.Errorf("encode create: %v", err)
 			}
 		case "sessions.destroy":

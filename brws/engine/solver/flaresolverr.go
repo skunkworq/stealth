@@ -197,15 +197,22 @@ func (f *FlareSolverr) ensureSession(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("solver flaresolverr: create session: %w", err)
 	}
 	var out struct {
+		// FlareSolverr names the id "session"; older builds and some
+		// proxies answer "session_id". Accept either.
+		Session   string `json:"session"`
 		SessionID string `json:"session_id"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
 		return "", fmt.Errorf("solver flaresolverr: decode session: %w", err)
 	}
-	if out.SessionID == "" {
+	sessionID := out.Session
+	if sessionID == "" {
+		sessionID = out.SessionID
+	}
+	if sessionID == "" {
 		return "", fmt.Errorf("solver flaresolverr: service returned no session id")
 	}
-	f.session = out.SessionID
+	f.session = sessionID
 	f.sessionOpen = true
 	f.requests = 1
 	return f.session, nil
