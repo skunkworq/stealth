@@ -510,6 +510,9 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 }
 
 // isCaptchaResponse returns true if the response contains a captcha/challenge.
+// Only confirmed markers count — a page that merely embeds a captcha widget
+// or keyword is not a wall, and treating it as one would fire solve machinery
+// (and record phantom ban signals) on every navigation.
 func (c *Client) isCaptchaResponse(resp *engine.Response) bool {
 	if resp == nil {
 		return false
@@ -517,7 +520,7 @@ func (c *Client) isCaptchaResponse(resp *engine.Response) bool {
 	// Use orchestrator's unified detector if available
 	if c.orchestrator != nil {
 		ud := challengefsm.NewUnifiedDetector()
-		if ch := ud.Detect(resp); ch != nil {
+		if ch := ud.DetectConfirmed(resp); ch != nil {
 			return true
 		}
 	}

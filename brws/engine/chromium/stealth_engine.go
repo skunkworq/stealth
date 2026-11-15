@@ -503,6 +503,14 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		idleWindow = 500 * time.Millisecond
 	}
 	actions = append(actions, chromedp.ActionFunc(func(ctx context.Context) error {
+		// The settle exists to catch a challenge stub's client-side redirect
+		// into the real document. A contentful page without interstitial
+		// markers is already the real document — skipping the wait there is
+		// what keeps pages that never go idle for idleWindow (telemetry,
+		// keepalives, jsd beacons) from burning the whole budget per nav.
+		if !s.challengeActive(ctx) && s.contentfulDocument(ctx) {
+			return nil
+		}
 		s.challengeSettle(ctx, &netMu, &inFlight, &lastActivity, &navCount, settleBudget, idleWindow)
 		return nil
 	}))

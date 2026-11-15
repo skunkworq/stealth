@@ -150,6 +150,24 @@ func (s *StealthEngine) challengeActive(ctx context.Context) bool {
 	return present
 }
 
+// challengeStubDocBytes bounds the DOM size that could still be an anti-bot
+// stub. Every known interstitial (Cloudflare, Imperva, DataDome, Kasada,
+// PerimeterX) serves a skeletal document far below this; real app pages
+// exceed it.
+const challengeStubDocBytes = 65536
+
+// contentfulDocument reports whether the current document is large enough to
+// be the real page rather than a challenge stub. Evaluation failures err
+// toward "not contentful" so the challenge settle still runs.
+func (s *StealthEngine) contentfulDocument(ctx context.Context) bool {
+	var n int
+	expr := `document.documentElement ? document.documentElement.outerHTML.length : 0`
+	if err := chromedp.Evaluate(expr, &n).Do(ctx); err != nil {
+		return false
+	}
+	return n >= challengeStubDocBytes
+}
+
 // turnstileBoxExpr locates the Turnstile iframe (the cf-chl-widget lives in a
 // cross-origin frame — unreachable by DOM query for a JS click) and returns
 // its bounding box as [x,y,w,h] for a coordinate click at the checkbox spot.

@@ -305,3 +305,174 @@ func TestUnifiedDetectorCleanPage(t *testing.T) {
 		t.Fatalf("expected nil for clean page, got %+v", ch)
 	}
 }
+
+// Embedded captcha widgets and keyword collisions on 2xx pages are soft
+// signals only — the confirmed gate keeps solver machinery off them while
+// preserving every detection that could actually be a wall.
+func TestUnifiedDetectorConfirmed(t *testing.T) {
+	detector := NewUnifiedDetector()
+
+	tests := []struct {
+		name        string
+		status      int
+		headers     map[string][]string
+		body        string
+		wantConfirm bool
+		wantType    challenge.ChallengeType
+	}{
+		{
+			name:        "2xx page embedding recaptcha sitekey is not a wall",
+			status:      200,
+			headers:     map[string][]string{"Content-Type": {"text/html"}},
+			body:        `<html><body><div class="g-recaptcha" data-sitekey="6Lc"></div></body></html>`,
+			wantConfirm: false,
+		},
+		{
+			name:        "2xx page containing 'blocked' keyword is not a wall",
+			status:      200,
+			headers:     map[string][]string{"Content-Type": {"text/html"}},
+			body:        `<html><body><div id="ad">this request was blocked by your browser</div></body></html>`,
+			wantConfirm: false,
+		},
+		{
+			name:        "2xx page embedding datadome tag is not a wall",
+			status:      200,
+			headers:     map[string][]string{"Content-Type": {"text/html"}},
+			body:        `<html><head><script src="https://dd.datadome.co/tags.js"></script></head><body>app</body></html>`,
+			wantConfirm: false,
+		},
+		{
+			name:        "2xx body carrying captcha-delivery payload is a wall",
+			status:      200,
+			headers:     map[string][]string{"Content-Type": {"text/html"}},
+			body:        `<html><body><script>location.href="https://geo.captcha-delivery.com/captcha/abc"</script></body></html>`,
+			wantConfirm: true,
+			wantType:    challenge.ChallengeDataDome,
+		},
+		{
+			name:        "403 with block text is a confirmed wall",
+			status:      403,
+			headers:     map[string][]string{"Content-Type": {"text/html"}},
+			body:        `<html><body>access denied</body></html>`,
+			wantConfirm: true,
+			wantType:    challenge.ChallengeGeneric,
+		},
+		{
+			name:        "403 datadome header is a confirmed wall",
+			status:      403,
+			headers:     map[string][]string{"X-DataDome": {"protected"}},
+			body:        `<html><body>blocked</body></html>`,
+			wantConfirm: true,
+			wantType:    challenge.ChallengeDataDome,
+		},
+		{
+			name:   "503 cloudflare js challenge is a confirmed wall",
+			status: 503,
+			headers: map[string][]string{
+				"Server": {"cloudflare"},
+				"Cf-Ray": {"abc123-LAX"},
+			},
+			body:        `<html><body><form id="challenge-form"><input name="jschl_vc" value="x"/></form></body></html>`,
+			wantConfirm: true,
+			wantType:    challenge.ChallengeCloudflare,
+		},
+		{
+			name:        "x-captcha-required header is a confirmed wall",
+			status:      200,
+			headers:     map[string][]string{"X-Captcha-Required": {"1"}},
+			body:        `<html><body>recaptcha</body></html>`,
+			wantConfirm: true,
+			wantType:    challenge.ChallengeRecaptchaV2,
+		},
+		{
+			name:        "clean 2xx page",
+			status:      200,
+			headers:     map[string][]string{"Content-Type": {"text/html"}},
+			body:        `<html><body>hello world</body></html>`,
+			wantConfirm: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &engine.Response{
+				Status:  tt.status,
+				Headers: tt.headers,
+				Body:    []byte(tt.body),
+			}
+			ch := detector.DetectConfirmed(resp)
+			if tt.wantConfirm && ch == nil {
+				t.Fatal("expected confirmed challenge, got nil")
+			}
+			if !tt.wantConfirm && ch != nil {
+				t.Fatalf("expected no confirmed challenge, got %s", ch.Type)
+			}
+			if ch != nil && ch.Type != tt.wantType {
+				t.Fatalf("expected type %s, got %s", tt.wantType, ch.Type)
+			}
+		})
+	}
+}
+
+// A soft detection on a 2xx page must never reach a solver.
+func TestOrchestratorSkipsUnconfirmed(t *testing.T) {
+	registry := NewSolverRegistry()
+	logger := newTestLogger(t)
+
+	solver := &mockSolver{
+		provider:    "captcha",
+		canSolve:    true,
+		solveResult: &SolveResult{Solved: true},
+	}
+	registry.Register(solver)
+	orch := NewChallengeOrchestrator(registry, nil, logger)
+
+	resp := &engine.Response{
+		Status:  200,
+		Headers: map[string][]string{"Content-Type": {"text/html"}},
+		Body:    []byte(`<html><body><div data-sitekey="6Lc">app page</div> blocked ads</body></html>`),
+	}
+	result, err := orch.HandleResponse(context.Background(), "https://example.com", resp, nil, 30*time.Second)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result != resp {
+		t.Fatal("expected original response for unconfirmed detection")
+	}
+	if solver.solveCalls != 0 {
+		t.Fatalf("solver ran %d times on unconfirmed detection", solver.solveCalls)
+	}
+}
+
+// A wall-status detection still reaches the solver.
+func TestOrchestratorSolvesConfirmed(t *testing.T) {
+	registry := NewSolverRegistry()
+	logger := newTestLogger(t)
+
+	solver := &mockSolver{
+		provider: "captcha",
+		canSolve: true,
+		solveResult: &SolveResult{
+			Solved:   true,
+			Response: &engine.Response{Status: 200, Body: []byte("solved")},
+		},
+	}
+	registry.Register(solver)
+	orch := NewChallengeOrchestrator(registry, nil, logger)
+
+	resp := &engine.Response{
+		Status:  403,
+		Headers: map[string][]string{"X-Captcha-Required": {"1"}},
+		Body:    []byte("solve this"),
+	}
+	result, err := orch.HandleResponse(context.Background(), "https://example.com", resp, nil, 30*time.Second)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if solver.solveCalls != 1 {
+		t.Fatalf("expected 1 solve call on confirmed detection, got %d", solver.solveCalls)
+	}
+	if string(result.Body) != "solved" {
+		t.Fatalf("expected solved response, got %s", string(result.Body))
+	}
+}

@@ -48,9 +48,16 @@ func (co *ChallengeOrchestrator) HandleResponse(
 	eng engine.Engine,
 	timeout time.Duration,
 ) (*engine.Response, error) {
-	// Unified detection
-	ch := co.detector.Detect(resp)
+	// Confirmed-marker detection: solver machinery runs only on hard
+	// challenge evidence. Soft detections are logged and left alone.
+	ch := co.detector.DetectConfirmed(resp)
 	if ch == nil {
+		if soft := co.detector.Detect(resp); soft != nil {
+			co.logger.Debug("unconfirmed challenge signal, solvers skipped",
+				"type", string(soft.Type),
+				"url", targetURL,
+			)
+		}
 		return resp, nil
 	}
 
@@ -134,8 +141,14 @@ func (co *ChallengeOrchestrator) HandleResponseWithTraceEvents(
 	timeout time.Duration,
 	traceEvents []adversarial.CaptchaEvent,
 ) (*engine.Response, error) {
-	ch := co.detector.Detect(resp)
+	ch := co.detector.DetectConfirmed(resp)
 	if ch == nil {
+		if soft := co.detector.Detect(resp); soft != nil {
+			co.logger.Debug("unconfirmed challenge signal, solvers skipped",
+				"type", string(soft.Type),
+				"url", targetURL,
+			)
+		}
 		return resp, nil
 	}
 
@@ -266,6 +279,82 @@ func (ud *UnifiedDetector) Detect(resp *engine.Response) *challenge.Challenge {
 
 	// 4. Generic challenge detection (body + headers analysis)
 	return ud.challengeDetector.Detect(resp.Body, resp.Headers)
+}
+
+// DetectConfirmed reports a challenge only when a hard marker backs the
+// detection: WAF headers, a wall status, or a provider-specific interstitial
+// payload. Soft body heuristics on ordinary 2xx pages — embedded captcha
+// sitekeys, keyword matches inside app bundles — do not qualify, so solver
+// machinery never fires on a page that merely references a challenge
+// platform. Detect remains the soft-signal path for logging.
+func (ud *UnifiedDetector) DetectConfirmed(resp *engine.Response) *challenge.Challenge {
+	if resp == nil {
+		return nil
+	}
+	wallStatus := isWallStatus(resp.Status)
+
+	// 1. DataDome — a header or body marker confirms on a wall status, or at
+	//    any status when the body carries the captcha-delivery payload; a
+	//    datadome script tag on a 2xx page is the embedded collector, not a
+	//    challenge.
+	if DetectDataDome(resp.Headers, resp.Body) &&
+		(wallStatus || extractDataDomeCaptchaURL(resp.Body) != "") {
+		return &challenge.Challenge{
+			Type: challenge.ChallengeDataDome,
+			URL:  resp.FinalURL,
+		}
+	}
+
+	// 2. Cloudflare — DetectChallenge already requires CF headers plus a
+	//    challenge status (403/503); inherently confirmed.
+	httpHeaders := make(http.Header)
+	for k, vals := range resp.Headers {
+		for _, v := range vals {
+			httpHeaders.Add(k, v)
+		}
+	}
+	cfChallenge := adversarial.DetectChallenge(resp.Status, httpHeaders, resp.Body)
+	if cfChallenge != nil {
+		challengeType := cfChallengeTypeToGeneric(cfChallenge.Type)
+		return &challenge.Challenge{
+			Type:    challengeType,
+			SiteKey: cfChallenge.SiteKey,
+			URL:     cfChallenge.URL,
+		}
+	}
+
+	// 3. X-Captcha-Required — an explicit hard marker at any status.
+	if HasCaptchaHeader(resp.Headers) {
+		bodyStr := strings.ToLower(string(resp.Body))
+		if strings.Contains(bodyStr, "recaptcha") || hasCaptchaTypeHeader(resp.Headers, "recaptcha-v2") {
+			return &challenge.Challenge{
+				Type: challenge.ChallengeRecaptchaV2,
+				URL:  resp.FinalURL,
+			}
+		}
+		return &challenge.Challenge{
+			Type: challenge.ChallengeGeneric,
+			URL:  resp.FinalURL,
+		}
+	}
+
+	// 4. Generic heuristics — confirmed only on wall statuses; on a 2xx
+	//    document the same markers are embedded widgets or keyword noise.
+	if wallStatus {
+		return ud.challengeDetector.Detect(resp.Body, resp.Headers)
+	}
+	return nil
+}
+
+// isWallStatus reports whether a status code can carry an anti-bot wall —
+// the same set the generic detector's IsBlocked treats as challenge-bearing.
+func isWallStatus(status int) bool {
+	switch status {
+	case http.StatusUnauthorized, http.StatusForbidden,
+		http.StatusTooManyRequests, http.StatusServiceUnavailable:
+		return true
+	}
+	return false
 }
 
 // cfChallengeTypeToGeneric maps adversarial CF challenge types to generic challenge types.
