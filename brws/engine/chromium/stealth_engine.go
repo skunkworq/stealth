@@ -260,6 +260,12 @@ func buildStealthAllocatorOptions(opts engine.Options) []chromedp.ExecAllocatorO
 
 		chromedp.Flag("disable-update", true),
 		chromedp.Flag("disable-background-updates", true),
+
+		// The default 20s ws-URL wait assumes a quiet host; under CPU
+		// pressure a Chromium spawn legitimately takes longer, and a
+		// premature timeout forces the caller into a relaunch storm on a
+		// box that is merely slow, not broken.
+		chromedp.WSURLReadTimeout(90 * time.Second),
 	}
 
 	if opts.InsecureSkipVerify {
