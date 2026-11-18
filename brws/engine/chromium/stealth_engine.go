@@ -27,12 +27,15 @@ func init() {
 
 // StealthEngine extends Chromium with advanced anti-detection capabilities
 type StealthEngine struct {
-	allocCtx    context.Context
-	allocCancel context.CancelFunc
-	config      *StealthConfig
-	fingerprint *types.CompleteFingerprint
-	stealthOpts StealthOptions
-	browserOpts BrowserOptions
+	allocCtx      context.Context
+	allocCancel   context.CancelFunc
+	browserMu     sync.Mutex
+	browserCtx    context.Context
+	browserCancel context.CancelFunc
+	config        *StealthConfig
+	fingerprint   *types.CompleteFingerprint
+	stealthOpts   StealthOptions
+	browserOpts   BrowserOptions
 
 	// Instrumentation
 	logger *instrumentation.Logger
@@ -293,6 +296,35 @@ func (s *StealthEngine) Capabilities() engine.Capabilities {
 	}
 }
 
+// tabContext returns a fresh tab on the engine's shared browser, lazily
+// spawning the browser on first use. Every operation used to derive its tab
+// straight from the allocator context — chromedp reads that as a new browser
+// allocation, so each navigation spawned a full Chromium tree (bound to the
+// request ctx via exec.CommandContext and killed when it ended) and re-solved
+// the edge challenge from scratch. Deriving tabs from a browser context
+// instead reuses one process: launch, profile and challenge state are paid
+// once per engine, not once per page. A dead browser is detected on the next
+// call (chromedp cancels the browser ctx on LostConnection) and respawned.
+func (s *StealthEngine) tabContext() (context.Context, context.CancelFunc, error) {
+	s.browserMu.Lock()
+	defer s.browserMu.Unlock()
+	if s.browserCtx == nil || s.browserCtx.Err() != nil {
+		bctx, bcancel := chromedp.NewContext(s.allocCtx)
+		// The first Run allocates the browser — bound to bctx (engine
+		// lifetime), not to any single request.
+		if err := chromedp.Run(bctx); err != nil {
+			bcancel()
+			return nil, nil, fmt.Errorf("spawn browser: %w", err)
+		}
+		if s.browserCancel != nil {
+			s.browserCancel()
+		}
+		s.browserCtx, s.browserCancel = bctx, bcancel
+	}
+	tabCtx, tabCancel := chromedp.NewContext(s.browserCtx)
+	return tabCtx, tabCancel, nil
+}
+
 // Do executes a request with stealth enhancements
 func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
 	// Start tracing
@@ -324,8 +356,11 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		Entries:   []engine.TraceEntry{},
 	}
 
-	// Create a new tab context
-	tabCtx, tabCancel := chromedp.NewContext(s.allocCtx)
+	// Create a new tab context on the shared browser
+	tabCtx, tabCancel, terr := s.tabContext()
+	if terr != nil {
+		return nil, terr
+	}
 	defer tabCancel()
 
 	timeout := req.Timeout
@@ -739,6 +774,11 @@ func (s *StealthEngine) challengeSettle(
 func (s *StealthEngine) Close() error {
 	s.logger.Info("closing stealth engine")
 	_ = s.hooks.Execute(context.Background(), instrumentation.HookNames.OnBrowserClose)
+	s.browserMu.Lock()
+	if s.browserCancel != nil {
+		s.browserCancel()
+	}
+	s.browserMu.Unlock()
 	if s.allocCancel != nil {
 		s.allocCancel()
 	}
@@ -760,7 +800,11 @@ func (s *StealthEngine) Mouse(x, y float64) error {
 	sim := behavior.NewMouseSimulator(s.getBehaviorDelay())
 	js := sim.MoveTo(x, y)
 
-	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	tabCtx, cancel, err := s.tabContext()
+	if err != nil {
+		return err
+	}
+	defer cancel()
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 
@@ -769,7 +813,11 @@ func (s *StealthEngine) Click(x, y float64) error {
 	sim := behavior.NewMouseSimulator(s.getBehaviorDelay())
 	js := sim.ClickAt(x, y)
 
-	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	tabCtx, cancel, err := s.tabContext()
+	if err != nil {
+		return err
+	}
+	defer cancel()
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 
@@ -778,7 +826,11 @@ func (s *StealthEngine) Type(text string) error {
 	sim := behavior.NewTypingSimulator(s.getBehaviorDelay())
 	js := sim.Type(text)
 
-	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	tabCtx, cancel, err := s.tabContext()
+	if err != nil {
+		return err
+	}
+	defer cancel()
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 
@@ -787,7 +839,11 @@ func (s *StealthEngine) Scroll(pixels float64) error {
 	sim := behavior.NewScrollSimulator(s.getBehaviorDelay())
 	js := sim.ScrollDown(pixels)
 
-	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	tabCtx, cancel, err := s.tabContext()
+	if err != nil {
+		return err
+	}
+	defer cancel()
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 
@@ -796,7 +852,11 @@ func (s *StealthEngine) ScrollTo(y float64) error {
 	sim := behavior.NewScrollSimulator(s.getBehaviorDelay())
 	js := sim.ScrollTo(y)
 
-	tabCtx, _ := chromedp.NewContext(s.allocCtx)
+	tabCtx, cancel, err := s.tabContext()
+	if err != nil {
+		return err
+	}
+	defer cancel()
 	return chromedp.Run(tabCtx, chromedp.Evaluate(js, nil))
 }
 

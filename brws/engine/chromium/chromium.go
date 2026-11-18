@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/chromedp/cdproto/cdp"
@@ -24,11 +25,13 @@ func init() {
 
 // Chromium implements the Engine interface using CDP/chromedp.
 type Chromium struct {
-	allocCtx    context.Context
-	allocCancel context.CancelFunc
-	tabCtx      context.Context
-	trace       *engine.Trace
-	options     engine.Options
+	allocCtx      context.Context
+	allocCancel   context.CancelFunc
+	browserMu     sync.Mutex
+	browserCtx    context.Context
+	browserCancel context.CancelFunc
+	trace         *engine.Trace
+	options       engine.Options
 }
 
 // New creates a new Chromium engine. If opts.DebuggerURL is set the engine
@@ -98,6 +101,30 @@ func (c *Chromium) Capabilities() engine.Capabilities {
 	}
 }
 
+// tabContext returns a fresh tab on the engine's shared browser, lazily
+// spawning the browser on first use. Deriving a tab from the allocator
+// context used to allocate a whole Chromium per request — killed when the
+// request ctx ended via exec.CommandContext. Tabs derived from a browser
+// context reuse one process instead. A dead browser is respawned on the
+// next call (chromedp cancels the browser ctx on LostConnection).
+func (c *Chromium) tabContext() (context.Context, context.CancelFunc, error) {
+	c.browserMu.Lock()
+	defer c.browserMu.Unlock()
+	if c.browserCtx == nil || c.browserCtx.Err() != nil {
+		bctx, bcancel := chromedp.NewContext(c.allocCtx)
+		if err := chromedp.Run(bctx); err != nil {
+			bcancel()
+			return nil, nil, fmt.Errorf("spawn browser: %w", err)
+		}
+		if c.browserCancel != nil {
+			c.browserCancel()
+		}
+		c.browserCtx, c.browserCancel = bctx, bcancel
+	}
+	tabCtx, tabCancel := chromedp.NewContext(c.browserCtx)
+	return tabCtx, tabCancel, nil
+}
+
 // Do executes a request using Chromium.
 func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response, error) {
 	requestID := uuid.New().String()
@@ -107,10 +134,11 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 		Entries:   []engine.TraceEntry{},
 	}
 
-	// Create a new tab context
-	tabCtx, tabCancel := chromedp.NewContext(c.allocCtx)
-	c.tabCtx = tabCtx
-
+	// Create a new tab context on the shared browser
+	tabCtx, tabCancel, terr := c.tabContext()
+	if terr != nil {
+		return nil, terr
+	}
 	defer tabCancel()
 
 	// Set timeout
@@ -258,6 +286,11 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 
 // Close cleans up browser resources.
 func (c *Chromium) Close() error {
+	c.browserMu.Lock()
+	if c.browserCancel != nil {
+		c.browserCancel()
+	}
+	c.browserMu.Unlock()
 	if c.allocCancel != nil {
 		c.allocCancel()
 	}
