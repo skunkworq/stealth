@@ -608,28 +608,36 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 
 	start := time.Now()
 
+	// collectTrace folds the network entries captured so far into the span
+	// trace — callers use it on both the success and failure paths so a
+	// timed-out navigation still surfaces which subrequests stalled.
+	collectTrace := func(total time.Duration) {
+		netMu.Lock()
+		for _, entry := range netRequests {
+			trace.Entries = append(trace.Entries, *entry)
+		}
+		netMu.Unlock()
+		if len(trace.Entries) == 0 {
+			trace.Entries = append(trace.Entries, engine.TraceEntry{
+				RequestID:   requestID,
+				URL:         req.URL,
+				Method:      "GET",
+				RequestTime: start,
+				Timing:      engine.TimingInfo{Total: total},
+			})
+		}
+	}
+
 	if err := chromedp.Run(tabCtx, actions...); err != nil {
-		return nil, fmt.Errorf("stealth run: %w", err)
+		collectTrace(time.Since(start))
+		return &engine.Response{
+			Body:     []byte(body),
+			FinalURL: finalURL,
+			Trace:    *trace,
+		}, fmt.Errorf("stealth run: %w", err)
 	}
 	total := time.Since(start)
-
-	// Collect captured network entries into the trace.
-	netMu.Lock()
-	for _, entry := range netRequests {
-		trace.Entries = append(trace.Entries, *entry)
-	}
-	netMu.Unlock()
-
-	// If no network entries were captured, add the primary navigation entry.
-	if len(trace.Entries) == 0 {
-		trace.Entries = append(trace.Entries, engine.TraceEntry{
-			RequestID:   requestID,
-			URL:         req.URL,
-			Method:      "GET",
-			RequestTime: start,
-			Timing:      engine.TimingInfo{Total: total},
-		})
-	}
+	collectTrace(total)
 
 	span.SetAttribute("status", 200)
 	span.SetAttribute("body_size", len(body))
@@ -667,8 +675,20 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		// Transition FSM to fail (which signals Adapting Retry)
 		_ = s.fsm.Transition(ctx, instrumentation.RequestEvents.Fail)
 
-		// Return specific error triggering the Adaptive loop upstream
-		return nil, fmt.Errorf("WAF Challenge Detected: %s", waf)
+		// Return specific error triggering the Adaptive loop upstream — the
+		// challenged DOM and network trace still reach the caller so a denied
+		// navigation isn't a black box downstream.
+		resolvedURL := finalURL
+		if resolvedURL == "" {
+			resolvedURL = req.URL
+		}
+		return &engine.Response{
+			Status:   200,
+			Body:     []byte(body),
+			FinalURL: resolvedURL,
+			Protocol: "h2",
+			Trace:    *trace,
+		}, fmt.Errorf("WAF Challenge Detected: %s", waf)
 	}
 
 	// No (or cleared) challenge: walk the happy path Detecting -> Extracting ->

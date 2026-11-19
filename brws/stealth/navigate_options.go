@@ -102,7 +102,7 @@ func (c *Client) NavigateWithOptions(ctx context.Context, url string, opts Navig
 
 			span.SetAttribute("error", err.Error())
 			c.logger.Error("navigation failed", "url", url, "error", err)
-			return nil, err
+			return partialResponse(resp), err
 		}
 		break
 	}
@@ -160,6 +160,13 @@ func (c *Client) NavigateWithOptions(ctx context.Context, url string, opts Navig
 				break
 			}
 		}
+	}
+
+	// A retry inside the FSM/escalation loops can surface a partial response
+	// alongside its error — hand both back rather than feeding the partial
+	// through the captcha/orchestrator blocks as if it were a real page.
+	if err != nil {
+		return partialResponse(resp), err
 	}
 
 	if c.evasionFSM != nil && resp != nil && c.isCaptchaResponse(resp) {

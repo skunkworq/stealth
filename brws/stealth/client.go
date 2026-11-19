@@ -379,7 +379,7 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 
 			span.SetAttribute("error", err.Error())
 			c.logger.Error("navigation failed", "url", url, "error", err)
-			return nil, err
+			return partialResponse(resp), err
 		}
 
 		// Unblocked response received
@@ -454,6 +454,13 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		}
 	}
 
+	// A retry inside the FSM/escalation loops can surface a partial response
+	// alongside its error — hand both back rather than feeding the partial
+	// through the captcha/orchestrator blocks as if it were a real page.
+	if err != nil {
+		return partialResponse(resp), err
+	}
+
 	// CAPTCHA SOLVING: detect captcha in response, attempt solve with trace replay before escalating
 	if c.evasionFSM != nil && resp != nil && c.isCaptchaResponse(resp) {
 		c.evasionFSM.RecordCaptchaDetected()
@@ -513,6 +520,22 @@ func (c *Client) Navigate(ctx context.Context, url string) (*Response, error) {
 		FinalURL: resp.FinalURL,
 		Trace:    resp.Trace,
 	}, nil
+}
+
+// partialResponse translates an engine response captured on a failed
+// navigation — the caller sees the error AND whatever the page produced
+// (challenged DOM, network trace) rather than a bare failure.
+func partialResponse(resp *engine.Response) *Response {
+	if resp == nil {
+		return nil
+	}
+	return &Response{
+		Status:   resp.Status,
+		Headers:  resp.Headers,
+		Body:     resp.Body,
+		FinalURL: resp.FinalURL,
+		Trace:    resp.Trace,
+	}
 }
 
 // isCaptchaResponse returns true if the response contains a captcha/challenge.
