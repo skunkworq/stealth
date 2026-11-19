@@ -194,6 +194,13 @@ type Options struct {
 	// a solver sidecar (Scrapling, browser-use) or a FlareSolverr instance.
 	// Engines that never talk to a service ignore it.
 	Endpoint string
+
+	// BlockedURLPatterns are Network.setBlockedURLs glob patterns (wildcards
+	// '*') failed before loading — images, fonts, media and tracker hosts a
+	// crawl pays download/render cost for but never reads. Empty = load
+	// everything. Applied per navigation on JS-capable engines that enable
+	// the network domain.
+	BlockedURLPatterns []string
 }
 
 // BrowserProfile defines what browser to emulate for fingerprinting.

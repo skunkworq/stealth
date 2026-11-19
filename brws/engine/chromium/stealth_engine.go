@@ -36,6 +36,7 @@ type StealthEngine struct {
 	fingerprint   *types.CompleteFingerprint
 	stealthOpts   StealthOptions
 	browserOpts   BrowserOptions
+	blockedURLs   []string
 
 	// Instrumentation
 	logger *instrumentation.Logger
@@ -196,6 +197,7 @@ func NewStealthWithFingerprint(opts engine.Options, fp *types.CompleteFingerprin
 		fingerprint: fp,
 		stealthOpts: DefaultStealthOptions(),
 		browserOpts: DefaultBrowserOptions(),
+		blockedURLs: opts.BlockedURLPatterns,
 		logger:      log,
 		tracer:      tracer,
 		hooks:       hooks,
@@ -408,6 +410,13 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		network.Enable(),
 		page.Enable(),
 		chromedp.EmulateViewport(viewportWidth, viewportHeight),
+	}
+
+	// Resource economy: caller-declared URL globs (asset types, tracker
+	// hosts) fail at the network layer before any download or decode —
+	// pure crawl cost saved, documents/scripts/XHR untouched.
+	if len(s.blockedURLs) > 0 {
+		actions = append(actions, network.SetBlockedURLs(s.blockedURLs))
 	}
 
 	// Apply precise isomorphic network headers

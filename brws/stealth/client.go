@@ -74,6 +74,11 @@ type Config struct {
 
 	// Trace-based captcha solving
 	TraceDataDir string // path to trace data directory for replay-based solving
+
+	// BlockedURLPatterns are Network.setBlockedURLs glob patterns failed
+	// before loading — images/fonts/media/tracker hosts a crawl never reads.
+	// Passed through to engines that enable the network domain.
+	BlockedURLPatterns []string
 }
 
 // StealthConfig configures stealth capabilities.
@@ -176,14 +181,15 @@ func NewWithConfig(cfg *Config) (*Client, error) {
 
 	stealthEnabled := cfg.Stealth != nil && cfg.Stealth.Enabled
 	eng, err := engine.New(cfg.EngineName, engine.Options{
-		Headless:         cfg.Headless,
-		Proxy:            cfg.Proxy,
-		ProfileDir:       cfg.Session.ProfileDir,
-		DebuggerURL:      cfg.Session.DebuggerURL,
-		Stealth:          stealthEnabled,
-		StealthTLS:       stealthEnabled,
-		ProfileName:      "chrome-120-macos",
-		StealthConfigRaw: cfg.Stealth,
+		Headless:           cfg.Headless,
+		Proxy:              cfg.Proxy,
+		ProfileDir:         cfg.Session.ProfileDir,
+		DebuggerURL:        cfg.Session.DebuggerURL,
+		Stealth:            stealthEnabled,
+		StealthTLS:         stealthEnabled,
+		ProfileName:        "chrome-120-macos",
+		StealthConfigRaw:   cfg.Stealth,
+		BlockedURLPatterns: cfg.BlockedURLPatterns,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("create engine: %w", err)

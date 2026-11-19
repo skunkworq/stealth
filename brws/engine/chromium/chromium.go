@@ -200,6 +200,9 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 	actions := []chromedp.Action{
 		network.Enable(),
 	}
+	if len(c.options.BlockedURLPatterns) > 0 {
+		actions = append(actions, network.SetBlockedURLs(c.options.BlockedURLPatterns))
+	}
 
 	// Set extra headers if provided
 	if len(req.ExtraHeaders) > 0 {
