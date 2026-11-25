@@ -126,7 +126,10 @@ func (c *Chromium) tabContext() (context.Context, context.CancelFunc, error) {
 }
 
 // Do executes a request using Chromium.
-func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response, error) {
+func (c *Chromium) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	requestID := uuid.New().String()
 	c.trace = &engine.Trace{
 		Engine:    c.Name(),
@@ -140,6 +143,8 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 		return nil, terr
 	}
 	defer tabCancel()
+	stopCallerCancel := context.AfterFunc(ctx, tabCancel)
+	defer stopCallerCancel()
 
 	// Set timeout
 	timeout := req.Timeout
@@ -251,6 +256,9 @@ func (c *Chromium) Do(_ context.Context, req *engine.Request) (*engine.Response,
 	start := time.Now()
 
 	if err := chromedp.Run(tabCtx, actions...); err != nil {
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
 		return nil, fmt.Errorf("chromedp run: %w", err)
 	}
 	total := time.Since(start)

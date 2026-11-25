@@ -329,6 +329,9 @@ func (s *StealthEngine) tabContext() (context.Context, context.CancelFunc, error
 
 // Do executes a request with stealth enhancements
 func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Response, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	// Start tracing
 	ctx, span := s.tracer.StartSpan(ctx, "stealth.fetch", instrumentation.SpanKindRequest)
 	span.SetAttribute("url", req.URL)
@@ -364,6 +367,8 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 		return nil, terr
 	}
 	defer tabCancel()
+	stopCallerCancel := context.AfterFunc(ctx, tabCancel)
+	defer stopCallerCancel()
 
 	timeout := req.Timeout
 	if timeout == 0 {
@@ -630,6 +635,9 @@ func (s *StealthEngine) Do(ctx context.Context, req *engine.Request) (*engine.Re
 
 	if err := chromedp.Run(tabCtx, actions...); err != nil {
 		collectTrace(time.Since(start))
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
 		return &engine.Response{
 			Body:     []byte(body),
 			FinalURL: finalURL,
