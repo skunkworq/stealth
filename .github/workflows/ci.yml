@@ -13,7 +13,7 @@ concurrency:
 
 env:
   GO_VERSION: "1.26"
-  NODE_VERSION: "20"
+  NODE_VERSION: "26.13.1"
 
 # Shared preconditions for every Go job:
 #   1. The `brws/lab/static/` tree is generated from `lab-ui/` (Next.js) and
